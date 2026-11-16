@@ -58,7 +58,7 @@ class Fake {
   hold = false;
   constructor(readonly ops: string[]) {}
   async request(op: string, fields: any = {}) {
-    if (op === 'hello') return { role: 'full', ops: this.ops, machine: { name: 'mac' }, os: 'macos' };
+    if (op === 'hello') return { version: 2, role: 'full', ops: this.ops, machine: { name: 'mac' }, os: 'macos' };
     if (op === 'ping') return {};
     this.asked.push({ op, ...fields });
     if (this.hold) await new Promise<void>((go) => (this.held = go));

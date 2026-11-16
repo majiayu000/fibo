@@ -65,7 +65,7 @@
 
 上表都已实现，下面这些和上表不完全一样，等手机端确认：
 
-- `hello` 的 Mooring 版本叫 `app_version`：`version` 已经是协议版本（数字 1），不能同名。
+- `hello` 的 Mooring 版本叫 `app_version`：`version` 是协议版本，不能同名；2026-11-16 升为 2，旧手机或旧电脑明确提示更新，见 [聊天不能批准审批](../decisions/2026-11-16-chat-does-not-approve.md)。
 - `chat` 的 `tools` 统计的是这条 Agent 消息和**上一条消息**（用户或 Agent）之间的工具调用，不是和上一条用户消息之间。一轮里 Agent 说了几句时，按上表的写法同一个调用会被算几次。失败的编辑不算改了文件，失败的命令算跑过。Codex 的命令来自日志里每条命令的执行记录，文件来自 `exec` 脚本里写成字符串的 `apply_patch`；运行时才拼出来的 patch 读不到。
 - `dirs` 的 `git.changes` 可能没有：单次列目录里数改动最多花 3 秒，来不及的不写，免得看起来像没有改动。
 - `dirs` 的 `query` 还跳过家目录下的 `Library`，否则 1 秒都耗在那里。

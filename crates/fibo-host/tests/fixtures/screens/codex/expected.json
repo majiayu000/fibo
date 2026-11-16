@@ -66,5 +66,22 @@
   "trust-real.txt": {
     "state": "idle",
     "note": "真实画面：新文件夹的信任提示，不是审批也不是选择题，screen_ask::trust_screen 认它"
+  },
+  "approval-wrapped-reason-real.txt": {
+    "state": "waiting",
+    "rule": "approval",
+    "question": "Would you like to run the following command?",
+    "note": "真实 Codex 0.167 审批，100 列终端，中文 Reason 折行；旧四行距离限制漏判。",
+    "ask": {
+      "kind": "Command",
+      "subject": "printf '%s\\n' IOS_CODEX_ALLOWED > codex-allowed.txt",
+      "note": "是否允许在当前临时目录创建 codex-allowed.txt，写入\nIOS_CODEX_ALLOWED，用于此次批准界面测试？"
+    },
+    "always": "p",
+    "always_label": "允许，`printf '%s\\n' IOS_CODEX_ALLOWED > codex- allowed.txt` 开头的命令以后不再询问"
+  },
+  "neg-wrapped-reason-answered.txt": {
+    "state": "idle",
+    "note": "真实换行理由审批后追加完成输出，旧审批不能继续显示。"
   }
 }

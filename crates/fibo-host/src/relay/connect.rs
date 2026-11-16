@@ -63,9 +63,9 @@ fn after(ended: Ended, was_up: bool, wait: &mut Duration) -> io::Result<(Duratio
         Ended::Refused(why) => Err(io::Error::other(why)),
         Ended::Replaced => {
             *wait = Duration::from_secs(1);
-            let why = format!(
-                "另一个连接用这台电脑的配对码连上了中继，把它顶了下来（同一个码在另一台电脑上，或码被别人拿到了），{} 分钟后再连",
-                REPLACED_WAIT.as_secs() / 60
+            let why = t!(
+                "另一个连接用这台电脑的配对码连上了中继，把它顶了下来（同一个码在另一台电脑上，或码被别人拿到了），{v1} 分钟后再连",
+                v1 = REPLACED_WAIT.as_secs() / 60
             );
             Ok((REPLACED_WAIT, why))
         }
@@ -75,7 +75,10 @@ fn after(ended: Ended, was_up: bool, wait: &mut Duration) -> io::Result<(Duratio
             }
             let now = *wait;
             *wait = (now * 2).min(Duration::from_secs(30));
-            Ok((now, format!("{why}，{} 秒后重连", now.as_secs())))
+            Ok((
+                now,
+                t!("{why}，{as_secs} 秒后重连", why, as_secs = now.as_secs()),
+            ))
         }
     }
 }
@@ -120,7 +123,7 @@ async fn connect(
     {
         Ok(Ok((ws, _))) => ws,
         Ok(Err(e)) => return (Ended::Lost(e.to_string()), false),
-        Err(_) => return (Ended::Lost("连接超时".into()), false),
+        Err(_) => return (Ended::Lost(t!("连接超时").into()), false),
     };
     let (mut sink, mut stream) = ws.split();
     let mut paired = Paired::default();
@@ -156,19 +159,19 @@ async fn connect(
             },
             Ok(Some(Ok(Message::Close(f)))) => {
                 let code = f.as_ref().map_or(1005, |f| u16::from(f.code));
-                let why = refusal.unwrap_or_else(|| format!("中继关闭了连接（{code}）"));
+                let why = refusal.unwrap_or_else(|| t!("中继关闭了连接（{code}）", code));
                 // Bad key, bad token, or full: the same again would fail the same way.
                 return match code {
                     4002 | 4003 | 4401 => {
-                        (Ended::Refused(format!("中继拒绝了这台机器：{why}")), false)
+                        (Ended::Refused(t!("中继拒绝了这台机器：{why}", why)), false)
                     }
                     _ => (Ended::Lost(why), false),
                 };
             }
             Ok(Some(Ok(_))) => (),
             Ok(Some(Err(e))) => return (Ended::Lost(e.to_string()), false),
-            Ok(None) => return (Ended::Lost("中继断开".into()), false),
-            Err(_) => return (Ended::Lost("中继没有回应注册".into()), false),
+            Ok(None) => return (Ended::Lost(t!("中继断开").into()), false),
+            Err(_) => return (Ended::Lost(t!("中继没有回应注册").into()), false),
         }
     };
     eprintln!("fibo remote: 已连上中继 {base:?}");
@@ -196,7 +199,7 @@ async fn connect(
     let ended = loop {
         let m = tokio::select! {
             m = tokio::time::timeout_at(deadline, stream.next()) => m,
-            _ = &mut writer => break Ended::Lost("中继发送连接已结束".into()),
+            _ = &mut writer => break Ended::Lost(t!("中继发送连接已结束").into()),
             // A phone paired or unpaired since is told to the relay; an unpaired one on
             // now is dropped within RECHECK, and one that never finishes its handshake
             // within HANDSHAKE_LIMIT, including proof of the channel key afterward.
@@ -238,8 +241,8 @@ async fn connect(
             }
         };
         let m = match m {
-            Err(_) => break Ended::Lost("中继很久没有消息".into()),
-            Ok(None) => break Ended::Lost("中继断开".into()),
+            Err(_) => break Ended::Lost(t!("中继很久没有消息").into()),
+            Ok(None) => break Ended::Lost(t!("中继断开").into()),
             Ok(Some(Err(e))) => break Ended::Lost(e.to_string()),
             Ok(Some(Ok(m))) => m,
         };
@@ -300,7 +303,7 @@ async fn connect(
                                 }
                             };
                             if out.send(to_phone(proto, &id, &answer)).await.is_err() {
-                                break Ended::Lost("写不进中继".into());
+                                break Ended::Lost(t!("写不进中继").into());
                             }
                             eprintln!("fibo remote: 「{:?}」已连上（{}）", d.name, d.role.label());
                             devices::log(
@@ -408,11 +411,11 @@ async fn connect(
             Message::Close(f) => {
                 let code = f.as_ref().map_or(1005, |f| u16::from(f.code));
                 break match code {
-                    4000 if taken_here(socket) => {
-                        Ended::Refused("这台电脑上另一个连接中继的进程接管了，这一个退出".into())
-                    }
+                    4000 if taken_here(socket) => Ended::Refused(
+                        t!("这台电脑上另一个连接中继的进程接管了，这一个退出").into(),
+                    ),
                     4000 => Ended::Replaced,
-                    _ => Ended::Lost(format!("中继关闭了连接（{code}）")),
+                    _ => Ended::Lost(t!("中继关闭了连接（{code}）", code)),
                 };
             }
             _ => (),
@@ -494,10 +497,10 @@ impl Dropped {
     }
     fn label(self) -> &'static str {
         match self {
-            Dropped::Unpaired => "被取消配对",
-            Dropped::Kicked => "被电脑断开",
-            Dropped::RoleChanged => "改了权限，断开等它重连",
-            Dropped::Handshake => "没在时限内完成握手，已断开",
+            Dropped::Unpaired => t!("被取消配对"),
+            Dropped::Kicked => t!("被电脑断开"),
+            Dropped::RoleChanged => t!("改了权限，断开等它重连"),
+            Dropped::Handshake => t!("没在时限内完成握手，已断开"),
         }
     }
 }

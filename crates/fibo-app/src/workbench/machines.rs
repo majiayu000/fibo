@@ -279,8 +279,14 @@ impl Workbench {
             cx.notify();
             return;
         };
-        view.update(cx, |w, cx| w.edit(Edit::ClosePane { terminal }, cx));
-        self.close_peek(cx);
+        if self.hosts.closing.is_some() {
+            return;
+        }
+        let id = view.update(cx, |w, cx| w.edit_named(Edit::ClosePane { terminal }, cx));
+        let peek = self.peek.as_mut().unwrap();
+        peek.answering = true;
+        self.hosts.closing = Some((id, peek.terminal.clone()));
+        cx.notify();
     }
 }
 

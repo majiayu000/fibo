@@ -56,7 +56,7 @@ fn card(w: &Workspace, seen: &RecognitionStatus, t: &Terminal, now: u64) -> rp::
     let cwd = w.terminal_cwd(t);
     let content = session.and_then(|s| w.content.get(&s.id));
     let trust = seen.terminal_trust.get(&t.id);
-    let said = |s: &String| Some(s.clone()).filter(|s| !s.is_empty());
+    let said = |s: &str| Some(s.to_owned()).filter(|s| !s.is_empty());
     // What a change here set, until the log says something newer.
     let set = seen
         .terminal_modes
@@ -103,7 +103,7 @@ fn card(w: &Workspace, seen: &RecognitionStatus, t: &Terminal, now: u64) -> rp::
                 .unwrap_or_else(|| cwd.clone()),
         ),
         approval: content.and_then(|c| said(&c.approval)),
-        waiting: content.and_then(|c| asked(c).or_else(|| said(&c.waiting))),
+        waiting: content.and_then(|c| asked(c).or_else(|| said(crate::i18n::say(&c.waiting)))),
         status: status.map(|s| s.key().to_owned()),
         status_label: status.map(|s| s.label().to_owned()),
         needs_you: trust.is_some() || session.is_some_and(|s| w.needs_you(s, now)),
@@ -135,7 +135,9 @@ fn card(w: &Workspace, seen: &RecognitionStatus, t: &Terminal, now: u64) -> rp::
         model: (set.and_then(|m| TerminalModes::read(&m.model, log_model)))
             .or_else(|| content.and_then(|c| said(&c.model))),
         permission_full,
-        permission: set_permission.or_else(|| content.and_then(|c| said(&c.permission))),
+        permission: set_permission
+            .or_else(|| content.and_then(|c| said(&c.permission)))
+            .map(|p| crate::i18n::say(&p).to_owned()),
     }
 }
 

@@ -234,7 +234,7 @@ function remote(machine: string) {
     }
     switch (op) {
       case 'hello':
-        return { version: 1, machine: { id: machine, name: LINKS.find((l) => l.machine === machine)?.name }, ops: ALL_OPS, role: machine === 'dev-linux' && !PROMO ? 'answer' : 'full', requests: true, os: machine === 'dev-linux' ? 'linux' : 'macos', app_version: '0.1.0' };
+        return { version: 2, machine: { id: machine, name: LINKS.find((l) => l.machine === machine)?.name }, ops: ALL_OPS, role: machine === 'dev-linux' && !PROMO ? 'answer' : 'full', requests: true, os: machine === 'dev-linux' ? 'linux' : 'macos', app_version: '0.1.0' };
       case 'list':
         return {
           machine: { id: machine, name: LINKS.find((l) => l.machine === machine)?.name },
@@ -284,6 +284,6 @@ export function install() {
     return remote(l.machine) as never;
   });
   outboxReady.then(() => {
-    if (!PROMO && !unsent().length) enqueue({ machine: 'air', terminal: 'x', session: 'fixture-air', text: '测完把 APK 装到手机上' });
-  });
+    if (!PROMO && !unsent().length) return enqueue({ machine: 'air', terminal: 'x', session: 'fixture-air', text: '测完把 APK 装到手机上' });
+  }).catch(() => console.warn('Could not save the screenshot outbox fixture'));
 }

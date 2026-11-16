@@ -30,7 +30,7 @@ fn the_desktop_client_lists_and_watches_another_machine() {
     client
         .request(
             Op::Hello {
-                version: Some(1),
+                version: Some(fibo_remote::protocol::VERSION),
                 client: None,
             },
             t,
@@ -174,9 +174,9 @@ fn remote_watches_and_drives_a_terminal_without_taking_or_resizing_it() {
         .as_str()
         .unwrap()
         .contains("hello"));
-    say(json!({ "id": 2, "op": "hello", "version": 1 }));
+    say(json!({ "id": 2, "op": "hello", "version": fibo_remote::protocol::VERSION }));
     let hello = next(&reply(2)).1;
-    assert_eq!(hello["ok"]["version"], 1);
+    assert_eq!(hello["ok"]["version"], fibo_remote::protocol::VERSION);
     let machine = hello["ok"]["machine"]["id"].as_str().unwrap().to_owned();
     assert!(!machine.is_empty());
 
@@ -315,7 +315,7 @@ fn remote_watches_and_drives_a_terminal_without_taking_or_resizing_it() {
     writeln!(
         again.stdin.as_mut().unwrap(),
         "{}",
-        json!({ "id": 1, "op": "hello" })
+        json!({ "id": 1, "op": "hello", "version": fibo_remote::protocol::VERSION })
     )
     .unwrap();
     let (_, hello) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
@@ -376,7 +376,12 @@ fn a_stalled_remote_watcher_slows_nobody_and_gets_the_screen_again() {
         .unwrap();
     let mut stdin = child.stdin.take().unwrap();
     let stdout = child.stdout.take().unwrap();
-    writeln!(stdin, "{}", json!({ "id": 1, "op": "hello" })).unwrap();
+    writeln!(
+        stdin,
+        "{}",
+        json!({ "id": 1, "op": "hello", "version": fibo_remote::protocol::VERSION })
+    )
+    .unwrap();
     writeln!(
         stdin,
         "{}",

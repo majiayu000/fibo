@@ -515,12 +515,12 @@ html[lang="zh-CN"] .spphone img[data-lang="en"],html:not([lang="zh-CN"]) .spphon
     <article class="feat" id="f-review">
       <p class="fnum"><b>2</b>F₃ · Review</p>
       <h2>A finished turn is ready for review, not done</h2>
-      <p>You decide when work is finished. Open a session's drawer to read the agent's last words, answer in its terminal, or mark it done. From your phone, if you're away from the desk.</p>
+      <p>You decide when work is finished. Open a session's drawer to read the agent's last words, answer in its terminal, or mark it done. The phone preview can do this too after you build and pair it.</p>
       <div class="canvas mid" style="background-image:var(--p-s3);background-position:center 60%"><div class="card" style="--w:673px"><img src="shots/c-drawer.webp" alt="A session drawer: last words, answer in terminal, mark done" width="1346" height="560" loading="lazy"></div></div>
       <div class="three">
         <div><h3>Read before you accept</h3><p>Each turn keeps what you asked, what the agent said last, its branch, folder and how long it ran.</p></div>
         <div><h3>Send it back in place</h3><p>Answer in the same pane. No context switch, no copy and paste between windows.</p></div>
-        <div><h3>From your phone (preview)</h3><p>Answer a question or approve a step while you're away. End-to-end encrypted; host the relay yourself if you like.</p></div>
+        <div><h3>From your phone (preview)</h3><p>Answer a question or approve a step while you're away. Developer preview: build the phone app from source and set up your own relay. No public mobile installer or default hosted relay is available yet.</p></div>
       </div>
     </article>
 
@@ -538,7 +538,7 @@ html[lang="zh-CN"] .spphone img[data-lang="en"],html:not([lang="zh-CN"]) .spphon
     <article class="feat" id="f-spaces">
       <p class="fnum"><b>5</b>F₅ · Spaces &amp; machines</p>
       <h2>Spaces for projects. <em>Machines for spaces.</em></h2>
-      <p>A space is a folder you work in; its sessions stay together, and you can quiet one while you're away from it. Add another Mac over SSH and its spaces appear under it, view only. Questions from every machine reach your phone, end-to-end encrypted, through a relay you can host yourself. Below: two Macs and a quieted space, then the same sessions on the phone.</p>
+      <p>A space is a folder you work in; its sessions stay together, and you can quiet one while you're away from it. Add another Mac over SSH and its spaces appear under it, view only. With a phone app built from source and your own relay, questions from every machine can reach your phone with end-to-end encryption. Below: two Macs and a quieted space, then the same sessions on the phone.</p>
       <div class="panel sp-panel">
         <div class="sp-real">
           <figure class="sbshot spdesk"><img class="on" data-lang="en" src="shots/sp-desktop.webp" width="632" height="1350" alt="Fibo sidebar by machine: This Mac with four spaces and the docs space quieted, mac2 over SSH with two"><img class="on" data-lang="zh" src="shots/sp-desktop-zh.webp" width="632" height="1350" alt="" loading="lazy"><figcaption><span class="on">Mac · This Mac, and mac2 over SSH</span></figcaption></figure>
@@ -549,7 +549,7 @@ html[lang="zh-CN"] .spphone img[data-lang="en"],html:not([lang="zh-CN"]) .spphon
       <div class="three">
         <div><h3>Spaces per project</h3><p>Group sessions by folder or repository; a new space on any machine is one click.</p></div>
         <div><h3>Quiet a space</h3><p>Step away from a project without losing it. Starting work there again turns it back on.</p></div>
-        <div><h3>More than one Mac</h3><p>Any host <code>ssh</code> can reach without a password, with Fibo installed. Your phone joins through the relay.</p></div>
+        <div><h3>More than one Mac</h3><p>Any host <code>ssh</code> can reach without a password, with Fibo installed. The phone preview requires a source build and a self-hosted relay.</p></div>
       </div>
     </article>
 
@@ -743,7 +743,7 @@ html[lang="zh-CN"] .spphone img[data-lang="en"],html:not([lang="zh-CN"]) .spphon
     <details><summary>Is Fibo a terminal or an agent?</summary><p>Neither on its own: it is a workbench around real terminals and the agent CLIs you already use. It shows their state and keeps them running; it does not replace an agent's model or loop.</p></details>
     <details><summary>Which agents does it know?</summary><p>Twelve are built in: Claude Code, Codex, Grok Build, Cursor Agent, Qoder CLI, Hermes, Factory Droid, Pi, oh-my-pi, DeepSeek Harness, Kimi Code and Gemini CLI. OpenCode comes as a plugin, and others can be added the same way. Any other program still runs in a plain terminal.</p></details>
     <details><summary>Does Fibo upload my conversations?</summary><p>No. Fibo reads local transcripts and does not upload them. Your agent CLIs still talk to their own providers. The optional phone link is end-to-end encrypted.</p></details>
-    <details><summary>Does it change my agent settings?</summary><p>Only if you install the optional hooks from the welcome screen or with <code>fibo hooks install</code>; they make state changes instant. <code>fibo hooks uninstall</code> removes them.</p></details>
+    <details><summary>Does it change my agent settings?</summary><p>Hooks change agent settings when you choose to install them. The packaged app also installs command links and a Codex skill on startup; set <code>MOORING_NO_CLI_SETUP=1</code> to disable that setup. <code>fibo hooks uninstall</code> removes the hooks.</p></details>
     <details><summary>Wasn't this called Mooring?</summary><p>Yes. It was renamed Fibo in November 2026. Existing installs keep working: the <code>mooring</code> command, settings and terminals carry over.</p></details>
     <details><summary>Windows or Linux?</summary><p>Macs with Apple silicon or Intel, macOS 14 or later. Windows x64 has a preview installer on the release page: not code-signed yet, tried on Windows 11, and it does not update itself. There is no Linux release.</p></details>
   </div>

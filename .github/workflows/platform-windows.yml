@@ -40,6 +40,8 @@ jobs:
     # Normally well under this. A test that hangs should fail, not hold a runner for six hours.
     timeout-minutes: 45
     env:
+      # Error-message fixtures are Chinese; production follows the system language.
+      MOORING_LANG: zh
       CARGO_INCREMENTAL: 0
     steps:
       # Tests compare files byte for byte; a checkout must not rewrite line endings.

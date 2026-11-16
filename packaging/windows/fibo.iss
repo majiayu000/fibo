@@ -32,6 +32,12 @@ WizardStyle=modern
 ; The window and its host must be closed to replace them.
 CloseApplications=yes
 RestartApplications=no
+; A release signer supplies /DSignTool=fibo and /Sfibo="signtool ... $f".
+; Without a certificate the CI artifact stays explicitly unsigned.
+#ifdef SignTool
+SignTool={#SignTool}
+SignedUninstaller=yes
+#endif
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

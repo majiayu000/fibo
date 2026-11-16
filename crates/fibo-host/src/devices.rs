@@ -187,7 +187,27 @@ fn lock(socket: &Path) -> io::Result<std::fs::File> {
         .truncate(false)
         .write(true)
         .open(socket.with_file_name("remote-devices.lock"))?;
-    file.lock()?;
+    // A suspended writer can hold this lock indefinitely. Bound only our wait; never
+    // unlink its lock or change the device list without owning the same lock it holds.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        match file.try_lock() {
+            Ok(()) => break,
+            Err(std::fs::TryLockError::Error(e)) => return Err(e),
+            Err(std::fs::TryLockError::WouldBlock) => {
+                let left = deadline.saturating_duration_since(std::time::Instant::now());
+                if left.is_zero() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        t!("设备文件正被另一项操作占用，请稍后重试"),
+                    ));
+                }
+                // Writes normally hold the lock for only a few milliseconds; a long
+                // polling interval lets a busy writer repeatedly win before we wake.
+                std::thread::sleep(left.min(std::time::Duration::from_millis(1)));
+            }
+        }
+    }
     clear_abandoned(socket);
     Ok(file)
 }

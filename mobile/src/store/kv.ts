@@ -2,6 +2,7 @@
 // localStorage on web, which serves only to try the UI in a browser.
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { persistedValue } from './persisted';
 
 export const kv =
   Platform.OS === 'web'
@@ -16,33 +17,34 @@ export const kv =
         del: (k: string) => SecureStore.deleteItemAsync(k),
       };
 
-/** A JSON value under `key`, `fallback` when absent or unreadable. */
-export async function load<T>(key: string, fallback: T): Promise<T> {
-  try {
-    const text = await kv.get(key);
-    return text ? { ...fallback, ...JSON.parse(text) } : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-export const save = (key: string, value: unknown) => kv.set(key, JSON.stringify(value)).catch(() => undefined);
-
 /** A value screens read with a hook and change with `set`; saved under `key` on each change. */
 export function persisted<T extends object>(key: string, initial: T) {
+  return persistedValue(kv, key, initial);
+}
+
+/**
+ * A preference whose loss costs nothing (how the home screen was folded, a count): it changes at
+ * once, a failed save is dropped, and an unreadable one starts from `initial`. What must not be
+ * lost or read wrong (settings, the outbox, what was reviewed) uses `persisted`.
+ */
+export function remembered<T extends object>(key: string, initial: T) {
   let value = initial;
   const listeners = new Set<() => void>();
-  const ready = load(key, initial).then((v) => {
-    value = v;
-    listeners.forEach((l) => l());
-  });
+  const emit = () => listeners.forEach((l) => l());
+  const ready = kv
+    .get(key)
+    .then((text) => {
+      if (text) value = { ...initial, ...JSON.parse(text) };
+    })
+    .catch(() => undefined)
+    .then(emit);
   return {
     ready,
     get: () => value,
     set(patch: Partial<T> | ((v: T) => T)) {
       value = typeof patch === 'function' ? patch(value) : { ...value, ...patch };
-      listeners.forEach((l) => l());
-      save(key, value);
+      emit();
+      kv.set(key, JSON.stringify(value)).catch(() => undefined);
     },
     subscribe(l: () => void) {
       listeners.add(l);

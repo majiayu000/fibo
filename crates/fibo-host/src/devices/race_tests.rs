@@ -373,3 +373,30 @@ fn fixed_name_temporaries_of_older_builds_are_removed() {
         assert!(!dir.0.join(name).exists(), "{name} 还在");
     }
 }
+
+/// A stopped writer must not leave every later pairing request waiting forever. Releasing
+/// the lock after the receive deadline also makes the old blocking implementation fail
+/// this test without leaving a hung test thread behind.
+#[test]
+fn a_stalled_writer_times_out_without_changing_the_device_list() {
+    let dir = Dir::new();
+    add(&dir.socket(), "kept", Role::View).unwrap();
+    let before = std::fs::read(file(&dir.socket())).unwrap();
+    let held = lock(&dir.socket()).unwrap();
+    let (sent, received) = std::sync::mpsc::channel();
+    let socket = dir.socket();
+    let writer = std::thread::spawn(move || {
+        sent.send(add(&socket, "must not appear", Role::Full).map(|_| ()))
+            .unwrap();
+    });
+    let result = received.recv_timeout(std::time::Duration::from_secs(6));
+    drop(held);
+    writer.join().unwrap();
+    let error = result
+        .expect("pairing did not return while the lock was held")
+        .expect_err("a pairing without the lock must fail");
+    assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+    assert_eq!(std::fs::read(file(&dir.socket())).unwrap(), before);
+    add(&dir.socket(), "after release", Role::Full).unwrap();
+    assert_eq!(load(&dir.socket()).len(), 2);
+}

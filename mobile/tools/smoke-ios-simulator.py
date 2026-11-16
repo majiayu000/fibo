@@ -13,13 +13,14 @@ import time
 import uuid
 
 root = Path(__file__).resolve().parents[2]
-app = root / "mobile/ios/build/ios-release/Build/Products/Release-iphonesimulator/Fibo.app"
+app = root / "target/ios-evidence/Fibo.app"
 out = root / "target/ios-evidence/native-smoke"
 out.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("DEVELOPER_DIR", "/Applications/Xcode.app/Contents/Developer")
 
 
 def sim(*args):
+    print(f"simctl {args[0]}", flush=True)
     return subprocess.check_output(["xcrun", "simctl", *args], text=True, timeout=300).strip()
 
 
@@ -47,8 +48,32 @@ try:
         sim("io", device, "screenshot", str(out / f"{name}.png"))
         result["starts"].append({"name": name, "pid": int(pid), "alive_after_seconds": 5})
         sim("terminate", device, bundle)
-    (out / "result.json").write_text(json.dumps(result, indent=2) + "\n")
-    print(json.dumps(result))
+except Exception as error:
+    result["error"] = str(error)
+    # Keep the device's own install/launch failure before deleting this disposable device.
+    # Host-level simctl only reports the outer IXErrorDomain error in some failures.
+    try:
+        log = subprocess.run([
+            "xcrun", "simctl", "spawn", device, "log", "show", "--last", "3m",
+            "--style", "compact", "--predicate",
+            'process == "installcoordinationd" OR process == "installd" OR process == "Fibo"',
+        ], capture_output=True, text=True, timeout=30)
+        (out / "failure.log").write_text(log.stdout + log.stderr)
+    except (OSError, subprocess.TimeoutExpired) as diagnostic_error:
+        (out / "failure.log").write_text(str(diagnostic_error))
+    raise
 finally:
-    subprocess.run(["xcrun", "simctl", "shutdown", device], check=False, capture_output=True)
-    subprocess.run(["xcrun", "simctl", "delete", device], check=False, capture_output=True)
+    # A broken simulator service can also hang shutdown; preserve the result and let
+    # CI report the original failure instead of spending the whole job in cleanup.
+    for action in ("shutdown", "delete"):
+        try:
+            cleanup = subprocess.run(
+                ["xcrun", "simctl", action, device], capture_output=True, text=True, timeout=30)
+            if cleanup.returncode:
+                result.setdefault("cleanup_errors", []).append(f"{action}: {cleanup.stderr.strip()}")
+        except subprocess.TimeoutExpired:
+            result.setdefault("cleanup_errors", []).append(f"{action}: timed out after 30 seconds")
+    (out / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+if result.get("cleanup_errors"):
+    raise RuntimeError(f"Simulator cleanup failed: {result['cleanup_errors']}")
+print(json.dumps(result))

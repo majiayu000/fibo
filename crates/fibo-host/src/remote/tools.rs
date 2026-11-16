@@ -28,8 +28,8 @@ const STRETCH: usize = 64 << 10;
 /// One reader at a time for all this machine's phones: a line can be 32 MiB.
 static READING: Mutex<()> = Mutex::new(());
 
-pub(super) const GONE: &str = "原始记录已不在";
-pub(super) const UNSUPPORTED: &str = "这个 Agent 还不支持查看工具详情";
+pub(super) const GONE: &str = tk!("原始记录已不在");
+pub(super) const UNSUPPORTED: &str = tk!("这个 Agent 还不支持查看工具详情");
 
 /// The raw log, opened once per reply; every line is checked to be the file it was read from.
 struct Log {
@@ -99,7 +99,7 @@ fn log_of(reply: &ToolLog) -> io::Result<()> {
     if reads_tools(reply.runtime) {
         Ok(())
     } else {
-        Err(io::Error::other(UNSUPPORTED))
+        Err(io::Error::other(fibo_core::i18n::text(UNSUPPORTED)))
     }
 }
 
@@ -221,7 +221,7 @@ pub(super) fn tool_call(socket: &Path, request: &Value) -> io::Result<Value> {
     let session = super::chat::session_of(socket, request)?;
     let call = request["call"]
         .as_str()
-        .ok_or_else(|| io::Error::other("toolcall 需要 call"))?;
+        .ok_or_else(|| io::Error::other(t!("toolcall 需要 call")))?;
     let reply = rpc(
         socket,
         &Request::ToolCall {
@@ -234,7 +234,8 @@ pub(super) fn tool_call(socket: &Path, request: &Value) -> io::Result<Value> {
     };
     log_of(&log)?;
     let _one = READING.lock().unwrap_or_else(|e| e.into_inner());
-    let mut raw = Log::open(&log.path).ok_or_else(|| io::Error::other(GONE))?;
+    let mut raw =
+        Log::open(&log.path).ok_or_else(|| io::Error::other(fibo_core::i18n::text(GONE)))?;
     let found = raw
         .line(row.inode, row.offset)
         .and_then(|line| tool_call_line(log.runtime, &line, &row.id));
@@ -249,17 +250,17 @@ pub(super) fn tool_call(socket: &Path, request: &Value) -> io::Result<Value> {
             let (name, args) = split_text(&row.text);
             (name.to_owned(), describe_tool(name, &args), true)
         }
-        None => return Err(io::Error::other(GONE)),
+        None => return Err(io::Error::other(fibo_core::i18n::text(GONE))),
     };
     raw.too_long = false;
     let mut output = read_output(&mut raw, log.runtime, &row);
     if output.is_none() && !row.results.is_empty() {
         // Results logged but none of them readable: the file has changed since.
         if !raw.too_long {
-            return Err(io::Error::other(GONE));
+            return Err(io::Error::other(fibo_core::i18n::text(GONE)));
         }
         output = Some(ToolOutput {
-            text: format!("[这条输出超过 {} MB，手机不显示]", MOST_LINE >> 20),
+            text: t!("[这条输出超过 {v1} MB，手机不显示]", v1 = MOST_LINE >> 20),
             ..Default::default()
         });
     }
@@ -269,7 +270,7 @@ pub(super) fn tool_call(socket: &Path, request: &Value) -> io::Result<Value> {
         let body = match part {
             "input" => input,
             "output" => text.unwrap_or_default(),
-            _ => return Err(io::Error::other("part 只能是 input 或 output")),
+            _ => return Err(io::Error::other(t!("part 只能是 input 或 output"))),
         };
         return Ok(json!(slice(
             part,
@@ -304,9 +305,9 @@ pub(super) fn tool_call(socket: &Path, request: &Value) -> io::Result<Value> {
             })
             .collect(),
         note: match call_too_long {
-            true => Some(format!(
-                "这条调用的输入超过 {} MB，只能看到记录里留下的部分",
-                MOST_LINE >> 20
+            true => Some(t!(
+                "这条调用的输入超过 {v1} MB，只能看到记录里留下的部分",
+                v1 = MOST_LINE >> 20
             )),
             false => described.note,
         },
@@ -318,7 +319,11 @@ fn output_words(o: &ToolOutput) -> String {
     match o.images {
         0 => o.text.clone(),
         n => {
-            let note = format!("[{n} 张图片 · {}，手机不显示]", bytes_word(o.image_bytes));
+            let note = t!(
+                "[{n} 张图片 · {v1}，手机不显示]",
+                n,
+                v1 = bytes_word(o.image_bytes)
+            );
             if o.text.is_empty() {
                 note
             } else {

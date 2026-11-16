@@ -21,17 +21,9 @@ fn remote_hello_names_the_os_and_build_and_v2_ops_follow_the_role() {
         "linux"
     };
     assert_eq!(full.hello["ok"]["os"], os);
-    // What Settings shows for this build, read from the window's own crate.
-    let app = include_str!("../../fibo-app/Cargo.toml");
-    let shown = app
-        .lines()
-        .find_map(|l| l.strip_prefix("version = "))
-        .unwrap();
-    assert_eq!(full.hello["ok"]["app_version"], shown.trim_matches('"'));
-    assert_eq!(
-        full.hello["ok"]["version"], 1,
-        "the protocol's version stays"
-    );
+    // This fixture runs the standalone host, whose version may differ from the app.
+    assert_eq!(full.hello["ok"]["app_version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(full.hello["ok"]["version"], fibo_remote::protocol::VERSION);
     for op in ["diff", "dirs", "mkdir", "stop", "quota"] {
         assert!(full.ops().iter().any(|o| o == op), "{op}");
     }

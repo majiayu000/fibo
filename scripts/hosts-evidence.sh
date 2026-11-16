@@ -9,10 +9,18 @@
 # Needs a debug build with visual tests:
 #   cargo build -p fibo-host -p fibo-app --features fibo-app/visual-test
 # Prints PASS and what the other machine holds afterwards; saves shots to $R/shots.
-set -u
+set -euo pipefail
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 R=${MOORING_EVIDENCE_TMP:-/private/tmp/mooring-hs}
-pkill -f "$R/far" 2>/dev/null
+pkill -f "$R/far" 2>/dev/null || true
+FAR=
+cleanup() {
+  pkill -9 -f "fake-forward-$R" 2>/dev/null || true
+  if [ -n "$FAR" ]; then kill "$FAR" 2>/dev/null || true; fi
+  pkill -f "$R/far" 2>/dev/null || true
+  pkill -f "serve --runtime $R/rt" 2>/dev/null || true
+}
+trap cleanup EXIT
 rm -rf "$R"; mkdir -p "$R/home/.config/fibo" "$R/bin" "$R/shots" "$R/farhome/code"
 mkdir -m 700 "$R/far" "$R/rt"
 cat > "$R/bin/ssh" <<SH
@@ -72,16 +80,22 @@ if [ -z "$added" ]; then
 fi
 PATH="$R/bin:$PATH" HOME="$R/home" MOORING_HOSTS_EVIDENCE=1 \
   perl -e 'alarm 180; exec @ARGV' "$REPO/target/debug/fibo-app" --runtime "$R/rt" --visual-evidence "$R/shots" > "$R/app.log" 2>&1
-echo "app exit $?"
-grep -E "^hosts|panicked" -A2 "$R/app.log" | head
+APP_STATUS=$?
+echo "app exit $APP_STATUS"
+grep '^hosts PASS:' "$R/app.log"
 rpc '"Workspace"' | python3 -I -c '
 import json, sys
 w = json.load(sys.stdin)["Workspace"]
 print("far tabs left:", [t["id"] for t in w["tabs"]])
 print("far terminals:", sorted({t["state"] for t in w["terminals"]}))
-shells = sorted({t["argv"][0] for t in w["terminals"]})
-print("far shells:", shells, "(its own: /bin/bash)" if shells == ["/bin/bash"] else "WRONG: not its own shell")'
-pgrep -f "fake-forward-$R" >/dev/null && echo "a fake forward outlived the window" || echo "forward ended with the window"
-pkill -9 -f "fake-forward-$R" 2>/dev/null  # the window's children shrug off TERM
-kill $FAR 2>/dev/null; sleep 1; pkill -f "$R/far" 2>/dev/null; pkill -f "serve --runtime $R/rt" 2>/dev/null
+live = [t for t in w["terminals"] if t["state"] == "Running"]
+print("far running shells left:", [t["argv"][0] for t in live])
+# Exited terminal records are history, not a process the window forgot to close.
+assert not w["tabs"] and not live, "the window left a tab or running terminal on far"'
+if pgrep -f "fake-forward-$R" >/dev/null; then
+  echo "a fake forward outlived the window"; exit 1
+fi
+echo "forward ended with the window"
 ls "$R/shots"
+
+exit "$APP_STATUS"

@@ -54,7 +54,7 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
 
     // A view-only device sees but cannot type, and is told so.
     let mut view = Phone::connect(&viewer);
-    view.say(json!({ "id": 1, "op": "hello" }));
+    view.say(json!({ "id": 1, "op": "hello", "version": fibo_remote::protocol::VERSION }));
     let hello = view.next(|v| v["id"] == 1);
     assert_eq!(hello["ok"]["role"], "view");
     assert!(!hello["ok"]["ops"]
@@ -70,13 +70,16 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
     view.next(|v| v["stream"] == 3 && v["type"] == "screen");
 
     let mut phone = Phone::connect(&full);
-    phone.say(json!({ "id": 1, "op": "hello", "version": 1 }));
+    phone.say(json!({ "id": 1, "op": "hello", "version": fibo_remote::protocol::VERSION }));
     let hello = phone.next(|v| v["id"] == 1);
     let typed: fibo_remote::protocol::Hello =
         serde_json::from_value(hello["ok"].clone()).expect("hello matches the protocol types");
     assert_eq!(
         (typed.version, typed.role),
-        (1, fibo_remote::role::Role::Full)
+        (
+            fibo_remote::protocol::VERSION,
+            fibo_remote::role::Role::Full
+        )
     );
     phone.say(json!({ "id": 2, "op": "list" }));
     let list = phone.next(|v| v["id"] == 2);
@@ -145,7 +148,7 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
     );
     eprintln!("role changed → session dropped in {:?}", changed.elapsed());
     let mut view = Phone::connect(&viewer);
-    view.say(json!({ "id": 1, "op": "hello" }));
+    view.say(json!({ "id": 1, "op": "hello", "version": fibo_remote::protocol::VERSION }));
     assert_eq!(view.next(|v| v["id"] == 1)["ok"]["role"], "answer");
     view.say(json!({ "id": 2, "op": "keys", "terminal": "rt", "keys": ["z"] }));
     assert!(view.next(|v| v["id"] == 2)["error"]
@@ -193,7 +196,7 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
     };
     std::thread::sleep(Duration::from_millis(300));
     let mut still = Phone::connect(&full);
-    still.say(json!({ "id": 1, "op": "hello" }));
+    still.say(json!({ "id": 1, "op": "hello", "version": fibo_remote::protocol::VERSION }));
     assert_eq!(still.next(|v| v["id"] == 1)["ok"]["role"], "full");
     drop((still, impostor));
 
@@ -201,7 +204,7 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
     // 「断开」 keeps it out for five minutes.
     let late = pair(&root, &base, "后来的", "view");
     let mut l = Phone::connect(&late);
-    l.say(json!({ "id": 1, "op": "hello" }));
+    l.say(json!({ "id": 1, "op": "hello", "version": fibo_remote::protocol::VERSION }));
     l.next(|v| v["id"] == 1);
     let out = Command::new(env!("CARGO_BIN_EXE_fibo"))
         .args(["remote", "--kick", "后来的", "--runtime", &root])
@@ -259,7 +262,7 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
     ))
     .unwrap();
     let mut stalled = Phone::connect(&full);
-    stalled.say(json!({ "id": 1, "op": "hello" }));
+    stalled.say(json!({ "id": 1, "op": "hello", "version": fibo_remote::protocol::VERSION }));
     stalled.next(|v| v["id"] == 1);
     stalled.ack = false;
     stalled.say(json!({ "id": 2, "op": "watch", "terminal": "fl" }));
@@ -312,8 +315,11 @@ fn a_phone_on_a_relay_drives_a_terminal_through_a_channel_the_relay_cannot_read(
     drop((phone, stalled));
     let (_base, _stop, _relay) = local_relay(&addr, Default::default());
     let mut phone = Phone::connect(&full);
-    phone.say(json!({ "id": 1, "op": "hello" }));
-    assert_eq!(phone.next(|v| v["id"] == 1)["ok"]["version"], 1);
+    phone.say(json!({ "id": 1, "op": "hello", "version": fibo_remote::protocol::VERSION }));
+    assert_eq!(
+        phone.next(|v| v["id"] == 1)["ok"]["version"],
+        fibo_remote::protocol::VERSION
+    );
 
     // A second machine with the same code takes over; the first one exits.
     let _twin = machine();
@@ -426,7 +432,7 @@ fn the_host_keeps_phones_on_a_relay_and_shows_the_app_who_is_on() {
 
     // Who is on, what it watches and what it last did reach the app.
     let mut phone = Phone::connect(&link);
-    phone.say(json!({ "id": 1, "op": "hello" }));
+    phone.say(json!({ "id": 1, "op": "hello", "version": fibo_remote::protocol::VERSION }));
     phone.next(|v| v["id"] == 1);
     phone.say(json!({ "id": 2, "op": "watch", "terminal": "rt" }));
     phone.next(|v| v["stream"] == 2 && v["type"] == "screen");
@@ -471,7 +477,7 @@ fn the_host_keeps_phones_on_a_relay_and_shows_the_app_who_is_on() {
     devices[0]["kicked"] = json!(kicked - fibo_host::devices::KICK_COOLDOWN_MS - 1);
     fs::write(&file, devices.to_string()).unwrap();
     let mut phone = Phone::connect(&link);
-    phone.say(json!({ "id": 1, "op": "hello" }));
+    phone.say(json!({ "id": 1, "op": "hello", "version": fibo_remote::protocol::VERSION }));
     phone.next(|v| v["id"] == 1);
     until("back", &|s| s.live.online.len() == 1);
 
@@ -483,7 +489,7 @@ fn the_host_keeps_phones_on_a_relay_and_shows_the_app_who_is_on() {
     eprintln!("killed → connected again in {took:?}");
     drop(phone);
     let mut phone = Phone::connect(&link);
-    phone.say(json!({ "id": 1, "op": "hello" }));
+    phone.say(json!({ "id": 1, "op": "hello", "version": fibo_remote::protocol::VERSION }));
     phone.next(|v| v["id"] == 1);
 
     // Off: the host lets go of the relay; the pairing stays.

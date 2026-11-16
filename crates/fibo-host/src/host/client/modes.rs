@@ -65,17 +65,17 @@ impl<'a> Steps<'a> {
             let agent = session
                 .map(|s| s.runtime)
                 .or_else(|| host.recognition.terminal_agents.get(id).copied())
-                .ok_or_else(|| io::Error::other("这个终端里没有 Agent"))?;
+                .ok_or_else(|| io::Error::other(t!("这个终端里没有 Agent")))?;
             let trust = host.recognition.terminal_trust.contains_key(id);
             let ok = match session {
-                _ if trust => Err("它在问要不要信任这个文件夹，答完再换"),
+                _ if trust => Err(t!("它在问要不要信任这个文件夹，答完再换")),
                 Some(s) => idle(w, s),
                 None => Ok(()),
             };
             (agent, ok)
         };
         if !drive::switches(agent) {
-            return Err(io::Error::other("这个 Agent 还不支持在手机上换"));
+            return Err(io::Error::other(t!("这个 Agent 还不支持在手机上换")));
         }
         ok.map_err(io::Error::other)?;
         Ok(Self { shared, id, agent })
@@ -138,12 +138,12 @@ fn idle(w: &Workspace, session: &AgentSession) -> Result<(), &'static str> {
     let now = fibo_core::content::now();
     if let Some(c) = w.content.get(&session.id) {
         if !c.approval.is_empty() || !c.waiting.is_empty() {
-            return Err("它在问你问题，答完再换");
+            return Err(t!("它在问你问题，答完再换"));
         }
     }
     match status::of(w, session, now).phase() {
-        status::Phase::Working => Err("这一轮还没结束，等它停下再换"),
-        status::Phase::Waiting => Err("它在问你问题，答完再换"),
+        status::Phase::Working => Err(t!("这一轮还没结束，等它停下再换")),
+        status::Phase::Waiting => Err(t!("它在问你问题，答完再换")),
         status::Phase::Idle => Ok(()),
     }
 }

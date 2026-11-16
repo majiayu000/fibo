@@ -46,7 +46,7 @@ fn read_ask(socket: &Path, terminal: &str) -> io::Result<rp::Ask> {
     // The same reading that made the card's `approval`: a question scrolled up is none.
     let seen = screen_rules::explain(screen_rules::default_rules(), &tail);
     let question = (seen.approval())
-        .ok_or_else(|| io::Error::other("画面上现在没有审批"))?
+        .ok_or_else(|| io::Error::other(t!("画面上现在没有审批")))?
         .to_owned();
     let a = screen_ask::approval_ask(&tail).unwrap_or_default();
     Ok(rp::Ask {
@@ -79,10 +79,12 @@ pub(super) fn same_subject(socket: &Path, terminal: &str, request: &Value) -> io
     }
     let now = read_ask(socket, terminal)?;
     if showed.is_some_and(|s| s != now.subject) {
-        return Err(io::Error::other("画面上的审批已经换了一条，请重新看一眼"));
+        return Err(io::Error::other(t!(
+            "画面上的审批已经换了一条，请重新看一眼"
+        )));
     }
     if label.is_some_and(|l| now.always.as_deref() != Some(l)) {
-        return Err(io::Error::other("菜单上这一项已经变了，请重新看一眼"));
+        return Err(io::Error::other(t!("菜单上这一项已经变了，请重新看一眼")));
     }
     Ok(())
 }
@@ -98,29 +100,19 @@ pub(super) fn trust(socket: &Path, request: &Value, client: Option<&str>) -> io:
         id: id.clone(),
         folder: text(request, "folder")?.to_owned(),
         trust: (request["trust"].as_bool())
-            .ok_or_else(|| io::Error::other("trust 需要 true 或 false"))?,
+            .ok_or_else(|| io::Error::other(t!("trust 需要 true 或 false")))?,
     };
     ok_reply(rpc(socket, &named(client, request, answer))?)?;
     let until = Instant::now() + TRUST_WAIT;
     while screen_ask::trust_screen(&screen(socket, &id)?).is_some() {
         if Instant::now() >= until {
-            return Err(io::Error::other(
-                "按键发了，但画面上还在问，请打开终端看一眼",
-            ));
+            return Err(io::Error::other(t!(
+                "按键发了，但画面上还在问，请打开终端看一眼"
+            )));
         }
         std::thread::sleep(Duration::from_millis(150));
     }
     Ok(json!({}))
-}
-
-/// Text for an Agent asking this has nowhere good to go: Enter on Claude Code's prompt quits.
-pub(super) fn not_asking_trust(socket: &Path, terminal: &str) -> io::Result<()> {
-    if screen_ask::trust_screen(&screen(socket, terminal)?).is_some() {
-        return Err(io::Error::other(
-            "它在等你决定要不要信任这个文件夹，答完才能发消息",
-        ));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

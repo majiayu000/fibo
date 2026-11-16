@@ -104,27 +104,32 @@ fn turn_end(w: &Workspace, child: &str) -> Option<(String, String)> {
                 "" => return None,
                 reply => reply.to_owned(),
             },
-            format!("要它接着做：fibo prompt {child} \"…\"；看画面：fibo read {child}"),
+            t!("要它接着做：fibo prompt {child} \"…\"；看画面：fibo read {child}", child),
         ),
         Event::Waiting => (
             format!(
                 "waiting:{}:{}:{}",
                 c.turn_key, c.turn_started, c.waiting_episode
             ),
-            format!("它在等回答：{}", c.waiting.trim()),
-            format!(
-                "看画面：fibo read {child}；替它回答前先问用户，用户同意后 fibo prompt {child} --force \"…\""
+            t!("它在等回答：{question}", question = c.waiting.trim()),
+            t!(
+                "看画面：fibo read {child}；替它回答前先问用户，用户同意后 fibo prompt {child} --force \"…\"", child
             ),
         ),
         Event::Error => (
             format!("error:{}:{}:{}", c.turn_key, c.turn_started, c.error),
-            format!("出错了：{}", c.error.trim()),
-            format!("看画面：fibo read {child}"),
+            t!("出错了：{error}", error = c.error.trim()),
+            t!("看画面：fibo read {child}", child),
         ),
         Event::Started | Event::CommandDone | Event::CommandFailed => return None,
     };
+    let note = t!(
+        "这是你用 fibo run 派出去的 {agent} 的汇报，不是用户说的话。{hint}",
+        agent,
+        hint
+    );
     let text = format!(
-        "<fibo from=\"{child}\" agent=\"{agent}\" event=\"{}\">\n{}\n</fibo>\n这是你用 fibo run 派出去的 {agent} 的汇报，不是用户说的话。{hint}",
+        "<fibo from=\"{child}\" agent=\"{agent}\" event=\"{}\">\n{}\n</fibo>\n{note}",
         event.name(),
         clean(&body),
     );
@@ -139,7 +144,7 @@ fn clean(text: &str) -> String {
         .take(LONGEST)
         .collect();
     if text.chars().count() > LONGEST {
-        out.push_str("\n…（太长，后面截掉了）");
+        out.push_str(t!("\n…（太长，后面截掉了）"));
     }
     out
 }

@@ -5,8 +5,8 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { oops } from '@/actions';
-import { NOT_YET, remote, supports, useHub, write } from '@/remote/hub';
+import { oops, sendToConversation } from '@/actions';
+import { NOT_YET, remote, supports, useHub } from '@/remote/hub';
 import { useReviewed } from '@/store/reviewed';
 import { Icon } from '@/ui/icons';
 import { Btn, Nav, Notice, TITLE_WEIGHT, mono, useBottom } from '@/ui/kit';
@@ -17,7 +17,7 @@ import { type Theme, useTheme } from '@/ui/theme';
 import { notUi, tr } from '@/i18n';
 
 type File = { path: string; added: number; removed: number; status: string; patch: string; truncated?: boolean };
-type Diff = { cwd: string; branch?: string; files: File[]; added: number; removed: number; truncated?: boolean; checks?: Check[]; summary?: boolean };
+type Diff = { session?: string | null; cwd: string; branch?: string; files: File[]; added: number; removed: number; truncated?: boolean; checks?: Check[]; summary?: boolean };
 
 function FileCard({ f, t, seen, onTick, open, onOpen, names }: { f: File; t: Theme; seen: boolean; onTick: () => void; open: boolean; onOpen: () => void; names: boolean }) {
   // Names only: nothing to open.
@@ -78,6 +78,7 @@ export default function DiffScreen() {
   const { machines } = useHub();
   const m = machines.find((x) => x.id === machine);
   const online = m?.status === 'online';
+  const cardSession = m?.cards.find((c) => c.id === terminal)?.session ?? null;
   const can = supports(m, 'diff');
   const [diff, setDiff] = useState<Diff | null>(null);
   const [error, setError] = useState('');
@@ -93,7 +94,7 @@ export default function DiffScreen() {
     r.request('diff', terminal ? { terminal } : { cwd })
       .then((d: Diff) => {
         if (!live) return;
-        setDiff(d);
+        setDiff({ ...d, session: cardSession });
         setError('');
         // The first file starts open, the rest folded.
         if (d.files[0]) setOpen((o) => (Object.keys(o).length ? o : { [d.files[0].path]: true }));
@@ -102,14 +103,14 @@ export default function DiffScreen() {
     return () => {
       live = false;
     };
-  }, [online, can, machine, terminal, cwd]);
+  }, [online, can, machine, terminal, cwd, cardSession]);
 
   const files = diff?.files ?? [];
   const check = checkLine(diff?.checks);
   const seen = files.filter((f) => reviewed.has(f.path, f.patch)).length;
   const words = diffWords(diff);
   const say = (text: string) =>
-    write(machine, 'send', { terminal, text, enter: true })
+    sendToConversation(machine, { id: terminal ?? '', session: diff?.session }, text)
       .then(() => setSent(text))
       .catch((e) => oops((e as Error).message));
 

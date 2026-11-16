@@ -117,3 +117,13 @@ impl Parser {
         }
     }
 }
+
+impl Parser {
+    pub(super) fn wait(&mut self, reason: &str, at: u64, source: &Source) {
+        // A dialog already known from the transcript or screen keeps its richer text.
+        if self.card.turn != Turn::Waiting {
+            self.card.waiting = reason.into();
+            self.phase(Turn::Waiting, "", at, source);
+        }
+    }
+}

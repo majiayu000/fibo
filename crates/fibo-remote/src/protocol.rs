@@ -6,7 +6,7 @@ use crate::role::Role;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 pub const MAX_LINE: usize = 1 << 20;
 pub use crate::asks::*;
 pub use crate::cards::*;

@@ -13,6 +13,7 @@ pub(super) fn once(shared: &Shared, request: RequestId, inner: Request) -> io::R
     if !matches!(
         inner,
         Request::SendText { .. }
+            | Request::SendTurn(..)
             | Request::SendKeys { .. }
             | Request::SendInput { .. }
             | Request::AnswerApproval { .. }
@@ -21,9 +22,9 @@ pub(super) fn once(shared: &Shared, request: RequestId, inner: Request) -> io::R
             | Request::Interrupt { .. }
             | Request::Modes(_)
     ) {
-        return Err(io::Error::other(
-            "只有打字、按键和回答审批能这样带请求 id；编辑用 Edit 自己的 request",
-        ));
+        return Err(io::Error::other(t!(
+            "只有打字、按键和回答审批能这样带请求 id；编辑用 Edit 自己的 request"
+        )));
     }
     let _turn = TURN.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(first) = lock(shared)?.store.settled(&request)? {
@@ -34,6 +35,11 @@ pub(super) fn once(shared: &Shared, request: RequestId, inner: Request) -> io::R
     let mut host = lock(shared)?;
     match &result {
         Ok(_) => host.store.applied(&request)?,
+        // An approval or trust prompt was up and nothing was typed: the phone resends
+        // under the same id once it is answered, and that resend has to act.
+        Err(e) if e.get_ref().is_some_and(|inner| inner.is::<NotTyped>()) => {
+            host.store.forgotten(&request)?
+        }
         Err(e) => host.store.refused(&request, &e.to_string())?,
     }
     result

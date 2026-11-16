@@ -27,6 +27,7 @@ mod store;
 pub mod tool_text;
 pub use agents::calling_conversations;
 pub use agents::hooks;
+pub use agents::launch::launch_argv as agent_launch_argv;
 pub use agents::mirror;
 pub use agents::modes_drive::switches as agent_modes_switch;
 pub use agents::{

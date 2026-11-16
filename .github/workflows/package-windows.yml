@@ -9,6 +9,11 @@ on:
     branches:
       - main
     paths:
+      - crates/**
+      - Cargo.lock
+      - rust-toolchain.toml
+      - bootstrap.sh
+      - patches/**
       - packaging/windows/**
       - .github/workflows/package-windows.yml
   workflow_dispatch:
@@ -63,20 +68,34 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-ChildItem target\installer | ForEach-Object { "$($_.Name) $([int]($_.Length/1MB)) MB" }
 
-      # The installed layout must start: the host serves and answers from an isolated runtime.
-      - name: Smoke test the staged host
+      # Exercise the installer itself, in a directory owned only by this job.
+      - name: Install, run the installed host, and uninstall
         shell: pwsh
         run: |
+          $install = "$env:RUNNER_TEMP\fibo-installed"
+          $setup = (Get-ChildItem target\installer\*.exe | Select-Object -First 1).FullName
+          $p = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"") -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "Installer exited $($p.ExitCode)" }
+          if (-not (Test-Path "$install\Resources\plugins\index.json")) { throw 'Installed catalog missing' }
           $rt = "$env:RUNNER_TEMP\fibo-rt"
-          $host_ = Start-Process -FilePath target\windows-stage\bin\fibo.exe -ArgumentList @('serve','--runtime',$rt) -PassThru -WindowStyle Hidden
-          Start-Sleep 3
-          $env:MOORING_RUNTIME = $rt
-          & target\windows-stage\bin\fibo.exe list
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Stop-Process -Id $host_.Id -Force
+          $host_ = Start-Process -FilePath "$install\bin\fibo.exe" -ArgumentList @('serve','--runtime',$rt) -PassThru -WindowStyle Hidden
+          try {
+            Start-Sleep 3
+            $env:MOORING_RUNTIME = $rt
+            & "$install\bin\fibo.exe" list --json | Tee-Object target\installer\installed-host.json
+            if ($LASTEXITCODE -ne 0) { throw 'Installed host did not answer' }
+            & "$install\bin\mooring.exe" --version
+            if ($LASTEXITCODE -ne 0) { throw 'Old CLI name did not start' }
+          } finally {
+            Stop-Process -Id $host_.Id -Force -ErrorAction SilentlyContinue
+          }
+          $p = Start-Process -FilePath "$install\unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -PassThru -Wait
+          if ($p.ExitCode -ne 0 -or (Test-Path "$install\bin\fibo.exe")) { throw 'Uninstall did not remove the installed executable' }
+          $manifest = @{ source = (git rev-parse HEAD); installer = (Split-Path $setup -Leaf); sha256 = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower(); signed = ((Get-AuthenticodeSignature $setup).Status -eq 'Valid'); published = $false }
+          $manifest | ConvertTo-Json | Set-Content target\installer\manifest.json
 
       - uses: actions/upload-artifact@v4
         with:
           name: Fibo-Setup-windows-x64
-          path: target/installer/*.exe
+          path: target/installer/
           retention-days: 14

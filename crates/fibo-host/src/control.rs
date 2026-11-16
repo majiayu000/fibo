@@ -70,7 +70,7 @@ fibo send <终端> <文字|-> [--enter]        把文字作为粘贴放进终端
         switches: &["wait", "force"],
         usage: tk!("\
 fibo prompt <终端> <文字|-> [--wait] [--timeout 秒] [--force]
-                                             给 Agent 发一条并回车；它正等你回答时拒绝，除非 --force"),
+                                             给 Agent 发一条并回车；--force 可回答普通问题，不能代替审批"),
     },
     Command {
         name: "wait",

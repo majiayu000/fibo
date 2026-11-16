@@ -19,7 +19,7 @@ pub(super) fn await_interrupt(shared: &Shared, id: &str) -> io::Result<Reply> {
     loop {
         let w = lock(shared)?.snapshot();
         let Some(session) = w.current_agent(id) else {
-            return Err(io::Error::other("Agent 退出了，这个终端里已经没有对话"));
+            return Err(io::Error::other(t!("Agent 退出了，这个终端里已经没有对话")));
         };
         let state = fibo_core::status::of(&w, session, fibo_core::content::now());
         if state.phase() != fibo_core::status::Phase::Working {
@@ -41,9 +41,9 @@ pub(super) fn await_interrupt(shared: &Shared, id: &str) -> io::Result<Reply> {
             }
         }
         if Instant::now() >= until {
-            return Err(io::Error::other(
-                "发了中断，但它没有停。可以打开终端看一眼，或者再试一次",
-            ));
+            return Err(io::Error::other(t!(
+                "发了中断，但它没有停。可以打开终端看一眼，或者再试一次"
+            )));
         }
         std::thread::sleep(Duration::from_millis(200));
     }

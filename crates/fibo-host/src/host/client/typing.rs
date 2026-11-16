@@ -10,11 +10,54 @@ pub(in crate::host) fn send_text(
     submit: bool,
     session: Option<&str>,
 ) -> io::Result<()> {
+    send_message(
+        shared,
+        id,
+        text,
+        submit.then_some(b"\r".as_slice()),
+        session,
+    )
+}
+
+pub(in crate::host) fn send_turn(
+    shared: &Shared,
+    id: &str,
+    text: &str,
+    steer: bool,
+    session: Option<&str>,
+) -> io::Result<()> {
+    let keys = {
+        let host = lock(shared)?;
+        let agent = host
+            .workspace
+            .current_agent(id)
+            .map(|s| s.runtime)
+            .or_else(|| host.recognition.terminal_agents.get(id).copied());
+        agent
+            .and_then(|a| crate::agent_adapter(a).turn_keys())
+            .ok_or_else(|| io::Error::other(t!("这个 Agent 分不出排队和马上发，直接发送就好")))?
+    };
+    send_message(
+        shared,
+        id,
+        text,
+        Some(if steer { keys.steer } else { keys.queue }),
+        session,
+    )
+}
+
+fn send_message(
+    shared: &Shared,
+    id: &str,
+    text: &str,
+    submit: Option<&[u8]>,
+    session: Option<&str>,
+) -> io::Result<()> {
     if text.contains('\x1b') {
-        return Err(io::Error::other("文本包含终端控制字符"));
+        return Err(io::Error::other(t!("文本包含终端控制字符")));
     }
     if text.len() > 64 * 1024 {
-        return Err(io::Error::other("单次输入超过 64 KiB"));
+        return Err(io::Error::other(t!("单次输入超过 64 KiB")));
     }
     let host = lock(shared)?;
     check_session(&host.workspace, id, session)?;
@@ -28,6 +71,7 @@ pub(in crate::host) fn send_text(
         if live.exited {
             return Err(io::Error::other("terminal has exited"));
         }
+        message_allowed(&host, &live, id).map_err(|e| io::Error::other(NotTyped(e.to_string())))?;
         if !text.is_empty() {
             let bracketed = live
                 .vt
@@ -37,7 +81,7 @@ pub(in crate::host) fn send_text(
             let bytes = if bracketed {
                 format!("\x1b[200~{text}\x1b[201~")
             } else if text.contains(['\n', '\r']) {
-                return Err(io::Error::other("程序未启用安全粘贴，不能发送多行文本"));
+                return Err(io::Error::other(t!("程序未启用安全粘贴，不能发送多行文本")));
             } else {
                 text.to_owned()
             };
@@ -48,9 +92,9 @@ pub(in crate::host) fn send_text(
     drop(host);
     // Same as typing in the app: the prompt on screen is no longer waiting on the user.
     lock(shared)?.set_screen_wait(id, None)?;
-    if !submit {
+    let Some(submit) = submit else {
         return Ok(());
-    }
+    };
     // Long enough for an Agent's paste handling to finish before Enter arrives.
     thread::sleep(Duration::from_millis(150));
     {
@@ -60,16 +104,57 @@ pub(in crate::host) fn send_text(
         if live.exited {
             return Err(io::Error::other("terminal has exited"));
         }
-        live.master.write(b"\r")?;
+        message_allowed(&host, &live, id)?;
+        live.master.write(submit)?;
     }
-    record_submission(shared, id)
+    typed(shared, id, submit.contains(&b'\r'))
+}
+
+/// A message refused before any of it was typed. Its request id is not used up
+/// (`once`): the same message sent again after the prompt is answered gets typed.
+#[derive(Debug)]
+pub(in crate::host) struct NotTyped(String);
+impl std::fmt::Display for NotTyped {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+impl std::error::Error for NotTyped {}
+
+/// Inspect the current screen under the same locks used to write the message.
+/// The second call catches an approval appearing while the paste is being handled.
+fn message_allowed(host: &Host, live: &live::Live, id: &str) -> io::Result<()> {
+    let tail = live.vt.tail_text(usize::from(live.rows))?;
+    if crate::screen_ask::trust_screen(&tail).is_some() {
+        return Err(io::Error::other(t!(
+            "它在等你决定要不要信任这个文件夹，答完才能发消息"
+        )));
+    }
+    let rules = host
+        .workspace
+        .current_agent(id)
+        .map(|s| s.runtime)
+        .map_or_else(
+            crate::screen_rules::default_rules,
+            crate::screen_rules::rules,
+        );
+    if host.http_asks.contains_key(id)
+        || crate::screen_rules::explain(rules, &tail)
+            .approval()
+            .is_some()
+    {
+        return Err(io::Error::other(t!(
+            "它在等你审批，先允许或拒绝，再发送消息"
+        )));
+    }
+    Ok(())
 }
 fn check_session(workspace: &Workspace, id: &str, expected: Option<&str>) -> io::Result<()> {
     if let Some(expected) = expected {
         if workspace.current_agent(id).map(|s| s.id.as_str()) != Some(expected) {
-            return Err(io::Error::other(
-                "原对话已离开这个终端，消息未继续发送，请打开原对话处理",
-            ));
+            return Err(io::Error::other(t!(
+                "原对话已离开这个终端，消息未继续发送，请打开原对话处理"
+            )));
         }
     }
     Ok(())
@@ -104,13 +189,13 @@ pub(in crate::host) fn key_bytes(key: &str, application_cursor: bool) -> io::Res
             (None, 1) if !key.chars().next().is_some_and(char::is_control) => {
                 key.as_bytes().to_vec()
             }
-            _ => return Err(io::Error::other(format!("不认识的按键 {key}"))),
+            _ => return Err(io::Error::other(t!("不认识的按键 {key}", key))),
         },
     })
 }
 pub(in crate::host) fn send_keys(shared: &Shared, id: &str, keys: &[String]) -> io::Result<()> {
     if keys.is_empty() || keys.len() > 64 {
-        return Err(io::Error::other("一次发 1 到 64 个按键"));
+        return Err(io::Error::other(t!("一次发 1 到 64 个按键")));
     }
     let terminal = lock(shared)?
         .terminals
@@ -141,7 +226,7 @@ pub(in crate::host) fn send_keys(shared: &Shared, id: &str, keys: &[String]) -> 
 /// Raw input from another desktop's pane, written as it came.
 pub(in crate::host) fn type_input(shared: &Shared, id: &str, bytes: &[u8]) -> io::Result<()> {
     if bytes.is_empty() || bytes.len() > 64 << 10 {
-        return Err(io::Error::other("一次发 1 字节到 64 KiB"));
+        return Err(io::Error::other(t!("一次发 1 字节到 64 KiB")));
     }
     let terminal = lock(shared)?
         .terminals
@@ -186,7 +271,9 @@ pub(in crate::host) fn answer_trust(
             let tail = live.vt.tail_text(usize::from(live.rows))?;
             let seen = crate::screen_ask::trust_screen(&tail)
                 .filter(|s| s.folder == folder)
-                .ok_or_else(|| io::Error::other("画面上已经没有这个信任提示了，可能已经答过"))?;
+                .ok_or_else(|| {
+                    io::Error::other(t!("画面上已经没有这个信任提示了，可能已经答过"))
+                })?;
             let bytes = match (trust, seen.on_yes) {
                 (false, _) => b"\x1b".to_vec(),
                 (true, true) => b"\r".to_vec(),
@@ -210,9 +297,9 @@ pub(in crate::host) fn answer_trust(
         }
         thread::sleep(TRUST_STEP);
     }
-    Err(io::Error::other(
-        "光标没有移到「信任」那一项，没有按回车，请打开终端处理",
-    ))
+    Err(io::Error::other(t!(
+        "光标没有移到「信任」那一项，没有按回车，请打开终端处理"
+    )))
 }
 /// The key its CLI interrupts a turn with, while the terminal's conversation is working.
 /// The Agent stays and can be asked to go on, unlike `StopAgent`, which ends its process.
@@ -223,12 +310,12 @@ const PRESS_GAP_MS: u64 = 150;
 pub(in crate::host) fn interrupt(shared: &Shared, id: &str) -> io::Result<()> {
     let w = lock(shared)?.snapshot();
     let session =
-        (w.current_agent(id)).ok_or_else(|| io::Error::other("这个终端里没有 Agent 对话"))?;
+        (w.current_agent(id)).ok_or_else(|| io::Error::other(t!("这个终端里没有 Agent 对话")))?;
     let state = fibo_core::status::of(&w, session, fibo_core::content::now());
     if state.phase() != fibo_core::status::Phase::Working {
-        return Err(io::Error::other(format!(
-            "Agent 现在是「{}」，没有要中断的",
-            state.label()
+        return Err(io::Error::other(t!(
+            "Agent 现在是「{label}」，没有要中断的",
+            label = state.label()
         )));
     }
     let cli = crate::agents::adapter(session.runtime);
@@ -252,9 +339,9 @@ pub(in crate::host) fn interrupt(shared: &Shared, id: &str) -> io::Result<()> {
             }
             Some(menu) if menu.on_cancel => b"\r",
             Some(_) => {
-                return Err(io::Error::other(
-                    "画面上的菜单光标不在「Cancel task」上，没有替你选，请打开终端处理",
-                ))
+                return Err(io::Error::other(t!(
+                    "画面上的菜单光标不在「Cancel task」上，没有替你选，请打开终端处理"
+                )));
             }
         };
         live.master.write(bytes)?;
@@ -278,6 +365,63 @@ fn typed(shared: &Shared, id: &str, entered: bool) -> io::Result<()> {
         record_submission(shared, id)?;
     }
     Ok(())
+}
+
+/// Enter for 允许一次, Esc for 拒绝, sent only while the screen still shows `question`
+/// as an approval, read again under the same lock the key is written under: an approval
+/// answered in the pane meanwhile gets nothing typed into what replaced it.
+pub(in crate::host) fn answer_approval(
+    shared: &Shared,
+    id: &str,
+    question: &str,
+    allow: bool,
+    always: bool,
+) -> io::Result<()> {
+    if let Some(done) = http_ask::answer(shared, id, question, allow, always) {
+        return done;
+    }
+    let (terminal, rules) = {
+        let host = lock(shared)?;
+        let terminal = host
+            .terminals
+            .get(id)
+            .cloned()
+            .ok_or_else(|| io::Error::other("terminal not found"))?;
+        let rules = host
+            .workspace
+            .current_agent(id)
+            .map(|s| s.runtime)
+            .map_or_else(
+                crate::screen_rules::default_rules,
+                crate::screen_rules::rules,
+            );
+        (terminal, rules)
+    };
+    {
+        let mut live = lock(&terminal)?;
+        if live.exited {
+            return Err(io::Error::other("terminal has exited"));
+        }
+        let tail = live.vt.tail_text(usize::from(live.rows))?;
+        let seen = crate::screen_rules::explain(rules, &tail);
+        if seen.approval() != Some(question) {
+            return Err(io::Error::other(t!(
+                "画面上已经没有这个审批了，可能已经答过"
+            )));
+        }
+        // Enter takes whichever option the cursor is on; only the first one is 允许一次.
+        let key = if always {
+            let key = seen.always_key();
+            key.ok_or_else(|| io::Error::other(t!("这个审批没有「不再询问」这一项")))?
+        } else if allow && !seen.cursor_on_first() {
+            return Err(io::Error::other(t!("光标不在第一个选项上，请打开画面回答")));
+        } else {
+            (if allow { "\r" } else { "\x1b" }).to_owned()
+        };
+        live.master.write(key.as_bytes())?;
+        live.input_at = Some(Instant::now());
+    }
+    lock(shared)?.set_screen_wait(id, None)
 }
 
 #[cfg(test)]

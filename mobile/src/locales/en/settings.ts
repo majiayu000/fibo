@@ -134,4 +134,13 @@ export const settings: Record<string, Entry> = {
   '{n} 小时前': (a) => `${a.n} ${plural(a.n, 'hour', 'hours')} ago`,
   '{month}月{day}日': '{month}/{day}',
   '{month}月{day}日 {time}': '{month}/{day} {time}',
+  '设置没有保存，请重试': "The setting wasn't saved. Try again.",
+  '请在手机上设置 Face ID / 指纹锁': 'Turn on the Face ID / fingerprint lock on the phone',
+  '无法完成身份验证，请重试': "Couldn't verify it's you. Try again.",
+  '无法读取本机保存的电脑，请重试。': "Couldn't read the computers saved on this phone. Try again.",
+  '无法读取本机的设置或待发送消息。为保护对话，暂不打开；请重试。':
+    "Couldn't read this phone's settings or unsent messages. To keep your conversations safe, Fibo stays closed; try again.",
+  重试读取: 'Read again',
+  正在读取本机设置: 'Reading settings on this phone',
+  '未能保存「看过」标记，请重试': "Couldn't save the reviewed mark. Try again.",
 };

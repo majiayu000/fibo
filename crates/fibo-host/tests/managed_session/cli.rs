@@ -71,18 +71,23 @@ fn command_line_lists_reads_sends_and_refuses_to_type_into_an_approval() {
     let waiting = fibo_core::status::Status::Waiting.label();
     assert!(line.contains("claude") && line.contains(waiting), "{out}");
     let (ok, _, err) = cli(&["prompt", "agent-cli", "yes", "please"]);
-    assert!(!ok && err.contains("等你回答"), "{err}");
+    // Either the CLI's waiting snapshot or the host's current screen can refuse first.
+    assert!(
+        !ok && (err.contains("正在等你回答") || err.contains("先允许或拒绝")),
+        "{err}"
+    );
     // Nothing reached the approval.
     std::thread::sleep(Duration::from_millis(500));
     let (_, screen, _) = cli(&["read", "agent-cli"]);
     assert!(!screen.contains("answer="), "{screen}");
     let (ok, _, err) = cli(&["prompt", "agent-cli", "1", "--force"]);
-    assert!(ok, "{err}");
-    let until = Instant::now() + Duration::from_secs(10);
-    while !cli(&["read", "agent-cli"]).1.contains("answer=1") {
-        assert!(Instant::now() < until, "forced prompt never arrived");
-        std::thread::sleep(Duration::from_millis(100));
-    }
+    assert!(!ok && err.contains("先允许或拒绝"), "{err}");
+    std::thread::sleep(Duration::from_millis(500));
+    let (_, screen, _) = cli(&["read", "agent-cli"]);
+    assert!(
+        !screen.contains("answer="),
+        "forced prompt answered approval: {screen}"
+    );
 }
 
 /// 允许一次 / 拒绝 from the workbench: the host answers only the approval still on

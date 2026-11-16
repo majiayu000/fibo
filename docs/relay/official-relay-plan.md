@@ -20,7 +20,7 @@
 | 按电脑记流量：每小时一行 `usage`，见 `self-host.md` | Claude | 本次 PR |
 | `/healthz` 不再对外说挂了几台电脑 | Claude | 本次 PR |
 | 换成域名 `relay.niannian.site`：主域名已备案、已在这台服务器上，只差 DNSPod 加一条 A 记录 | 用户加解析，Claude 签证书、切换 | 等解析 |
-| 告警：证书快到期、`/healthz` 不通时发邮件（GitHub Actions 定时检查，失败时 GitHub 自动发邮件，不加新凭据） | Claude | 等域名 |
+| 告警：每 6 小时检查 HTTPS、`/healthz` 与证书剩余 48 小时，失败时 Actions 标红 | Claude | `relay-health.yml`；`RELAY_URL` 设当前入口，合入 main 后定时生效 |
 | 封顶花费：在腾讯云控制台看流量包大小和超额策略 | 用户 | 待看 |
 
 换域名期间 IP 入口继续开着，旧配对照常用；重新配对后再关掉 IP 入口和它那张 6.7 天的短期证书。
@@ -39,3 +39,9 @@
 - 腾讯云设带宽或流量上限，防账单失控；用户多了再考虑国内外各一台。
 
 不做：把共用密钥写进 App（等于完全开放，安装包里一扒就有）。
+
+## 告警验收（11-16）
+
+`relay-health.yml` 对当前 IP 入口和将来的域名都可用，不用等 DNS。地址放仓库 secret `RELAY_URL`（日志不打印地址），不放注册密钥。每 6 小时检查一次，证书不足 48 小时或健康接口失败即使工作流失败。GitHub 定时任务可能延迟，不承诺精确到点。
+
+邮件通知依赖操作者的 [Actions 通知设置](https://docs.github.com/en/subscriptions-and-notifications/how-tos/managing-github-actions-notifications)，可选择只收失败；定时运行通知送给最后修改 cron 的用户。工作流通过只能证明探测成功，邮件实际送达需单独确认。

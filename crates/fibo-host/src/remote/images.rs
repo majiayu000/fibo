@@ -36,8 +36,9 @@ fn kind(bytes: &[u8]) -> Option<&'static str> {
 pub(super) fn upload(socket: &Path, request: &Value) -> io::Result<Value> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(text(request, "data")?)
-        .map_err(|e| io::Error::other(format!("data 不是 base64：{e}")))?;
-    let ext = kind(&bytes).ok_or_else(|| io::Error::other("只收 PNG、JPEG、GIF 或 WebP 图片"))?;
+        .map_err(|e| io::Error::other(t!("data 不是 base64：{e}", e)))?;
+    let ext =
+        kind(&bytes).ok_or_else(|| io::Error::other(t!("只收 PNG、JPEG、GIF 或 WebP 图片")))?;
     let dir = folder(socket);
     // Its own, or refused: a link or a folder others may enter is not where a picture goes.
     fibo_platform::fs::create_private_dir(&dir)?;
@@ -69,16 +70,19 @@ pub(super) fn wanted(socket: &Path, request: &Value) -> io::Result<Vec<String>> 
     };
     let list = list
         .as_array()
-        .ok_or_else(|| io::Error::other("images 需要字符串数组"))?;
+        .ok_or_else(|| io::Error::other(t!("images 需要字符串数组")))?;
     if list.len() > MAX_IMAGES {
-        return Err(io::Error::other(format!("一次最多 {MAX_IMAGES} 张图片")));
+        return Err(io::Error::other(t!(
+            "一次最多 {MAX_IMAGES} 张图片",
+            MAX_IMAGES
+        )));
     }
     let dir = folder(socket);
     list.iter()
         .map(|p| {
             let p = p
                 .as_str()
-                .ok_or_else(|| io::Error::other("images 需要字符串数组"))?;
+                .ok_or_else(|| io::Error::other(t!("images 需要字符串数组")))?;
             let path = Path::new(p);
             let ours = path.parent() == Some(dir.as_path())
                 && path
@@ -86,10 +90,10 @@ pub(super) fn wanted(socket: &Path, request: &Value) -> io::Result<Vec<String>> 
                     .and_then(|e| e.to_str())
                     .is_some_and(|e| ["png", "jpg", "gif", "webp"].contains(&e));
             if !ours {
-                return Err(io::Error::other("images 只能是 image 回的路径"));
+                return Err(io::Error::other(t!("images 只能是 image 回的路径")));
             }
             if !path.is_file() {
-                return Err(io::Error::other("图片已经不在电脑上了，重新选一次"));
+                return Err(io::Error::other(t!("图片已经不在电脑上了，重新选一次")));
             }
             Ok(p.to_owned())
         })

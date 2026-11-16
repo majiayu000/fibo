@@ -236,7 +236,9 @@ export default function Chat() {
    * computer first, which then pastes each before the words; they need it online.
    */
   async function send(text: string, pictures: Picture[] = [], how?: How): Promise<boolean> {
-    const blocked = sendBlocked(view, waiting, warned.current === text);
+    const blocked = online && card?.approval
+      ? tr('它在等你审批，先允许或拒绝，再发送消息')
+      : sendBlocked(view, waiting, warned.current === text);
     warned.current = blocked ? text : '';
     if (blocked) {
       setError(blocked);
@@ -252,8 +254,15 @@ export default function Chat() {
       return false;
     }
     if (!online) {
-      enqueue({ machine, terminal, session: to, text });
-      return true;
+      // Queued only once it is saved; otherwise the words stay in the box.
+      try {
+        await enqueue({ machine, terminal, session: to, text });
+        setError('');
+        return true;
+      } catch {
+        setError(tr('未能保存待发送消息，文字还留在输入框里，请重试'));
+        return false;
+      }
     }
     setPending((p) => [...p, { text, at: Date.now() / 1000, queued: working, pictures: pictures.length, how }]);
     try {
@@ -348,7 +357,7 @@ export default function Chat() {
           <Mine text={pendingText(l.p)} note={l.p.now ? tr(SENT_NOW) : l.p.how ? tr(HOW_NOTE[l.p.how]) : l.p.queued ? tr(whileBusy(card?.controls).note) : tr('发送中…')} tone="pending" />
         )
       ) : (
-        <Pressable onPress={() => l.error && retry(l.id)} onLongPress={() => drop(l.id)}>
+        <Pressable onPress={() => l.error && retry(l.id).catch(() => oops(tr('未能保存重试状态，请重试')))} onLongPress={() => drop(l.id).catch(() => oops(tr('未能删除待发送消息，请重试')))}>
           <Mine text={l.text} note={l.error ? tr('没发出去：{why}（点一下重发，按住删除）', { why: l.error }) : tr('重连后发送（按住删除）')} tone={l.error ? 'error' : 'pending'} />
         </Pressable>
       ),

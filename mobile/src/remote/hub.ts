@@ -255,15 +255,22 @@ async function connect(id: string) {
     // Only the current connection's end says anything about the machine.
     if (remotes.get(id) !== r) return;
     remotes.delete(id);
-    ended(id, refusal ? undefined : e.code, refusal, e.reason);
+    if (refusal) {
+      stopRetry(id);
+      set(id, { status: 'refused', error: refusal });
+    } else ended(id, e.code, undefined, e.reason);
   });
   try {
     // The device id names this phone for the request ids its writes carry.
-    const hello = await r.request('hello', { version: 1, client: m.link.device });
+    const hello = await r.request('hello', { version: 2, client: m.link.device });
+    if (hello.version !== 2) throw new Error(tr('手机和电脑的 Fibo 协议不一致，请把两端更新到同一版本'));
     if (remotes.get(id) !== r) return;
     const beat = setInterval(() => {
       if (r.ended) clearInterval(beat);
-      else ping(id, r);
+      else {
+        ping(id, r);
+        void refresh(id);
+      }
     }, HEARTBEAT_MS);
     r.onEnded(() => clearInterval(beat));
     retry.delete(id);
@@ -393,12 +400,13 @@ export async function pair(link: Link) {
 }
 
 export async function forget(id: string) {
+  // Keep the live machine usable until removing its saved identity succeeds.
+  await forgetMachine(id);
   const old = remotes.get(id);
   remotes.delete(id);
   old?.close();
   dialing.delete(id);
   stopRetry(id);
-  await forgetMachine(id);
   await forgetQuota(id);
   state = { ...state, machines: state.machines.filter((m) => m.id !== id) };
   listeners.forEach((l) => l());

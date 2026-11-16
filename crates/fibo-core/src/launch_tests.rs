@@ -68,6 +68,10 @@ fn a_build_reads_without_launch_and_writes_none_when_fine() {
         serde_json::from_str(r#"{"binary":"/x/fibo","digest":"d","pid":7,"handoff":true}"#)
             .unwrap();
     assert!(old.launch.is_empty());
+    assert!(
+        !old.guarded_chat,
+        "an old running host must not accept phone chat"
+    );
     let fine = serde_json::to_string(&old).unwrap();
     assert!(!fine.contains("launch"), "{fine}");
     let off = crate::protocol::Build {

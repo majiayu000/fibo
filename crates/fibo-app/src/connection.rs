@@ -215,7 +215,7 @@ impl Connection {
                 unsent.abandon();
                 let mut state = state.lock().unwrap();
                 state.error = Some(t!("连接已断开：{error}", error));
-                state.dropped = state.vt.is_some() && !state.ended;
+                state.dropped = !state.ended;
                 state.writable = false;
                 if let Some(socket) = &state.socket {
                     let _ = socket.shutdown(std::net::Shutdown::Both);
@@ -354,6 +354,21 @@ mod tests {
     use super::*;
     use futures::StreamExt;
 
+    #[test]
+    fn a_first_connection_failure_wakes_the_pane_for_retry() {
+        let path = std::env::temp_dir().join(format!("fibo-absent-{}.sock", std::process::id()));
+        let (tx, mut wake) = futures::channel::mpsc::unbounded();
+        let connection = Connection::new(&path, "missing", false, tx);
+        futures::executor::block_on(wake.next()).unwrap();
+        let state = connection.state.lock().unwrap();
+        assert!(state.vt.is_none());
+        assert!(state.error.is_some());
+        assert!(
+            state.dropped,
+            "the pane must retry even before its first snapshot"
+        );
+        assert!(!state.writable);
+    }
     /// Plays one host lifetime: greets a single subscriber, reports `phase`, then exits.
     fn host_once(path: &Path, phase: RecognitionPhase) -> std::thread::JoinHandle<()> {
         let _ = std::fs::remove_file(path);

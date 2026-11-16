@@ -2,6 +2,9 @@ use crate::model::{Edit, Workspace};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
 
+mod input;
+pub use input::{TrustPrompt, TurnInput};
+
 pub const MAJOR: u32 = 3;
 pub const MAX_FRAME: usize = 16 * 1024 * 1024;
 pub const CONTROL: u8 = 1;
@@ -36,15 +39,6 @@ pub struct HookShell {
     pub id: String,
     pub description: String,
     pub command: String,
-}
-/// An Agent asking to be trusted with a folder before it does anything.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TrustPrompt {
-    pub agent: crate::agent::Agent,
-    /// Its words.
-    pub question: String,
-    /// The folder as its screen writes it.
-    pub folder: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Request {
@@ -222,6 +216,8 @@ pub enum Request {
         text: String,
         submit: bool,
     },
+    /// A guarded chat message using the Agent's queue or steer key.
+    SendTurn(TurnInput),
     /// `fibo run`: each time the Agent in `child` ends a turn (done, a question, an
     /// error), its last reply goes into `parent`'s Agent input, wrapped as
     /// `<fibo from=…>`, once that Agent is idle. Ends when either terminal exits.
@@ -540,6 +536,9 @@ pub struct Build {
     /// The host can hand its running terminals to a newer one, so updating it ends none.
     #[serde(default)]
     pub handoff: bool,
+    /// Chat input checks the current approval before paste and submit.
+    #[serde(default)]
+    pub guarded_chat: bool,
     /// What is off about how the host was started (`launch::of_host`); none from hosts
     /// before it, and an older window ignores it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -554,6 +553,7 @@ impl Build {
             pid: std::process::id(),
             // Windows cannot pass a running console over: a newer host there waits for a restart.
             handoff: fibo_platform::terminal::CAN_HAND_OVER,
+            guarded_chat: true,
             launch: vec![],
         }
     }
@@ -781,6 +781,7 @@ mod tests {
             digest: Build::digest(&binary).unwrap(),
             pid: 1,
             handoff: true,
+            guarded_chat: true,
             launch: vec![],
         };
         assert!(!started.stale(&dir.join("absent")));

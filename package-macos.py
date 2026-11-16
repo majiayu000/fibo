@@ -81,6 +81,23 @@ for plugin in json.loads((catalog / 'index.json').read_text())['plugins']:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
 shutil.copy2(catalog / 'index.json', resources / 'plugins/index.json')
+# Permission text follows the system language before any app code runs.
+privacy_zh = {
+    'NSDesktopFolderUsageDescription': 'Fibo 终端里运行的程序（例如 Claude Code、Codex）要读写桌面上的项目。',
+    'NSDocumentsFolderUsageDescription': 'Fibo 终端里运行的程序（例如 Claude Code、Codex）要读写文稿里的项目。',
+    'NSDownloadsFolderUsageDescription': 'Fibo 终端里运行的程序（例如 Claude Code、Codex）要读写下载里的文件。',
+}
+privacy_en = {
+    'NSDesktopFolderUsageDescription': 'Programs running in Fibo terminals, such as Claude Code and Codex, need to read and write projects on your Desktop.',
+    'NSDocumentsFolderUsageDescription': 'Programs running in Fibo terminals, such as Claude Code and Codex, need to read and write projects in your Documents folder.',
+    'NSDownloadsFolderUsageDescription': 'Programs running in Fibo terminals, such as Claude Code and Codex, need to read and write files in your Downloads folder.',
+}
+for language, words in (('en', privacy_en), ('zh-Hans', privacy_zh)):
+    localized = resources / f'{language}.lproj'
+    localized.mkdir()
+    (localized / 'InfoPlist.strings').write_text(''.join(
+        f'{json.dumps(key)} = {json.dumps(value, ensure_ascii=False)};\n'
+        for key, value in words.items()), encoding='utf-8')
 # The version users and the updater compare: the app crate's, so a release bumps it in one place.
 # CFBundleVersion must only grow; the commit count does.
 version = tomllib.loads((root / 'crates/fibo-app/Cargo.toml').read_text())['package']['version']
@@ -91,11 +108,8 @@ build = subprocess.check_output(['git', 'rev-list', '--count', 'HEAD'], cwd=root
     'CFBundleIdentifier': 'page.fibo.app', 'CFBundleExecutable': 'fibo-app',
     'CFBundlePackageType': 'APPL', 'CFBundleIconFile': 'Fibo', **icon_name, 'CFBundleVersion': build, 'CFBundleShortVersionString': version,
     'NSHighResolutionCapable': True, 'LSMinimumSystemVersion': '14.0',
-    # macOS names the app, not the Agent in its terminal, when a program there first opens
-    # 桌面, 文稿 or 下载; without these it asks with no reason given.
-    'NSDesktopFolderUsageDescription': 'Fibo 终端里运行的程序（例如 Claude Code、Codex）要读写桌面上的项目。',
-    'NSDocumentsFolderUsageDescription': 'Fibo 终端里运行的程序（例如 Claude Code、Codex）要读写文稿里的项目。',
-    'NSDownloadsFolderUsageDescription': 'Fibo 终端里运行的程序（例如 Claude Code、Codex）要读写下载里的文件。',
+    'CFBundleDevelopmentRegion': 'en', 'CFBundleLocalizations': ['en', 'zh-Hans'],
+    **privacy_en,
 }))
 subprocess.run([*sign, str(stage)], check=True)
 subprocess.run(['codesign', '--verify', '--deep', '--strict', str(stage)], check=True)

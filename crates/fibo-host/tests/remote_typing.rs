@@ -92,7 +92,7 @@ impl Drop for Machine {
 fn connect(argv: &[String]) -> Client {
     let c = Client::spawn(argv).unwrap();
     let hello = Op::Hello {
-        version: Some(1),
+        version: Some(fibo_remote::protocol::VERSION),
         client: Some("desk-1".into()),
     };
     let hello: Hello = serde_json::from_value(c.request(hello, T).unwrap()).unwrap();

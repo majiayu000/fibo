@@ -171,7 +171,7 @@ fn supervisor(shared: &Shared) -> io::Result<std::sync::Arc<super::remote::Super
     lock(shared)?
         .remote
         .clone()
-        .ok_or_else(|| io::Error::other("远程还没准备好"))
+        .ok_or_else(|| io::Error::other(t!("远程还没准备好")))
 }
 
 pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
@@ -429,7 +429,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 }
                 if existing.pid.is_none() {
                     return Err(io::Error::other(
-                        existing.error.as_deref().unwrap_or("终端启动结果未知"),
+                        existing.error.as_deref().unwrap_or(t!("终端启动结果未知")),
                     ));
                 }
                 return Ok(Reply::Workspace(host.snapshot()));
@@ -558,15 +558,23 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             submit,
             session,
         } => send_text(shared, &id, &text, submit, session.as_deref()).map(|()| Reply::Ok),
+        Request::SendTurn(input) => send_turn(
+            shared,
+            &input.id,
+            &input.text,
+            input.steer,
+            input.session.as_deref(),
+        )
+        .map(|()| Reply::Ok),
         Request::ReportTo { child, parent } => {
             let mut host = lock(shared)?;
             for id in [&child, &parent] {
                 if !host.terminals.contains_key(id) {
-                    return Err(io::Error::other(format!("终端 {id} 不存在")));
+                    return Err(io::Error::other(t!("终端 {id} 不存在", id)));
                 }
             }
             if child == parent {
-                return Err(io::Error::other("不能让终端向自己汇报"));
+                return Err(io::Error::other(t!("不能让终端向自己汇报")));
             }
             let w = host.snapshot();
             host.report_back.link(&w, &child, &parent);
@@ -623,12 +631,12 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             let remote = supervisor(shared)?;
             let relay = remote.relay();
             if relay.is_empty() {
-                return Err(io::Error::other("先填中继地址"));
+                return Err(io::Error::other(t!("先填中继地址")));
             }
             let role = crate::devices::parse_role(&role)?;
             let name = Some(name.trim())
                 .filter(|n| !n.is_empty())
-                .unwrap_or("手机");
+                .unwrap_or(t!("手机"));
             let (_, link) = crate::devices::pair_link(&remote.socket(), &relay, name, role)?;
             remote.refresh();
             Ok(Reply::Text(link))
@@ -686,13 +694,13 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             let session = host
                 .workspace
                 .current_agent(&id)
-                .ok_or_else(|| io::Error::other("没有已识别的活动 Agent"))?;
+                .ok_or_else(|| io::Error::other(t!("没有已识别的活动 Agent")))?;
             let pid = host
                 .agent_pids
                 .iter()
                 .find(|(_, sid)| *sid == &session.id)
                 .map(|(pid, _)| *pid)
-                .ok_or_else(|| io::Error::other("Agent 进程身份未确认，未发送停止信号"))?;
+                .ok_or_else(|| io::Error::other(t!("Agent 进程身份未确认，未发送停止信号")))?;
             let processes = crate::recognition::processes(&host.workspace)?;
             if !processes
                 .iter()
@@ -701,7 +709,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                     .as_deref()
                     != Some(id.as_str())
             {
-                return Err(io::Error::other("Agent 进程身份已变化，未发送停止信号"));
+                return Err(io::Error::other(t!("Agent 进程身份已变化，未发送停止信号")));
             }
             // A freshly verified Agent PID only; never kill the PTY shell or group.
             fibo_platform::process::terminate(pid as i32)?;
@@ -720,61 +728,6 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
     }
 }
 
-/// Enter for 允许一次, Esc for 拒绝, sent only while the screen still shows `question`
-/// as an approval, read again under the same lock the key is written under: an approval
-/// answered in the pane meanwhile gets nothing typed into what replaced it.
-pub(super) fn answer_approval(
-    shared: &Shared,
-    id: &str,
-    question: &str,
-    allow: bool,
-    always: bool,
-) -> io::Result<()> {
-    if let Some(done) = http_ask::answer(shared, id, question, allow, always) {
-        return done;
-    }
-    let (terminal, rules) = {
-        let host = lock(shared)?;
-        let terminal = host
-            .terminals
-            .get(id)
-            .cloned()
-            .ok_or_else(|| io::Error::other("terminal not found"))?;
-        let rules = host
-            .workspace
-            .current_agent(id)
-            .map(|s| s.runtime)
-            .map_or_else(
-                crate::screen_rules::default_rules,
-                crate::screen_rules::rules,
-            );
-        (terminal, rules)
-    };
-    {
-        let mut live = lock(&terminal)?;
-        if live.exited {
-            return Err(io::Error::other("terminal has exited"));
-        }
-        let tail = live.vt.tail_text(usize::from(live.rows))?;
-        let seen = crate::screen_rules::explain(rules, &tail);
-        if seen.approval() != Some(question) {
-            return Err(io::Error::other("画面上已经没有这个审批了，可能已经答过"));
-        }
-        // Enter takes whichever option the cursor is on; only the first one is 允许一次.
-        let key = if always {
-            let key = seen.always_key();
-            key.ok_or_else(|| io::Error::other("这个审批没有「不再询问」这一项"))?
-        } else if allow && !seen.cursor_on_first() {
-            return Err(io::Error::other("光标不在第一个选项上，请打开画面回答"));
-        } else {
-            (if allow { "\r" } else { "\x1b" }).to_owned()
-        };
-        live.master.write(key.as_bytes())?;
-        live.input_at = Some(Instant::now());
-    }
-    lock(shared)?.set_screen_wait(id, None)
-}
-
 /// Room for both halves of a split of `target`, at the size it is shown now, and the
 /// new pane's size, so it starts close to how it will show. A terminal this host does
 /// not run has no size to judge; the edit refuses it.
@@ -785,7 +738,7 @@ fn split_room(
     share: u16,
 ) -> io::Result<(u16, u16)> {
     let Some(terminal) = host.terminals.get(target) else {
-        return Err(io::Error::other("终端不存在"));
+        return Err(io::Error::other(t!("终端不存在")));
     };
     let (cols, rows) = {
         let live = lock(terminal)?;

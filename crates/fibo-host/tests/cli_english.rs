@@ -99,9 +99,44 @@ fn cli_renders_english_via_env_and_saved_preference_without_cjk() {
     assert!(stdout.contains("List terminals"), "{stdout}");
     assert!(!has_cjk(&stdout), "{stdout}");
 
-    // Unbundled binary with no language file or env var stays deterministic in Chinese.
+    // A source build without a saved choice follows the same system language as the app.
     let fresh_home = TempDir::new("zh");
     let (ok, stdout, _stderr) = run_cli(fresh_home.path(), &[], &["--help"]);
     assert!(ok);
-    assert!(stdout.contains("终端列表"), "{stdout}");
+    let expected = match fibo_core::i18n::system(&fibo_platform::desktop::preferred_languages()) {
+        fibo_core::i18n::Lang::Zh => "终端列表",
+        fibo_core::i18n::Lang::En => "List terminals",
+    };
+    assert!(stdout.contains(expected), "{stdout}");
+}
+
+#[test]
+fn explain_translates_the_rule_name_and_the_reason_below_its_heading() {
+    let tmp = TempDir::new("explain");
+    let screen = tmp.path().join("screen.txt");
+    for text in [
+        "Do you want to proceed?\n❯ 1. Yes\n  2. No\n",
+        "$ ls\nsrc\n$ ",
+    ] {
+        std::fs::write(&screen, text).unwrap();
+        for json in [false, true] {
+            let mut args = vec![
+                "explain",
+                "--file",
+                screen.to_str().unwrap(),
+                "--agent",
+                "claude",
+            ];
+            if json {
+                args.push("--json");
+            }
+            let (ok, out, err) = run_cli(tmp.path(), &[("MOORING_LANG", "en")], &args);
+            assert!(ok, "{err}");
+            assert!(!has_cjk(&out), "explain leaked Chinese: {out}");
+            assert!(
+                out.contains(if json { "\"state\"" } else { "State:" }),
+                "{out}"
+            );
+        }
+    }
 }

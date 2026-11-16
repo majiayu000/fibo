@@ -133,11 +133,11 @@ pub const CLAUDE_FULL: &str = "bypassPermissions";
 /// What a card says for a Claude mode; a `key` is also what the host is asked to pick.
 pub fn claude_option_detail(key: &str) -> &'static str {
     match key {
-        "manual" => "跑命令和改文件前都问你",
-        "acceptEdits" => "改文件不问，跑命令还问",
-        "plan" => "只读和出方案，不动手",
-        "auto" => "Claude 自己判断哪些要问",
-        "bypassPermissions" => "跑命令、改文件都不再问你",
+        "manual" => t!("跑命令和改文件前都问你"),
+        "acceptEdits" => t!("改文件不问，跑命令还问"),
+        "plan" => t!("只读和出方案，不动手"),
+        "auto" => t!("Claude 自己判断哪些要问"),
+        "bypassPermissions" => t!("跑命令、改文件都不再问你"),
         _ => "",
     }
 }

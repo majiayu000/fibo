@@ -13,7 +13,7 @@ const link = parseLink(linkText);
 const remote = await Remote.connect(link);
 out.connect_ms = Math.round(performance.now() - t0);
 // The device id names this phone for its writes' request ids, as the hub does.
-const hello = await remote.request('hello', { version: 1, client: link.device });
+const hello = await remote.request('hello', { version: 2, client: link.device });
 out.role = hello.role;
 out.ops = hello.ops;
 const events: string[] = [];
@@ -29,7 +29,15 @@ for (let i = 0; i < 100; i++) {
 out.before = page.messages.map((m: any) => `${m.role}:${m.text}`);
 const last = page.messages.at(-1).seq;
 const sent = performance.now();
-const named = { terminal, text: '手机发来的话', enter: true, request: 'e2e-send-1' };
+// A queued message still belongs to its original conversation, even if its terminal
+// is now running another one. Rejection must happen before any bytes are typed.
+try {
+  await remote.request('send', { terminal, session: 'previous-conversation', text: '不能串进新对话', enter: true, request: 'e2e-stale' });
+} catch (e) {
+  out.stale = (e as Error).message;
+}
+if (!String(out.stale).includes('原对话已离开')) throw new Error('stale conversation was not rejected');
+const named = { terminal, session: page.session, text: '手机发来的话', enter: true, request: 'e2e-send-1' };
 await remote.request('send', named);
 out.send_ms = Math.round(performance.now() - sent);
 let newer: any;
@@ -50,7 +58,7 @@ out.pong = await remote.request('ping');
 remote.close();
 // The answer was lost, say: a new connection sends the same request again.
 const again = await Remote.connect(link);
-await again.request('hello', { version: 1, client: link.device });
+await again.request('hello', { version: 2, client: link.device });
 out.resent = await again.request('send', named);
 await sleep(500);
 again.close();
