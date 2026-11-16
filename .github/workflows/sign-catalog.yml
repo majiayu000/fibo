@@ -12,7 +12,6 @@ on:
       - plugins/**
       - crates/fibo-core/src/market*.rs
       - crates/fibo-host/src/plugins_cmd.rs
-      - scripts/publish-catalog.sh
       - .github/workflows/sign-catalog.yml
   workflow_dispatch:
 
@@ -50,50 +49,132 @@ jobs:
       - name: Build
         run: cargo build --locked -p fibo-host --bin fibo
 
+      - name: Generate the unsigned catalog
+        run: target/debug/fibo plugins index plugins
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: fibo
-          path: target/debug/fibo
+          name: unsigned-catalog
+          path: plugins/index.json
           retention-days: 1
 
-  # Holds the key and can push, and compiles nothing.
+  # A fresh runner signs data only. No compiled artifact or repository script ever
+  # sees the key, and this job has no write token.
   sign:
     needs: build
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: unsigned-catalog
+          path: ${{ runner.temp }}/catalog
+
+      - name: Sign the exact index bytes with the runner's OpenSSL
+        env:
+          # To retire this key, select MOORING_PUBLISHER_KEY_SPARE. Both public keys
+          # are read from this commit's OFFICIAL_KEYS, never from the build artifact.
+          PUBLISHER_KEY: ${{ secrets.MOORING_PUBLISHER_KEY }}
+        run: |
+          python3 -I - <<'PY'
+          import json, os, pathlib, re, subprocess, tempfile
+
+          catalog = pathlib.Path(os.environ["RUNNER_TEMP"]) / "catalog"
+          key = json.loads(os.environ.pop("PUBLISHER_KEY"))
+          seed = bytes.fromhex(key["secret"])
+          if len(seed) != 32:
+              raise ValueError("publisher seed must contain 32 bytes")
+          source = pathlib.Path("crates/fibo-core/src/market.rs").read_text()
+          declaration = source.split("pub const OFFICIAL_KEYS:", 1)[1].split("];", 1)[0]
+          official = re.findall(r'"([0-9a-f]{64})"', declaration)
+          # RFC 8410 PKCS#8 Ed25519 seed and SubjectPublicKeyInfo prefixes.
+          with tempfile.TemporaryDirectory(dir=os.environ["RUNNER_TEMP"]) as temp:
+              private = pathlib.Path(temp) / "key.der"
+              private.write_bytes(bytes.fromhex("302e020100300506032b657004220420") + seed)
+              private.chmod(0o600)
+              public = subprocess.check_output([
+                  "openssl", "pkey", "-inform", "DER", "-in", str(private),
+                  "-pubout", "-outform", "DER",
+              ])
+              prefix = bytes.fromhex("302a300506032b6570032100")
+              if not public.startswith(prefix) or len(public) != len(prefix) + 32:
+                  raise ValueError("unexpected Ed25519 public key encoding")
+              public_hex = public[len(prefix):].hex()
+              if public_hex not in official:
+                  raise ValueError("publisher is not one of this app's official keys")
+              signature = pathlib.Path(temp) / "signature"
+              subprocess.run([
+                  "openssl", "pkeyutl", "-sign", "-rawin", "-keyform", "DER",
+                  "-inkey", str(private), "-in", str(catalog / "index.json"),
+                  "-out", str(signature),
+              ], check=True)
+              public_file = pathlib.Path(temp) / "public.der"
+              public_file.write_bytes(public)
+              subprocess.run([
+                  "openssl", "pkeyutl", "-verify", "-rawin", "-pubin", "-keyform", "DER",
+                  "-inkey", str(public_file), "-in", str(catalog / "index.json"),
+                  "-sigfile", str(signature),
+              ], check=True)
+              signed = dict(alg="ed25519", publisher=key["publisher"], key=public_hex,
+                            sig=signature.read_bytes().hex())
+              (catalog / "index.sig").write_text(json.dumps(signed, indent=2, ensure_ascii=False) + "\n")
+          PY
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: signed-catalog
+          path: |
+            ${{ runner.temp }}/catalog/index.json
+            ${{ runner.temp }}/catalog/index.sig
+          retention-days: 1
+
+  # Another fresh runner has the write token but neither a private key nor a build
+  # binary. Its only staged paths must be the two catalog files.
+  publish:
+    needs: sign
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
       actions: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: main
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: fibo
-          path: ${{ runner.temp }}/bin
+          name: signed-catalog
+          path: ${{ runner.temp }}/catalog
 
-      - name: Sign and push to the catalog branch
-        id: sign
-        env:
-          # To retire this key, change the name to MOORING_PUBLISHER_KEY_SPARE, then build the
-          # next pair into OFFICIAL_KEYS and ship an app that has it.
-          PUBLISHER_KEY: ${{ secrets.MOORING_PUBLISHER_KEY }}
-          BIN: ${{ runner.temp }}/bin/fibo
-          KEY_FILE: ${{ runner.temp }}/publisher.key
+      - name: Publish only the signed catalog files
+        id: publish
         run: |
-          chmod +x "$BIN"
+          cp "$RUNNER_TEMP/catalog/index.json" plugins/index.json
+          cp "$RUNNER_TEMP/catalog/index.sig" plugins/index.sig
+          git add -- plugins/index.json plugins/index.sig
+          python3 -I - <<'PY'
+          import subprocess
+          paths = subprocess.check_output(["git", "diff", "--cached", "--name-only", "-z"]).split(b"\0")
+          if set(paths) - {b"", b"plugins/index.json", b"plugins/index.sig"}:
+              raise SystemExit("refusing to publish paths outside the catalog")
+          PY
+          if git diff --cached --quiet; then
+            echo "Catalog is unchanged"
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          trap 'rm -f "$KEY_FILE"' EXIT
-          (umask 077 && printf '%s' "$PUBLISHER_KEY" > "$KEY_FILE")
-          sh scripts/publish-catalog.sh "$BIN" "$KEY_FILE"
+          git commit -m "chore(plugins): CI 重新生成目录并签名"
+          # A newer run replaces the catalog PR's previous generated snapshot.
+          git push --force origin HEAD:refs/heads/catalog-signed
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
 
-      # A step of its own: this token can open and merge pull requests, and neither the key
-      # nor the compiled binary is around when it is used.
       - name: Open the pull request and start its CI
-        if: steps.sign.outputs.pushed == 'true'
+        if: steps.publish.outputs.pushed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
