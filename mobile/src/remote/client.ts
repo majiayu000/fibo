@@ -190,14 +190,6 @@ export class Remote {
     if (message.bytes.length && (receiving || finishedReply)) {
       for (const p of this.pending.values()) p.progressedAt = Date.now();
     }
-    // The host writes each reply as one whole JSON line. While a known reply is still
-    // arriving, the other pending replies are blocked behind it too. Complete replies
-    // and terminal stream events do not extend another request's deadline.
-    const id = /^\s*\{\s*"id"\s*:\s*(\d+)\s*,/.exec(text(this.buffer.subarray(0, 64)))?.[1];
-    const receiving = id === undefined ? undefined : this.pending.get(Number(id));
-    if (message.bytes.length && receiving) {
-      for (const p of this.pending.values()) p.progressedAt = Date.now();
-    }
   }
 
   private line(m: any) {
