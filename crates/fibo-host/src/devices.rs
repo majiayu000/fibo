@@ -42,6 +42,10 @@ pub struct Device {
     pub role: Role,
     /// Unix seconds.
     pub paired: u64,
+    /// New links expire until the phone proves the channel key with its first message.
+    /// Existing device records without this field already have permanent pairing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pairing_expires: Option<u64>,
     /// Unix milliseconds of the last "disconnect now": sessions opened before it end.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub kicked: u64,
@@ -60,6 +64,9 @@ fn is_zero(n: &u64) -> bool {
 }
 
 impl Device {
+    pub fn pairing_expired(&self, now: u64) -> bool {
+        self.pairing_expires.is_some_and(|until| now >= until)
+    }
     pub fn key(&self) -> Option<Code> {
         Code::parse(&self.key)
     }
@@ -78,7 +85,11 @@ impl Device {
 
 /// The route hashes of the paired phones, for the relay.
 pub fn routes(devices: &[Device]) -> Vec<String> {
-    let mut all: Vec<String> = devices.iter().filter_map(Device::route_hash).collect();
+    let mut all: Vec<String> = devices
+        .iter()
+        .filter(|d| !d.pairing_expired(now()))
+        .filter_map(Device::route_hash)
+        .collect();
     all.truncate(wire::MAX_ROUTES);
     all
 }
@@ -97,17 +108,41 @@ pub fn revoked(socket: &Path) -> Vec<String> {
         .collect()
 }
 
-fn revoke(socket: &Path, gone: &Device) -> io::Result<()> {
-    let Some(hash) = gone.route_hash() else {
-        return Ok(());
-    };
-    let mut list = revoked(socket);
-    list.push(hash);
+fn revocations(socket: &Path, gone: &[Device]) -> io::Result<Vec<u8>> {
+    let mut list = hashes_for_update(&revoked_file(socket))?;
+    list.extend(gone.iter().filter_map(Device::route_hash));
     let start = list.len().saturating_sub(wire::MAX_ROUTES);
-    write_private(
-        &revoked_file(socket),
-        (list[start..].join("\n") + "\n").as_bytes(),
-    )
+    Ok(list[start..].join("\n").into_bytes())
+}
+
+/// These lists are line-based, unlike the JSON device file. An invalid line is not empty.
+fn hashes_for_update(path: &Path) -> io::Result<Vec<String>> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(vec![]),
+        Err(e) => {
+            return Err(io::Error::new(
+                e.kind(),
+                t!("读不了 {path}，未改动：{e}", path = path.display(), e),
+            ))
+        }
+    };
+    text.lines()
+        .map(|line| {
+            if wire::is_token_hash(line) {
+                Ok(line.to_owned())
+            } else {
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    t!(
+                        "{path} 格式不对，未改动：{e}",
+                        path = path.display(),
+                        e = "invalid token hash"
+                    ),
+                ))
+            }
+        })
+        .collect()
 }
 
 /// Replaces `path` whole. The temporary name is this write's alone (a process id alone can be
@@ -246,6 +281,7 @@ pub fn add(socket: &Path, name: &str, role: Role) -> io::Result<(Device, Code)> 
         key: key.text(),
         role,
         paired: now(),
+        pairing_expires: Some(now() + 10 * 60),
         kicked: 0,
     };
     let _held = lock(socket)?;
@@ -253,6 +289,24 @@ pub fn add(socket: &Path, name: &str, role: Role) -> io::Result<(Device, Code)> 
     devices.push(device.clone());
     save(socket, &devices)?;
     Ok((device, key))
+}
+
+/// A valid encrypted message proves the phone holds the negotiated channel key.
+/// A replayed handshake alone must not keep a pairing link alive.
+pub fn confirm_pairing(socket: &Path, id: &str) -> io::Result<()> {
+    let _held = lock(socket)?;
+    let mut devices = load_for_update(socket)?;
+    let device = devices
+        .iter_mut()
+        .find(|d| d.id == id)
+        .ok_or_else(|| io::Error::other("device no longer paired"))?;
+    if device.pairing_expired(now()) {
+        return Err(io::Error::other("pairing link expired"));
+    }
+    if device.pairing_expires.take().is_some() {
+        save(socket, &devices)?;
+    }
+    Ok(())
 }
 
 /// The one device whose id starts with `needle`, or whose name is `needle`.
@@ -276,8 +330,9 @@ pub fn remove(socket: &Path, needle: &str) -> io::Result<Device> {
     let _held = lock(socket)?;
     let mut devices = load_for_update(socket)?;
     let gone = devices.remove(find(&devices, needle)?);
+    let revoked = revocations(socket, std::slice::from_ref(&gone))?;
     save(socket, &devices)?;
-    revoke(socket, &gone)?;
+    write_private(&revoked_file(socket), &revoked)?;
     Ok(gone)
 }
 
@@ -306,8 +361,9 @@ pub fn kick(socket: &Path, needle: &str) -> io::Result<Device> {
 pub fn clear(socket: &Path) -> io::Result<()> {
     let _held = lock(socket)?;
     let gone = load_for_update(socket)?;
+    let revoked = revocations(socket, &gone)?;
     save(socket, &[])?;
-    gone.iter().try_for_each(|d| revoke(socket, d))
+    write_private(&revoked_file(socket), &revoked)
 }
 
 pub fn now_ms() -> u64 {
@@ -473,7 +529,7 @@ pub fn retired(socket: &Path) -> Vec<String> {
 }
 
 fn retire(socket: &Path, old: &Code) -> io::Result<()> {
-    let mut list = retired(socket);
+    let mut list = hashes_for_update(&retired_file(socket))?;
     list.push(wire::token_hash(&old.token()));
     let start = list.len().saturating_sub(wire::MAX_RETIRED);
     write_private(
@@ -642,6 +698,49 @@ mod tests {
         let unwritable = machine(&socket);
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
         assert!(unwritable.is_err(), "{unwritable:?}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn unreadable_revocation_lists_are_not_replaced() {
+        let dir = std::env::temp_dir().join(format!("fibo-revoked-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let socket = dir.join("host.sock");
+        let (device, _) = add(&socket, "phone", Role::Full).unwrap();
+        machine_code(&socket, false).unwrap();
+        for bad in ["broken hash", "abc\n"] {
+            std::fs::write(revoked_file(&socket), bad).unwrap();
+            assert!(remove(&socket, &device.id).is_err());
+            assert!(clear(&socket).is_err());
+            assert_eq!(load(&socket).len(), 1);
+            assert_eq!(std::fs::read_to_string(revoked_file(&socket)).unwrap(), bad);
+            std::fs::write(retired_file(&socket), bad).unwrap();
+            assert!(machine_code(&socket, true).is_err());
+            assert_eq!(std::fs::read_to_string(retired_file(&socket)).unwrap(), bad);
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn unused_links_expire_but_confirmed_and_existing_devices_stay_paired() {
+        let dir = std::env::temp_dir().join(format!("fibo-pair-expiry-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let socket = dir.join("host.sock");
+        let (mut device, _) = add(&socket, "phone", Role::Full).unwrap();
+        let deadline = device.pairing_expires.unwrap();
+        assert!(!device.pairing_expired(deadline - 1));
+        assert!(device.pairing_expired(deadline));
+        device.pairing_expires = Some(now() - 1);
+        save(&socket, &[device.clone()]).unwrap();
+        assert!(confirm_pairing(&socket, &device.id).is_err());
+        assert!(routes(&load(&socket)).is_empty());
+        device.pairing_expires = Some(now() + 600);
+        save(&socket, &[device.clone()]).unwrap();
+        confirm_pairing(&socket, &device.id).unwrap();
+        assert!(!load(&socket)[0].pairing_expired(u64::MAX));
+        let mut old = serde_json::to_value(&device).unwrap();
+        old.as_object_mut().unwrap().remove("pairing_expires");
+        let old: Device = serde_json::from_value(old).unwrap();
+        assert!(!old.pairing_expired(u64::MAX));
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

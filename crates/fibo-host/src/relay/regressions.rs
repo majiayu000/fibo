@@ -187,6 +187,12 @@ async fn replayed_handshake_expires_but_authenticated_idle_session_survives() {
             .unwrap();
         assert!(matches!(from_machine(&mut ws).await, Message::Binary(_)));
     }
+    assert!(
+        devices::load(&root.join("workbench.sock"))[0]
+            .pairing_expires
+            .is_some(),
+        "replayed handshakes must not confirm a pairing"
+    );
     open(&mut ws, "authenticated", &path).await;
     let mut channel = handshake(&mut ws, "authenticated", &key).await;
     ws.send(to_phone(
@@ -207,6 +213,12 @@ async fn replayed_handshake_expires_but_authenticated_idle_session_survives() {
     .unwrap();
     assert!(matches!(text_frame(&mut ws).await, Frame::Hres { .. }));
     assert!(matches!(text_frame(&mut ws).await, Frame::Hend { .. }));
+    assert!(
+        devices::load(&root.join("workbench.sock"))[0]
+            .pairing_expires
+            .is_none(),
+        "the authenticated acknowledgement confirms pairing before it is forwarded"
+    );
     tokio::time::pause();
     for _ in 0..HANDSHAKE_LIMIT.as_secs() + 2 {
         tokio::time::advance(RECHECK).await;
@@ -341,5 +353,28 @@ async fn relay_refusal_is_safe_when_returned_to_the_cli() {
         "raw controls returned to CLI: {why:?}"
     );
     assert!(why.contains("refused\\u{1b}[2J\\r\\nforged"));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn invalid_first_encrypted_message_does_not_confirm_pairing() {
+    let (mut ws, connection, root, path, key) = fixture().await;
+    open(&mut ws, "invalid", &path).await;
+    handshake(&mut ws, "invalid", &key).await;
+    ws.send(to_phone(wire::PROTOCOL, "invalid", b"invalid"))
+        .await
+        .unwrap();
+    assert!(matches!(
+        text_frame(&mut ws).await,
+        Frame::Wclose {
+            code: Some(close::BAD_MESSAGE),
+            ..
+        }
+    ));
+    assert!(devices::load(&root.join("workbench.sock"))[0]
+        .pairing_expires
+        .is_some());
+    connection.abort();
+    let _ = connection.await;
     std::fs::remove_dir_all(root).unwrap();
 }

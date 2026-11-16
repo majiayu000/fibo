@@ -269,7 +269,11 @@ async fn connect(
             let payload = &payload[..];
             let next = match sessions.remove(&id) {
                 Some(Session::Pairing(device, _)) => {
-                    let known = paired.load(socket).iter().find(|d| d.id == device).cloned();
+                    let known = paired
+                        .load(socket)
+                        .iter()
+                        .find(|d| d.id == device && !d.pairing_expired(devices::now()))
+                        .cloned();
                     // Disconnected from the computer: stays out for KICK_COOLDOWN_MS.
                     if known.as_ref().is_some_and(|d| d.cooling(devices::now_ms())) {
                         close(&out, &id, close::KICKED, "disconnected; try in 5 minutes").await;
@@ -332,8 +336,13 @@ async fn connect(
                     device,
                     role,
                     since,
-                    ..
-                }) => match bridge.receive(payload) {
+                    first_message,
+                }) => match bridge.receive(payload, || {
+                    if first_message.is_some() {
+                        devices::confirm_pairing(socket, &device)?;
+                    }
+                    Ok(())
+                }) {
                     Ok(()) => Some(Session::Open {
                         bridge,
                         device,
@@ -510,7 +519,9 @@ fn dropped(now: &[Device], device: &str, role: Role, since: u64) -> Option<Dropp
     let Some(d) = now.iter().find(|d| d.id == device) else {
         return Some(Dropped::Unpaired);
     };
-    if d.kicked >= since {
+    if d.pairing_expired(devices::now()) {
+        Some(Dropped::Unpaired)
+    } else if d.kicked >= since {
         Some(Dropped::Kicked)
     } else if d.role != role {
         Some(Dropped::RoleChanged)

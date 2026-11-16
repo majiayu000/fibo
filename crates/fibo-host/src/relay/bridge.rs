@@ -89,12 +89,17 @@ impl Bridge {
         })
     }
 
-    pub(super) fn receive(&self, message: &[u8]) -> io::Result<()> {
+    pub(super) fn receive(
+        &self,
+        message: &[u8],
+        authenticated: impl FnOnce() -> io::Result<()>,
+    ) -> io::Result<()> {
         let opened = self
             .channel
             .lock()
             .map_err(|_| io::Error::other("channel lock poisoned"))?
             .open(message)?;
+        authenticated()?;
         match opened {
             Secure::Data(bytes) => self
                 .input
