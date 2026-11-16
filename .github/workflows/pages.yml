@@ -28,7 +28,7 @@ jobs:
           mkdir -p _site
           cp docs/site/index.html docs/site/sitemap.xml docs/site/robots.txt docs/site/CNAME _site/
           cp docs/site/polish.css docs/site/extra.css docs/site/extra.js docs/site/i18n.js _site/
-          cp -R docs/site/assets docs/site/agents docs/site/art-b docs/site/brand docs/site/fonts docs/site/media docs/site/shots _site/
+          cp -R docs/site/assets docs/site/agents docs/site/art-b docs/site/blog docs/site/brand docs/site/fonts docs/site/media docs/site/shots _site/
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
           path: _site

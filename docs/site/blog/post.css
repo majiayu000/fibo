@@ -52,6 +52,7 @@ th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);verti
 th{color:var(--ink);font-weight:600;background:var(--mist)}
 
 figure{margin:26px 0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.figure-img{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:12px;background:var(--mist)}
 figcaption{font-size:14px;color:var(--soft);text-align:center;margin-top:8px}
 .diagram{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:12px;background:var(--mist)}
 .diagram text{font-family:var(--sans);text-anchor:middle;fill:var(--body)}

@@ -3,17 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>One window for terminals on every machine · Fibo blog</title>
-<meta name="description" content="How Fibo lets one window drive coding agents on another machine as if they were local: why we threw away a separate remote UI, how the host and the window split the work, and how one refresh went from 3.59 MB to 660 bytes on a slow link.">
+<title>One Window for Terminals on Every Machine: Fibo’s Multi-Host Architecture and Slow-Link Sync Design · Fibo Blog</title>
+<meta name="description" content="How Fibo lets one desktop window operate terminals across multiple machines: why we dropped our separate remote UI, how one ssh -L socket tunnel unified 85 native RPCs, how we decoupled per-window view chrome from per-host state, and how we shrank refreshes from 3.59 MB to 660 bytes on a 54 KB/s link.">
 <link rel="canonical" href="https://fibo.page/blog/many-machines/">
 <link rel="alternate" hreflang="en" href="https://fibo.page/blog/many-machines/">
 <link rel="alternate" hreflang="zh-CN" href="https://fibo.page/blog/many-machines/zh.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Fibo">
-<meta property="og:title" content="One window for terminals on every machine">
-<meta property="og:description" content="Agents on another machine, driven like local ones: the approach, how it works, and the trade-offs on a slow link.">
+<meta property="og:title" content="One Window for Terminals on Every Machine: Fibo’s Multi-Host Architecture and Slow-Link Sync Design">
+<meta property="og:description" content="Protocol unification over ssh -L, isolating localhost assumptions, decoupling view chrome from host state, and shrinking refreshes 5,400× from 3.59 MB to 660 bytes.">
 <meta property="og:url" content="https://fibo.page/blog/many-machines/">
-<meta property="og:image" content="https://fibo.page/assets/og.png">
+<meta property="og:image" content="https://fibo.page/blog/many-machines/images/00-cover-en.webp">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#1499ad">
 <link rel="icon" type="image/svg+xml" href="../../brand/favicon.svg">
@@ -29,207 +29,208 @@
   <div class="bar">
     <a class="home" href="../../">Fibo</a>
     <span class="crumb">Blog</span>
-    <a class="lang" href="zh.html" hreflang="zh-CN" lang="zh-CN">中文</a>
+    <a class="lang" href="./zh.html" hreflang="zh-CN" lang="zh-CN">中文</a>
   </div>
 </header>
 
 <main class="post">
-<p class="kicker">Engineering notes · November 2026</p>
-<h1>One window for terminals on every machine</h1>
-<p class="lede">Run enough coding agents and their terminals end up spread across several machines. Fibo&#39;s goal is many machines, one window: a terminal on another machine opens, splits and takes typing exactly like a local one, and the sidebar shows who is waiting on every machine. This post covers why we built it this way, how it works underneath, and how, on a link of 54 KB/s, one refresh went from 3.59 MB to 660 bytes.</p>
+<p class="kicker">Architecture · November 2026</p>
+<h1>One Window for Terminals on Every Machine: Fibo’s Multi-Host Architecture and Slow-Link Sync Design</h1>
+<p class="lede">Once you run more than a dozen Coding Agents (Claude Code, Codex, OpenCode) in parallel, terminal workflows quickly outgrow a single computer. <a href="../../">Fibo</a> is built around a simple premise: <b>many machines, one window</b>. Wherever a terminal runs, you open tabs, split panes with <code>⌘D</code>, drag split dividers, type directly, and press <code>⌘J</code> to jump to the next agent waiting for you across every machine. This post breaks down the five core architectural problems behind that experience: why we abandoned a dedicated remote UI after 11 seam bugs, how forwarding a Unix domain socket over a single <code>ssh -L</code> tunnel unified 85 native RPCs, how we decoupled 448 single-host state reads, and how we shrank workspace refreshes 5,400× from 3.59 MB to 660 bytes on a 54 KB/s link.</p>
+
+<figure>
+  <img class="figure-img" src="images/00-cover-en.webp" alt="One Window for Terminals on Every Machine: Fibo Architecture Overview" width="1800" height="766">
+  <figcaption>Many machines, one window: the left sidebar groups every machine and highlights who is waiting; the right main area operates the active machine’s native tabs and split tree.</figcaption>
+</figure>
 
 <nav class="toc" aria-label="Contents">
-  <a href="#why">Why we did it</a>
-  <a href="#others">What others do</a>
-  <a href="#host">How it works, part 1: terminals live in the host</a>
-  <a href="#one-ui">How it works, part 2: one UI, each machine a data source</a>
-  <a href="#slow">The slow link: from 3.59 MB to 660 bytes</a>
-  <a href="#input">Who holds the keyboard</a>
-  <a href="#update">Updating without dropping terminals</a>
-  <a href="#learned">What we took away</a>
+  <a href="#s1">01 Protocol Choice: Why “Summary Cards + a Separate Remote UI” Fractured at the Seams</a>
+  <a href="#s2">02 Protocol Unification &amp; Boundary Isolation: Eliminating Implicit Localhost Assumptions</a>
+  <a href="#s3">03 Decoupling View Chrome from Data Sources: Why the Sidebar Mutated</a>
+  <a href="#s4">04 Slow-Link Sync Protocol: Content-Addressed Deltas from 3.59 MB to 660 Bytes</a>
+  <a href="#s5">05 Multi-Host Concurrency &amp; OS Lifecycle: Input Leases, Live Handoff &amp; Signal Inheritance</a>
+  <a href="#summary">Summary: Five Engineering Principles for Multi-Host Desktop Apps</a>
 </nav>
 
-<h2 id="why">Why we did it</h2>
-<p><a href="../../">Fibo</a> is a native macOS workbench: Claude Code, Codex and other agents run side by side in real terminals, and the sidebar tells you which one is waiting for you. The terminals don't belong to the window. They belong to a background host (<code>fibo serve</code>), so closing the window or updating the app leaves them running.</p>
-<p>With enough agents, one machine isn't enough, and terminals end up spread across several. The goal: wherever a terminal runs, open it, split it and type into it from the same window, with no difference from local. Below, the other machine is called "the remote machine".</p>
-<p>The first remote was a separate path. The window ran <code>ssh host fibo remote --stdio</code> and spoke the phone protocol, getting back one card per terminal: title, state, folder. Local and remote saw very different things:</p>
+<h2 id="s1">01 Protocol Choice: Why “Summary Cards + a Separate Remote UI” Fractured at the Seams</h2>
+
+<p>In Fibo’s single-machine architecture, terminals do not live inside the GUI window (<code>fibo-app</code>). They live in a persistent background daemon (<code>fibo serve</code>), while the window acts as a stateless client connected over a local Unix domain socket (<code>workbench.sock</code>). Before building desktop multi-machine support, Fibo already had a lightweight remote protocol designed for its mobile companion app (<code>ssh host fibo remote --stdio</code>), which summarized each terminal into a flat <code>Card</code> containing only its title, state, and working directory.</p>
+
+<p>Flat cards are enough for checking status and approving prompts on a phone, but the desktop app requires full tab bars, arbitrary split trees, and <b>85 native RPC requests</b>. Our initial attempt (<a href="https://github.com/majiayu000/fibo/pull/340">PR #340</a>) took the seemingly pragmatic shortcut: keep the phone card protocol and rebuild whatever UI pieces the desktop was missing—a remote start page, a remote main area, and a client-side remote split container.</p>
+
+<figure>
+  <img class="figure-img" src="images/01-two-paths-ui-en.webp" alt="Local Native UI vs Attempt 1 Remote Overlay UI" loading="lazy" width="1080" height="745">
+  <figcaption>Local terminals use the native socket protocol (85 RPCs and host-persisted split trees); our first attempt (PR #340) stacked a phone-protocol overlay on top of the local workspace, triggering 11 seam bugs in a single day.</figcaption>
+</figure>
+
+<p>Because local and remote terminals ran on two different data models and two UI layers, behavioral divergence was immediate:</p>
+
+<ul>
+  <li><b>Disconnected split state</b>: Local split trees live in <code>fibo serve</code> with draggable ratios and survive window restarts. Remote splits built on top of cards existed only in the local window’s memory, were locked to 50:50, and were completely invisible on the remote machine’s own Fibo window.</li>
+  <li><b>Divergent interactions</b>: Pressing <code>⌘D</code> locally immediately spawns a shell in the same directory; on remote, it popped up an Agent picker modal. Pressing <code>⌘W</code> locally terminates the shell; on the remote overlay, it merely hid the view.</li>
+</ul>
+
+<p>Worse, mounting the remote UI as an overlay on top of the local workspace created a fragile seam between two state machines. Automated review (Codex) flagged 11 bugs on <a href="https://github.com/majiayu000/fibo/pull/340">PR #340</a> in a single day, every one of them at that seam:</p>
+
+<ul>
+  <li><b>Silent local shell kill (P1)</b>: While a remote terminal or start page covered the main area, the underlying local <code>nav.tab</code> stayed unchanged. Pressing <code>⌘W</code> to close the remote view fell straight through to <code>close_focused()</code> and silently killed the hidden local shell underneath without confirmation.</li>
+  <li><b>Stolen keyboard focus</b>: Clicking a remote session from the Overview board set <code>nav.pending_focus = true</code> on exit, which immediately yanked keyboard focus back to the hidden local pane on the next frame.</li>
+  <li><b>Crossed navigation and array indices</b>: Pressing <code>⌘[</code> and <code>⌘]</code> traversed local <code>layout.panes</code> instead of remote splits; the remote start page tracked its host by array index (<code>machine_idx</code>), so deleting machine A in settings shifted machine B’s start page to machine C.</li>
+</ul>
+
+<p>Comparing existing developer tools confirmed the architectural lesson:</p>
+
 <div class="table">
 <table>
-<thead><tr><th></th><th>Local</th><th>Remote (then)</th></tr></thead>
+<thead><tr><th>Product</th><th>Where state lives</th><th>Connection &amp; protocol model</th></tr></thead>
 <tbody>
-<tr><td>Connection</td><td>Local Unix socket, native protocol</td><td>ssh in, phone protocol</td></tr>
-<tr><td>Data</td><td>The whole workspace: spaces, tabs, splits, sessions, to-dos</td><td>One card per terminal, no tabs or layout</td></tr>
-<tr><td>What you can do</td><td>85 kinds of request: split, move a pane, rename…</td><td>Watch, type, approve, open and close terminals, mark done</td></tr>
+<tr><td>VS Code Remote-SSH</td><td>Remote VS Code Server</td><td>Local UI connects over SSH using the same protocol as local</td></tr>
+<tr><td>Zed Remote Development</td><td>Remote <code>zed-remote-server</code></td><td>Spawns system <code>ssh</code>, sharing the native workspace model</td></tr>
+<tr><td>WezTerm Multiplexing</td><td>Remote mux server</td><td>Connects over SSH to a remote Unix socket; local and remote tabs coexist</td></tr>
+<tr><td>iTerm2 + <code>tmux -CC</code></td><td>Remote tmux</td><td>Translates tmux’s control protocol into native tabs (prone to seam bugs)</td></tr>
 </tbody>
 </table>
 </div>
-<p>So every local feature the remote needed had to be written again. One PR that gave the remote a main area, a start page and splits drew 11 comments from automated review (Codex) in a single day, every one of them at the seam between the two code paths: focus landing on a hidden local pane, ⌘W closing a local shell you couldn't see, ⌘[ and ⌘] following the local layout, the start page pointing at the wrong machine after the machine list changed.</p>
-<p>The spec already had a stop condition for this: if the app ends up maintaining two drifting sets of terminal code for local and remote, keep only one. We closed that PR (<a href="https://github.com/majiayu000/fibo/pull/340">#340</a>).</p>
 
-<h2 id="others">What others do</h2>
-<p>Before writing code we looked at how others handle it:</p>
-<div class="table">
-<table>
-<thead><tr><th>Product</th><th>Where state lives</th><th>How it connects</th></tr></thead>
-<tbody>
-<tr><td>VS Code Remote-SSH</td><td>VS Code Server on the remote</td><td>Local UI over SSH, the same protocol as local</td></tr>
-<tr><td>Zed remote development</td><td>zed-remote-server on the remote</td><td>Through the system ssh</td></tr>
-<tr><td>WezTerm multiplexing</td><td>The remote mux server</td><td>Over SSH to a remote Unix socket; local and remote tabs can share a window</td></tr>
-<tr><td>iTerm2 + <code>tmux -CC</code></td><td>Remote tmux</td><td>Translates tmux's control protocol into native tabs</td></tr>
-</tbody>
-</table>
-</div>
-<p>The first three agree: state stays on the remote machine, the local side is only UI, and it speaks the same protocol it uses locally. None of them invents a summary protocol and rebuilds the UI on top. iTerm2's translation approach is the closest to the path we had just abandoned, and it's also the one users complain about most.</p>
+<p>VS Code, Zed, and WezTerm all keep state on the remote machine and speak the exact same protocol locally and remotely. Translating a foreign summary protocol into native UI was the root cause of our seam bugs. We closed <a href="https://github.com/majiayu000/fibo/pull/340">PR #340</a> and established our first architectural rule: <b>one native protocol and one UI code path for both local and remote hosts.</b></p>
 
-<h2 id="host">How it works, part 1: terminals live in the host, the window is a client</h2>
-<p>Fibo was already split into client and server. The host owns the terminals, the workspace and the state rules; the window sends requests over a Unix socket using length-prefixed JSON frames, and every terminal pane opens its own connection for screen updates and keystrokes.</p>
-<p>So reaching another machine needs no new protocol, only a way to reach that machine's socket. OpenSSH forwards Unix sockets directly:</p>
+<h2 id="s2">02 Protocol Unification &amp; Boundary Isolation: Eliminating Implicit Localhost Assumptions</h2>
+
+<p>Unlike VS Code and Zed—which install an isolated headless server (such as <code>~/.vscode-server</code>) locked to the client version—Fibo has a stricter requirement: <b>tabs and splits opened on a remote machine from your local window must appear live in that machine’s own desktop window too.</b> Both windows must connect to the <b>same <code>fibo serve</code> daemon</b>.</p>
+
+<p>Because Fibo already separates client and daemon over <code>workbench.sock</code>, we didn’t need a new protocol. OpenSSH natively forwards Unix domain sockets over a single connection:</p>
+
 <pre><code>ssh -N -o Compression=yes -o StreamLocalBindUnlink=yes \
-    -L ~/.local/share/fibo/m/remote/workbench.sock:&lt;its workbench.sock&gt; remote</code></pre>
-<p>The window connects to that local socket the same way it connects to its own, and from there it's the same code: tabs, splits, ⌘T, ⌘D, running an agent. The other host stores those tabs and splits, so that machine's own window sees them too. One <code>ssh -L</code> carries any number of connections, which fits one connection per pane.</p>
+    -L ~/.local/share/fibo/m/&lt;id&gt;/workbench.sock:&lt;remote workbench.sock&gt; remote</code></pre>
+
+<p>Every terminal pane opens its own stream over that single <code>ssh -L</code> tunnel. Once the window manages this forward automatically, all 85 RPC requests, tabs, and draggable splits work identically to local (<a href="https://github.com/majiayu000/fibo/pull/342">PR #342</a>).</p>
 
 <figure>
-<svg class="diagram" viewBox="0 0 720 300" role="img" aria-labelledby="d1t">
-<title id="d1t">One window reaches the local host over a Unix socket and the other machine's host over one ssh -L</title>
-<rect x="20" y="40" width="200" height="220" rx="12" class="box"/>
-<text x="120" y="68" class="h">This window</text>
-<rect x="38" y="84" width="164" height="44" rx="8" class="soft"/>
-<text x="120" y="111" class="t">Sidebar: every machine</text>
-<rect x="38" y="140" width="164" height="100" rx="8" class="soft"/>
-<text x="120" y="176" class="t">Main area</text>
-<text x="120" y="198" class="s">only the current machine:</text>
-<text x="120" y="216" class="s">tabs, splits, terminals</text>
-<rect x="470" y="30" width="230" height="100" rx="12" class="box"/>
-<text x="585" y="58" class="h">Local host · fibo serve</text>
-<text x="585" y="84" class="s">terminals · workspace · state rules</text>
-<text x="585" y="104" class="s">machine 0</text>
-<rect x="470" y="170" width="230" height="100" rx="12" class="box"/>
-<text x="585" y="198" class="h">Remote host · fibo serve</text>
-<text x="585" y="224" class="s">terminals · workspace · state rules</text>
-<text x="585" y="244" class="s">its own window connects too</text>
-<path d="M220 100 H470" class="line"/>
-<text x="345" y="92" class="s">Unix socket</text>
-<path d="M220 210 C300 210 380 220 470 220" class="line accent"/>
-<text x="345" y="236" class="s accent-t">one ssh -N -L, compressed</text>
-<text x="345" y="254" class="s">one connection per pane inside</text>
-</svg>
-<figcaption>One host per machine; the window speaks the same native protocol to each.</figcaption>
+  <img class="figure-img" src="images/02-ssh-socket-and-traps-en.webp" alt="Forwarding the Native Socket and Isolating 6 Localhost Assumptions" loading="lazy" width="1080" height="920">
+  <figcaption>OpenSSH maps the remote workbench.sock locally so all 85 RPCs work unchanged; the real engineering work was isolating 6 implicit “localhost” assumptions in the client.</figcaption>
 </figure>
 
-<p>The real traps were the places that assumed the host is on this machine:</p>
+<p>The prototype took an hour. The real engineering work was finding every place in the client that silently assumed the daemon ran on the same OS—none of which threw errors:</p>
+
 <ul>
-<li><b>Stale-host detection.</b> When the window finds a host running a different build, it treats it as outdated and either takes over its terminals or stops it by the pid it reports. Across machines that pid belongs to the other machine and could be any process here. We added an attached mode: a host that isn't ours is never started, stopped or replaced.</li>
-<li><b>The local file system.</b> Before opening a terminal the window checked that the folder exists and fell back to the local home when it didn't, which the other host then refused. When attached, the other host decides.</li>
-<li><b>Where the socket is.</b> The other machine says (<code>fibo socket</code>); older versions without that command are found by their old runtime folder.</li>
+  <li><b>1. Process lifecycle isolation (PID kill guard)</b>: When a local window sees a daemon with a different build fingerprint, it either runs <code>--takeover</code> or sends a signal to the daemon’s reported <code>pid</code>. Over an SSH tunnel, that <code>pid</code> belongs to the remote OS and could hit an arbitrary local process. Attached clients enforce a strict guard (<code>an_attached_host_is_never_stopped_started_or_stale</code>): never start, stop, or replace an attached daemon.</li>
+  <li><b>2. Delegating directory validation to the remote daemon</b>: Before opening a terminal, the client used to check <code>Path::new(&amp;cwd).is_dir()</code> on the local disk, falling back to the local <code>$HOME</code> when a remote path didn’t exist locally. We removed client-side disk checks for attached hosts and moved 3-tier fallback into the daemon (<code>host/start_dir.rs</code>): requested CWD → space root directory → remote <code>$HOME</code>.</li>
+  <li><b>3. Remote environment probing &amp; local entry-point gating</b>: On attach, the SSH probe fetches the remote socket path, <code>$HOME</code>, <code>$SHELL</code>, and <code>machine-id</code> in one shot (preventing a macOS client from sending <code>/bin/zsh</code> to a <code>/bin/bash</code> host). Hook checks/installs run over SSH on the remote host, and file-opening actions—including the "Open file" button in the Git changes panel—are gated at the single <code>Pane::open_target</code> entry point.</li>
+  <li><b>4. macOS 104-byte Unix socket path limit (<code>SUN_LEN</code>) &amp; collision resistance</b>: Placing forwarded sockets under <code>&lt;runtime&gt;/machines/&lt;host&gt;/attached-client/client.sock</code> pushed full Tailscale hostnames (e.g. <code>user@host.tailc3193d.ts.net</code>) to 113 bytes, exceeding macOS’s 104-byte <code>SUN_LEN</code> kernel limit; simple character replacement also caused <code>alice@server</code> and <code>alice-server</code> to collide. Compacting the directory key to <code>&lt;runtime&gt;/m/&lt;8-char-prefix&gt;-&lt;64-bit FNV-1a hash&gt;/</code> keeps paths under 80 bytes and collision-free.</li>
 </ul>
 
-<h2 id="one-ui">How it works, part 2: one UI, each machine a data source</h2>
-<p>The first version worked like this: click a space on the remote machine, build a complete workbench for that machine, and hand the whole window to it. Data and UI lived in one structure, so copying the data copied the UI too. That workbench believed it was the only machine, and drew the sidebar that way: you meant to open one space on another machine, the whole window changed, and getting back meant hunting for the way out.</p>
-<p>The right split has two layers:</p>
+<h2 id="s3">03 Decoupling View Chrome from Data Sources: Why the Sidebar Mutated</h2>
+
+<p>Moving from "one window per machine" to switching machines inside a single window exposed the largest structural coupling in the codebase: the <code>Workbench</code> struct held both <b>one machine’s data</b> (<b>448</b> reads of <code>self.workspace</code>, <b>66</b> of <code>self.store</code>, <b>50</b> of <code>self.layout.panes</code>) and <b>the entire window’s UI</b>.</p>
+
+<p>To avoid rewriting 448 call sites at once, our first multi-host switch (commit <code>12d9cea4</code>) instantiated a complete <code>Workbench</code> per remote machine and delegated the entire window render to whichever host was selected.</p>
+
+<figure>
+  <img class="figure-img" src="images/03-sidebar-jump-comparison-en.webp" alt="Sidebar Jump Before and After Architectural Split" loading="lazy" width="1080" height="710">
+  <figcaption>Left: Delegating the whole window to a remote Workbench caused the sidebar to mutate into a single-machine layout while maintaining two parallel SSH connections. Right: PR #349–#356 separated per-host data sources from per-window view chrome over a single ssh -L.</figcaption>
+</figure>
+
+<p>That shortcut immediately exposed two architectural flaws (shown above left):</p>
+
+<ul>
+  <li><b>The sidebar mutated into a single-machine layout</b>: Because the sidebar lived inside <code>Workbench</code>, handing the window to the remote <code>Workbench</code> replaced the sidebar too. Running in attached mode with an empty machine list, the remote <code>Workbench</code> assumed it was the only computer in the world and drew a single-machine sidebar ("Only &lt;space&gt;", "Earlier 40", "Quiet · 3 spaces"), collapsing the multi-machine hierarchy into a tiny "Local" chip at the bottom.</li>
+  <li><b>Two simultaneous SSH connections per machine</b>: The sidebar still polled summary cards over the legacy phone protocol (<code>fibo remote --stdio</code>), while the main area connected via <code>ssh -N -L</code>. Two protocols and two state copies meant the sidebar and main area could disagree.</li>
+</ul>
+
+<p>Across <a href="https://github.com/majiayu000/fibo/pull/349">PR #349</a> through <a href="https://github.com/majiayu000/fibo/pull/357">#357</a>, we split the architecture cleanly into two layers without touching the 448 internal <code>self.workspace</code> reads:</p>
+
 <div class="table">
 <table>
-<thead><tr><th>One per machine (data source)</th><th>One per window (UI)</th></tr></thead>
+<thead><tr><th>Per-Host Data Source (One per Machine)</th><th>Per-Window View Chrome (One per Window)</th></tr></thead>
 <tbody>
-<tr><td>Connection and request queue</td><td>Sidebar: filters, collapsed groups, scroll position</td></tr>
-<tr><td>That machine's whole workspace</td><td>Overview, search, the order of ⌘J</td></tr>
-<tr><td>That machine's terminal panes</td><td>Theme, font size, shortcuts</td></tr>
-<tr><td>The space, tab and focus picked there</td><td>Which machine is shown</td></tr>
+<tr><td>Socket connection, request queue &amp; backoff state</td><td>Sidebar: multi-machine tree, filters, folding &amp; scroll offset</td></tr>
+<tr><td>Complete <code>Workspace</code> snapshot &amp; delta base</td><td>Overview board, search palette &amp; global <code>⌘J</code> ordering</td></tr>
+<tr><td>Terminal pane instances (<code>layout.panes</code>)</td><td>Peek overlay, theme, font size &amp; keybindings</td></tr>
+<tr><td>Selected space, active tab &amp; focus on that host</td><td>Which machine the main area is currently showing</td></tr>
 </tbody>
 </table>
 </div>
-<p>The local machine is machine 0 and takes the same path as the others. The sidebar reads every machine's workspace and groups them with the same state rules, and it never moves when you switch; the main area draws only the current machine. ⌘J, which jumps to the next session that needs you, orders across machines by the same rules.</p>
-<p>We also dropped a connection along the way. The remote machine&#39;s group in the sidebar used to come from phone-protocol cards, while the main area connected again over the native protocol: two connections and two copies of state for one machine, so the sidebar and the main area could show different moments. Now each machine has exactly one <code>ssh -L</code>.</p>
-<p>This landed as several PRs: <a href="https://github.com/majiayu000/fibo/pull/349">#349</a> keeps the sidebar in place, <a href="https://github.com/majiayu000/fibo/pull/352">#352</a> connects to every machine at start, <a href="https://github.com/majiayu000/fibo/pull/353">#353</a> has the sidebar read each machine's own workspace, and <a href="https://github.com/majiayu000/fibo/pull/354">#354</a> takes the board and ⌘J across machines.</p>
 
-<h2 id="slow">The slow link: from 3.59 MB to 660 bytes</h2>
-<p>Syncing was simple. When the host's workspace changes it pushes a revision number over the status connection; a window that is behind asks for the whole workspace, with bursts of changes merged into one request. Locally that's 1.6 MB of JSON in under 10 ms, never a problem.</p>
-<p>Then the link to one remote machine dropped to about 54 KB/s. That machine has hundreds of sessions and a workspace of about 3 MB, sent whole on every change. Typing went over the same ssh, so keystrokes queued behind megabytes of JSON, and the window showed 1765 ms of latency. We brought it down in three steps.</p>
+<p>The top-level window always renders its own unified sidebar and passes the sidebar’s pixel width (<code>beside</code>) to the active host’s workbench, which draws only the right-hand main area (<a href="https://github.com/majiayu000/fibo/pull/349">PR #349</a>). Moving the card-projection rules into <code>fibo_core::remote_cards</code> (<a href="https://github.com/majiayu000/fibo/pull/353">PR #353</a>) allowed the sidebar to compute rows directly from each host’s native <code>Workspace</code> connected at startup (<a href="https://github.com/majiayu000/fibo/pull/352">PR #352</a>), eliminating the phone-protocol SSH link (<a href="https://github.com/majiayu000/fibo/pull/356">PR #356</a>, ~580 lines removed) and leaving <b>one <code>ssh -N -L</code> connection per machine</b>.</p>
 
-<h3>Step 1: compress, and don't give up too early</h3>
-<p>First, <code>Compression=yes</code> on the forward: on the same link, 3 MB went from about 35 seconds to about 11. Second, the host dropped a client whenever 5 seconds passed without a byte of a reply written, so on the slow link a workspace never finished. We raised that to 30 seconds and count only time in which not a single byte goes out, so a write that is moving is never cut off (<a href="https://github.com/majiayu000/fibo/pull/358">#358</a>).</p>
-<p>That made the machine reachable again, but not responsive. Every change still took more than 10 seconds.</p>
+<h2 id="s4">04 Slow-Link Sync Protocol: Content-Addressed Deltas from 3.59 MB to 660 Bytes</h2>
 
-<h3>Step 2: send only the sessions that changed</h3>
-<p>Measured locally, about 98% of a workspace is sessions and their content. So the protocol gained a request: the window wraps refreshes, edits and launches as <code>Brief(stamp of the last one, original request)</code>, the host compares session by session and content by content, and replies with only what changed. The window rebuilds the whole workspace before handing it on, so not a line of UI code changed; it still receives a complete workspace.</p>
-<pre><code>struct Delta {
-    stamp: u64,              // which workspace this is: a hash of its content
-    base: Option&lt;u64&gt;,       // what it was compared against; None means whole
-    sessions: Vec&lt;Session&gt;,  // new or changed sessions
-    order: Option&lt;Vec&lt;Id&gt;&gt;,  // only when the order changed
-    content: Map&lt;Id, Content&gt;,
-    gone: Vec&lt;Id&gt;,           // sessions that went away
-    rest: …,                 // everything else in the workspace
-}</code></pre>
-<p>A few design points:</p>
+<p>On a local Unix socket, pushing a revision counter and fetching a full 1.6 MB <code>Workspace</code> JSON takes under 10 ms. When our network link to the remote host dropped to roughly <b>54 KB/s</b>, full-snapshot polling broke down in two ways:</p>
+
 <ul>
-<li><b>Stamps hash the content instead of using the revision.</b> A restarted host counts revisions from the start again and could collide with the one a window holds; a content hash can't.</li>
-<li><b>Both sides keep a few.</b> The host remembers the last 16 indexes it sent, enough for this machine's window, the menu bar and other machines' windows together. The window keeps 3, because a refresh and an action can be in flight at once and whichever returns second still needs the earlier base.</li>
-<li><b>No base, ask for the whole.</b> If the window no longer holds the workspace a reply was built against, it asks again, explicitly for the whole.</li>
-<li><b>Old hosts never see a request they can't read.</b> An older host drops the connection on an unknown request, so the new host advertises a <code>brief</code> capability in its status and the window sends <code>Brief</code> only when it sees it. With one side updated, everything goes whole as before.</li>
+  <li><b>5-second stall timeouts</b>: Hundreds of historical sessions on the remote host produced a <b>3.59 MB</b> <code>Workspace</code> JSON. Over a 54 KB/s link, whenever the kernel send buffer filled and stalled for 5 seconds with zero bytes written, the daemon aborted with <code>os error 35</code> and the client failed with <code>RPC receive reply: failed to fill whole buffer</code>.</li>
+  <li><b>Head-of-line blocking on typing</b>: Because keystrokes and refreshes share the same <code>ssh -L</code> tunnel, keystrokes queued behind megabytes of JSON, driving typing latency in the status bar up to <b>1765 ms</b>.</li>
 </ul>
-<p>We also throttled refreshes: for another machine, after a refresh the window waits as long as that refresh took (at most 10 seconds) before the next one, so typing gets at least half the link. The local machine doesn't wait (<a href="https://github.com/majiayu000/fibo/pull/362">#362</a>).</p>
-<p>On local data, one refresh went from 1.6 MB to 14 KB.</p>
 
-<h3>Step 3: measure again, and the rest isn't small</h3>
-<p>The step-2 commit explicitly rejected diffing the other fields as well: 98% of a workspace is sessions, so sending the rest whole is simpler. With both machines updated, we measured again on the real remote machine:</p>
+<figure>
+  <img class="figure-img" src="images/04-slow-link-delta-en.webp" alt="Three-Stage Delta Sync and Kept Base Isolation on a 54 KB/s Link" loading="lazy" width="1080" height="815">
+  <figcaption>Across PR #358, #362 (Brief), and #380 (BriefAll), refresh payloads on a 54 KB/s link shrank 5,400× from 3.59 MB to ~660 bytes while isolating local UI drag previews from the clean host base (Kept).</figcaption>
+</figure>
+
+<h3>Layer 1: Stream Compression, Zero-Progress Timeouts &amp; Adaptive Pacing (PR #358 / #362)</h3>
+
+<p>Enabling <code>Compression=yes</code> on <code>ssh -L</code> shrank the 3.59 MB payload to <b>893 KB</b> on the wire (~11s instead of ~35s), and raising the daemon’s write timeout to 30 seconds of <i>zero byte progress</i> stopped mid-reply disconnects (<a href="https://github.com/majiayu000/fibo/pull/358">PR #358</a>). We also added adaptive pacing for remote refreshes: if a refresh takes <code>T</code>, the window waits <code>min(T, 10s)</code> before the next refresh so interactive typing always gets at least half the link.</p>
+
+<h3>Layer 2: Session-Level Content-Addressed Deltas &amp; Production Data Skew (PR #362 Brief)</h3>
+
+<p>On our dev machine, 98% of the workspace JSON lived in <code>sessions</code> and <code>session_contents</code>. In <a href="https://github.com/majiayu000/fibo/pull/362">PR #362</a>, we introduced <code>Brief(last_stamp, Request)</code> so the daemon diffs sessions against an LRU ring of the last 16 snapshots it sent (using a 64-bit FNV-1a content hash rather than <code>revision</code>, which resets if the daemon restarts) and returns only changed sessions.</p>
+
+<p>On the dev box, refreshes dropped from 1.68 MB to <b>14–22 KB</b>. Yet when we deployed to the production remote machine and measured again, a refresh with <b>zero session changes</b> still transmitted <b>352 KB</b> (81 KB compressed):</p>
+
 <div class="table">
 <table>
-<thead><tr><th>Largest fields in the rest</th><th>Size</th></tr></thead>
+<thead><tr><th>Largest top-level fields in <code>rest</code></th><th>Production remote size</th></tr></thead>
 <tbody>
-<tr><td>Terminal list (677 terminals)</td><td>186 KB</td></tr>
-<tr><td>Task logs</td><td>81 KB</td></tr>
-<tr><td>Outcome history</td><td>66 KB</td></tr>
-<tr><td>Tasks</td><td>39 KB</td></tr>
-<tr><td>Agent launch records</td><td>36 KB</td></tr>
+<tr><td><code>terminals</code> (677 historical &amp; live terminal records)</td><td>186 KB</td></tr>
+<tr><td><code>task_logs</code></td><td>81 KB</td></tr>
+<tr><td><code>outcome_history</code></td><td>66 KB</td></tr>
+<tr><td><code>tasks</code></td><td>39 KB</td></tr>
+<tr><td><code>agent_launches</code></td><td>36 KB</td></tr>
 </tbody>
 </table>
 </div>
-<p>This machine has 4 terminals and a rest under 3 KB, which is why the local measurement missed it. On the remote machine, a refresh with no session changes at all still carried 352 KB.</p>
-<p>Should we diff down to each terminal? We tried the cheapest check first: 12 samples over two minutes, and none of those fields changed once. They change when a terminal opens or closes, or a task ends. So diffing by top-level field is enough: the host hashes each field and sends only those whose hash changed, and the window lays them over the copy the host last sent (<a href="https://github.com/majiayu000/fibo/pull/380">#380</a>).</p>
-<p>One trap here: the window edits its own copy of the workspace, for example the preview while you drag a divider. Lay a reply over that copy, and any field missing from the reply would keep the local edit. So the window also keeps the copy exactly as the host sent it, and only ever lays replies over that one.</p>
-<p>Compatibility took the same path again. <code>Brief</code> is a two-element tuple variant, and an older host can't read a tuple with an extra element; it would drop the connection. So it's a new request, <code>BriefAll</code>, with a new capability, <code>brief_all</code>. The reply's <code>rest</code> still looks like a workspace object on the wire, so older windows read it as before. A test guards one assumption: every top-level field of a workspace is written even when empty. Otherwise a field missing from a reply could mean either "unchanged" or "now empty".</p>
+
+<p>The dev box only had <b>4 terminals</b> (<code>rest</code> &lt; 3 KB); the production remote host had <b>677 terminals</b>, making the un-diffed <code>rest</code> payload 352 KB on every poll.</p>
+
+<h3>Layer 3: Top-Level Field Hashing &amp; Clean Base Isolation (PR #380 BriefAll)</h3>
+
+<p>Before writing item-level diffing for 677 terminals, we sampled the remote workspace <b>12 times over 2 minutes</b>. None of those five fields changed once—they only mutate when a terminal opens/closes or a task finishes. Hashing each top-level field in <code>rest</code> and omitting unchanged fields (<code>BriefAll</code>, <a href="https://github.com/majiayu000/fibo/pull/380">PR #380</a>) was sufficient.</p>
+
+<p>To prevent local UI mutations (such as live split-divider drag previews on <code>self.workspace</code>) from surviving across sparse replies where unchanged fields are omitted, the client stores an untouched copy of the host’s state (<code>Kept</code>) and applies deltas strictly onto <code>Kept</code> before handing a fresh copy to the UI. On the real remote host, a refresh dropped from <b>3.59 MB → 352 KB → ~660 bytes</b> (~420 bytes compressed, a <b>5,400×</b> reduction), completing in milliseconds on a 54 KB/s link.</p>
+
+<h2 id="s5">05 Multi-Host Concurrency &amp; OS Lifecycle: Input Leases, Live Handoff &amp; Signal Inheritance</h2>
 
 <figure>
-<svg class="diagram" viewBox="0 0 720 210" role="img" aria-labelledby="d2t">
-<title id="d2t">Bytes per refresh from another machine: whole 3.59 MB, changed sessions only 352 KB, changed fields too about 660 bytes (log scale)</title>
-<text x="20" y="40" class="l">Whole workspace</text>
-<rect x="190" y="24" width="420" height="26" rx="5" class="bar0"/>
-<text x="618" y="43" class="v">3.59 MB</text>
-<text x="20" y="96" class="l">Changed sessions</text>
-<rect x="190" y="80" width="327" height="26" rx="5" class="bar1"/>
-<text x="525" y="99" class="v">352 KB</text>
-<text x="20" y="152" class="l">Changed fields too</text>
-<rect x="190" y="136" width="76" height="26" rx="5" class="bar2"/>
-<text x="274" y="155" class="v">~660 bytes</text>
-<text x="190" y="194" class="s left">Log scale · real remote machine over the ssh forward, one or two sessions changing</text>
-</svg>
-<figcaption>Compressed: 893 KB, 81 KB and about 420 bytes.</figcaption>
+  <img class="figure-img" src="images/05-three-ghost-bugs-en.webp" alt="Three Systems Bugs That Only Surfaced on Real Machines" loading="lazy" width="1080" height="845">
+  <figcaption>Undrawn background workbenches stealing input lease (#367), zero-downtime live handoff of 43 running terminals (--takeover), and macOS AppKit SIG_IGN inheritance across fork + exec (#360).</figcaption>
 </figure>
 
-<p>What's left in the last bar is essentially the one or two sessions that changed, plus the <code>revision</code> field. On a 54 KB/s link, about 420 compressed bytes take a few milliseconds instead of more than ten seconds. Typing no longer waits behind a refresh.</p>
+<h3>1. Multi-Window Input Lease &amp; Visibility Gating (PR #367)</h3>
 
-<h2 id="input">Who holds the keyboard</h2>
-<p>Two windows can have the same terminal open: the local one and the remote machine's own. Typing from both at once would interleave the keystrokes, so only one window has input at a time, and the other shows "Read only · click to take over input".</p>
-<p>The old rule was that whoever got input first kept it. In practice that meant: you'd opened the terminal over there, came back to the local window to keep typing, and found it read-only. We switched to "the one opened last takes over": whichever window newly opens the terminal gets its input. Peeking is the exception; a glance takes nothing until your first keystroke.</p>
-<p>Another review caught a problem with that change the day it shipped. At start, the window builds a workbench for every machine in the background to feed the sidebar. Those undrawn workbenches behaved as if they were on screen: they opened every terminal in that machine's first tab and took over its input. You hadn't clicked that machine yet, and its own window had already gone read-only. The fix is for a workbench to know whether it's being drawn: undrawn, it builds no panes; in the frame it first appears, it builds them and takes input (<a href="https://github.com/majiayu000/fibo/pull/367">#367</a>).</p>
+<p>When both the remote machine’s own window and a local window view the same terminal, simultaneous typing would interleave keystrokes. Fibo enforces an exclusive input lease ("last-opened window takes input; the other shows <i>Read only · click to take over</i>"). Right after shipping that rule, launching the local window caused the remote machine’s own window to flip to read-only before the user ever clicked the remote machine. Why? Startup created a hidden background <code>Workbench</code> per machine to feed the sidebar, and its initializer attached to the remote’s first tab and claimed the input lease. Gating pane creation and lease acquisition on <code>drawn_last_frame</code> (<a href="https://github.com/majiayu000/fibo/pull/367">PR #367</a>) ensured undrawn background workbenches never steal focus.</p>
 
-<h2 id="update">Updating without dropping terminals</h2>
-<p>The new protocol only works once both machines run the new version. Updating means replacing the host with a new program, without dropping the terminals inside it, because dozens of agents are running there.</p>
-<p>The new program starts with <code>--takeover</code>: the old host hands every terminal to the new one, then exits. A new window that finds an older host does this on its own. When we updated the remote machine this time, the log said <code>handed 43 terminals to a newer host</code>, and all 43 kept running.</p>
+<h3>2. Zero-Downtime Handoff of 43 Live Terminals (--takeover)</h3>
 
-<h2 id="learned">What we took away</h2>
+<p>Upgrading both machines to <code>BriefAll</code> couldn’t interrupt the <b>43 live terminals</b> running on the remote host. Launching the new binary with <code>fibo serve --takeover</code> transfers every live PTY file descriptor and scrollback buffer from the old daemon before it exits (logged as <code>handed 43 terminals to a newer host</code>). We also avoid building and signing over SSH on macOS: locked SSH Keychains block Developer ID signing, while ad-hoc signing (<code>codesign -s -</code>) changes the binary identity on every build and triggers endless TCC permission prompts.</p>
+
+<h3>3. Why Orphan ssh -L Processes Ignored SIGTERM (PR #360)</h3>
+
+<p>During upgrades, we noticed an orphaned <code>ssh -N -L</code> process left by a crashed window ignored <code>SIGTERM</code> and needed <code>kill -9</code>, and stopping an old daemon always waited the full 5-second timeout. The root cause: macOS <code>AppKit</code> sets <code>SIGTERM</code> to <code>SIG_IGN</code> on the GUI process, and under POSIX, <code>fork + exec</code> resets caught signals but <b>inherits <code>SIG_IGN</code> across <code>exec</code></b>. Resetting <code>SIGTERM</code> to <code>SIG_DFL</code> in the child’s <code>pre_exec</code> hook (<a href="https://github.com/majiayu000/fibo/pull/360">PR #360</a>) fixed both.</p>
+
+<h2 id="summary">Summary: Five Engineering Principles for Multi-Host Desktop Apps</h2>
+
 <ul>
-<li><b>Find where the difference comes from before choosing to patch or unify.</b> The remote's problems looked like a string of UI bugs. The root was two protocols and two UIs, and every patch added more seams.</li>
-<li><b>Keep data and UI apart.</b> "One complete workbench per machine" went wrong because data and UI lived in one structure, so copying the data copied the UI.</li>
-<li><b>Measure on real data, then measure again after it ships.</b> "The rest is small" was true on a machine with 4 terminals and false on one with 677. The second measurement took two minutes and replaced a lot of guessing.</li>
-<li><b>For every protocol change, think about the old side first.</b> An older host drops connections on requests it can't read, so each step is switched on by a capability flag, and with only one side updated nothing changes.</li>
-<li><b>Accept on real machines.</b> Every step has an evidence script, run against a fake ssh and against the real remote machine: sidebar screenshots compared pixel by pixel before and after switching, ssh connections counted, handed-over terminals counted.</li>
+  <li><b>1. Forward the native socket instead of maintaining two UIs</b>: Forwarding <code>workbench.sock</code> over <code>ssh -L</code> so local and remote share all 85 RPCs eliminated an entire class of UI seam bugs.</li>
+  <li><b>2. Separate per-host data sources from per-window view chrome</b>: Keeping the sidebar, Overview, and <code>⌘J</code> at the window level while scoping <code>Workspace</code> and panes per host prevented sidebar mutations and cut two SSH links down to one.</li>
+  <li><b>3. Audit silent “localhost” assumptions</b>: Guard against remote PIDs passed to local <code>kill</code>, local <code>is_dir()</code> checks, local <code>$SHELL</code>/Hook reads, and macOS’s 104-byte Unix socket path limit.</li>
+  <li><b>4. Measure deltas on production data and isolate the clean base</b>: A 4-terminal dev box hid 352 KB of metadata across 677 production terminals; sparse field deltas require an untouched host base (<code>Kept</code>) separate from live UI drag previews.</li>
+  <li><b>5. Verify on real machines over slow links</b>: Undrawn workbenches stealing input leases, 43-terminal live takeovers, and <code>AppKit</code> <code>SIG_IGN</code> inheritance only surface on real multi-host hardware.</li>
 </ul>
 
-<p class="next">Not done yet: local predictive echo, the way WezTerm does it, only if typing echo goes above 200 ms at p95, which it hasn't needed to. Clicking a file link in the other machine's terminal to open your editor here isn't done either.</p>
+<p class="next">Still ahead: local predictive echo when typing p95 exceeds 200 ms (similar to WezTerm); opening remote terminal file links in a local editor; and computing context rings and Git ahead/behind counts on the remote daemon. Verified between Macs; Windows is in preview and Linux is planned.</p>
 
 <footer class="end">
-  <p>Fibo is open source under the MIT license. The code, the decision records and every PR mentioned here are on <a href="https://github.com/majiayu000/fibo">GitHub</a>.</p>
+  <p>Fibo is open source under the MIT license. The code, decision records, and every PR linked above are on <a href="https://github.com/majiayu000/fibo">GitHub</a>.</p>
   <p><a href="../../">← Back to fibo.page</a></p>
 </footer>
 </main>
