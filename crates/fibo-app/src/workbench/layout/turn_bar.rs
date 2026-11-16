@@ -48,7 +48,7 @@ impl Workbench {
                 self.tick_turn(cx);
                 t!("本轮 {v1}", v1 = turn_clock(now().saturating_sub(at)))
             }
-            None => crate::model::time::short_ago(content.map_or(s.updated, |c| c.updated), now()),
+            None => crate::model::time::short_ago(self.session_updated(s), now()),
         };
         meta.child(super::board::agent_mark(s.runtime, T::color(T::muted())))
             .child(s.runtime.executable().to_string())
@@ -127,7 +127,7 @@ impl Workbench {
                 self.tick_turn(cx);
                 t!("本轮 {v1}", v1 = turn_clock(now().saturating_sub(at)))
             }
-            None => crate::model::time::short_ago(content.map_or(s.updated, |c| c.updated), now()),
+            None => crate::model::time::short_ago(self.session_updated(s), now()),
         })
     }
     /// The files this turn changed, from the session's own record of its edits.
