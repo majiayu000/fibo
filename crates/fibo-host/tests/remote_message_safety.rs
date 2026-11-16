@@ -74,6 +74,13 @@ fn approval_blocks_text_images_queue_steer_and_sendnow() {
             b"",
             "{agent}: text/image paths must not enter the menu"
         );
+        // What the phone's outbox does: the message goes again under its first request id.
+        let queued = json!({"op":"send","terminal":agent,"text":"queued","enter":true,"request":format!("outbox-{agent}")});
+        let error = phone.error(queued.clone());
+        assert!(
+            error.contains("审批") || error.contains("approval"),
+            "{agent}: {error}"
+        );
         let question = phone.ok(json!({"op":"ask","terminal":agent}))["question"]
             .as_str()
             .unwrap()
@@ -86,6 +93,13 @@ fn approval_blocks_text_images_queue_steer_and_sendnow() {
             fs::read(&captured).unwrap(),
             b"\x1bexplanation\r",
             "only explicit denial and later chat reach the PTY"
+        );
+        phone.ok(queued);
+        std::thread::sleep(Duration::from_millis(400));
+        assert_eq!(
+            fs::read(&captured).unwrap(),
+            b"\x1bexplanation\rqueued\r",
+            "{agent}: a message refused during the approval is typed when sent again under the same request id"
         );
     }
 }

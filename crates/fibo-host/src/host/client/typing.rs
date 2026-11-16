@@ -71,7 +71,7 @@ fn send_message(
         if live.exited {
             return Err(io::Error::other("terminal has exited"));
         }
-        message_allowed(&host, &live, id)?;
+        message_allowed(&host, &live, id).map_err(|e| io::Error::other(NotTyped(e.to_string())))?;
         if !text.is_empty() {
             let bracketed = live
                 .vt
@@ -109,6 +109,17 @@ fn send_message(
     }
     typed(shared, id, submit.contains(&b'\r'))
 }
+
+/// A message refused before any of it was typed. Its request id is not used up
+/// (`once`): the same message sent again after the prompt is answered gets typed.
+#[derive(Debug)]
+pub(in crate::host) struct NotTyped(String);
+impl std::fmt::Display for NotTyped {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+impl std::error::Error for NotTyped {}
 
 /// Inspect the current screen under the same locks used to write the message.
 /// The second call catches an approval appearing while the paste is being handled.
