@@ -32,6 +32,7 @@ mod hermes;
 mod hermes_store;
 pub mod hooks;
 mod kimi;
+pub mod launch;
 pub mod modes;
 pub mod modes_drive;
 pub use tool_lines::{describe_tool, Described, ToolCallLine, ToolOutput};

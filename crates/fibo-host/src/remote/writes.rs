@@ -58,6 +58,23 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
                 .ok_or_else(|| io::Error::other("这段对话找不到了"))
         })
         .transpose()?;
+    // Validate launch arguments before returning an existing terminal or creating a tab.
+    // Some CLIs cannot receive a new message while restoring an old conversation.
+    let shell = shell::interactive();
+    let command = match session {
+        Some(s) => Some(w.resume_command(s)),
+        None => agent.map(|a| a.command()),
+    };
+    let pictures = super::images::wanted(socket, request)?;
+    let argv = match command {
+        Some(c) => {
+            let runtime = session.map(|s| s.runtime).or(agent);
+            let label = runtime.map(control::agent_label).unwrap_or_default();
+            fibo_host::agent_launch_argv(&shell, &label, c, prompt, &pictures, session.is_some())?
+        }
+        None if !pictures.is_empty() => return Err(io::Error::other("图片要和 agent 一起")),
+        None => shell::stay(&shell),
+    };
     // Running already: never a second copy of it. The resend of this very open is not that.
     if let Some(live) = session.and_then(|s| status::live_terminal(&w, s)) {
         if live.id != terminal {
@@ -157,30 +174,10 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
         .filter(|c| Path::new(c).is_dir())
         .or_else(fibo_platform::dirs::home_str)
         .ok_or_else(|| io::Error::other("目录不存在"))?;
-    let shell = shell::interactive();
-    let command = match session {
-        Some(s) => Some(w.resume_command(s)),
-        None => agent.map(|a| a.command()),
-    };
-    // Pictures picked with the task: checked before anything opens, so a refused one
-    // leaves no terminal behind.
-    let pictures = super::images::wanted(socket, request)?;
-    let started = match command {
-        Some(c) => {
-            let runtime = session.map(|s| s.runtime).or(agent);
-            let label = runtime.map(control::agent_label).unwrap_or_default();
-            Some(super::open_pictures::attach(&label, c, prompt, &pictures)?)
-        }
-        None if !pictures.is_empty() => return Err(io::Error::other("图片要和 agent 一起")),
-        None => None,
-    };
     let launch = Request::Launch {
         id: terminal.clone(),
         space: space.id.clone(),
-        argv: started.map_or_else(
-            || shell::stay(&shell),
-            |(c, prompt)| agent_argv(&shell, &c, prompt.as_deref()),
-        ),
+        argv,
         cwd,
         cols: 100,
         rows: 30,
@@ -256,17 +253,6 @@ pub(super) fn space_quiet(
         (request["quiet"].as_bool()).ok_or_else(|| io::Error::other("quiet 要是 true 或 false"))?;
     edit_once(socket, request, client, Edit::SetSpaceQuiet { id, quiet })?;
     Ok(json!({}))
-}
-
-/// The shell running `command` and then itself, as the window's resume does (`launch_argv`).
-/// The prompt goes as an argument the shell does not read.
-fn agent_argv(shell: &str, command: &str, prompt: Option<&str>) -> Vec<String> {
-    // `--`: a prompt starting with `-` is not read as a flag.
-    let command = match prompt {
-        Some(p) if p.starts_with('-') => format!("{command} --"),
-        _ => command.to_owned(),
-    };
-    shell::run_then_stay(shell, &command, prompt)
 }
 
 /// `stop`: interrupts the Agent's turn, as the window's 中断这一轮 does. The host checks it is

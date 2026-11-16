@@ -126,6 +126,7 @@
 "等待超时，当前 {phase}" = "timed out waiting; current phase is {phase}"
 "不认识的 Agent：{key}；可选：{known}" = "unknown Agent: {key}; available: {known}"
 "任务是空的" = "task prompt is empty"
+"OpenCode 恢复会话时不能附带消息；请先留空恢复，再在聊天中发送" = "OpenCode cannot accept a message while resuming; resume with an empty message, then send it in chat"
 "不在 Fibo 终端里：用 --from <终端> 说要开在谁旁边、汇报给谁" = "not inside a Fibo terminal: pass --from <terminal> to choose where to open and report back"
 "{e}（终端 {id} 留着，fibo read {id} 看画面）" = "{e} (terminal {id} kept open; inspect with `fibo read {id}`)"
 "开在旁边" = "opened in a split beside you"

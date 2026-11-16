@@ -132,3 +132,11 @@ Ubuntu 图形补验：直接安装首轮 CI 的 ARM64 包，在 Ubuntu 24.04 + X
 - Linux：原生 Ubuntu runner 构建后执行 `python3 packaging/linux/package.py`，用 `sudo apt install ./target/linux-package/*.deb` 安装/更新。容器不证明桌面可用。
 
 当前决定：采用现有产品收尾和上述三平台交付范围；发行结论待验证。完整日志和截图保留在 `~/Documents/claude-pages/fibo/2026-11-16-closeout/`。
+
+### 实际换包与 RC2 结论
+
+`9e7edf3a` 的六条 CI 成功后，Mac build 1232 与 Android Release APK 已实际保留数据换装。Mac 51 个终端和记录的 8 个 Agent PID 保留。此前“没有换包”的说明只描述当时状态；[RC2 记录](v0.1.3-rc2.md)钉住了这轮包身份、失败现场与完整覆盖边界。
+
+RC2 因 OpenCode 新任务文字被当目录而停止，不能发布。修复在真实 OpenCode 1.19.5 上收到指定回复，恢复后单独发消息也收到回复；恢复时附带消息仍属上游不支持路径，Fibo 在任何创建之前明确拒绝，不再静默丢弃。修复分支已同步 `dbad69cc` 主线（包含输入队列、菜单栏性能、会话时间与网站 robots 后续）。#374 的审批输入保护等仍是独立草稿，下一候选要统一来源再走全表；已停止的 RC2 不续记通过项。
+
+已验：真实首条任务与恢复后聊天回复、拒绝恢复附带消息的实际错误、测试终端清理读回／没验：包含此修复的完整 App/APK 同包走查及正式公证发布／相邻情况：Claude/Codex 参数和图片回归保留，其他 CLI 版本的恢复附带消息能力未验。
