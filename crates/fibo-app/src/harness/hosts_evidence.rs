@@ -93,6 +93,12 @@ pub(super) fn start(
             Some(&host),
             "{host} was never drawn: {shown:?}"
         );
+        // What is drawn is the workbench reached as the window opened, not a second one.
+        let hosted = handle.update(cx, |v, _, _| v.visual_hosted()).unwrap();
+        assert!(
+            hosted.as_ref() == Some(&far),
+            "the workbench drawn is not the one reached for {host}"
+        );
         let far_state = |cx: &mut gpui::AsyncApp| far.read_with(cx, |w, _| w.visual_attach_state());
         let far_tabs = far.read_with(cx, |w, _| w.visual_tab_ids());
         assert!(far.read_with(cx, |w, _| w.visual_host().attached()));
