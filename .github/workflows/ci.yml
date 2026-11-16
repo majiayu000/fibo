@@ -32,7 +32,7 @@ jobs:
       # Incremental state is not worth its size in the target/ cache.
       CARGO_INCREMENTAL: 0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # 2026-11-08 history was rewritten from d32157e on (docs/decisions/2026-11-08-scrub-relay-address.md).
       # A branch still built on the old history would bring the old commits back. The compare API
@@ -85,7 +85,7 @@ jobs:
       - name: Prepare pinned native dependencies
         run: sh bootstrap.sh
 
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2
         with:
           tool: cargo-deny@0.19.0
 
@@ -122,7 +122,7 @@ jobs:
 
       - name: Keep native regression evidence
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: resize-scenes
           path: |
@@ -133,7 +133,7 @@ jobs:
 
       - name: Upload managed_session retries
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ci-test-retries
           path: target/ci-test-retries.txt
@@ -154,7 +154,7 @@ jobs:
     env:
       LIBGHOSTTY_VT_SYS_OPTIMIZE: ReleaseFast
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Installs what rust-toolchain.toml pins: the version, rustfmt, clippy, the wasm target.
       - name: Install the pinned Rust toolchain
@@ -206,7 +206,7 @@ jobs:
 
       - name: Keep the gate's pictures
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: perf-gate
           path: |
@@ -220,9 +220,9 @@ jobs:
       run:
         working-directory: mobile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
 
@@ -240,7 +240,7 @@ jobs:
     name: Relay image for self-hosting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # The image docs/relay/self-host.md tells people to build; built here, not pushed.
       - name: Build the relay image
@@ -259,7 +259,7 @@ jobs:
           docker create --name out fibo-relay:ci
           docker cp out:/usr/local/bin/fibo-relay fibo-relay-linux-x86_64
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: fibo-relay-linux-x86_64
           path: fibo-relay-linux-x86_64
