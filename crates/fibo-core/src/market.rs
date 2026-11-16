@@ -544,6 +544,7 @@ fn curl(url: &str) -> Result<Vec<u8>, String> {
         .arg(MAX_FILE.to_string())
         .arg("--proto")
         .arg("=https,file")
+        .args(["--proto-redir", "=https"])
         .arg(url)
         .stdin(std::process::Stdio::null())
         .output()
