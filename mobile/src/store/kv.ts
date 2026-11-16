@@ -22,35 +22,15 @@ export function persisted<T extends object>(key: string, initial: T, options?: {
   return persistedValue(kv, key, initial, options);
 }
 
-/**
- * A preference whose loss costs nothing (how the home screen was folded, a count): it changes at
- * once, a failed save is dropped, and an unreadable one starts from `initial`. What must not be
- * lost or read wrong (settings, the outbox, what was reviewed) uses `persisted`.
- */
+/** Optional preferences share the same safe store; their caller need not handle save errors. */
 export function remembered<T extends object>(key: string, initial: T) {
-  let value = initial;
-  const listeners = new Set<() => void>();
-  const emit = () => listeners.forEach((l) => l());
-  const ready = kv
-    .get(key)
-    .then((text) => {
-      if (text) value = { ...initial, ...JSON.parse(text) };
-    })
-    .catch(() => undefined)
-    .then(emit);
+  const store = persistedValue(kv, key, initial);
   return {
-    ready,
-    get: () => value,
+    ready: store.ready.catch(() => undefined),
+    get: store.get,
+    subscribe: store.subscribe,
     set(patch: Partial<T> | ((v: T) => T)) {
-      value = typeof patch === 'function' ? patch(value) : { ...value, ...patch };
-      emit();
-      kv.set(key, JSON.stringify(value)).catch(() => undefined);
-    },
-    subscribe(l: () => void) {
-      listeners.add(l);
-      return () => {
-        listeners.delete(l);
-      };
+      void store.set(patch).catch(() => undefined);
     },
   };
 }
