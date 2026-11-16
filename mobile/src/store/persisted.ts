@@ -2,11 +2,17 @@
 import { notUi } from '../i18n';
 type Storage = { get(key: string): Promise<string | null>; set(key: string, text: string): Promise<unknown> };
 
-export function persistedValue<T extends object>(storage: Storage, key: string, initial: T) {
+/**
+ * `replaceable`: a copy of what another device says (a computer's quota reading), which the next
+ * answer from it replaces whole. An unreadable copy then reads as `initial` and a fresh answer is
+ * saved over it; without this, a failed read refuses every write until `reload`, which is what
+ * settings and the outbox need, since a wrong default there unlocks the app or drops messages.
+ */
+export function persistedValue<T extends object>(storage: Storage, key: string, initial: T, options: { replaceable?: boolean } = {}) {
   let value = initial;
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((listener) => listener());
-  async function read() {
+  async function parse() {
     const text = await storage.get(key);
     if (text === null) return initial;
     const parsed = JSON.parse(text);
@@ -14,6 +20,7 @@ export function persistedValue<T extends object>(storage: Storage, key: string, 
     // A value an older build saved lacks the fields added since: they read as their defaults.
     return { ...initial, ...parsed } as T;
   }
+  const read = options.replaceable ? () => parse().catch(() => initial) : parse;
   let ready = read().then((next) => { value = next; emit(); });
   // Consumers may mount later. Keep the rejection available to them without an
   // unhandled promise during module initialization.

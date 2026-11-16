@@ -18,8 +18,8 @@ export const kv =
       };
 
 /** A value screens read with a hook and change with `set`; saved under `key` on each change. */
-export function persisted<T extends object>(key: string, initial: T) {
-  return persistedValue(kv, key, initial);
+export function persisted<T extends object>(key: string, initial: T, options?: { replaceable?: boolean }) {
+  return persistedValue(kv, key, initial, options);
 }
 
 /**
