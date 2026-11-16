@@ -301,7 +301,7 @@ impl Workbench {
         let mut height = LINE;
         if self.sidebar.open(&fold_key(&space.id), false) {
             let rows = self.quiet_space_sessions(&space.id);
-            let row = F::ONE_PAD_Y * 2. + F::TITLE_LINE;
+            let row = super::super::sidebar_flat::ONE_LINE_ROW;
             let shown = row * rows.len().min(SHOWN_ROWS) as f32;
             height += shown;
             out.push(

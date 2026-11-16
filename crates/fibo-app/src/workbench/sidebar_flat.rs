@@ -94,6 +94,9 @@ pub(super) fn flat_row_box(
         .hover(|s| s.bg(ink(F::selected())))
 }
 
+/// A one-line row's height: its padding and its title's line, the tallest thing in it.
+pub(super) const ONE_LINE_ROW: f32 = F::ONE_PAD_Y * 2. + F::TITLE_LINE;
+
 /// The selected row's edge, drawn over it so it never moves the row's text.
 pub(super) fn flat_selected_edge() -> gpui::Div {
     div()
@@ -296,12 +299,12 @@ impl Workbench {
             Bucket::Stopped | Bucket::Fresh => F::quiet(),
             Bucket::Stale => F::second(),
         };
-        let title = match self
+        let renaming = self
             .layout
             .renaming_session
             .as_ref()
-            .filter(|(id, ..)| id == &session.id)
-        {
+            .filter(|(id, ..)| id == &session.id);
+        let title = match renaming {
             Some((_, field, _)) => div().flex_1().min_w_0().child(field.clone()),
             None => div()
                 .flex_1()
@@ -334,39 +337,46 @@ impl Workbench {
         };
         let asks_ink = g.colors().1;
         let row = gpui::SharedString::from(format!("session-{}", session.id));
-        flat_row_box(row, selected, two)
+        let line = div()
+            .flex()
+            .items_center()
+            .gap(px(T::S8))
+            .child(title)
+            .children(space)
             .child(
                 div()
+                    .min_w(px(F::TIME_WIDTH))
                     .flex_shrink_0()
-                    .when(two, |d| d.mt(px(T::S4)))
-                    .child(self.flat_session_mark(g, attention, cx)),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
                     .flex()
-                    .flex_col()
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(T::S8))
-                            .child(title)
-                            .children(space)
-                            .child(
-                                div()
-                                    .min_w(px(F::TIME_WIDTH))
-                                    .flex_shrink_0()
-                                    .flex()
-                                    .justify_end()
-                                    .font_family(T::mono(cx).family)
-                                    .text_size(px(F::TIME))
-                                    .line_height(px(F::LINE_SMALL))
-                                    .text_color(ink(F::third()))
-                                    .child(time),
-                            ),
-                    )
+                    .justify_end()
+                    .font_family(T::mono(cx).family)
+                    .text_size(px(F::TIME))
+                    .line_height(px(F::LINE_SMALL))
+                    .text_color(ink(F::third()))
+                    .child(time),
+            );
+        let mark = div()
+            .flex_shrink_0()
+            .when(two, |d| d.mt(px(T::S4)))
+            .child(self.flat_session_mark(g, attention, cx));
+        // A one-line row is laid out flat and at its known height: every wrapper whose
+        // size comes from its content has taffy measure the row again, and a redraw of
+        // the column with 50 rows spent half its time there (docs/performance).
+        let content = if two {
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .child(line)
+        } else {
+            line.flex_1().min_w_0()
+        };
+        flat_row_box(row, selected, two)
+            .when(!two && renaming.is_none(), |d| d.h(px(ONE_LINE_ROW)))
+            .child(mark)
+            .child(
+                content
                     .when_some(detail, |d, text| {
                         d.child(
                             div()
