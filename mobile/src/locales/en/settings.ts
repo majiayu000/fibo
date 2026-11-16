@@ -8,7 +8,18 @@ export const settings: Record<string, Entry> = {
   通知与设置: 'Notifications & settings',
   什么时候提醒我: 'When to notify me',
   推送还没接: 'Push not set up yet',
-  '立即，带「允许一次」按钮': 'Right away, with an “Allow once” button',
+  '关着 App 收不到': 'Not while the app is closed',
+  后台保持连接: 'Stay connected in background',
+  '关着 App 也能收到下面的提醒。通知栏会常驻一条，更费电':
+    'Get the notifications below with the app closed. One line stays in the notification shade, and it uses more battery.',
+  '手机没有允许 Fibo 发通知，或系统拦下了后台连接': "This phone hasn't let Fibo send notifications, or the system blocked the background connection",
+  还要允许不限制电量: 'Also allow unrestricted battery use',
+  '不允许的话，手机一离开 Fibo，几秒后连接就会被系统断开，收不到提醒':
+    'Otherwise the system cuts the connection seconds after you leave Fibo, and no notifications arrive',
+  系统里的通知和电池设置: 'Notification and battery settings',
+  '要允许通知、允许后台运行，手机才不会把它杀掉': 'Allow notifications and background activity so the phone does not stop it',
+  只在打开时: 'Only while open',
+  '立即提醒，点开处理': 'Right away; tap to handle it',
   'Agent 问你问题停下来时': 'When an Agent stops to ask you something',
   '命令失败或 Agent 报错': 'A command fails or an Agent reports an error',
   '一轮跑完，等你看结果': 'A turn finished and waits for you',
@@ -16,6 +27,8 @@ export const settings: Record<string, Entry> = {
   '23:00 – 08:00，审批除外': '23:00 – 08:00, except approvals',
   '推送需要 APNs / FCM 账号，这一版还没接：开关先记在这台手机上，接好后按这里的设置提醒。':
     "Push needs an APNs / FCM account and isn't set up in this version. The switches are saved on this phone, and notifications will follow them once it is.",
+  '电脑睡着或没联网时没有提醒。提醒由这台手机自己生成，中继看不到内容。':
+    "No notifications while the computer sleeps or is offline. They are made on this phone, and the relay can't read them.",
   外观与安全: 'Appearance & security',
   外观: 'Appearance',
   语言: 'Language',

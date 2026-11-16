@@ -2,6 +2,8 @@
 // is off takes one line here, so it never stands between you and what needs you on the home screen.
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { keepsConnected } from '@/remote/alerts';
+import { canKeepConnected } from '@/remote/background';
 import { type Machine, useHub } from '@/remote/hub';
 import { tk, tr } from '@/i18n';
 import { useSettings } from '@/store/settings';
@@ -83,7 +85,7 @@ export default function Me() {
           <Line t={t} title={tr('额度明细')} onPress={() => router.push('/quota')} />
           <Line t={t} title={tr('外观')} value={tr(APPEARANCE[v.appearance])} onPress={() => router.push('/settings')} />
           <Line t={t} title={tr('打开时要 Face ID / 指纹')} value={v.lock ? tr('开') : tr('关')} onPress={() => router.push('/settings')} />
-          <Line t={t} title={tr('通知')} value={tr('推送还没接')} last onPress={() => router.push('/settings')} />
+          <Line t={t} title={tr('通知')} value={canKeepConnected ? (keepsConnected(v) ? tr('后台保持连接') : tr('只在打开时')) : tr('推送还没接')} last onPress={() => router.push('/settings')} />
         </View>
       </ScrollView>
       <TabBar on="me" />

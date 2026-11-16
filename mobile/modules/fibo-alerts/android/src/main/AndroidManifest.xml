@@ -1,0 +1,15 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- HeadlessJsTaskService.startTask takes a partial wake lock until the service ends. -->
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <!-- ColorOS closes a background app's sockets within seconds, foreground service or not, unless it is exempt. -->
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+  <application>
+    <service
+      android:name=".KeepConnectedService"
+      android:exported="false"
+      android:foregroundServiceType="remoteMessaging" />
+  </application>
+</manifest>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="fibo_alerts_asks_channel">要你处理</string>
+  <string name="fibo_alerts_service_channel">后台保持连接</string>
+  <string name="fibo_alerts_service_title">Fibo 在后台等电脑的消息</string>
+</resources>

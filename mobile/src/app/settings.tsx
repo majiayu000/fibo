@@ -1,11 +1,13 @@
-// Settings kept on this phone: when to be told (switches only, push is not wired yet),
-// appearance, Face ID / fingerprint, and a second confirmation for dangerous commands.
+// Settings kept on this phone: when to be told (on Android, with 后台保持连接 on; push is not
+// wired), appearance, Face ID / fingerprint, and a second confirmation for dangerous commands.
 import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
-import type { ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { type ReactNode, useEffect, useState } from 'react';
+import { AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { oops } from '@/actions';
 import { notUi, tk, tr } from '@/i18n';
+import { keepsConnected } from '@/remote/alerts';
+import { askBatteryFree, batteryFree, canKeepConnected, setKeepConnected } from '@/remote/background';
 import { type Settings, settings, useSettings } from '@/store/settings';
 import { statsWords } from '@/store/suggestionCounts';
 import { useSuggestionStats } from '@/store/suggestions';
@@ -47,6 +49,13 @@ export default function SettingsScreen() {
   // A setting changes once it is saved; a failed save says so rather than showing what was not kept.
   const save = (patch: Partial<Settings> | ((value: Settings) => Settings)) => settings.set(patch).catch(() => oops(tr('设置没有保存，请重试')));
   const notify = (k: keyof Settings['notify']) => (on: boolean) => save((value) => ({ ...value, notify: { ...value.notify, [k]: on } }));
+  const away = canKeepConnected && keepsConnected(v);
+  // The system's answer arrives by coming back to this page, as does a change made in its settings.
+  const [free, setFree] = useState(batteryFree);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && setFree(batteryFree()));
+    return () => sub.remove();
+  }, []);
 
   async function setLock(on: boolean) {
     // A browser has no Face ID: a lock it could not check would let everything through.
@@ -71,10 +80,36 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 12, paddingBottom: bottom + 16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Label>{tr('什么时候提醒我')}</Label>
-          <Text style={[s.badge, { color: t.wait, backgroundColor: t.waitBg }]}>{tr('推送还没接')}</Text>
+          {!away && <Text style={[s.badge, { color: t.wait, backgroundColor: t.waitBg }]}>{canKeepConnected ? tr('关着 App 收不到') : tr('推送还没接')}</Text>}
         </View>
+        {canKeepConnected && (
+          <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>
+            <Item t={t} title={tr('后台保持连接')} sub={tr('关着 App 也能收到下面的提醒。通知栏会常驻一条，更费电')}>
+              <Switch
+                label={tr('后台保持连接')}
+                on={away}
+                onChange={(on) => {
+                  setKeepConnected(on).then(
+                    (now) => {
+                      if (on && !now) oops(tr('手机没有允许 Fibo 发通知，或系统拦下了后台连接'));
+                    },
+                    () => oops(tr('设置没有保存，请重试')),
+                  );
+                }}
+              />
+            </Item>
+            {away && !free && (
+              <Item t={t} title={tr('还要允许不限制电量')} sub={tr('不允许的话，手机一离开 Fibo，几秒后连接就会被系统断开，收不到提醒')} onPress={askBatteryFree}>
+                <Icon name="right" size={14} width={2} color={t.wait} />
+              </Item>
+            )}
+            <Item t={t} title={tr('系统里的通知和电池设置')} sub={tr('要允许通知、允许后台运行，手机才不会把它杀掉')} last onPress={() => Linking.openSettings()}>
+              <Icon name="right" size={14} width={2} color={t.dim} />
+            </Item>
+          </View>
+        )}
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>
-          <Item t={t} title={tr('等你审批')} sub={tr('立即，带「允许一次」按钮')}>
+          <Item t={t} title={tr('等你审批')} sub={tr('立即提醒，点开处理')}>
             <Switch label={tr('等你审批')} on={v.notify.approval} onChange={notify('approval')} />
           </Item>
           <Item t={t} title={tr('等你回答')} sub={tr('Agent 问你问题停下来时')}>
@@ -93,7 +128,9 @@ export default function SettingsScreen() {
           </Item>
         </View>
         <Text style={{ fontSize: 12, color: t.dim, lineHeight: 18 }}>
-          {tr('推送需要 APNs / FCM 账号，这一版还没接：开关先记在这台手机上，接好后按这里的设置提醒。')}
+          {canKeepConnected
+            ? tr('电脑睡着或没联网时没有提醒。提醒由这台手机自己生成，中继看不到内容。')
+            : tr('推送需要 APNs / FCM 账号，这一版还没接：开关先记在这台手机上，接好后按这里的设置提醒。')}
         </Text>
         <Label style={{ marginTop: 8 }}>{tr('外观与安全')}</Label>
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>

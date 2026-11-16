@@ -69,12 +69,12 @@ a { color: inherit; text-underline-offset: 3px; }
 
 <div class="lead">
   <p><b>手机能离开电脑处理事情了。</b>安卓真机已经走通：经公网中继连到你的 Mac，看对话和工具调用、批准或拒绝、发消息、开新任务。停下 Agent 和接着上次的对话已用真 Agent 走协议验过，最新版还没在手机上点过。</p>
-  <p><b>最大的缺口是推送。</b>不开 App 就不知道有审批在等你，这要你提供账号。其余是几项只能你在手机上验的操作，以及 iPhone 版。</p>
+  <p><b>最大的缺口是提醒。</b>不开 App 就不知道有审批在等你。不要账号的做法已写好（安卓前台服务，设置页「后台保持连接」，默认关），等真机三天试用；其余是几项只能你在手机上验的操作，以及 iPhone 版。</p>
   <div class="stats">
     <div class="stat"><b>69fe098</b><span>电脑端正在跑的版本（加 CI 已签名、待合入的插件目录）；手机 App 同一份手机代码</span></div>
     <div class="stat"><b>安卓</b><span>OPPO Find X9 Ultra 已安装</span></div>
     <div class="stat"><b>1 台</b><span>已配对（这台 Mac）</span></div>
-    <div class="stat"><b>未开始</b><span>推送、iPhone 真机</span></div>
+    <div class="stat"><b>未开始</b><span>提醒的真机试用、iPhone 真机</span></div>
   </div>
 </div>
 
@@ -84,7 +84,7 @@ a { color: inherit; text-underline-offset: 3px; }
 <tr><td>1</td><td>日常用几天，留意 4G、键盘挡输入框、Face ID 弹窗、相机扫码</td><td><span class="tag you">你</span></td><td>这几项我测不了，真实使用才会暴露问题</td></tr>
 <tr><td>2</td><td><s>确认中继证书能自动续期</s> 已确认（11-16）</td><td><span class="tag ok">做完</span></td><td>定时任务在 11-11 03:21 和 11-14 15:20 各自动换过一张，每次都在旧证书到期前约 3 天，中间没有断档。现在这张到 11-21 06:22。还缺的是续期失败时的告警：失败了没人知道</td></tr>
 <tr><td>3</td><td>高峰时再量一次流量，清掉用完的手机工作区</td><td><span class="tag todo">我</span></td><td>真机 0.7 MB/时是在每分钟 10 个事件时量的，之前的峰值是每分钟 72 个，那个条件真机还没量</td></tr>
-<tr><td>4</td><td>推送通知</td><td><span class="tag you">你定账号</span> <span class="tag todo">我做</span></td><td>最大的功能缺口。需要 FCM；国内安卓可能还要接厂商推送</td></tr>
+<tr><td>4</td><td>手机提醒</td><td><span class="tag you">你试用三天</span></td><td>最大的功能缺口。这台 OPPO 上 FCM 连不上，OPPO 推送要公司主体和上架，所以先走不要账号的前台服务。分支 feat/phone-alerts-v2，理由和放弃条件见 <a href="../decisions/2026-11-07-phone-push-channel.md">决定记录</a></td></tr>
 <tr><td>5</td><td>中继换成域名 <code>relay.niannian.site</code></td><td><span class="tag you">你加解析</span> <span class="tag todo">我做</span></td><td>现在用 IP，换服务器就要重新配对。确定长期用就该换</td></tr>
 <tr><td>6</td><td>iPhone 真机</td><td><span class="tag you">你给开发者账号</span> <span class="tag todo">我做</span></td><td>只在模拟器跑过，要签名</td></tr>
 <tr><td>7</td><td>其他 Agent 的工具详情（Cursor、Grok 等）</td><td><span class="tag todo">我</span></td><td>现在显示「还不支持」。看你用得多不多再做</td></tr>
@@ -117,7 +117,7 @@ a { color: inherit; text-underline-offset: 3px; }
 <tr><td>看板、改动、电脑、设置</td><td><span class="tag part">部分验过</span></td><td>看板和改动页真机打开过。设置页和待办列只在网页版看过</td></tr>
 <tr><td>桌面端「中断这一轮」</td><td><span class="tag part">只测过</span></td><td>和手机的停下走同一套逻辑，窗口里没真点过</td></tr>
 <tr><td>Face ID</td><td><span class="tag todo">没验</span></td><td>代码写了，弹窗没在真机出现过</td></tr>
-<tr><td>推送</td><td><span class="tag todo">没做</span></td><td>设置页开关只存在手机上，写着「推送还没接」</td></tr>
+<tr><td>提醒</td><td><span class="tag todo">真机没验</span></td><td>安卓前台服务和本机通知：规则有测试，能编译打包，这一版还没装到手机。iPhone 仍要 APNs 账号</td></tr>
 <tr><td>iPhone</td><td><span class="tag todo">没做真机</span></td><td>模拟器跑过较早版本</td></tr>
 </table></div>
 

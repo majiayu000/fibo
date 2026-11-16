@@ -46,6 +46,7 @@ field turn	crates/fibo-host/src/host/status.rs	1
 field turn	crates/fibo-host/src/plugin_hooks.rs	1
 field turn	mobile/src/actions.ts	2
 field turn	mobile/src/app/chat.tsx	1
+field turn	mobile/src/remote/alerts.ts	2
 field turn_started	crates/fibo-app/src/desktop.rs	1
 field turn_started	crates/fibo-app/src/workbench/board/card.rs	1
 field turn_started	crates/fibo-app/src/workbench/sessions/here_card.rs	3
