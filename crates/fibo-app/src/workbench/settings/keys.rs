@@ -35,7 +35,7 @@ impl SettingsView {
             self.taken = Some((action, chord, holder));
         } else {
             map.assign(action, chord);
-            keymap::update(map, cx);
+            self.text_error = keymap::update(map, cx).err();
         }
         cx.notify();
     }
@@ -44,7 +44,7 @@ impl SettingsView {
         if let Some((action, chord, _)) = self.taken.take() {
             let mut map = keymap::current(cx);
             map.assign(action, chord);
-            keymap::update(map, cx);
+            self.text_error = keymap::update(map, cx).err();
         }
         cx.notify();
     }
@@ -59,7 +59,7 @@ impl SettingsView {
         };
         self.taken = None;
         self.refused = None;
-        keymap::update(map, cx);
+        self.text_error = keymap::update(map, cx).err();
         cx.notify();
     }
     fn key_row(&self, first: bool, action: Action, map: &Keymap, cx: &Context<Self>) -> gpui::Div {

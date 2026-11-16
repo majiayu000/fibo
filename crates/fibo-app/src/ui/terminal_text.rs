@@ -214,14 +214,22 @@ pub fn path() -> Option<PathBuf> {
 /// Save before applying, so a failed write never looks like a saved preference.
 pub fn update(value: TerminalText) -> Result<(), String> {
     let path = path().ok_or(t!("找不到配置目录"))?;
-    let text = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
-    let value = TerminalText::parse(&text)?;
-    std::fs::create_dir_all(path.parent().unwrap())
-        .and_then(|()| super::status_colors::write_atomic(&path, text.as_bytes()))
-        .map_err(|e| t!("无法保存 {path}：{e}", path = path.display(), e))?;
+    let value = save_at(&path, value)?;
     *state().write().unwrap() = value;
     GENERATION.fetch_add(1, Ordering::Relaxed);
     Ok(())
+}
+fn save_at(path: &std::path::Path, value: TerminalText) -> Result<TerminalText, String> {
+    let saved: TerminalText =
+        fibo_core::state_file::read_for_update(path).map_err(|e| e.to_string())?;
+    TerminalText::parse(&serde_json::to_string(&saved).unwrap())
+        .map_err(|e| t!("{path} 格式不对，未改动：{e}", path = path.display(), e))?;
+    let text = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
+    let value = TerminalText::parse(&text)?;
+    std::fs::create_dir_all(path.parent().unwrap())
+        .and_then(|()| super::status_colors::write_atomic(path, text.as_bytes()))
+        .map_err(|e| t!("无法保存 {path}：{e}", path = path.display(), e))?;
+    Ok(value)
 }
 
 #[cfg(test)]
@@ -283,5 +291,21 @@ mod tests {
         assert_eq!((value.min_contrast, value.faint), (1., 0.5));
         assert!(!value.ligatures && !value.cursor_guide);
         assert_eq!((value.window_dim, value.padding), (0., 0.));
+    }
+    #[test]
+    fn saving_after_a_broken_load_keeps_the_original_file() {
+        let dir = std::env::temp_dir().join(format!("fibo-terminal-text-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("terminal-text.json");
+        for bad in ["{", "null", r#"{"size":90}"#] {
+            std::fs::write(&path, bad).unwrap();
+            assert!(
+                save_at(&path, TerminalText::default())
+                    .unwrap_err()
+                    .contains("terminal-text.json")
+            );
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), bad);
+        }
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

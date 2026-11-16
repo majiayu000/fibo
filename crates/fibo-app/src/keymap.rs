@@ -450,11 +450,13 @@ impl Chord {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Keymap {
     bindings: Vec<(Action, Vec<Chord>)>,
+    unknown: serde_json::Map<String, serde_json::Value>,
 }
 impl Global for Keymap {}
 impl Default for Keymap {
     fn default() -> Self {
         Self {
+            unknown: Default::default(),
             bindings: Action::ALL
                 .into_iter()
                 .map(|a| {
@@ -521,7 +523,7 @@ impl Keymap {
     }
     /// The changed actions only, `{}` when nothing differs.
     pub fn to_json(&self) -> String {
-        let changed: serde_json::Map<_, _> = self
+        let mut changed: serde_json::Map<_, _> = self
             .bindings
             .iter()
             .filter(|(a, _)| !a.fixed() && !self.is_default(*a))
@@ -530,6 +532,7 @@ impl Keymap {
                 (a.name(), serde_json::Value::Array(list))
             })
             .collect();
+        changed.extend(self.unknown.clone());
         serde_json::to_string_pretty(&changed).unwrap_or_else(|_| "{}".into())
     }
     pub fn parse(text: &str) -> Result<Self, String> {
@@ -542,7 +545,10 @@ impl Keymap {
         // skipped: those chords are fixed now, and the rest of the file still applies.
         let mut named = vec![];
         'entries: for (name, list) in object {
-            let action = Action::parse(name).ok_or_else(|| format!("unknown action \"{name}\""))?;
+            let Some(action) = Action::parse(name) else {
+                map.unknown.insert(name.clone(), list.clone());
+                continue;
+            };
             let list = list
                 .as_array()
                 .ok_or_else(|| format!("\"{name}\": expected a list of chords"))?;
@@ -607,13 +613,16 @@ impl Keymap {
             Err(_) => Self::default(),
         }
     }
-    fn save(&self) {
-        let Some(path) = path() else {
-            return;
-        };
-        let json = self.to_json();
+    fn save_at(&self, path: &std::path::Path) -> Result<Self, String> {
+        let saved: serde_json::Map<String, serde_json::Value> =
+            fibo_core::state_file::read_for_update(path).map_err(|e| e.to_string())?;
+        let previous = Self::parse(&serde_json::to_string(&saved).unwrap())
+            .map_err(|e| t!("{path} 格式不对，未改动：{e}", path = path.display(), e))?;
+        let mut map = self.clone();
+        map.unknown = previous.unknown;
+        let json = map.to_json();
         let written = if json == "{}" {
-            std::fs::remove_file(&path).or_else(|e| {
+            std::fs::remove_file(path).or_else(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     Ok(())
                 } else {
@@ -623,11 +632,10 @@ impl Keymap {
         } else {
             path.parent()
                 .map_or(Ok(()), std::fs::create_dir_all)
-                .and_then(|()| crate::ui::status_colors::write_atomic(&path, json.as_bytes()))
+                .and_then(|()| crate::ui::status_colors::write_atomic(path, json.as_bytes()))
         };
-        if let Err(e) = written {
-            eprintln!("fibo: saving {}: {e}", path.display());
-        }
+        written.map_err(|e| t!("无法保存 {path}：{e}", path = path.display(), e))?;
+        Ok(map)
     }
 }
 /// The action bound to this keystroke in the current keymap.
@@ -652,10 +660,12 @@ pub fn current(cx: &App) -> Keymap {
     cx.try_global::<Keymap>().cloned().unwrap_or_default()
 }
 /// Saves the changed keymap and makes it the one every pane reads.
-pub fn update(map: Keymap, cx: &mut App) {
-    map.save();
-    cx.set_global(map);
+pub fn update(map: Keymap, cx: &mut App) -> Result<(), String> {
+    let path = path().ok_or(t!("找不到配置目录"))?;
+    let saved = map.save_at(&path)?;
+    cx.set_global(saved);
     cx.refresh_windows();
+    Ok(())
 }
 pub fn path() -> Option<std::path::PathBuf> {
     crate::ui::status_colors::config_dir().map(|dir| dir.join("keys.json"))

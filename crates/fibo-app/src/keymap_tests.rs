@@ -149,7 +149,6 @@ fn only_changes_are_written_and_read_back() {
 #[test]
 fn bad_files_are_refused_whole() {
     for text in [
-        r#"{"new_tabb":["cmd-t"]}"#,
         r#"{"new_tab":"cmd-t"}"#,
         r#"{"new_tab":["ctrl-t"]}"#,
         r#"{"new_tab":["cmd-c"]}"#,
@@ -210,4 +209,27 @@ fn what_is_shown_without_a_command_key_is_what_to_press() {
             );
         }
     }
+}
+
+#[test]
+fn saving_preserves_unknown_actions_and_refuses_a_broken_file() {
+    let dir = std::env::temp_dir().join(format!("fibo-keys-save-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("keys.json");
+    let old = r#"{"future_action":["cmd-y"],"new_tab":["cmd-d"]}"#;
+    std::fs::write(&path, old).unwrap();
+    let map = Keymap::parse(old).unwrap();
+    assert_eq!(map.action_for(&press("cmd-d")), Some(Action::NewTab));
+    Keymap::default().save_at(&path).unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(&path).unwrap())
+            .unwrap(),
+        serde_json::json!({"future_action": ["cmd-y"]})
+    );
+    for bad in ["{", r#"{"new_tab":"cmd-t"}"#, "[]"] {
+        std::fs::write(&path, bad).unwrap();
+        assert!(map.save_at(&path).unwrap_err().contains("keys.json"));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), bad);
+    }
+    std::fs::remove_dir_all(dir).unwrap();
 }
