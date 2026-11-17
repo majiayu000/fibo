@@ -66,14 +66,22 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
         None => agent.map(|a| a.command()),
     };
     let pictures = super::images::wanted(socket, request)?;
-    let argv = match command {
+    let (argv, agent_start) = match command {
         Some(c) => {
             let runtime = session.map(|s| s.runtime).or(agent);
             let label = runtime.map(control::agent_label).unwrap_or_default();
-            fibo_host::agent_launch_argv(&shell, &label, c, prompt, &pictures, session.is_some())?
+            let (argv, first) =
+                fibo_host::agent_launch(&shell, &label, c, prompt, &pictures, session.is_some())?;
+            // What the host keeps as evidence of which conversation this terminal runs: the
+            // one it resumes, else the one that begins with this first message.
+            let started = runtime.map(|agent| match session {
+                Some(s) => AgentStart::resuming(agent, &s.cli_session_id),
+                None => AgentStart::new(agent, first),
+            });
+            (argv, started)
         }
         None if !pictures.is_empty() => return Err(io::Error::other(t!("图片要和 agent 一起"))),
-        None => shell::stay(&shell),
+        None => (shell::stay(&shell), None),
     };
     // Running already: never a second copy of it. The resend of this very open is not that.
     if let Some(live) = session.and_then(|s| status::live_terminal(&w, s)) {
@@ -183,6 +191,7 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
         rows: 30,
         scheme: Default::default(),
         colors: None,
+        start: agent_start,
     };
     rpc(socket, &launch)?;
     if !w.tabs.iter().any(|t| t.id == tab) {

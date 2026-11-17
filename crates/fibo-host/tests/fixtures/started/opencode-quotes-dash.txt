@@ -1,0 +1,29 @@
+
+  ┃
+  ┃  --rc3-walk: keep "double quotes", 'single quotes' and $(echo not-expanded) exactly as
+  ┃  written.
+  ┃  Line two: reply with only WALK-RC3-REMOTE-OK
+  ┃
+
+     + Thought: 311ms
+
+     WALK-RC3-REMOTE-OK
+
+     ▣  Build · DeepSeek V4.1 Flash 1017 · 31.2s
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · DeepSeek V4.1 Flash 1017 OpenCode Go · max
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/tmp/claude-502/r3ow/new-remote                     26.3K (3%) · $0.00  ctrl+p commands

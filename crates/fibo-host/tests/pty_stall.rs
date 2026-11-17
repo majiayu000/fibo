@@ -266,6 +266,7 @@ fn pty_read_stall_under_load() {
                 rows: 40,
                 scheme: Default::default(),
                 colors: None,
+                start: None,
             })
             .unwrap();
         assert!(!matches!(reply, Reply::Error(_)), "{reply:?}");

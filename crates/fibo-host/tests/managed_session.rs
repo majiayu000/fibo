@@ -47,6 +47,8 @@ mod remote;
 mod resources;
 #[path = "managed_session/restart_binding.rs"]
 mod restart_binding;
+#[path = "managed_session/started.rs"]
+mod started;
 #[path = "managed_session/status.rs"]
 mod status;
 #[path = "managed_session/terminal_io.rs"]

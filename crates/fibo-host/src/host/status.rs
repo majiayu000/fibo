@@ -137,6 +137,8 @@ pub(super) fn refresh_agents(
     let mut host = lock(shared)?;
     let mut next = host.workspace.clone();
     crate::recognition::reconcile(&mut next, transcripts, &processes, &files)?;
+    // A conversation this host resumed in a terminal is the one its CLI runs there.
+    crate::recognition::launched::resume(&mut next, transcripts, &processes);
     crate::recognition::record_launch(&mut next, &processes);
     if next.agent_sessions != host.workspace.agent_sessions
         || next.agent_launch != host.workspace.agent_launch

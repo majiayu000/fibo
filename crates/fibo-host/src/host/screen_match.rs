@@ -43,13 +43,26 @@ pub(super) fn holder<'a>(workspace: &'a Workspace, t: &Transcript) -> Option<&'a
         .iter()
         .find(|s| s.current && s.runtime == t.runtime && s.cli_session_id == t.cli_id)
 }
-/// A thread as evidence, or None while its log holds no prompt.
+/// A thread as evidence, or None while its log holds no prompt. With `first`, also what it
+/// began with and whether that is still its newest prompt, for panes whose Agent the host
+/// started with a first message.
 pub(super) fn thread<'a>(
     index: &crate::log_index::Index,
     t: &'a Transcript,
+    first: bool,
 ) -> io::Result<Option<ScreenThread<'a>>> {
     let Some((text, at)) = index.latest_user(&t.path)? else {
         return Ok(None);
+    };
+    let first = match first {
+        true => index
+            .first_user(&t.path)?
+            .map(|(first, at)| crate::recognition::launched::First {
+                newest: first == text,
+                text: crate::recognition::screen_text(&first),
+                at,
+            }),
+        false => None,
     };
     Ok(Some(ScreenThread {
         transcript: t,
@@ -59,6 +72,7 @@ pub(super) fn thread<'a>(
         cwd: fibo_platform::fs::canonical(std::path::Path::new(&t.cwd))
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_else(|_| t.cwd.clone()),
+        first,
     }))
 }
 type Submits = HashMap<String, std::collections::VecDeque<u64>>;
@@ -107,8 +121,23 @@ fn one_per_terminal<T>(items: &[T], of: impl Fn(&T) -> (u32, &str)) -> Vec<&T> {
     }
     oldest.into_values().collect()
 }
+/// The first message the host started `terminal`'s Agent with, for a pane of that Agent
+/// that runs no conversation yet; where it was started, with symlinks resolved.
+fn launched(
+    workspace: &Workspace,
+    terminal: &str,
+    runtime: Agent,
+) -> Option<crate::recognition::launched::Launched> {
+    let start = workspace.agent_starts.get(terminal)?;
+    let cwd = &workspace.terminals.iter().find(|t| t.id == terminal)?.cwd;
+    let cwd = fibo_platform::fs::canonical(std::path::Path::new(cwd))
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| cwd.clone());
+    crate::recognition::launched::launched(start, runtime, cwd)
+}
 pub(super) fn terminals(
     index: &crate::log_index::Index,
+    workspace: &Workspace,
     panes: &[Pane],
     submits: &Submits,
 ) -> io::Result<Vec<ScreenTerminal>> {
@@ -116,6 +145,10 @@ pub(super) fn terminals(
     for (pid, live, terminal, runtime, current) in
         one_per_terminal(panes, |(pid, _, terminal, ..)| (*pid, terminal))
     {
+        let started = match current {
+            None => launched(workspace, terminal, *runtime),
+            Some(_) => None,
+        };
         let screen = lock(live)?.vt.tail_text(200)?;
         let current = match current {
             Some(s) => Some((
@@ -134,6 +167,7 @@ pub(super) fn terminals(
             screen: crate::recognition::screen_text(&screen),
             current,
             submits: presses(submits, terminal),
+            launched: started,
         });
     }
     Ok(terminals)
@@ -241,6 +275,8 @@ pub(super) fn associate_pane(shared: &Shared, id: &str) -> io::Result<Reply> {
         return answer(None);
     };
     let cached = index.cached()?;
+    let terminals = terminals(&index, &workspace, &panes, &submits)?;
+    let first = terminals.iter().any(|t| t.launched.is_some());
     let mut threads = vec![];
     for t in cached
         .iter()
@@ -250,13 +286,12 @@ pub(super) fn associate_pane(shared: &Shared, id: &str) -> io::Result<Reply> {
         if !crate::recognition::screen_candidate(true, false, held, true) {
             continue;
         }
-        if let Some(thread) = thread(&index, t)? {
+        if let Some(thread) = thread(&index, t, first)? {
             if !stays(shared, &thread, held, &submits)? {
                 threads.push(thread);
             }
         }
     }
-    let terminals = terminals(&index, &panes, &submits)?;
     let bindings = crate::recognition::screen_bindings(&threads, &terminals)
         .into_iter()
         .filter(|(terminal, _)| terminal == id)

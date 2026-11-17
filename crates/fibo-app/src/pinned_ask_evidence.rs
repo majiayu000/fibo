@@ -88,6 +88,7 @@ text.push_str(&format!("  {}.{n} 这一轮的回答\n", turn + 1));
                 rows: 24,
                 scheme: Default::default(),
                 colors: None,
+                start: None,
             });
         }
         let layout = Layout::Split {

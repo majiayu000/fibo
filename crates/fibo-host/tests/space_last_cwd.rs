@@ -61,6 +61,7 @@ impl Host {
             rows: 24,
             scheme: Default::default(),
             colors: None,
+            start: None,
         };
         rpc(&self.socket, &launch).unwrap();
         self.edit(Edit::CreateTab {

@@ -7,15 +7,18 @@
 use fibo_platform::shell;
 use std::io;
 
-/// Keep user text in the shell's separate argument, including OpenCode's option value.
-pub fn launch_argv(
+/// The command line that starts `agent`, and its first message exactly as that command line
+/// hands it to the CLI: the words with each picture's reference for Claude Code, the words
+/// alone for the rest. User text stays in the shell's separate argument, OpenCode's option
+/// value included.
+pub fn launch(
     shell: &str,
     agent: &str,
     command: String,
     prompt: Option<&str>,
     pictures: &[String],
     resuming: bool,
-) -> io::Result<Vec<String>> {
+) -> io::Result<(Vec<String>, Option<String>)> {
     // OpenCode 1.19.5 only consumes --prompt on its home route, not its session route.
     // Refuse before opening anything rather than report success after losing the message.
     if agent == "opencode" && resuming && prompt.is_some() {
@@ -23,17 +26,18 @@ pub fn launch_argv(
             "OpenCode 恢复会话时不能附带消息；请先留空恢复，再在聊天中发送"
         )));
     }
-    let (mut command, prompt) = attach(agent, command, prompt, pictures)?;
-    let prompt = match (agent, prompt) {
+    let (mut command, message) = attach(agent, command, prompt, pictures)?;
+    let argument = match (agent, &message) {
         ("opencode", Some(text)) => Some(format!("--prompt={text}")),
         (_, text) => {
             if text.as_ref().is_some_and(|p| p.starts_with('-')) {
                 command.push_str(" --");
             }
-            text
+            text.clone()
         }
     };
-    Ok(shell::run_then_stay(shell, &command, prompt.as_deref()))
+    let argv = shell::run_then_stay(shell, &command, argument.as_deref());
+    Ok((argv, message))
 }
 
 /// The command and first message to start `agent` with, `pictures` attached. No pictures:
@@ -70,7 +74,18 @@ fn attach(
 
 #[cfg(test)]
 mod tests {
-    use super::{attach, launch_argv};
+    use super::attach;
+
+    fn launch_argv(
+        shell: &str,
+        agent: &str,
+        command: String,
+        prompt: Option<&str>,
+        pictures: &[String],
+        resuming: bool,
+    ) -> std::io::Result<Vec<String>> {
+        super::launch(shell, agent, command, prompt, pictures, resuming).map(|(argv, _)| argv)
+    }
 
     const PIC: &str = "/r/phone-images/a.jpg";
 
@@ -146,6 +161,30 @@ mod tests {
                 format!("--prompt={prompt}\n")
             );
         }
+    }
+
+    /// The first message kept as evidence is the one on the command line, not the words
+    /// alone: Claude Code's carries its pictures, OpenCode's comes as `--prompt=` and its
+    /// value is what the CLI keeps.
+    #[test]
+    fn the_first_message_is_what_the_command_line_hands_over() {
+        let words = "--两行\n`代码` \"引号\"";
+        for (agent, pictures, sent) in [
+            ("codex", vec![PIC.to_owned()], words.to_owned()),
+            ("opencode", vec![], words.to_owned()),
+            ("claude", vec![PIC.to_owned()], format!("{words}\n\n@{PIC}")),
+        ] {
+            let (argv, message) =
+                super::launch("sh", agent, agent.into(), Some(words), &pictures, false).unwrap();
+            assert_eq!(message.as_deref(), Some(sent.as_str()), "{agent}");
+            let handed = argv.last().unwrap();
+            assert!(
+                handed == &sent || handed == &format!("--prompt={sent}"),
+                "{agent}: {argv:?}"
+            );
+        }
+        let (_, none) = super::launch("sh", "codex", "codex".into(), None, &[], true).unwrap();
+        assert_eq!(none, None);
     }
 
     #[test]

@@ -43,6 +43,7 @@ fn launch(root: &Path, id: &str, argv: Vec<String>) {
         rows: 24,
         scheme: Default::default(),
         colors: None,
+        start: None,
     };
     rpc(&root.join("workbench.sock"), &request).unwrap();
 }

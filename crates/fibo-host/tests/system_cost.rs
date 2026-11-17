@@ -249,6 +249,7 @@ fn launch(socket: &Path, cwd: &str, id: String, argv: Vec<String>) {
             rows: 30,
             scheme: Default::default(),
             colors: None,
+            start: None,
         },
     );
     assert!(!matches!(reply, Reply::Error(_)), "{reply:?}");

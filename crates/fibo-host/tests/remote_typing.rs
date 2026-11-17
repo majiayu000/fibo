@@ -63,6 +63,7 @@ impl Machine {
             rows: 30,
             scheme: Default::default(),
             colors: None,
+            start: None,
         };
         rpc(&socket, &launch).unwrap();
         std::thread::sleep(Duration::from_millis(300));
@@ -314,6 +315,7 @@ fn another_desktop_opens_settles_and_ends() {
         rows: 24,
         scheme: Default::default(),
         colors: None,
+        start: None,
     };
     rpc(&socket, &launch).unwrap();
     let until = Instant::now() + Duration::from_secs(10);

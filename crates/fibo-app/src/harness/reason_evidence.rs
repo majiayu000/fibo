@@ -56,6 +56,7 @@ pub(super) fn start(
                     rows: 20,
                     scheme: Default::default(),
                     colors: None,
+                    start: None,
                 });
             }
             let leaf = |id: &str| Layout::Leaf(id.into());

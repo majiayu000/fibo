@@ -189,6 +189,12 @@ impl Workbench {
             .filter(|t| t.state == ProcessState::Running)
             .filter(|_| task_id.is_none() && resuming.is_none())
             .map(|t| t.id.clone());
+        // The conversation it resumes is the one this terminal runs: the host is told, for a
+        // CLI whose command line it reads no conversation from (OpenCode).
+        let resumed = resuming
+            .as_ref()
+            .and_then(|id| self.workspace.agent_sessions.iter().find(|s| &s.id == id))
+            .map(|s| fibo_core::model::AgentStart::resuming(s.runtime, &s.cli_session_id));
         let request = Request::Launch {
             id: terminal.clone(),
             space: space.id,
@@ -198,6 +204,7 @@ impl Workbench {
             rows: 30,
             scheme: crate::ui::theme::Theme::scheme(),
             colors: crate::lifecycle::host_colors(),
+            start: resumed,
         };
         let tab_id = tab.id.clone();
         // New work brings the space back. Showing an interrupted pane or a closed conversation

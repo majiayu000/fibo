@@ -163,6 +163,7 @@ fn screen_case(prompts: &[(&str, u64)], screens: &[(&str, Current)]) -> Vec<(Str
                 at: None,
                 began: None,
                 cwd: "/same".into(),
+                first: None,
             })
         })
         .collect();
@@ -176,6 +177,7 @@ fn screen_case(prompts: &[(&str, u64)], screens: &[(&str, Current)]) -> Vec<(Str
             screen: screen_text(screen),
             current: current.map(|(id, at, prompt)| (id.into(), at, screen_key(prompt))),
             submits: vec![],
+            launched: None,
         })
         .collect();
     screen_bindings(&threads, &terminals)
@@ -201,6 +203,7 @@ fn a_thread_binds_only_to_a_screen_of_its_own_cli() {
         screen: screen_text(prompt),
         current: None,
         submits: vec![],
+        launched: None,
     };
     for (thread, screen, binds) in [
         (Agent::Claude, Agent::Claude, true),
@@ -215,6 +218,7 @@ fn a_thread_binds_only_to_a_screen_of_its_own_cli() {
             at: None,
             began: None,
             cwd: "/same".into(),
+            first: None,
         }];
         assert_eq!(
             screen_bindings(&threads, &[pane(screen)]).len(),
@@ -275,6 +279,7 @@ fn enter_at_the_logged_moment_binds_short_and_pasted_prompts() {
         at: Some(at),
         began: None,
         cwd: "/same".into(),
+        first: None,
     };
     let pane = |i: usize, submits: Vec<u64>| ScreenTerminal {
         terminal: format!("pty-{i}"),
@@ -283,6 +288,7 @@ fn enter_at_the_logged_moment_binds_short_and_pasted_prompts() {
         screen: screen_text("[Pasted Content 4096 chars]"),
         current: None,
         submits,
+        launched: None,
     };
     let bound = |threads: &[ScreenThread], panes: &[ScreenTerminal]| {
         screen_bindings(threads, panes)

@@ -100,6 +100,10 @@ pub enum Request {
         /// A user's theme; hosts before it read `scheme`, the nearest built-in.
         #[serde(default)]
         colors: Option<crate::terminal::TermColors>,
+        /// The Agent `argv` starts and with what: kept as evidence of the conversation it
+        /// runs (`Workspace::agent_starts`). Hosts before it ignore it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        start: Option<crate::model::AgentStart>,
     },
     Attach {
         id: String,

@@ -36,6 +36,7 @@ pub struct Transcript {
     pub updated: u64,
 }
 
+pub mod launched;
 mod processes;
 pub use processes::{claude_transcript_off, processes};
 
@@ -505,6 +506,9 @@ pub struct ScreenThread<'a> {
     pub began: Option<u64>,
     /// The log's cwd with symlinks resolved, comparable with the kernel's process cwd.
     pub cwd: String,
+    /// What it began with, read only while some pane's Agent was started with a first
+    /// message.
+    pub first: Option<launched::First>,
 }
 pub struct ScreenTerminal {
     pub terminal: String,
@@ -517,6 +521,8 @@ pub struct ScreenTerminal {
     pub current: Option<(String, u64, Option<String>)>,
     /// When Enter was pressed here lately, seconds since the epoch.
     pub submits: Vec<u64>,
+    /// The first message the host started this pane's Agent with, while it runs none.
+    pub launched: Option<launched::Launched>,
 }
 /// How far apart Enter in a pane and the prompt's log time may be and still be one event.
 pub const SUBMIT_WINDOW: u64 = 3;
@@ -535,24 +541,65 @@ pub fn screen_candidate(
 /// Whether this screen and these Enter presses say the thread's newest prompt came from there.
 pub fn prompt_evidence(thread: &ScreenThread, screen: &str, submits: &[u64]) -> bool {
     let shown = thread.key.as_ref().is_some_and(|key| screen.contains(key));
-    shown
-        || [thread.at, thread.began]
-            .into_iter()
-            .flatten()
-            .any(|at| submits.iter().any(|s| s.abs_diff(at) <= SUBMIT_WINDOW))
+    shown || entered(thread, submits)
+}
+/// Whether Enter was pressed in a pane when the thread's newest prompt was logged or its turn
+/// began, by these presses there.
+pub fn entered(thread: &ScreenThread, submits: &[u64]) -> bool {
+    [thread.at, thread.began]
+        .into_iter()
+        .flatten()
+        .any(|at| submits.iter().any(|s| s.abs_diff(at) <= SUBMIT_WINDOW))
 }
 /// Pair threads with terminals one-to-one. Evidence is the prompt shown verbatim on the
 /// screen, or Enter pressed in that pane when the prompt was logged or its turn began (a
-/// short or pasted prompt never shows verbatim). A thread fitting two panes, or a pane fitting two
-/// threads, binds nothing; the next distinct prompt can settle it.
+/// short or pasted prompt never shows verbatim), or the thread beginning with the first
+/// message the host started that pane's Agent with (`launched::evidence`). A thread fitting
+/// two panes, or a pane fitting two threads, by any of these binds nothing; the next
+/// distinct prompt can settle it. For that, Enter is the newer word than a start: a thread
+/// Enter sent a later prompt no longer goes by what it began with, and a pane where Enter
+/// sent anything other than the message it was started with (another task typed in, `/new`)
+/// no longer goes by its start. Two panes started with one task in one folder then tell
+/// apart once either is typed into. A started pane drawing the very message it was started
+/// with is that start's evidence, not the screen's: Codex draws a two-line task verbatim, and
+/// two panes started with it would otherwise each show the other's thread for good.
 pub fn screen_bindings<'a>(
     threads: &[ScreenThread<'a>],
     terminals: &[ScreenTerminal],
 ) -> Vec<(String, &'a Transcript)> {
-    let fits = |thread: &ScreenThread, terminal: &ScreenTerminal| {
+    let here = |thread: &ScreenThread, terminal: &ScreenTerminal| {
         terminal.runtime == thread.transcript.runtime
             && terminal.cwd.as_ref().is_none_or(|cwd| cwd == &thread.cwd)
-            && prompt_evidence(thread, &terminal.screen, &terminal.submits)
+    };
+    let entered_in = |thread: &ScreenThread, terminal: &ScreenTerminal| {
+        here(thread, terminal) && entered(thread, &terminal.submits)
+    };
+    let went_on: Vec<bool> = threads
+        .iter()
+        .map(|t| {
+            t.first.as_ref().is_some_and(|f| !f.newest)
+                && terminals.iter().any(|p| entered_in(t, p))
+        })
+        .collect();
+    let moved_on: Vec<bool> = terminals
+        .iter()
+        .map(|p| {
+            threads
+                .iter()
+                .any(|t| entered_in(t, p) && !launched::still_the_start(t, p))
+        })
+        .collect();
+    let fits = |i: usize, j: usize| {
+        let (thread, terminal) = (&threads[i], &terminals[j]);
+        let shown = !launched::still_the_start(thread, terminal)
+            && thread
+                .key
+                .as_ref()
+                .is_some_and(|key| terminal.screen.contains(key));
+        here(thread, terminal)
+            && (shown
+                || entered(thread, &terminal.submits)
+                || (!went_on[i] && !moved_on[j] && launched::evidence(thread, terminal)))
             && terminal.current.as_ref().is_none_or(|(id, updated, key)| {
                 id != &thread.transcript.cli_id
                     && thread.transcript.updated >= *updated
@@ -560,13 +607,13 @@ pub fn screen_bindings<'a>(
             })
     };
     let mut out = vec![];
-    for thread in threads {
-        let mut matched = terminals.iter().filter(|t| fits(thread, t));
-        let (Some(terminal), None) = (matched.next(), matched.next()) else {
+    for (i, thread) in threads.iter().enumerate() {
+        let mut matched = (0..terminals.len()).filter(|&j| fits(i, j));
+        let (Some(j), None) = (matched.next(), matched.next()) else {
             continue;
         };
-        if threads.iter().filter(|other| fits(other, terminal)).count() == 1 {
-            out.push((terminal.terminal.clone(), thread.transcript));
+        if (0..threads.len()).filter(|&other| fits(other, j)).count() == 1 {
+            out.push((terminals[j].terminal.clone(), thread.transcript));
         }
     }
     out
@@ -608,5 +655,7 @@ pub fn open_transcripts(
 
 #[cfg(test)]
 mod binding_tests;
+#[cfg(test)]
+mod launched_tests;
 #[cfg(test)]
 mod tests;

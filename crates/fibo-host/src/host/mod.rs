@@ -23,6 +23,7 @@ mod client;
 mod events;
 mod found_shells;
 mod http_ask;
+mod launch_probe;
 mod live;
 mod lock;
 pub(crate) mod remote;
@@ -669,6 +670,8 @@ impl Host {
         applied: Option<&fibo_core::protocol::RequestId>,
     ) -> io::Result<()> {
         next.revision = self.workspace.revision + 1;
+        // Whatever tied a terminal to its first conversation, or ended it, ends its start.
+        next.settle_starts();
         self.store.save_applying(&self.workspace, &next, applied)?;
         // Terminals that just got their Agent conversation. The quiet-screen check after
         // the last output skipped them while unbound; a dialog drawn before binding (an

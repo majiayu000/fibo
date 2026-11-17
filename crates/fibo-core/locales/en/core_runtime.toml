@@ -110,7 +110,7 @@
 "进程报出的会话 ID" = "Session ID reported by process"
 "Agent 的 Hook 上报" = "Reported by Agent hook"
 "进程打开的对话文件" = "Transcript file held open by process"
-"画面上的提示词" = "Prompt matched on screen"
+"画面上的提示词，或打开它时给它的任务、对话" = "Prompt on screen, or the task or conversation it was opened with"
 "日志写明从这个终端的会话接着跑" = "Continued from this terminal's session in log"
 "你起的名" = "Named by you"
 "待办标题" = "To-do title"

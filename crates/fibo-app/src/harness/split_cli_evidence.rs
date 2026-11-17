@@ -29,7 +29,7 @@ pub(super) fn start(
                     "s".into()
                 }
             };
-            call(Request::Launch { colors: None, id: "base".into(), space: space.clone(), argv: vec!["/bin/sh".into(), "-c".into(), "printf '~/mooring $ 我在这块打字\\n'; exec /bin/sh -i".into()], cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
+            call(Request::Launch { colors: None, id: "base".into(), space: space.clone(), argv: vec!["/bin/sh".into(), "-c".into(), "printf '~/mooring $ 我在这块打字\\n'; exec /bin/sh -i".into()], cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default(), start: None });
             call(Request::Edit { request: None, edit: Edit::CreateTab { tab: Tab { id: "tab-base".into(), space, default_task: None, title: "base".into(), layout: Some(Layout::Leaf("base".into())) } } });
             wait(500).await;
             handle.update(cx, |v, _, a| v.visual_peek_show_tab("base", a)).unwrap();
@@ -125,7 +125,7 @@ pub(super) fn start(
             shown_after(cx, 4).await;
             let full = (vec!["base".to_owned(), c, a, b], ());
             // A tab that is not shown gets its pane without the shown tab changing.
-            call(Request::Launch { colors: None, id: "hidden".into(), space: workspace().spaces[0].id.clone(), argv: vec!["/bin/sh".into(), "-i".into()], cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
+            call(Request::Launch { colors: None, id: "hidden".into(), space: workspace().spaces[0].id.clone(), argv: vec!["/bin/sh".into(), "-i".into()], cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default(), start: None });
             call(Request::Edit { request: None, edit: Edit::CreateTab { tab: Tab { id: "tab-other".into(), space: workspace().spaces[0].id.clone(), default_task: None, title: "other".into(), layout: Some(Layout::Leaf("hidden".into())) } } });
             wait(500).await;
             ok(run(args(&["split", "hidden", "--", "echo pane-hidden"])).await);
