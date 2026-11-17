@@ -8,11 +8,15 @@ pub use fibo_remote::subagent::{Subagent, Workflow, WorkflowStep};
 /// or the run's end closes its steps.
 pub trait WorkflowRun {
     fn workflow_summary(&self, live: bool) -> Option<String>;
+    fn workflow_progress(&self, live: bool) -> Option<String>;
     fn workflow_registry(&mut self, registry: &Option<(u64, Vec<String>)>);
     fn end_workflow(&mut self);
 }
 impl WorkflowRun for Subagent {
     fn workflow_summary(&self, live: bool) -> Option<String> {
+        Some(format!("{} · {}", self.name, self.workflow_progress(live)?))
+    }
+    fn workflow_progress(&self, live: bool) -> Option<String> {
         let w = self.workflow.as_ref()?;
         let live = live && self.running();
         let done = w.completed(live);
@@ -25,16 +29,10 @@ impl WorkflowRun for Subagent {
             crate::t!("完成")
         };
         if !w.detailed {
-            return Some(crate::t!(
-                "{name} · {state} · {total} 步",
-                name = self.name,
-                state,
-                total
-            ));
+            return Some(crate::t!("{state} · {total} 步", state, total));
         }
         Some(crate::t!(
-            "{name} · {state} · {phase} 阶段 · {done}/{total} 完成",
-            name = self.name,
+            "{state} · {phase} 阶段 · {done}/{total} 完成",
             state,
             phase = w.phase,
             done,

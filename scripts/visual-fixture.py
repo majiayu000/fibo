@@ -97,6 +97,7 @@ if sys.argv[1] == 'prepare':
         project = root / 'projects/Resize regression'; project.mkdir(parents=True)
         env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
         host = subprocess.Popen([str(BIN / 'fibo'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
+        STATE.write_text(json.dumps({'root': str(root), 'home': str(home), 'host': host.pid}))
         deadline = time.monotonic() + 30
         while not (root / 'runtime/workbench.sock').exists():
             assert host.poll() is None and time.monotonic() < deadline; time.sleep(.05)
@@ -175,6 +176,7 @@ if sys.argv[1] == 'prepare':
                          else visual_child_fixture.prepare(root, home, BIN, now))
     env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
     host = subprocess.Popen([str(BIN / 'fibo'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
+    STATE.write_text(json.dumps({'root': str(root), 'home': str(home), 'host': host.pid}))
     deadline = time.monotonic() + 30
     while not (root / 'runtime/workbench.sock').exists():
         assert host.poll() is None and time.monotonic() < deadline; time.sleep(.05)
@@ -283,6 +285,7 @@ else:
         # MOORING_LANG=en|zh renders the window in that language; without it the private HOME
         # has no choice saved and the window follows this Mac's language.
         if os.environ.get('MOORING_LANG'): env['MOORING_LANG'] = os.environ['MOORING_LANG']
+        if os.environ.get('MOORING_FIXTURE_CHILD_ADAPTERS'): env['MOORING_FIXTURE_CHILD_ADAPTERS'] = os.environ['MOORING_FIXTURE_CHILD_ADAPTERS']
         result = subprocess.run([str(BIN / 'fibo-app'), '--runtime', str(root / 'runtime'), '--visual-evidence', str(directory)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
         (directory / 'native-render.log').write_bytes(result.stdout); assert result.returncode == 0, result.stdout.decode()[-4000:]
         print('native captures', sorted(p.name for p in directory.glob('*-native.png')))

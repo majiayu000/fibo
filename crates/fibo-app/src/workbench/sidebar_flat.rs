@@ -289,7 +289,11 @@ impl Workbench {
             .content
             .get(&session.id)
             .map(|c| c.subagents.as_slice())
-            .filter(|s| !s.is_empty() && bucket(g) != Bucket::Attention);
+            .filter(|s| {
+                !s.is_empty()
+                    && (bucket(g) != Bucket::Attention
+                        || g == Status::Review && s.iter().any(|s| s.workflow.is_some()))
+            });
         let detail = if subs.is_some() { None } else { detail };
         let subs_live = matches!(g, Status::Running | Status::Background);
         let subs_open = self.subagents_open(&session.id, selected);

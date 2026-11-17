@@ -266,6 +266,7 @@ impl Workbench {
                 let workflow = s.workflow.as_ref().filter(|w| w.detailed);
                 let expandable = workflow.is_some();
                 let branch = leaf(i)
+                    .when(s.workflow.is_some(), |d| d.h(px(LEAF * 2.)))
                     .id(gpui::SharedString::from(format!("subagent-{session}-{i}")))
                     .cursor_pointer()
                     .child(
@@ -287,7 +288,18 @@ impl Workbench {
                             .flex_1()
                             .truncate()
                             .text_color(ink(if on { F::second() } else { F::third() }))
-                            .child(s.workflow_summary(live).unwrap_or_else(|| s.name.clone())),
+                            .child(s.name.clone())
+                            .when_some(s.workflow_progress(live), |d, text| {
+                                d.flex().flex_col().child(
+                                    div()
+                                        .text_color(if s.stopped {
+                                            Tone::Danger.dot()
+                                        } else {
+                                            ink(F::third())
+                                        })
+                                        .child(text),
+                                )
+                            }),
                     )
                     .when(s.foreground && on, |d| {
                         d.child(

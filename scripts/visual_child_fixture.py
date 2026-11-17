@@ -73,7 +73,7 @@ def launch(root, sources, rpc):
             if t.get('pid'): break
             assert time.monotonic() < deadline, 'terminal timeout'
             time.sleep(.1)
-        r = rpc(root, {'Hook': {'runtime': runtime, 'pid': t['pid'], 'cli_session_id': ('session_' + PARENT if runtime == 'Kimi' else PARENT), 'transcript': str(transcript), 'ended': False, 'event': None}})
+        r = rpc(root, {'Hook': {'runtime': runtime, 'pid': t['pid'], 'cli_session_id': ('session_' + PARENT if runtime == 'Kimi' else transcript.stem if runtime == 'Claude' else PARENT), 'transcript': str(transcript), 'ended': False, 'event': None}})
         # The comparison's old binary has no adapter for either new CLI. It still
         # launches the identical mock terminal, but cannot bind its transcript.
         assert 'Error' not in r or (runtime in ('Kimi', 'Gemini') and 'transcript has no CLI identity' in str(r)), r
