@@ -174,14 +174,10 @@ impl Workbench {
         )
     }
     /// The menus opened from the left column, drawn over the whole window.
-    pub(in crate::workbench) fn sidebar_menus(
-        &self,
-        window: &Window,
-        cx: &Context<Self>,
-    ) -> Vec<gpui::AnyElement> {
+    pub(in crate::workbench) fn sidebar_menus(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
         let mut out = Vec::new();
         if let Some((id, position)) = &self.layout.space_menu {
-            out.push(self.space_menu_view(id, *position, window, cx));
+            out.push(self.space_menu_view(id, *position, cx));
         }
         let menu = self.sidebar.machine_menu.as_ref().and_then(|(host, at)| {
             let index = (0..self.machines.len())
@@ -218,9 +214,7 @@ impl Workbench {
                     cx.notify();
                 }));
             let entries = vec![open.into_any_element(), entry.into_any_element()];
-            out.push(self.popup(at, entries, window, cx, |this| {
-                this.sidebar.machine_menu = None
-            }));
+            out.push(self.popup(at, entries, cx, |this| this.sidebar.machine_menu = None));
         }
         out
     }

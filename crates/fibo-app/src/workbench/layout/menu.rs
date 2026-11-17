@@ -262,7 +262,6 @@ impl Workbench {
     pub(in crate::workbench) fn menu_view(
         &self,
         menu: &PaneMenu,
-        window: &Window,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         let session = self.current_agent(&menu.terminal);
@@ -507,16 +506,13 @@ impl Workbench {
             }
         }
         let position = menu.position;
-        self.popup(position, entries, window, cx, |this| {
-            this.layout.menu = None
-        })
+        self.popup(position, entries, cx, |this| this.layout.menu = None)
     }
     /// A tab's right-click menu.
     pub(in crate::workbench) fn tab_menu_view(
         &self,
         id: &str,
         position: gpui::Point<gpui::Pixels>,
-        window: &Window,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         let rename = id.to_owned();
@@ -566,16 +562,13 @@ impl Workbench {
                 }))
                 .into_any_element(),
         ]);
-        self.popup(position, entries, window, cx, |this| {
-            this.layout.tab_menu = None
-        })
+        self.popup(position, entries, cx, |this| this.layout.tab_menu = None)
     }
     /// Ink ring or mascot: the title bar and the Dock tile change at once, and the
     /// choice is remembered for the next launch.
     pub(in crate::workbench) fn icon_menu_view(
         &self,
         position: gpui::Point<gpui::Pixels>,
-        window: &Window,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         let current = cx.global::<Chosen>().icon;
@@ -611,8 +604,6 @@ impl Workbench {
                     .into_any_element()
             })
             .collect();
-        self.popup(position, entries, window, cx, |this| {
-            this.layout.icon_menu = None
-        })
+        self.popup(position, entries, cx, |this| this.layout.icon_menu = None)
     }
 }
