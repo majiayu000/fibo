@@ -438,22 +438,23 @@ impl Workspace {
             .find(|t| t.layout.as_ref().is_some_and(|l| l.contains(id)))
     }
     /// What a conversation is called and where that name comes from, best first: the
-    /// name the user gave it, the task it was started for or given, the one its CLI
-    /// keeps, its first ask. `None` when none of those is known. Like Claude Desktop's
-    /// title sources, a name the user or a task chose is never replaced by a generated one.
+    /// name the user gave it, the task it was started for or given (with its Agent when
+    /// the task has several, `task_names`), the one its CLI keeps, its first ask. `None`
+    /// when none of those is known. Like Claude Desktop's title sources, a name the user
+    /// or a task chose is never replaced by a generated one.
     pub fn session_naming(&self, s: &AgentSession) -> Option<(String, NameSource)> {
         let named = s.name.trim();
         if !named.is_empty() {
             return Some((named.to_owned(), NameSource::User));
         }
-        if let Some(task) = s
+        if let Some((id, title)) = s
             .task
             .as_ref()
             .and_then(|id| self.tasks.iter().find(|t| &t.id == id))
-            .map(|t| t.title.trim())
-            .filter(|t| !t.is_empty())
+            .map(|t| (t.id.as_str(), t.title.trim()))
+            .filter(|(_, t)| !t.is_empty())
         {
-            return Some((task.to_owned(), NameSource::Task));
+            return Some((self.task_session_name(s, id, title), NameSource::Task));
         }
         let c = self.content.get(&s.id)?;
         let named = crate::content::topic(&c.name);
@@ -548,6 +549,9 @@ mod task_log;
 pub use task_log::{NOTE_LIMIT, TaskLog, TaskNote, short_id};
 mod tab_names;
 mod tabs;
+mod task_names;
+#[cfg(test)]
+mod task_names_tests;
 #[cfg(test)]
 mod tests;
 mod workspace_edit;
