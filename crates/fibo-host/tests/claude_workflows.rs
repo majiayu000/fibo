@@ -219,6 +219,11 @@ fn workflow_notifications_taskstop_and_exact_stop_registry_end_only_the_named_ru
     c.note_task_notification("<task-notification><task-id>w1</task-id><status>completed</status>");
     c.keep_subagents(f.read().subagents);
     assert!(!c.subagents[0].running() && !c.subagents[0].stopped);
+    assert_eq!(
+        c.subagents[0].workflow.as_ref().unwrap().completed(false),
+        1,
+        "a run notification does not invent missing journal results"
+    );
     let facts = fibo_host::content::hook_facts(
         &json!({"background_tasks":[{"type":"agent","id":"ordinary","status":"running"}]}),
     );

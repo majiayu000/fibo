@@ -158,6 +158,7 @@ pub(super) fn read(transcript: &Path) -> Vec<Subagent> {
         };
         let metas_count = agents.len();
         let journal = dir.join("journal.jsonl");
+        workflow.journal = journal.exists();
         match std::fs::read_to_string(&journal) {
             Ok(log) => {
                 let mut by_key = HashMap::<String, usize>::new();
@@ -200,6 +201,9 @@ pub(super) fn read(transcript: &Path) -> Vec<Subagent> {
                             }
                         }
                         Some("result") => {
+                            if v["agentId"].as_str().is_none() {
+                                workflow.detailed = false;
+                            }
                             if let Some(i) = v["key"].as_str().and_then(|key| by_key.get(key)) {
                                 let s = &mut workflow.steps[*i].agent;
                                 if v["agentId"].as_str() == Some(s.id.as_str()) {

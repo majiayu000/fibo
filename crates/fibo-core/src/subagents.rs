@@ -60,7 +60,7 @@ impl WorkflowRun for Subagent {
     fn end_workflow(&mut self) {
         if let (Some(w), Some(at)) = (&mut self.workflow, self.ended) {
             for step in &mut w.steps {
-                if step.agent.running() {
+                if step.agent.running() && (self.stopped || !w.journal) {
                     step.agent.ended = Some(at.max(step.agent.started));
                     step.agent.stopped = self.stopped;
                 }

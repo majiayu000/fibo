@@ -38,7 +38,7 @@ impl Workbench {
                             let on = live && s.agent.running();
                             let (mark, color) = if on {
                                 ("·", run)
-                            } else if s.agent.stopped {
+                            } else if s.agent.stopped || workflow.journal && s.agent.running() {
                                 ("✕", Tone::Danger.dot())
                             } else {
                                 ("✓", T::color(F::done()))

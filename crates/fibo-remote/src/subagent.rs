@@ -31,6 +31,7 @@ pub struct Workflow {
     pub phases: Vec<String>,
     pub steps: Vec<WorkflowStep>,
     pub detailed: bool,
+    pub journal: bool,
     pub total: usize,
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,7 +44,7 @@ impl Workflow {
     pub fn completed(&self, live: bool) -> usize {
         self.steps
             .iter()
-            .filter(|s| !s.agent.stopped && (!live || !s.agent.running()))
+            .filter(|s| !s.agent.stopped && (!s.agent.running() || !self.journal && !live))
             .count()
     }
 }
