@@ -10,6 +10,7 @@
 //! - `frames-section`: a frame of 本机's whole section folding under 按机器. Needs a machine in
 //!   machines.json, so the gate does not run it: `perf-fixture.py` with MACHINE=1 at prepare.
 //! - `frames-rail`: the same machine's rail layout, at rest and with the list arriving.
+//! - `frames-scroll`: Agent output scrolling a line a frame, in `cpu_probe_evidence/scroll.rs`.
 //! - `frames-turning`: the running mark turning, in `cpu_probe_evidence/turning.rs`.
 //! - `frames-plugins`: 设置 › 插件 and the themes with a picture or a see-through window, in
 //!   `cpu_probe_evidence/plugins.rs`.
@@ -29,6 +30,8 @@ use super::*;
 use gpui::WindowHandle;
 #[path = "cpu_probe_evidence/plugins.rs"]
 mod plugins;
+#[path = "cpu_probe_evidence/scroll.rs"]
+mod scroll;
 #[path = "cpu_probe_evidence/turning.rs"]
 mod turning;
 use std::time::{Duration, Instant};
@@ -304,6 +307,8 @@ pub(super) fn start(
                 )
             } else if name == "frames-changes" {
                 changes_frames(handle, &pane, cx).await
+            } else if name == "frames-scroll" {
+                scroll::run(handle, &pane, cx).await
             } else if name == "frames-turning" {
                 turning::run(handle, &directory, cx).await
             } else if name == "frames-board-motion" {

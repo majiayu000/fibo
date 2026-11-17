@@ -105,6 +105,18 @@ def main():
         fails.append(f'no frame numbers in the probe output: {measured} {ms}')
         ms = {'frames-pane': 1, 'frames-main': 1}
     share = ms['frames-pane'] / ms['frames-main']
+    # Counted, not timed, so a virtual machine gates it too: a line of output brings 18 new
+    # runs, and a cache that loses the runs that only moved shapes the whole screen (774).
+    # Its own workspace: after the others the shell in the shown pane no longer runs what
+    # the probe types.
+    scroll_text = probe(bindir, out / 'scroll', 'frames-scroll', catch_up=False)
+    measured.update({k: float(v) for k, v in re.findall(r'(frames-scroll): [^\n]*?([\d.]+) M instructions', scroll_text)})
+    scrolled = re.search(r'frames-scroll: [^\n]*?([\d.]+) runs shaped', scroll_text)
+    if not scrolled:
+        fails.append('no frames-scroll line in the probe output')
+    elif not 1 <= float(scrolled.group(1)) <= 40:
+        fails.append(f'a scrolled line shaped {scrolled.group(1)} runs, 18 are new: '
+                     'runs that only moved must keep their shapes, and 0 means nothing scrolled')
     panel = re.search(r'frames-changes: [^\n]*drawn before (\d+); drew again (\d+)', text)
     if not panel:
         fails.append('no frames-changes line in the probe output')

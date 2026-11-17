@@ -130,6 +130,7 @@
   <tr><td>在跑圆圈转动（默认关）：一步的指令数；真的在转；侧栏不重画；看不到标记或关掉后不再请求下一步</td><td>超基线 15%，或任何一项没发生</td><td>转动时重排侧栏；圆圈滚走后还在空转；门禁量的是静止画面</td></tr>
 <tr><td>插件页：静止时请求下一帧</td><td>&gt;0</td><td>页面停着还在一直重画</td></tr>
   <tr><td>插件页：复用的页面对重画的页面；动画真的在动；16 个动画都播了；3 个主题都生效</td><td>有差异，或任何一项没发生</td><td>缓存盖住了变化；门禁量的是静止画面而空转</td></tr>
+  <tr><td>Agent 输出滚过一行，再画一帧不变的（<code>frames-scroll</code>，单独一个工作区）</td><td>指令数超基线 15%；或交给 CoreText 的段不在 1–40 之间（按次数数，虚拟机上也拦）</td><td>终端排字缓存只按行号找：滚一行整屏中文重新排字（坏版本每行 774 段、419 M）；0 段说明没滚动，量的是静止画面</td></tr>
   <tr><td>面板自己重画，5000 个文件（<code>frames-changesdraw</code>）</td><td>指令数超基线 15%</td><td>开销随文件数涨，比如每次重画都复制全部文件（第一版在 5000 个文件各 2000 行时是 390 ms）</td></tr>
 <tr><td>终端输出时开着看改动，5000 个文件（<code>frames-changes</code>）</td><td>指令数超基线 15%，或面板被重画</td><td>面板不是缓存视图。坏版本（去掉缓存）300 帧全部重画，6.4 M → 14.2 M；正常 6.8 M → 8.2 M</td></tr>
 <tr><td>终端输出时侧栏保留上次绘制</td><td>侧栏重画了</td><td>违反 R1</td></tr>
@@ -174,6 +175,7 @@
   <tr><td>2026-11-16 菜单栏要整份工作区</td><td>真实安装上换上 #365 后窗口仍约 23.6%：侧栏降到每 10 秒 308 ms（优化前约 840 ms），但菜单栏图标每来一次状态就另开连接要整份工作区（725 个会话、3.7 MB JSON），后台序列化每 10 秒 339 ms、窗口解析 120 ms，窗口同步早已走增量</td><td>菜单栏也走 <code>Request::Brief</code>，用自己的 <code>Held</code>；<code>wants</code> 每个会话只取一次状态</td><td>后台整份序列化每 10 秒 339 ms → 0；窗口解析 120 ms → 应用增量 111 ms。#377 版本号没变不拉，#378 通知说明行发时才算（每 10 秒约 49 ms）</td></tr>
   <tr><td>2026-11-17 空间目录（#386）</td><td>真实窗口（16 个在跑、33 个空间）侧栏渲染每 10 秒 1.4 s，其中 <code>space_dir_missing</code> 的 <code>stat</code> 1.04 s：终端里 33 个目录一遍 28 µs，App 进程里慢得多，侧栏每秒重画就每秒问一遍</td><td><code>workbench/dir_seen.rs</code> 按路径记 2 秒</td><td>侧栏渲染 1395 → 126 ms/10 s，整窗绘制 2647 → 338 ms/10 s，窗口 24.3% → 8.1%（在跑 16 → 19）</td></tr>
   <tr><td>2026-11-17 增量哈希（#388）</td><td>后台 41%，<code>workspace_delta::diff</code> 每 10 秒 4.3 s：每个客户端每次刷新都把全部会话内容写成 JSON 过一遍 SipHash</td><td><code>Hashes</code> 按会话记住上次内容和哈希，相等就沿用，各客户端共用</td><td>内容哈希 2.3 s → 70 ms/10 s，增量下发 12.1 s → 1.4 s/10 s（含等锁）</td></tr>
+  <tr><td>2026-11-17 终端排字按行号缓存</td><td>真实窗口（4419 个会话，开着转圈）12 秒采样里 <code>shape_cell</code> 占主线程 433/8980，多半在 CoreText 新建排版。缓存按「第几行第几段」存，内容一滚动全部对不上；GPUI 自己的排版缓存只留上一帧用过的，中间夹一帧不变的（转圈、光标）就清空。中文每个字是单独一段</td><td>按位置找不到时，按内容（文字、列宽、颜色、粗斜体、淡色）在上一帧的段里找（<code>terminal/screen_shape_cache.rs</code>）</td><td><code>frames-scroll</code>：每行 419 M → 52 M，约 45 ms → 7.5 ms；送 CoreText 774 段 → 18 段；<code>frames-pane</code> 不变（7.1–7.7 M，双峰）</td></tr>
 </table>
 
 <h2 id="pitfalls">8. 踩过的坑</h2>
@@ -212,7 +214,8 @@
   <li><span class="tag">未查</span> 开启补画时，开头那帧顶栏「＋」附近有 803 px 差异；新 main（11-04）才出现，门禁目前只比对关闭补画的那轮，不拦。</li>
   <li><span class="tag">未确认根因</span> <code>pty::env_tests::a_spawned_shell_does_not_see_the_hosts_launcher_state</code> 在 CI 上偶尔读到空输出；430820d 改成遇到任何读错误都继续读到期限，并在失败时打印退出状态和读错误，之后 CI 通过。再失败时看那行诊断。</li>
   <li><span class="tag">下一步</span> 11-17 换上 7c3ec48 后后台剩下的：每次请求复制整份快照（<code>Host::snapshot</code>，约 1 s/10 s）、后台进程扫描查 TCP 端口（<code>background_shells::look</code>，约 1.4 s/10 s）。换包后 4 分钟、负载 350 时后台量到 50%，是重启后的补索引加 20 个在跑，没有干净的对照数。</li>
-  <li><span class="tag">下一步</span> <code>status::of</code> 每次都按 id 顺着扫全部终端找它的终端（<code>live_terminal</code>），真实窗口每 10 秒 146 ms，大半是字符串比较；要么在 <code>FrameFacts</code> 里每秒算好状态，要么给终端建索引（core 里一处改）。</li>
+  <li><span class="tag">下一步</span> <code>status::of</code> 每次都按 id 顺着扫全部终端找它的终端（<code>live_terminal</code>），真实窗口每 10 秒 146 ms，大半是字符串比较；要么在 <code>FrameFacts</code> 里每秒算好状态，要么给终端建索引（core 里一处改）。11-17：标题行「下一个要你的」每帧对每个要你处理的会话各算一次（采样 41/8980），已收进 <code>FrameFacts</code>；其余调用（<code>session_status</code>、桌面面板）还在。</li>
+  <li><span class="tag">未查</span> <code>settings-open</code> 在门禁里是 0.08 M，基线 0.06：11-17 纯 origin/main 同样 0.08，单独跑探针是 0.06，不是哪次改动带来的，基线没动。CI 读不到指令数，不拦这项。</li>
   <li><span class="tag">已否定</span> 窗口同步改增量：真实后台（842 个会话、快照 4.34 MB）一次快照后台约 19 ms CPU、窗口解析约 6 ms；900 秒里 198 秒有变化，合约 0.6% 个核。放弃线是 1%。没量到高峰，假设每秒都变也才 2.6%；窗口主线程应用快照的开销没单独量。</li>
   <li><span class="tag">已改</span> 后台每批写库都 fsync，约占后台剩余 CPU 的 10%：原先主库因存的是用户操作（待办、完成状态）保留 <code>synchronous=FULL</code>；11-05 按 <code>docs/plan.md</code> 第 3 阶段改成 WAL + NORMAL，进程崩溃不丢，只有掉电或系统崩溃可能丢最后几笔（见 <code>docs/decisions/2026-11-05-workbench-db-synchronous-normal.md</code>）。写库挪出锁还没做。日志索引本来就是 NORMAL。</li>
   <li><span class="tag">没测</span> 后台指令数预算没做坏版本测试。</li>

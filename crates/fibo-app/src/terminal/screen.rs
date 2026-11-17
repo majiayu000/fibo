@@ -12,12 +12,17 @@ mod ascii;
 mod native;
 #[path = "screen_paint.rs"]
 mod paint;
+#[path = "screen_shape_cache.rs"]
+mod shape_cache;
 #[path = "screen_capture.rs"]
 mod vt_capture;
 use ascii::AsciiGlyphs;
 #[cfg(feature = "visual-test")]
 #[allow(unused_imports)]
 pub use native::verify_native_geometry;
+#[cfg(feature = "visual-test")]
+#[allow(unused_imports)]
+pub use paint::SHAPED;
 use paint::printable_cells;
 #[allow(unused_imports)]
 pub use paint::{CursorPaint, LayoutCache, paint_cached};
