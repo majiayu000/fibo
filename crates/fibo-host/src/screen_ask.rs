@@ -59,23 +59,46 @@ fn is_option(line: &str) -> bool {
     rest.split_once(". ")
         .is_some_and(|(n, _)| n.len() == 1 && n.chars().all(|c| c.is_ascii_digit()))
 }
-fn is_question(line: &str) -> bool {
+fn opens_question(line: &str) -> bool {
     let t = line.trim();
-    (t.starts_with("Do you want to ") || t.starts_with("Would you like to ")) && t.ends_with('?')
+    t.starts_with("Do you want to ") || t.starts_with("Would you like to ")
+}
+/// The rows an approval question takes, first and last: a narrow pane wraps it, so it ends
+/// with its 「?」 up to three rows down, never past a blank one.
+fn question_at(lines: &[&str], start: usize) -> Option<(usize, usize)> {
+    if !opens_question(lines[start]) {
+        return None;
+    }
+    let rows = lines[start..]
+        .iter()
+        .take(4)
+        .take_while(|l| !l.trim().is_empty());
+    rows.enumerate()
+        .find(|(_, l)| l.trim_end().ends_with('?'))
+        .map(|(i, _)| (start, start + i))
+}
+/// The lowest approval question on screen.
+fn last_question(lines: &[&str]) -> Option<(usize, usize)> {
+    (0..lines.len()).rev().find_map(|i| question_at(lines, i))
 }
 fn is_tip(line: &str) -> bool {
     line.trim_start().starts_with("Tip:")
 }
 /// Whether `next` is the rest of `line`, wrapped by the CLI: its first word would not have
 /// fit after `line` in a terminal `width` wide. A line already wider than `width` was not
-/// wrapped at it, so the width says nothing.
+/// wrapped at it, so the width says nothing. Nor does it when the tip's last row is nearly
+/// full anyway: the CLI's own sentence after it starts with a capital ("Create empty test
+/// file" under 「"switch to auto mode" below」 in 31 columns), the tip's rest never does.
 fn wraps_into(line: &str, next: &str, width: usize) -> bool {
     let used = line.trim_end().chars().count();
     let word = next
         .split_whitespace()
         .next()
         .map_or(0, |w| w.chars().count());
-    word > 0 && used <= width && used + 1 + word > width
+    let capital = next
+        .trim_start()
+        .starts_with(|c: char| c.is_ascii_uppercase());
+    word > 0 && !capital && used <= width && used + 1 + word > width
 }
 /// The head's lines without the tip, the tip's wrapped lines included: the dashed rule
 /// spans the terminal, so it gives the width a wrap is measured against.
@@ -168,12 +191,12 @@ fn paragraphs<'a>(lines: &[&'a str]) -> Vec<Vec<&'a str>> {
 /// Reads the approval whose question is the lowest on `tail`. None without a question.
 pub fn approval_ask(tail: &str) -> Option<ApprovalAsk> {
     let lines: Vec<&str> = tail.lines().map(unbox).collect();
-    let question = lines.iter().rposition(|l| is_question(l))?;
+    let (question, end) = last_question(&lines)?;
     let above = &lines[..question];
     // A rule right above, or with words from the CLI between it and the question
     // (「This command requires approval」, a tool's description).
     let near = (above.iter())
-        .rposition(|l| is_option(l) || is_question(l))
+        .rposition(|l| is_option(l) || opens_question(l))
         .map_or(0, |i| i + 1);
     if let Some(bottom) = above[near..]
         .iter()
@@ -191,7 +214,7 @@ pub fn approval_ask(tail: &str) -> Option<ApprovalAsk> {
         }
         return Some(ask);
     }
-    if let Some(ask) = under_question(&lines, question) {
+    if let Some(ask) = under_question(&lines, end) {
         return Some(ask);
     }
     Some(under_title(above))
@@ -240,9 +263,9 @@ fn between_rules(above: &[&str], bottom: usize) -> ApprovalAsk {
     ask
 }
 
-/// Codex: the subject stands between the question and option 1.
-fn under_question(lines: &[&str], question: usize) -> Option<ApprovalAsk> {
-    let below = &lines[question + 1..];
+/// Codex: the subject stands between the question's last row and option 1.
+fn under_question(lines: &[&str], question_end: usize) -> Option<ApprovalAsk> {
+    let below = &lines[question_end + 1..];
     let first = below.iter().position(|l| is_option(l))?;
     let parts = paragraphs(&below[..first]);
     if parts.is_empty() {
@@ -255,7 +278,10 @@ fn under_question(lines: &[&str], question: usize) -> Option<ApprovalAsk> {
         for line in part {
             let t = line.trim_start();
             if let Some(said) = t.strip_prefix("Reason:").or(t.strip_prefix("Description:")) {
-                note.push(said.trim());
+                // A narrow pane puts the whole reason on the rows under 「Reason:」.
+                if !said.trim().is_empty() {
+                    note.push(said.trim());
+                }
                 in_note = true;
             } else if let Some(path) = t.strip_prefix("Destination:") {
                 destination = Some(path.trim());

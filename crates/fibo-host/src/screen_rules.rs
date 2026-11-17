@@ -489,16 +489,11 @@ impl Explained {
         })
     }
 }
-/// Reads the bottom of a quiet screen with `rules`.
+/// Reads the bottom of a quiet screen with `rules`, as whole lines: a narrow pane's wrapped
+/// question, options and footer are joined back first (`screen_lines`).
 pub fn explain(rules: &'static Rules, tail: &str) -> Explained {
-    const FRAME: &[char] = &[
-        '│', '┃', '║', '╭', '╮', '╰', '╯', '┌', '┐', '└', '┘', '─', '━', '═',
-    ];
-    let lines: Vec<&str> = tail
-        .lines()
-        .map(|l| l.trim().trim_matches(FRAME).trim())
-        .filter(|l| !l.is_empty() && !l.chars().all(|c| FRAME.contains(&c)))
-        .collect();
+    let joined = crate::screen_lines::logical(tail);
+    let lines: Vec<&str> = joined.iter().map(String::as_str).collect();
     let lines = &lines[lines.len().saturating_sub(rules.bottom_lines)..];
     let mut misses = Vec::new();
     for (i, rule) in rules.rules.iter().enumerate() {

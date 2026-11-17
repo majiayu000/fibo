@@ -187,5 +187,18 @@
   "trust-real.txt": {
     "state": "idle",
     "note": "真实画面：新文件夹的信任提示，不是审批也不是选择题，screen_ask::trust_screen 认它"
+  },
+  "approval-narrow-wrapped-real.txt": {
+    "state": "waiting",
+    "rule": "approval",
+    "question": "Do you want to proceed?",
+    "note": "真实 Claude Code 2.1.326 审批，31 列（11-17 为 Codex 窄旁屏补的兄弟用例）：提示、命令和第 2、3 个选项都折行，路径在词中间断开。GNU screen 存下时把 ❯ ╌ ─ · — ⏺ ⎿ 存坏了，按同版本宽屏真实画面补回；路径换成等长的假路径，折行位置不变。",
+    "ask": {
+      "kind": "Bash command",
+      "subject": "touch phone-walk-claude.txt",
+      "note": "Create empty test file"
+    },
+    "always": "2",
+    "always_label": "允许，这个项目以后都能访问 /Users/x/src/projects/sandbox/narrow-panes/aa/fibo-wrapped-ask-20261117/target/cln-UHSo"
   }
 }

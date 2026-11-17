@@ -83,5 +83,31 @@
   "neg-wrapped-reason-answered.txt": {
     "state": "idle",
     "note": "真实换行理由审批后追加完成输出，旧审批不能继续显示。"
+  },
+  "approval-narrow-wrapped-real.txt": {
+    "state": "waiting",
+    "rule": "approval",
+    "question": "Would you like to run the following command?",
+    "note": "真实 Codex 0.169 审批，31 列窄旁屏（11-17 走查 card.sendguard）：问句、选项和页脚都折行，旧规则认不出，手机的第二次发送回车批准了 touch。各行文字取自当时的 fibo read，空行按同宽度重现补回。",
+    "ask": {
+      "kind": "Command",
+      "subject": "touch\nphone-walk-codex.txt",
+      "note": "只读沙箱阻止了文件创建，是\n否允许执行你要求的 touch\nphone-walk-codex.txt？"
+    },
+    "always": "p",
+    "always_label": "允许，`touch phone-walk- codex.txt` 开头的命令以后不再询问"
+  },
+  "approval-narrow44-real.txt": {
+    "state": "waiting",
+    "rule": "approval",
+    "question": "Would you like to run the following command?",
+    "note": "真实 Codex 0.169 审批，44 列纯 PTY（mooring-af 11-17 录）：问句折成两行、中文 Reason 以全角问号结尾，2 号选项折成三行；旧规则读作 idle。",
+    "ask": {
+      "kind": "Command",
+      "subject": "touch phone-walk-codex.txt",
+      "note": "是否批准执行 touch\nphone-walk-codex.txt？"
+    },
+    "always": "p",
+    "always_label": "允许，`touch phone-walk- codex.txt` 开头的命令以后不再询问"
   }
 }

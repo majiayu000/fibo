@@ -124,8 +124,12 @@ impl std::error::Error for NotTyped {}
 /// Inspect the current screen under the same locks used to write the message.
 /// The second call catches an approval appearing while the paste is being handled.
 fn message_allowed(host: &Host, live: &live::Live, id: &str) -> io::Result<()> {
+    use crate::screen_lines::{open_menu_at_bottom, OpenMenu};
     let tail = live.vt.tail_text(usize::from(live.rows))?;
-    if crate::screen_ask::trust_screen(&tail).is_some() {
+    // An open menu counts even when no rule read its question: a narrow pane once wrapped
+    // Codex's question, and the message's Enter approved a command (11-17 walk).
+    let menu = open_menu_at_bottom(&tail);
+    if crate::screen_ask::trust_screen(&tail).is_some() || menu == Some(OpenMenu::Trust) {
         return Err(io::Error::other(t!(
             "它在等你决定要不要信任这个文件夹，答完才能发消息"
         )));
@@ -139,6 +143,7 @@ fn message_allowed(host: &Host, live: &live::Live, id: &str) -> io::Result<()> {
             crate::screen_rules::rules,
         );
     if host.http_asks.contains_key(id)
+        || menu == Some(OpenMenu::Approval)
         || crate::screen_rules::explain(rules, &tail)
             .approval()
             .is_some()
