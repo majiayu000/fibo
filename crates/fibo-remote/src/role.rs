@@ -102,6 +102,7 @@ mod tests {
             "usage",
             "toolcalls",
             "toolcall",
+            "toolslast",
             "backfill",
             "suggestion",
             "ask",
@@ -121,6 +122,9 @@ mod tests {
             "todooutcome",
             "image",
             "sendnow",
+            "steer",
+            "effort",
+            "openimages",
         ] {
             assert!(!Role::Answer.allows(op) && Role::Full.allows(op), "{op}");
         }

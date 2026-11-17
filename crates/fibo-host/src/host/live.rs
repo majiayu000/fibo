@@ -156,7 +156,13 @@ fn stop_terminal_with(
     // Only this terminal's own process groups, never a name-based kill.
     let groups: Vec<_> = std::iter::once(shell)
         .chain(foreground)
-        .map(|group| (group, fibo_platform::inspect::started_micros(group as u32)))
+        .map(|group| {
+            let members: Vec<_> = fibo_platform::process::group_members(group)
+                .into_iter()
+                .filter_map(|pid| fibo_platform::inspect::started_micros(pid).map(|at| (pid, at)))
+                .collect();
+            (group, members)
+        })
         .collect();
     let mut error = None;
     for (group, _) in &groups {
@@ -169,16 +175,14 @@ fn stop_terminal_with(
         thread::sleep(HANGUP_GRACE);
         let terminal = weak.upgrade();
         let live = terminal.as_ref().and_then(|terminal| lock(terminal).ok());
-        for (group, started) in &groups {
-            // A foreground program can ignore HUP after its shell has exited and detached
-            // the PTY. Its birth time still identifies it without trusting a reused PID.
-            let same_leader = started.is_some_and(|at| {
-                fibo_platform::inspect::started_micros(*group as u32) == Some(at)
-            });
+        for (group, members) in &groups {
+            // HUP can end the leader and detach the PTY while a child survives. Any
+            // original member still in the group identifies it, without trusting a reused PID.
+            let same_group = has_original_member(*group, members);
             let still_attached = live.as_ref().is_some_and(|live| {
                 (*group == shell && !live.exited) || Some(*group) == live.master.foreground_group()
             });
-            let still_ours = same_leader || still_attached;
+            let still_ours = same_group || still_attached;
             if !still_ours {
                 continue;
             }
@@ -189,6 +193,17 @@ fn stop_terminal_with(
     });
     error.map_or(Ok(()), Err)
 }
+
+fn has_original_member(group: i32, members: &[(u32, u64)]) -> bool {
+    fibo_platform::process::group_members(group)
+        .into_iter()
+        .any(|pid| {
+            members.iter().any(|&(original, at)| {
+                pid == original && fibo_platform::inspect::started_micros(pid) == Some(at)
+            })
+        })
+}
+
 /// Long enough for an Agent to save its conversation on hangup.
 const HANGUP_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
 
@@ -645,62 +660,5 @@ pub(super) fn attach(
     Err(reason.unwrap_or_else(|| io::ErrorKind::UnexpectedEof.into()))
 }
 
-#[cfg(all(test, unix))]
-mod shutdown_tests {
-    use super::*;
-    #[test]
-    fn a_failed_hangup_still_force_stops_its_live_terminal() {
-        let (mut child, master) = pty::spawn(
-            &["/bin/sh".into(), "-c".into(), "exec sleep 600".into()],
-            Path::new("/tmp"),
-            80,
-            24,
-            "hangup-error-test",
-            "15;0",
-        )
-        .unwrap();
-        let terminal = Arc::new(Mutex::new(Live {
-            vt: Vt::new(80, 24).unwrap(),
-            master,
-            cols: 80,
-            rows: 24,
-            pid: child.id(),
-            owner: None,
-            subscribers: HashMap::new(),
-            watchers: Default::default(),
-            exited: false,
-            drained: false,
-            status: None,
-            exit_code: None,
-            title: String::new(),
-            cell: CellPixels::default(),
-            input_at: None,
-            marks: Default::default(),
-            reports: Default::default(),
-        }));
-        let began = Instant::now();
-        let error = stop_terminal_with(&terminal, |_| {
-            Err(io::Error::from_raw_os_error(libc::EPERM))
-        })
-        .unwrap_err();
-        assert_eq!(error.raw_os_error(), Some(libc::EPERM));
-        let pid = child.id() as i32;
-        assert!(
-            fibo_platform::process::exists(pid),
-            "the failed SIGHUP did not stop it"
-        );
-        let (tx, rx) = std::sync::mpsc::channel();
-        thread::spawn(move || {
-            let _ = tx.send(child.wait());
-        });
-        match rx.recv_timeout(HANGUP_GRACE + Duration::from_secs(3)) {
-            Ok(exit) => assert_eq!(exit.unwrap(), None, "the terminal was killed by a signal"),
-            Err(_) => {
-                let _ = fibo_platform::process::kill_group(pid);
-                let _ = rx.recv_timeout(Duration::from_secs(1));
-                panic!("a failed hangup cancelled the delayed force stop");
-            }
-        }
-        assert!(began.elapsed() >= HANGUP_GRACE);
-    }
-}
+#[cfg(test)]
+mod shutdown_tests;

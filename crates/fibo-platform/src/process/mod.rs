@@ -98,6 +98,18 @@ pub fn kill_group(group: i32) -> io::Result<()> {
     imp::kill_group(group)
 }
 
+/// The processes still in a Unix group, even after its leader exits. Windows has no
+/// process groups: only the named process identifies the tree `kill_group` can end.
+pub fn group_members(group: i32) -> Vec<u32> {
+    if group <= 0 {
+        return vec![];
+    }
+    #[cfg(unix)]
+    return imp::group_members(group);
+    #[cfg(windows)]
+    vec![group as u32]
+}
+
 /// Whether a process was ended from outside rather than ending itself.
 pub fn was_signalled(status: &std::process::ExitStatus) -> bool {
     imp::was_signalled(status)
