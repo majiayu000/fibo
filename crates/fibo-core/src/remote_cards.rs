@@ -70,7 +70,8 @@ fn card(w: &Workspace, seen: &RecognitionStatus, t: &Terminal, now: u64) -> rp::
     } else {
         content.and_then(|c| c.permission_full)
     };
-    let status = status::of_terminal(w, &t.id, trust.is_some(), now);
+    let report = seen.terminal_reports.get(&t.id);
+    let status = status::of_terminal(w, &t.id, trust.is_some(), report, now);
     let phase = match status.map(status::Status::phase) {
         Some(status::Phase::Working) => rp::Phase::Working,
         Some(status::Phase::Waiting) => rp::Phase::Waiting,
@@ -193,5 +194,44 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(asked(&approval), None, "no options: the text as it is");
+    }
+
+    /// A shell whose program reports its own state reaches the phone with that state, as
+    /// the window's row shows it, not as a bare 终端.
+    #[test]
+    fn a_reporting_program_reaches_the_phone_with_its_state() {
+        let mut w = crate::sample::every_state();
+        let shell = "pty-deploy".to_owned();
+        w.terminals.push(Terminal {
+            id: shell.clone(),
+            space: "space".into(),
+            argv: vec!["/bin/zsh".into()],
+            cwd: "/project".into(),
+            pid: None,
+            state: ProcessState::Running,
+            exit_code: None,
+            error: None,
+        });
+        let mut seen = RecognitionStatus::default();
+        let card = |seen: &RecognitionStatus| {
+            let t = w.terminals.iter().find(|t| t.id == shell).unwrap();
+            card(&w, seen, t, crate::content::now())
+        };
+        assert_eq!(card(&seen).phase, rp::Phase::Shell);
+        seen.terminal_reports.insert(
+            shell.clone(),
+            crate::protocol::ProgramReport {
+                state: "blocked".into(),
+                kind: None,
+                progress: None,
+                app: String::new(),
+                title: String::new(),
+                msg: String::new(),
+                since: 0,
+            },
+        );
+        let blocked = card(&seen);
+        assert_eq!(blocked.phase, rp::Phase::Waiting);
+        assert_eq!(blocked.status.as_deref(), Some("waiting"));
     }
 }
