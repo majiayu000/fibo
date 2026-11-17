@@ -406,21 +406,23 @@ fn claude_without_a_transcript_says_so_until_it_exits() {
     resign(&cli);
     let cli = shell_quote(&cli.to_string_lossy());
     // Two lines: the first is the Enter that prompts a scan, the second ends the CLI.
-    let script = shell_quote("read -r a; read -r b");
+    let script = shell_quote("printf 'hint-fixture-ready\\n'; read -r a; read -r b");
     h.call(h.launch(
         "nested",
         &format!("exec /usr/bin/env CLAUDE_CODE_CHILD_SESSION=1 {cli} -c {script}"),
     ))
     .unwrap();
     // Not left to the host: whatever runs the tests may itself carry the marker.
+    // This CLI starts later: the nested CLI being ready says nothing about this one.
     h.call(h.launch(
         "plain",
-        &format!("exec /usr/bin/env -u CLAUDE_CODE_CHILD_SESSION {cli} -c {script}"),
+        &format!("sleep 1; exec /usr/bin/env -u CLAUDE_CODE_CHILD_SESSION {cli} -c {script}"),
     ))
     .unwrap();
     let mut streams = vec![];
     for pane in ["nested", "plain"] {
-        let (mut stream, _, _) = h.attach(pane, false);
+        let (mut stream, mut vt, _) = h.attach(pane, false);
+        read_until(&mut stream, &mut vt, "hint-fixture-ready");
         send(
             &mut stream,
             CONTROL,
@@ -434,17 +436,16 @@ fn claude_without_a_transcript_says_so_until_it_exits() {
         streams.push(stream);
     }
     let until = Instant::now() + Duration::from_secs(10);
-    while recognition(&h)
-        .terminal_hints
-        .get("nested")
-        .map(String::as_str)
-        != Some(fibo_core::protocol::CLAUDE_TRANSCRIPT_OFF)
-    {
-        assert!(
-            Instant::now() < until,
-            "{:?}",
-            recognition(&h).terminal_hints
-        );
+    let plain_hint = format!("{}claude", fibo_core::protocol::AGENT_UNBOUND_PREFIX);
+    loop {
+        let hints = recognition(&h).terminal_hints;
+        if hints.get("nested").map(String::as_str)
+            == Some(fibo_core::protocol::CLAUDE_TRANSCRIPT_OFF)
+            && hints.get("plain") == Some(&plain_hint)
+        {
+            break;
+        }
+        assert!(Instant::now() < until, "{:?}", hints);
         std::thread::sleep(Duration::from_millis(25));
     }
     // A plain Claude saves its transcript; until a prompt ties it to one it is only unbound.
@@ -453,7 +454,7 @@ fn claude_without_a_transcript_says_so_until_it_exits() {
             .terminal_hints
             .get("plain")
             .map(String::as_str),
-        Some(format!("{}claude", fibo_core::protocol::AGENT_UNBOUND_PREFIX).as_str())
+        Some(plain_hint.as_str())
     );
     send(
         &mut streams[0],
