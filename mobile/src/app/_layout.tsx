@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, Text, View } from 'react-native';
 import { verify } from '@/actions';
 import { setLanguage, tr, useLang } from '@/i18n';
+import { beginAlerts } from '@/remote/background';
 import { start } from '@/remote/hub';
 import { Pump } from '@/remote/pump';
 import { outboxReady, reloadOutbox } from '@/store/outbox';
@@ -94,6 +95,8 @@ export default function Layout() {
     // Screenshot builds only; inlined to false otherwise, so the fixture is dropped.
     // It installs once, never on each foreground; the computers load once the app opens (useLocked).
     if (process.env.EXPO_PUBLIC_FIXTURE === '1' || process.env.EXPO_PUBLIC_FIXTURE === 'promo') require('@/fixture').install();
+    // Only follows the hub; the hub itself starts once the lock is passed (useLocked).
+    beginAlerts();
   }, []);
   return (
     <>

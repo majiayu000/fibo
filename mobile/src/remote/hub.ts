@@ -348,8 +348,18 @@ function later(id: string) {
   retry.set(id, r);
 }
 
-export async function start() {
-  if (state.loaded) return;
+/** The start in flight: the window and the background service can both ask, and a second would
+ * put back a list of machines the first has begun connecting. */
+let starting: Promise<void> | null = null;
+
+export function start(): Promise<void> {
+  if (state.loaded) return Promise.resolve();
+  return (starting ??= boot().finally(() => {
+    starting = null;
+  }));
+}
+
+async function boot() {
   const links = staged ?? (await loadMachines());
   state = {
     loaded: true,
@@ -434,14 +444,18 @@ export const remote = (id: string) => remotes.get(id) ?? null;
 
 export { refresh };
 
+/** Every change of the hub, for what follows it outside a screen. */
+export function watch(l: () => void): () => void {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
+}
+
+export const allMachines = () => state.machines;
+
 export function useHub(): State {
-  return useSyncExternalStore(
-    (l) => {
-      listeners.add(l);
-      return () => listeners.delete(l);
-    },
-    () => state,
-  );
+  return useSyncExternalStore(watch, () => state);
 }
 
 /** A write named by a request id, sent again under it after a reconnect (`named.ts`). */

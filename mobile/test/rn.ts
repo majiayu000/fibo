@@ -9,5 +9,7 @@ export const rn = (over: Record<string, unknown> = {}) => ({
   Platform: { OS: 'web' },
   AppState: { addEventListener: () => ({ remove() {} }) },
   Alert: { alert: unset('Alert.alert') },
+  AppRegistry: { registerHeadlessTask: unset('AppRegistry.registerHeadlessTask') },
+  PermissionsAndroid: { request: unset('PermissionsAndroid.request'), PERMISSIONS: {}, RESULTS: {} },
   ...over,
 });

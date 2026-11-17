@@ -1,5 +1,4 @@
 // What this phone remembers about how it should behave; none of it reaches the computer.
-// Notifications are switches only: push is not wired yet (docs/phone-app/v2-plan.md).
 import { useSyncExternalStore } from 'react';
 import { notUi } from '../i18n';
 import { persisted } from './kv';
@@ -13,6 +12,9 @@ export type Settings = {
   /** Ask once more before allowing a push, rm, deploy and the like. */
   confirmDanger: boolean;
   notify: { approval: boolean; waiting: boolean; error: boolean; done: boolean; quiet: boolean };
+  /** Android 后台保持连接: a foreground service keeps the connection, so `notify` works with the app
+   * closed. Off until turned on here; read it through `keepsConnected` (remote/alerts.ts). */
+  backgroundAlerts: boolean;
 };
 
 export const settings = persisted<Settings>('mooring.settings', {
@@ -21,6 +23,7 @@ export const settings = persisted<Settings>('mooring.settings', {
   lock: false,
   confirmDanger: true,
   notify: { approval: true, waiting: true, error: true, done: false, quiet: false },
+  backgroundAlerts: false,
 });
 
 export const useSettings = () => useSyncExternalStore(settings.subscribe, settings.get);

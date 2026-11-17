@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Words the system shows for 后台保持连接 when no JS is running; English unless the phone is Chinese (values-zh). -->
+<resources>
+  <string name="fibo_alerts_asks_channel">Needs you</string>
+  <string name="fibo_alerts_service_channel">Stay connected in background</string>
+  <string name="fibo_alerts_service_title">Fibo is waiting for your computer in the background</string>
+</resources>
