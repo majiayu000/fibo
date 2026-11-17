@@ -4,7 +4,7 @@
 // phone could not read left 「等你回答」 and Esc, and the conversation stuck).
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { sendBlocked, waitView } from '../src/ui/waits';
+import { sendBlocked, stillBlocks, waitView } from '../src/ui/waits';
 
 type Rule = { id: string; kind: string; match: string };
 const rules: Rule[] = JSON.parse(readFileSync(new URL('../../crates/fibo-core/assets/reasons.json', import.meta.url), 'utf8')).rules ?? [];
@@ -74,5 +74,17 @@ describe('typing while a menu is open', () => {
     expect(held('generic-input')).toBe('');
     expect(held('subagent')).toBe('');
     expect(sendBlocked(null, null, false)).toBe('');
+  });
+});
+
+describe('the line that stopped a send', () => {
+  // 2026-11-17 phone walk: 「它在等你审批」 stayed after the approval was allowed and the turn ended.
+  test('stays while the approval or the menu is open', () => {
+    expect(stillBlocks(true, null, null)).toBe(true);
+    expect(stillBlocks(false, waitView(SAMPLES['hook-permission']), SAMPLES['hook-permission'])).toBe(true);
+  });
+  test('goes once nothing is asked any more', () => {
+    expect(stillBlocks(false, null, null)).toBe(false);
+    expect(stillBlocks(false, waitView(SAMPLES['generic-input']), SAMPLES['generic-input'])).toBe(false);
   });
 });

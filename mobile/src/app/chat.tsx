@@ -28,7 +28,7 @@ import { Btn, Nav, Notice, Pill, mono } from '@/ui/kit';
 import { type Message, Mine, Theirs } from '@/ui/message';
 import { partialWords, readBackWords } from '@/ui/parse';
 import { WaitPanel } from '@/ui/waitpanel';
-import { sendBlocked, starting as startingView, waitView } from '@/ui/waits';
+import { sendBlocked, starting as startingView, stillBlocks, waitView } from '@/ui/waits';
 import { RunningWord, spaceName } from '@/ui/row';
 import { TerminalSheet } from '@/ui/sheets';
 import { hasEffort, type ModeKind } from '@/ui/modes';
@@ -91,6 +91,8 @@ export default function Chat() {
   const last = useRef(0);
   /** The text a send was just held back for: sent again, it goes. */
   const warned = useRef('');
+  // The guard's own line, so it goes once what it was about is over and nothing else's does.
+  const guarded = useRef('');
   last.current = messages.at(-1)?.seq ?? 0;
 
   // The newest page; again whenever the connection comes back, and when the terminal's
@@ -241,6 +243,7 @@ export default function Chat() {
       : sendBlocked(view, waiting, warned.current === text);
     warned.current = blocked ? text : '';
     if (blocked) {
+      guarded.current = blocked;
       setError(blocked);
       return false;
     }
@@ -329,6 +332,14 @@ export default function Chat() {
   const waiting = online && card?.phase === 'waiting' && !card.approval ? card.waiting : null;
   const starting = online && card?.phase === 'shell' && !!card.agent && !card.trust;
   const view = waitView(waiting) ?? (starting ? startingView() : null);
+  const blocks = stillBlocks(!!(online && card?.approval), view, waiting);
+  useEffect(() => {
+    if (blocks || !guarded.current) return;
+    const said = guarded.current;
+    guarded.current = '';
+    warned.current = '';
+    setError((e) => (e === said ? '' : e));
+  }, [blocks]);
   const agent = agentName(card);
   const running = online && card?.phase === 'working';
   const canSendNow = !!running && supports(m, 'sendnow') && sendsNow(card?.controls);

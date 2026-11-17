@@ -78,7 +78,11 @@ export default function DiffScreen() {
   const { machines } = useHub();
   const m = machines.find((x) => x.id === machine);
   const online = m?.status === 'online';
-  const cardSession = m?.cards.find((c) => c.id === terminal)?.session ?? null;
+  const card = m?.cards.find((c) => c.id === terminal);
+  const cardSession = card?.session ?? null;
+  // Read again when the Agent starts or ends a turn: a change asked for from this page lands
+  // while it is open (2026-11-17 phone walk: +2 −1 stayed after the edit).
+  const phase = card?.phase ?? null;
   const can = supports(m, 'diff');
   const [diff, setDiff] = useState<Diff | null>(null);
   const [error, setError] = useState('');
@@ -103,7 +107,7 @@ export default function DiffScreen() {
     return () => {
       live = false;
     };
-  }, [online, can, machine, terminal, cwd, cardSession]);
+  }, [online, can, machine, terminal, cwd, cardSession, phase]);
 
   const files = diff?.files ?? [];
   const check = checkLine(diff?.checks);
