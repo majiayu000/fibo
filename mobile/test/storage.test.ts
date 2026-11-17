@@ -1,10 +1,12 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { rn } from './rn';
 mock.module('react-native', () => rn());
 mock.module('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} }));
 const { kv, persisted } = await import('../src/store/kv');
-const machines = await import('../src/store/machines');
-const link = { machine: 'stored', name: 'Mac', device: 'phone', relay: 'wss://example.test', code: new Uint8Array(32), key: new Uint8Array(32) };
 
 afterEach(() => mock.restore());
 function storage(value: string | null) {
@@ -53,11 +55,17 @@ test('a failed save does not claim the new value and a later save can retry', as
   expect(p.get().n).toBe(6);
 });
 
-test('a broken machine index prevents both pairing and forgetting before any mutation', async () => {
-  const s = storage('{broken');
-  await expect(machines.saveMachine(link)).rejects.toThrow();
-  await expect(machines.forgetMachine('stored')).rejects.toThrow();
-  expect(s.set).not.toHaveBeenCalled();
-  expect(s.del).not.toHaveBeenCalled();
-  expect(s.text()).toBe('{broken');
+test('a broken machine index prevents both pairing and forgetting before any mutation', () => {
+  // hub.test.ts mocks machines for the whole Bun process; ask the real store in a fresh one.
+  const output = join(tmpdir(), `fibo-machines-${crypto.randomUUID()}.json`);
+  try {
+    execFileSync(process.execPath, [new URL('./native/machines.ts', import.meta.url).pathname, output], {
+      cwd: new URL('..', import.meta.url).pathname, encoding: 'utf8', timeout: 5000,
+    });
+    expect(JSON.parse(readFileSync(output, 'utf8'))).toEqual({
+      saveRejected: true, forgetRejected: true, writes: 0, deletes: 0, index: '{broken', machine: 'kept',
+    });
+  } finally {
+    rmSync(output, { force: true });
+  }
 });
