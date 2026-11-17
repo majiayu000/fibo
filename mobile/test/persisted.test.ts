@@ -38,6 +38,20 @@ test('read failures block writes until an explicit successful reload', async () 
   expect(settings.get().lock).toBe(true);
 });
 
+test('a replaceable copy that cannot be read takes the next fresh answer', async () => {
+  for (const text of ['{"agents":[1]}', '{broken', '[]']) {
+    const storage = disk(text);
+    storage.failRead = text.startsWith('{"');
+    const quota = persistedValue(storage, 'quota', { agents: null as number[] | null }, { replaceable: true });
+    await quota.ready;
+    expect(quota.get().agents).toBeNull();
+    storage.failRead = false;
+    await quota.set({ agents: [42] });
+    expect(quota.get().agents).toEqual([42]);
+    expect(JSON.parse(storage.text!)).toEqual({ agents: [42] });
+  }
+});
+
 test('malformed stored settings cannot be read as unlocked defaults', async () => {
   for (const text of ['{broken', 'null', 'false', '[]']) {
     const settings = persistedValue(disk(text), 'settings', { lock: false });

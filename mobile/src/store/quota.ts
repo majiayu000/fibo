@@ -14,7 +14,8 @@ const stores = new Map<string, ReturnType<typeof persisted<QuotaSaved>>>();
 export function quotaStore(machine: string) {
   let s = stores.get(machine);
   if (!s) {
-    s = persisted<QuotaSaved>(entry(machine), { agents: null });
+    // The computer's next answer replaces the copy, so an unreadable one must not refuse it.
+    s = persisted<QuotaSaved>(entry(machine), { agents: null }, { replaceable: true });
     stores.set(machine, s);
   }
   return s;
