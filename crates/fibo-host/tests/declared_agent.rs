@@ -36,13 +36,7 @@ impl Host {
         if let Some(declaration) = declaration {
             fs::write(root.join("agents/fake.json"), declaration(&root)).unwrap();
         }
-        let child = Command::new(std::env::current_exe().unwrap())
-            .args(["--ignored", "--exact", "daemon_fixture", "--nocapture"])
-            .env("MOORING_FIXTURE_RUNTIME", &root)
-            .stdout(Stdio::null())
-            .stderr(Stdio::inherit())
-            .spawn_tied()
-            .unwrap();
+        let child = Self::daemon(&root).spawn_tied().unwrap();
         let h = Self { child, root };
         let until = Instant::now() + Duration::from_secs(30);
         while !h.root.join("workbench.sock").exists() {
@@ -59,6 +53,30 @@ impl Host {
         })
         .unwrap();
         h
+    }
+    /// This test binary's daemon, serving `root`.
+    fn daemon(root: &Path) -> Command {
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args(["--ignored", "--exact", "daemon_fixture", "--nocapture"])
+            .env("MOORING_FIXTURE_RUNTIME", root)
+            .stdout(Stdio::null())
+            .stderr(Stdio::inherit());
+        command
+    }
+    /// A newer host takes the terminals over, as a new App's does; the older one exits. Only
+    /// the store and the processes carry across.
+    fn take_over(&mut self) {
+        let next = Self::daemon(&self.root)
+            .env("MOORING_FIXTURE_TAKEOVER", "1")
+            .spawn_tied()
+            .unwrap();
+        let mut older = std::mem::replace(&mut self.child, next);
+        let until = Instant::now() + Duration::from_secs(30);
+        while older.try_wait().unwrap().is_none() || self.call(Request::Workspace).is_err() {
+            assert!(Instant::now() < until, "the takeover never finished");
+            std::thread::sleep(Duration::from_millis(50));
+        }
     }
     fn call(&self, request: Request) -> io::Result<Reply> {
         rpc(&self.root.join("workbench.sock"), &request)
@@ -77,6 +95,15 @@ impl Host {
     }
     /// Runs `script` in a terminal as the declared CLI: `/bin/sh` under its name.
     fn run_cli(&self, id: &str, script: &str) {
+        self.run_started(id, script, None)
+    }
+    /// `run_cli`, the host told what it starts the CLI with (as a phone's 接着做 tells it).
+    fn run_started(&self, id: &str, script: &str, start: Option<AgentStart>) {
+        self.run_resuming(id, script, "", start)
+    }
+    /// `run_started`, `cli_id` on the CLI's own command line after its script, as the host's
+    /// resume command (`fake-cli --resume {id}`) puts it there.
+    fn run_resuming(&self, id: &str, script: &str, cli_id: &str, start: Option<AgentStart>) {
         let cli = self.root.join("fake-cli");
         if !cli.exists() {
             std::os::unix::fs::symlink("/bin/sh", &cli).unwrap();
@@ -88,9 +115,10 @@ impl Host {
                 "/bin/sh".into(),
                 "-c".into(),
                 format!(
-                    "{} -c {}; read -r line",
+                    "{} -c {} {}; read -r line",
                     shell_quote(&cli.to_string_lossy()),
-                    shell_quote(script)
+                    shell_quote(script),
+                    shell_quote(cli_id)
                 ),
             ],
             cwd: "/tmp".into(),
@@ -98,6 +126,7 @@ impl Host {
             rows: 24,
             scheme: Default::default(),
             colors: None,
+            start,
         })
         .unwrap();
     }
@@ -172,7 +201,11 @@ fn daemon_fixture() {
     for agent in Agent::all().into_iter().filter(|a| *a != fake) {
         roots.push((agent, root.join("logs").join(agent.key())));
     }
-    fibo_host::serve_with_roots(&root, roots).unwrap();
+    if std::env::var_os("MOORING_FIXTURE_TAKEOVER").is_some() {
+        fibo_host::serve_taking_over(&root, roots, 7).unwrap();
+    } else {
+        fibo_host::serve_with_roots(&root, roots).unwrap();
+    }
 }
 
 fn declaration(transcripts: bool) -> impl FnOnce(&Path) -> String {
@@ -373,4 +406,177 @@ fn a_declared_extension_keeps_indexing_after_initial_import() {
             indexed(h, expected)
         });
     }
+}
+
+/// OpenCode resumed with `--session <id>` names no conversation Fibo reads from its command
+/// line, and writes nothing to its log until it is spoken to; nor does a phone press Enter.
+/// The host started it with that conversation, so it ties the terminal before any message,
+/// and the phone's chat has a conversation to send that first message to (RC3 walk). Not
+/// before the CLI shows its input: OpenCode 1.19.5 hides the cursor, turns on the alternate
+/// screen and loads, and drops what is typed until its prompt is focused and shows the cursor;
+/// tied earlier, the phone's first message was accepted and lost (#403 review). Each step
+/// waits on a file and nothing else looks at the terminal meanwhile, so undoing the start
+/// evidence, the wait for the input or the host's watch for it fails this every time.
+#[test]
+fn a_declared_cli_the_host_resumed_binds_once_it_shows_its_input() {
+    let h = Host::start(declaration(true));
+    let row = serde_json::json!({"sid":"fake-old","cwd":"/tmp","role":"user","content":"整理一下发布说明"});
+    fs::write(h.root.join("logs/fake/old.jsonl"), format!("{row}\n")).unwrap();
+    h.wait("the earlier conversation is known", |h| {
+        h.workspace()
+            .agent_sessions
+            .iter()
+            .any(|s| s.cli_session_id == "fake-old")
+    });
+    // Whatever that log's write sets off is over before the terminal starts.
+    std::thread::sleep(Duration::from_secs(3));
+    let fake = Agent::from_key("fake");
+    let (loading, focused) = (h.root.join("loading"), h.root.join("focused"));
+    let wait = |f: &Path| {
+        format!(
+            "while [ ! -e {} ]; do sleep 0.05; done; ",
+            shell_quote(&f.to_string_lossy())
+        )
+    };
+    let script = format!(
+        "{}printf '\\033[?25l\\033[?1049hRESUMING'; {}printf '\\033[2J\\033[HRESUMED\\033[?25h'; read -r line",
+        wait(&loading),
+        wait(&focused)
+    );
+    h.run_resuming(
+        "resumed",
+        &script,
+        "fake-old",
+        Some(AgentStart::resuming(fake, "fake-old")),
+    );
+    // Found as an Agent with no conversation yet, or (wrongly) tied to it already.
+    h.wait("the host never found the CLI it started", |h| {
+        h.recognition().terminal_agents.contains_key("resumed")
+            || h.workspace().current_agent("resumed").is_some()
+    });
+    let untied = |what: &str| {
+        let until = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < until {
+            assert!(h.workspace().current_agent("resumed").is_none(), "{what}");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    };
+    untied("tied before its CLI drew anything");
+    fs::write(&loading, "").unwrap();
+    untied("tied while its CLI loads with no input focused");
+    fs::write(&focused, "").unwrap();
+    h.wait("never tied once its CLI showed its input", |h| {
+        h.workspace()
+            .current_agent("resumed")
+            .is_some_and(|s| s.cli_session_id == "fake-old")
+    });
+    let w = h.workspace();
+    assert_eq!(
+        w.current_agent("resumed").unwrap().binding,
+        Some(Binding::Screen)
+    );
+    // Another terminal started resuming it while it runs there takes nothing, input or not.
+    h.run_resuming(
+        "again",
+        "printf '\\033[?1049hRESUMED'; read -r line",
+        "fake-old",
+        Some(AgentStart::resuming(fake, "fake-old")),
+    );
+    std::thread::sleep(Duration::from_secs(3));
+    let w = h.workspace();
+    assert!(w.current_agent("again").is_none());
+    assert!(w
+        .current_agent("resumed")
+        .is_some_and(|s| s.cli_session_id == "fake-old"));
+}
+
+/// The CLI the host started resuming a conversation exits before it ties anything (it could
+/// not open that conversation, say). Its start is over: kept, any CLI of that kind started in
+/// the shell left behind could be tied to the conversation, whatever it runs (#403 review).
+#[test]
+fn a_resume_start_ends_with_the_cli_it_started() {
+    let h = Host::start(declaration(true));
+    let row = serde_json::json!({"sid":"fake-old","cwd":"/tmp","role":"user","content":"整理一下发布说明"});
+    fs::write(h.root.join("logs/fake/old.jsonl"), format!("{row}\n")).unwrap();
+    h.wait("the earlier conversation is known", |h| {
+        h.workspace()
+            .agent_sessions
+            .iter()
+            .any(|s| s.cli_session_id == "fake-old")
+    });
+    let quit = h.root.join("quit");
+    h.run_resuming(
+        "resumed",
+        &format!(
+            "while [ ! -e {} ]; do sleep 0.05; done",
+            shell_quote(&quit.to_string_lossy())
+        ),
+        "fake-old",
+        Some(AgentStart::resuming(Agent::from_key("fake"), "fake-old")),
+    );
+    h.wait("the host never found the CLI it started", |h| {
+        h.recognition().terminal_agents.contains_key("resumed")
+    });
+    assert!(h.workspace().agent_starts.contains_key("resumed"));
+    fs::write(&quit, "").unwrap();
+    h.wait("the start outlived the CLI it started", |h| {
+        !h.workspace().agent_starts.contains_key("resumed")
+    });
+    let w = h.workspace();
+    assert!(w.current_agent("resumed").is_none());
+    assert!(w
+        .terminals
+        .iter()
+        .any(|t| t.id == "resumed" && t.state == ProcessState::Running));
+}
+
+/// A newer host takes the terminals over while the CLI the older one started resuming a
+/// conversation still loads (a new App swapped in right after the phone's 接着做). Nothing
+/// announces that CLI to the newer host either, so it watches for its input as the older one
+/// did; otherwise the terminal stays untied until it is spoken to, which the phone cannot do
+/// before it is tied (#403 review, round two). Each step waits on a file, so undoing that
+/// watch fails this every time.
+#[test]
+fn a_resume_start_handed_over_while_its_cli_loads_binds_once_it_shows_its_input() {
+    let mut h = Host::start(declaration(true));
+    let row = serde_json::json!({"sid":"fake-old","cwd":"/tmp","role":"user","content":"整理一下发布说明"});
+    fs::write(h.root.join("logs/fake/old.jsonl"), format!("{row}\n")).unwrap();
+    h.wait("the earlier conversation is known", |h| {
+        h.workspace()
+            .agent_sessions
+            .iter()
+            .any(|s| s.cli_session_id == "fake-old")
+    });
+    let focused = h.root.join("focused");
+    // Loading on the alternate screen with the cursor hidden, then its input, drawn anew.
+    let script = format!(
+        "printf '\\033[?25l\\033[?1049hRESUMING'; while [ ! -e {} ]; do sleep 0.05; done; printf '\\033[?1049h\\033[2J\\033[HRESUMED\\033[?25h'; read -r line",
+        shell_quote(&focused.to_string_lossy())
+    );
+    h.run_resuming(
+        "resumed",
+        &script,
+        "fake-old",
+        Some(AgentStart::resuming(Agent::from_key("fake"), "fake-old")),
+    );
+    h.wait("the host never found the CLI it started", |h| {
+        h.recognition().terminal_agents.contains_key("resumed")
+    });
+    h.take_over();
+    assert!(h.workspace().agent_starts.contains_key("resumed"));
+    // Whatever the takeover set off is over, and nothing tied it while its CLI loads.
+    let until = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < until {
+        assert!(
+            h.workspace().current_agent("resumed").is_none(),
+            "tied while its CLI loads"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    fs::write(&focused, "").unwrap();
+    h.wait("never tied once its CLI showed its input", |h| {
+        h.workspace()
+            .current_agent("resumed")
+            .is_some_and(|s| s.cli_session_id == "fake-old")
+    });
 }

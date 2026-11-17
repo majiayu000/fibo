@@ -1,0 +1,29 @@
+
+  ┃
+  ┃  Line one of two.
+  ┃  Reply with only WALK-RC3-NL-OK
+  ┃
+
+     + Thought: 523ms
+
+     WALK-RC3-NL-OK
+
+     ▣  Build · DeepSeek V4.1 Flash 1017 · 11.7s
+
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · DeepSeek V4.1 Flash 1017 OpenCode Go · max
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/tmp/claude-502/r3ow/nr-nl                          26.3K (3%) · $0.00  ctrl+p commands

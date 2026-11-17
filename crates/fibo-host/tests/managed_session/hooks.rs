@@ -411,6 +411,7 @@ fn real_claude_hooks_bind_at_startup_before_any_prompt() {
         rows: 40,
         scheme: Default::default(),
         colors: None,
+        start: None,
     })
     .unwrap();
     let (cli_id, binding) = wait_bound(&h, "real", 30);

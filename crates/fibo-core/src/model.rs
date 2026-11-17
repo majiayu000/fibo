@@ -27,6 +27,9 @@ pub struct Workspace {
     /// resume repeats (model, permissions, config), never a prompt or an old resume.
     #[serde(default)]
     pub agent_launch: std::collections::HashMap<String, Vec<String>>,
+    /// Terminal -> what the host started its Agent with, until it first runs a conversation.
+    #[serde(default)]
+    pub agent_starts: std::collections::HashMap<String, AgentStart>,
     /// Spaces you put aside (先不管): everything in them stays and keeps running, and none
     /// of it asks for you until you take the space back.
     #[serde(default)]
@@ -251,7 +254,10 @@ pub enum Binding {
     Hook,
     /// The process holds the transcript open.
     OpenFile,
-    /// The newest prompt shows on exactly one screen, or was submitted there.
+    /// What went into the TUI, not anything its process or files say: the newest prompt
+    /// shows on exactly one screen or was submitted there, or the host started this
+    /// terminal's Agent with the conversation's first message or with this conversation
+    /// to resume. Any of these may move to another thread of the same TUI later.
     Screen,
     /// The conversation this terminal ran went on in this session, run by the CLI outside
     /// the terminal (Claude Code's background daemon); the terminal only shows it.
@@ -263,7 +269,7 @@ impl Binding {
             Self::Process => t!("进程报出的会话 ID"),
             Self::Hook => t!("Agent 的 Hook 上报"),
             Self::OpenFile => t!("进程打开的对话文件"),
-            Self::Screen => t!("画面上的提示词"),
+            Self::Screen => t!("画面上的提示词，或打开它时给它的任务、对话"),
             Self::Continued => t!("日志写明从这个终端的会话接着跑"),
         }
     }
@@ -547,6 +553,8 @@ impl Workspace {
     }
 }
 
+mod agent_start;
+pub use agent_start::AgentStart;
 mod edit;
 pub use edit::{Edit, SeenSession};
 mod pins;

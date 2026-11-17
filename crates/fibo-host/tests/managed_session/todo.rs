@@ -203,6 +203,7 @@ fn real_claude_writes_back_and_the_next_conversation_continues() {
             rows: 40,
             scheme: Default::default(),
             colors: None,
+            start: None,
         })
         .unwrap();
         edit(Edit::CreateTab {
@@ -371,6 +372,7 @@ fn real_claude_notes_a_todo_when_told_and_only_then() {
         rows: 40,
         scheme: Default::default(),
         colors: None,
+        start: None,
     })
     .unwrap();
     edit(Edit::CreateTab {

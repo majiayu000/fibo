@@ -213,6 +213,7 @@ pub(super) fn serve_runtime(
         unrecorded_pids: HashMap::new(),
         submits: HashMap::new(),
         input_probes: Default::default(),
+        started_clis: HashMap::new(),
         deadlines: None,
         myself: std::sync::Weak::new(),
         http_asks: HashMap::new(),
@@ -278,6 +279,17 @@ pub(super) fn serve_runtime(
             replies,
             Reaper::Pid(t.handed.pid),
         );
+    }
+    // A terminal the older host started with an Agent may still wait on it, and nothing here
+    // announces that Agent either: no Enter, and a CLI resuming a conversation writes nothing
+    // to its log until it is spoken to. One still loading when the terminals were handed over
+    // is looked for as at its launch, or it ties nothing until something else changes.
+    let waiting: Vec<String> = (lock(&host)?.workspace.agent_starts.keys())
+        .filter(|terminal| kept.contains(*terminal))
+        .cloned()
+        .collect();
+    for terminal in waiting {
+        super::launch_probe::look_for_started(&host, &terminal);
     }
     start_deadlines(&host)?;
     shell_watch::start(&host)?;

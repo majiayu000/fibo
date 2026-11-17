@@ -50,6 +50,7 @@ pub(super) fn start(
                 cols: 100,
                 rows: 30,
                 scheme: Default::default(), colors: None,
+                start: None,
             });
             call(Request::Edit {
                 request: None,

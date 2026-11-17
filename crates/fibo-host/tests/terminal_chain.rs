@@ -106,6 +106,7 @@ fn a_real_terminal_is_listed_read_and_typed_into() {
             rows: 30,
             scheme: Default::default(),
             colors: None,
+            start: None,
         },
     );
     assert!(!matches!(reply, Reply::Error(_)), "{reply:?}");
@@ -264,6 +265,7 @@ fn how_much_a_host_costs() {
                 rows: 30,
                 scheme: Default::default(),
                 colors: None,
+                start: None,
             },
         );
         assert!(!matches!(reply, Reply::Error(_)), "{reply:?}");
@@ -500,6 +502,7 @@ fn real_clis_are_recognized_in_this_system_s_shell() {
                 rows: 30,
                 scheme: Default::default(),
                 colors: None,
+                start: None,
             },
         );
         assert!(!matches!(reply, Reply::Error(_)), "{reply:?}");
@@ -702,6 +705,7 @@ fn by_hand() {
                     rows: 40,
                     scheme: Default::default(),
                     colors: None,
+                    start: None,
                 },
             );
             eprintln!("{reply:?}");

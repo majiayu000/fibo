@@ -137,6 +137,19 @@ pub(super) fn refresh_agents(
     let mut host = lock(shared)?;
     let mut next = host.workspace.clone();
     crate::recognition::reconcile(&mut next, transcripts, &processes, &files)?;
+    // A conversation this host resumed in a terminal is the one its CLI runs there, once
+    // that CLI shows its input.
+    let shown = super::launch_probe::shown(&host);
+    let argv = |pid| fibo_platform::inspect::argv(pid).unwrap_or_default();
+    let live = crate::recognition::launched::Live {
+        shown: &shown,
+        argv: &argv,
+    };
+    for (pid, terminal) in
+        crate::recognition::launched::resume(&mut next, transcripts, &processes, &live)
+    {
+        host.started_clis.insert(pid, terminal);
+    }
     crate::recognition::record_launch(&mut next, &processes);
     if next.agent_sessions != host.workspace.agent_sessions
         || next.agent_launch != host.workspace.agent_launch

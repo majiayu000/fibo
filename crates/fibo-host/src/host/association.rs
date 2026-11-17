@@ -159,16 +159,18 @@ impl Association {
         }
         let cached = index.cached()?;
         let submits = lock(shared)?.submits.clone();
+        let terminals = super::screen_match::terminals(index, &workspace, &panes, &submits)?;
+        // What a thread began with is read only when a pane's Agent was started with it.
+        let first = terminals.iter().any(|t| t.launched.is_some());
         let mut threads = vec![];
         for t in cached.iter().filter(|t| unbound(t)) {
-            if let Some(thread) = super::screen_match::thread(index, t)? {
+            if let Some(thread) = super::screen_match::thread(index, &workspace, t, first)? {
                 let held = super::screen_match::holder(&workspace, t);
                 if !super::screen_match::stays(shared, &thread, held, &submits)? {
                     threads.push(thread);
                 }
             }
         }
-        let terminals = super::screen_match::terminals(index, &panes, &submits)?;
         let bindings = crate::recognition::screen_bindings(&threads, &terminals);
         super::screen_match::commit(shared, bindings, &panes, &cached)
     }

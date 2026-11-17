@@ -78,6 +78,7 @@ fn keys_sent_while_the_program_is_not_reading_never_back_up_the_client() {
             rows: 24,
             scheme: Default::default(),
             colors: None,
+            start: None,
         },
     );
     wait_for(&raw, "the terminal never went raw");

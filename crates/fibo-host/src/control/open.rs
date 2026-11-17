@@ -242,6 +242,7 @@ pub(super) fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> 
             rows,
             scheme: Default::default(),
             colors: None,
+            start: None,
         },
     )? {
         Reply::Workspace(_) => (),

@@ -410,6 +410,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             rows,
             scheme,
             colors,
+            start,
         } => {
             let colors = colors.unwrap_or(scheme.colors());
             geometry(cols, rows)?;
@@ -469,6 +470,11 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 exit_code: None,
                 error: None,
             });
+            if let Some(start) = start {
+                let at = fibo_core::content::now();
+                next.agent_starts
+                    .insert(id.clone(), AgentStart { at, ..start });
+            }
             host.commit(next)?;
             let (mut child, master) =
                 match pty::spawn(&argv, Path::new(&cwd), cols, rows, &id, colors.colorfgbg()) {
@@ -500,6 +506,11 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 let _ = child.wait();
                 return Err(e);
             }
+            let started = host
+                .workspace
+                .agent_starts
+                .contains_key(&id)
+                .then(|| id.clone());
             run_live(
                 &mut host,
                 shared,
@@ -527,6 +538,9 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 replies,
                 Reaper::Child(child),
             );
+            if let Some(id) = started {
+                super::launch_probe::look_for_started(shared, &id);
+            }
             Ok(Reply::Workspace(host.snapshot()))
         }
         request @ (Request::Chat { .. }

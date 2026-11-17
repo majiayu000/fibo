@@ -108,7 +108,7 @@ pub(super) fn start(
             let fill = if fill { "i=0; while [ $i -lt 40 ]; do printf '%s\\n' \"Agent 说的第 $i 行\"; i=$((i+1)); done; " } else { "" };
             let script = format!("cat '{}' > '{}'; {fill}printf '%s\\n' '⏺ 改好了，都在这几个文件里。'; printf '%s\\n' '还有两件事等你定。'; cat; sleep 600", file.display(), logs.join(format!("{sid}.jsonl")).display());
             let argv = vec!["/bin/sh".into(), "-c".into(), format!("exec '{}' -c \"$0\" fixture --session-id {sid}", claude.display()), script];
-            call(Request::Launch { colors: None, id: tid.into(), space: space.clone(), argv, cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default() });
+            call(Request::Launch { colors: None, id: tid.into(), space: space.clone(), argv, cwd: "/tmp".into(), cols: 100, rows: 30, scheme: Default::default(), start: None });
             call(Request::Edit { request: None, edit: Edit::CreateTab { tab: Tab { id: format!("tab-{tid}"), space: space.clone(), default_task: None, title: tid.into(), layout: Some(Layout::Leaf(tid.into())) } } });
         };
         let screen = |tid: &str| match call(Request::ReadScreen { id: tid.into(), rows: 40 }) {

@@ -75,6 +75,7 @@ fn input_and_resize_sent_before_the_first_screen_arrives_are_kept() {
             rows: 30,
             scheme: Default::default(),
             colors: None,
+            start: None,
         },
     );
     wait_for(&filled, "the terminal never filled its history");

@@ -57,7 +57,7 @@ fn list_as(h: &Host, id: &str, pid_file: &std::path::Path) {
     fs::set_permissions(&agents, fs::Permissions::from_mode(0o755)).unwrap();
 }
 /// A newer host takes the terminals over; only the store and the processes carry across.
-fn take_over(h: &mut Host) -> tied::Tied {
+pub(crate) fn take_over(h: &mut Host) -> tied::Tied {
     let next = fixture_command(&h.root)
         .env("MOORING_FIXTURE_TAKEOVER", "1")
         .stdout(Stdio::null())

@@ -84,6 +84,7 @@ impl Host {
             rows: 24,
             scheme: Default::default(),
             colors: None,
+            start: None,
         }
     }
     pub(crate) fn attach(&self, id: &str, takeover: bool) -> (UnixStream, Vt, bool) {

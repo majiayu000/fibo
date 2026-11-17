@@ -1,0 +1,29 @@
+
+  ┃
+  ┃  This single line is deliberately long so that it wraps inside the OpenCode prompt box at one
+  ┃  hundred columns; reply with only WALK-RC3-WRAP-OK
+  ┃
+
+     + Thought: 1.1s
+
+     WALK-RC3-WRAP-OK
+
+     ▣  Build · DeepSeek V4.1 Flash 1017 · 41.0s
+
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · DeepSeek V4.1 Flash 1017 OpenCode Go · max
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /private/tmp/claude-502/r3ow/nr-wrap                        26.3K (3%) · $0.00  ctrl+p commands

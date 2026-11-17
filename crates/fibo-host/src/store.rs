@@ -2,6 +2,7 @@ use fibo_core::model::*;
 use rusqlite::{params, Connection};
 use std::{io, path::Path};
 mod requests;
+mod starts;
 
 pub struct Store(Connection);
 fn db_error(error: impl std::error::Error + Send + Sync + 'static) -> io::Error {
@@ -109,6 +110,7 @@ impl Store {
             CREATE TABLE IF NOT EXISTS session_names (session_id TEXT PRIMARY KEY REFERENCES agent_sessions(id), name TEXT NOT NULL);")
             .map_err(db_error)?;
         db.execute_batch(requests::TABLE).map_err(db_error)?;
+        db.execute_batch(starts::TABLE).map_err(db_error)?;
         // Tabs are deleted when closed, with their panes and place in the order. A row an
         // older build only marked closed, or left without panes or a place, is that build's.
         let old_tabs: bool = db
@@ -420,6 +422,7 @@ impl Store {
                 s.name = r.get(1).map_err(db_error)?;
             }
         }
+        starts::load(&self.0, &mut w)?;
         Ok(w)
     }
     pub fn save(&mut self, before: &Workspace, w: &Workspace) -> io::Result<()> {
@@ -528,6 +531,8 @@ impl Store {
         for t in changed(&before.terminals, &w.terminals, |t| &t.id) {
             tx.execute("INSERT INTO terminals VALUES(?1,?2,?3,?4,?5,?6,?7,?8) ON CONFLICT(id) DO UPDATE SET space_id=excluded.space_id,argv=excluded.argv,cwd=excluded.cwd,pid=excluded.pid,process_state=excluded.process_state,exit_code=excluded.exit_code,error=excluded.error",params![t.id,t.space,serde_json::to_string(&t.argv).map_err(db_error)?,t.cwd,t.pid,enum_name(&t.state)?,t.exit_code,t.error]).map_err(db_error)?;
         }
+        // After its terminal's row, which it refers to.
+        starts::save(&tx, before, w)?;
         let order = |w: &Workspace| w.tabs.iter().map(|t| t.id.clone()).collect::<Vec<_>>();
         if order(before) != order(w) {
             for (position, tab) in w.tabs.iter().enumerate() {

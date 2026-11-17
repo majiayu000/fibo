@@ -230,6 +230,7 @@ fn layout_changes_from_two_hands_all_stay() {
             rows: 48,
             scheme: Default::default(),
             colors: None,
+            start: None,
         };
         rpc(&socket, &launch).unwrap();
     }
@@ -376,6 +377,7 @@ fn a_remote_write_sent_again_after_a_reconnect_is_typed_once() {
         rows: 24,
         scheme: Default::default(),
         colors: None,
+        start: None,
     };
     rpc(&root.join("workbench.sock"), &launch).unwrap();
     std::thread::sleep(Duration::from_millis(300));
@@ -474,6 +476,7 @@ fn a_failed_launch_is_still_refused_when_replayed_and_after_restart() {
         rows: 24,
         scheme: Default::default(),
         colors: None,
+        start: None,
     };
     let socket = root.join("workbench.sock");
     let first = rpc(&socket, &request).unwrap_err().to_string();

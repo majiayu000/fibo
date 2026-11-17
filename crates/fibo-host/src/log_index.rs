@@ -462,6 +462,22 @@ impl Index {
             None => None,
         })
     }
+    /// The first user message and when it was logged: what a conversation began with, as
+    /// evidence of the start that handed it over (`recognition::launched`).
+    pub fn first_user(&self, path: &str) -> io::Result<Option<(String, u64)>> {
+        let mut q = self
+            .db
+            .prepare_cached("SELECT text,at FROM session_records WHERE path=?1 AND kind='user' ORDER BY at,offset,ordinal LIMIT 1")
+            .map_err(err)?;
+        let mut rows = q.query([path]).map_err(err)?;
+        Ok(match rows.next().map_err(err)? {
+            Some(row) => Some((
+                row.get(0).map_err(err)?,
+                u64::try_from(row.get::<_, i64>(1).map_err(err)?).unwrap_or(0),
+            )),
+            None => None,
+        })
+    }
     /// When the newest turn that began by `at` began: the turn a prompt logged at `at`
     /// opened. Codex starts it at Enter and may log the prompt seconds later. A turn begun
     /// over `TURN_LEAD` earlier is one the prompt was typed into, not one it opened.
