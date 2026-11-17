@@ -377,12 +377,33 @@ fn log_subscription_restarts_itself_after_an_index_write_fails() {
     let wait = |what: &str, done: &dyn Fn() -> bool| {
         let deadline = Instant::now() + Duration::from_secs(20);
         while !done() {
-            assert!(Instant::now() < deadline, "{what}");
+            assert!(
+                Instant::now() < deadline,
+                "{what}; status={:?}; indexed={:?}",
+                recognition(&h),
+                db.query_row("SELECT count(*) FROM log_files", [], |r| r.get::<_, i64>(0))
+            );
             std::thread::sleep(Duration::from_millis(50));
         }
     };
-    wait("subscription did not start", &|| {
+    // Healthy alone does not prove the new directory's logs have been consumed. Prove
+    // that it is indexed before injecting a write failure; root appearance is covered
+    // by the neighbouring recovery test, not by this subscription-restart check.
+    let before = root.join("before.jsonl");
+    fs::write(
+        &before,
+        "{\"type\":\"session_meta\",\"payload\":{\"id\":\"before-failure\",\"cwd\":\"/tmp\"}}\n",
+    )
+    .unwrap();
+    wait("subscription did not index its initial log", &|| {
         recognition(&h).phase == RecognitionPhase::Healthy
+            && db
+                .query_row(
+                    "SELECT offset FROM log_files WHERE cli_id='before-failure'",
+                    [],
+                    |r| r.get::<_, i64>(0),
+                )
+                .is_ok_and(|offset| offset == fs::metadata(&before).unwrap().len() as i64)
     });
     // Indexing fails, and so does recording that failure: the error leaves the subscription.
     db.execute_batch(
@@ -398,7 +419,11 @@ fn log_subscription_restarts_itself_after_an_index_write_fails() {
     .unwrap();
     wait(
         "the injected failure never stopped the subscription",
-        &|| recognition(&h).detail.starts_with("识别中断"),
+        &|| {
+            let status = recognition(&h);
+            status.phase == RecognitionPhase::Interrupted
+                && status.detail.contains("injected index failure")
+        },
     );
     db.execute_batch(
         "DROP TRIGGER fail_insert; DROP TRIGGER fail_update; DROP TRIGGER fail_state;",
