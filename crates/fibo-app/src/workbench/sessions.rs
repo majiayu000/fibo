@@ -34,6 +34,7 @@ impl Workbench {
         let Some(tab) = self.workspace.terminal_tab(terminal_id) else {
             return false;
         };
+        self.nav.zoomed = super::pane_sync::zoom_kept(self.nav.zoomed.take(), terminal_id);
         self.nav.space = tab.space.clone();
         self.nav.tab = Some(tab.id.clone());
         self.leave_host(cx);
