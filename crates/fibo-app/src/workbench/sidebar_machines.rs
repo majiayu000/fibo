@@ -246,8 +246,7 @@ impl Workbench {
         let time = if !r.online && !r.quiet {
             t!("断开").to_owned()
         } else {
-            card.updated
-                .map_or_else(String::new, |at| short_ago(at, now()))
+            self.card_time(card, r.online, cx).unwrap_or_default()
         };
         // Named when this list holds more than one machine.
         let mark = (!r.quiet

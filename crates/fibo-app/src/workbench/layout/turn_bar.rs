@@ -58,6 +58,22 @@ impl Workbench {
     pub(in crate::workbench) fn tick_turn(&self, cx: &Context<Self>) {
         super::pace::wake(&TURN_TICK, TURN_TICK_EVERY, cx);
     }
+    /// Another machine's card's time, read as this machine's rows read theirs: a running
+    /// turn's clock while that machine is reachable, else how long ago it changed.
+    pub(in crate::workbench) fn card_time(
+        &self,
+        card: &fibo_remote::protocol::Card,
+        online: bool,
+        cx: &Context<Self>,
+    ) -> Option<String> {
+        match card.running_since.filter(|_| online) {
+            Some(at) => {
+                self.tick_turn(cx);
+                Some(super::turn_clock(now().saturating_sub(at)))
+            }
+            None => card.updated.map(|at| short_ago(at, now())),
+        }
+    }
     /// The cached branch for `dir`; a missing or old entry is read in the background and
     /// redraws the window only if it changed.
     pub(in crate::workbench) fn git_branch(&self, dir: &str, cx: &Context<Self>) -> Option<String> {
