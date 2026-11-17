@@ -62,6 +62,7 @@ mod split_evidence;
 #[path = "subagent_evidence.rs"]
 mod subagent_evidence;
 mod tab_cwd_evidence;
+mod tab_drag_evidence;
 mod tab_evidence;
 mod tab_geometry_evidence;
 mod tab_overflow_evidence;
@@ -85,6 +86,7 @@ pub fn start(
         || hosts_evidence::start(handle, evidence.clone(), cx)
         || cpu_probe_evidence::start(handle, evidence.clone(), cx)
         || pane_drag_evidence::start(handle, evidence.clone(), cx)
+        || tab_drag_evidence::start(handle, evidence.clone(), cx)
         || resume_evidence::start(handle, evidence.clone(), cx)
         || subagent_evidence::start(handle, evidence.clone(), cx)
         || sidebar_rows_evidence::start(handle, evidence.clone(), cx)

@@ -256,13 +256,7 @@ impl Render for Workbench {
         let mut wants = Vec::new();
         // Every row and tab shows its CLI's mark, in its own color (v3 mock).
         let marks = true;
-        for (n, tab) in self
-            .workspace
-            .tabs
-            .iter()
-            .filter(|t| t.space == self.nav.space)
-            .enumerate()
-        {
+        for (n, tab) in self.strip_tabs(cx).into_iter().enumerate() {
             let id = tab.id.clone();
             // Over the overview no tab is shown; clicking one goes straight back to it.
             let active = page.is_none() && Some(&id) == self.nav.tab.as_ref();
@@ -317,11 +311,10 @@ impl Render for Workbench {
                 continue;
             }
             let title = self.tab_name(tab, cx);
+            // Carried, the tab keeps its place as the gap and its contents step aside.
+            let carried = self.tab_carried(&id, cx);
             let tip = self.tab_tip(&title, &ids);
-            let dragged = super::tabs::DraggedTab {
-                id: id.clone(),
-                title: title.clone(),
-            };
+            let dragged = self.dragged_tab(&id, &title, agent, terminal_style);
             let group_name = gpui::SharedString::from(format!("tab-group-{id}"));
             // Shown on the current tab, and on the others while hovered, like a browser.
             let close = button(gpui::SharedString::from(format!("tab-close-{id}")), "×")
@@ -381,7 +374,7 @@ impl Render for Workbench {
                     .border_0()
                     .when(terminal_style, |d| {
                         d.rounded_none()
-                            .hover(|s| s.bg(T::color(T::button_hover())))
+                            .when(!carried, |d| d.hover(|s| s.bg(T::color(T::button_hover()))))
                     })
                     .when(!terminal_style, |d| {
                         d.pl(px(T::S10 - T::BORDER_WIDTH))
@@ -389,39 +382,48 @@ impl Render for Workbench {
                             .border(px(T::BORDER_WIDTH))
                             .border_color(gpui::transparent_black())
                             .font_weight(gpui::FontWeight::MEDIUM)
-                            .hover(move |s| {
-                                s.bg(if active {
-                                    T::surface(T::pane())
-                                } else {
-                                    T::color(T::todo())
+                            // Not under a carried tab's gap, which stays bare.
+                            .when(!carried, |d| {
+                                d.hover(move |s| {
+                                    s.bg(if active {
+                                        T::surface(T::pane())
+                                    } else {
+                                        T::color(T::todo())
+                                    })
                                 })
                             })
                     })
                     .text_size(px(T::MONO_SIZE))
                     .text_color(T::color(if active { T::primary() } else { T::secondary() }))
                     .when_some(agent.filter(|_| !terminal_style && marks), |d, a| {
-                        d.child(super::board::agent_mark(
-                            a,
-                            T::color(if active { T::secondary() } else { T::muted() }),
+                        d.child(super::layout::veil(
+                            carried,
+                            super::board::agent_mark(
+                                a,
+                                T::color(if active { T::secondary() } else { T::muted() }),
+                            ),
                         ))
                     })
                     // Terminal style: `2:标题*` with the state as a symbol, like tmux.
                     .when(terminal_style, |d| {
-                        d.when_some(status, |d, g| d.child(glyph(g)))
-                            .when(active, |d| d.font_weight(gpui::FontWeight::SEMIBOLD))
+                        d.when_some(status, |d, g| {
+                            d.child(super::layout::veil(carried, glyph(g)))
+                        })
+                        .when(active, |d| d.font_weight(gpui::FontWeight::SEMIBOLD))
                     })
                     .child(
                         div()
                             .flex_grow_1()
                             .min_w_0()
                             .truncate()
+                            .when(carried, |d| d.invisible())
                             .child(if terminal_style {
                                 format!("{}:{title}{}", n + 1, if active { "*" } else { "" })
                             } else {
                                 title
                             }),
                     )
-                    .child(tail)
+                    .child(super::layout::veil(carried, tail))
                     // The current tab: white with a hairline, the others bare.
                     .when(active && !terminal_style, |d| {
                         d.bg(T::surface(T::pane()))
@@ -471,6 +473,7 @@ impl Render for Workbench {
             .h_full()
             .flex()
             .items_center()
+            .map(|d| self.strip_lift(d, terminal_style, cx))
             .child(strip.flex_1())
             // Tabs past the right edge fade out instead of being cut mid-character.
             .when(fade, |d| {
@@ -584,6 +587,7 @@ impl Render for Workbench {
             // One white surface under the title row and the panes; the sidebar's gray
             // beside it is the only other layer.
             .when(!terminal_style, |d| d.bg(T::surface(T::pane())))
+            .map(|d| self.tab_drop_area(d, cx))
             .child(header);
         // Indexing in progress is a top-bar note; only a lost link to the host is worth a
         // strip, in words the user can act on. A missing official status source is not:
