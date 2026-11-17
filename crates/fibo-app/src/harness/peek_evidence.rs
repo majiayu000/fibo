@@ -141,7 +141,7 @@ pub(super) fn start(
             shot("5-peek-off.png", cx);
             eprintln!("peek native PASS: hidden approval peeked, answered once, size kept until typed in, Esc closes without reaching the Agent, off opens the session instead");
             // 置顶: right-clicking the row opens its menu, 置顶 there pins the terminal, the
-            // pin is saved, and it comes off once the terminal ends. The row is the only
+            // host keeps the pin, and it comes off once the terminal ends. The row is the only
             // session, under 会话 and its 在跑 heading.
             let row = gpui::point(px(100.), px(197.));
             cx.update_window(handle.into(), |_, w, a| { w.refresh(); w.draw(a).clear(a); native_click(w, a, row, gpui::MouseButton::Right) }).unwrap();
@@ -152,8 +152,13 @@ pub(super) fn start(
             wait(300).await;
             assert_eq!(handle.update(cx, |v, _, _| v.visual_pins()).unwrap(), vec!["agent".to_owned()], "the menu did not pin");
             assert!(handle.update(cx, |v, _, _| v.visual_peek_state()).unwrap().is_none(), "the menu's click also reached the row");
-            let saved = std::fs::read_to_string(crate::ui::status_colors::config_dir().unwrap().join("sidebar")).unwrap();
-            assert!(saved.lines().any(|l| l == "pin agent"), "pin not saved: {saved:?}");
+            let mut kept = None;
+            for _ in 0..25 {
+                kept = workspace().pinned_terminals;
+                if kept == Some(vec!["agent".to_owned()]) { break; }
+                wait(200).await;
+            }
+            assert_eq!(kept, Some(vec!["agent".to_owned()]), "the host did not keep the pin");
             shot("5-pinned.png", cx);
             // 放弃 sits last in the same menu, and gives the session up.
             let w = workspace();
@@ -176,10 +181,8 @@ pub(super) fn start(
                 if handle.update(cx, |v, _, _| v.visual_pins()).unwrap().is_empty() { gone = true; break; }
             }
             assert!(gone, "pin outlived its terminal");
-            let saved = std::fs::read_to_string(crate::ui::status_colors::config_dir().unwrap().join("sidebar")).unwrap();
-            assert!(!saved.contains("pin "), "ended pin still saved: {saved:?}");
             shot("6-unpinned.png", cx);
-            eprintln!("pin native PASS: row menu pins and saves, ended terminal unpins");
+            eprintln!("pin native PASS: row menu pins, the host keeps it, ended terminal unpins");
             // 在编辑器里看滚动内容: the pane menu opens the terminal's text with $EDITOR in a
             // new tab; the stand-in editor (MOORING_TEST_EDITOR) copies what it was given.
             if let Some(edited) = std::env::var_os("MOORING_EDITED") {

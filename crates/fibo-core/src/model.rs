@@ -35,6 +35,11 @@ pub struct Workspace {
     /// with no folder of its own starts there; a folder set on the space always wins.
     #[serde(default)]
     pub space_last_cwd: std::collections::BTreeMap<String, String>,
+    /// Terminals whose session sits in the sidebar's 置顶, in the order pinned. Kept by the
+    /// host so every window that looks at this machine sees the same pins. None: a host
+    /// from before it kept them, whose windows keep pins in `<config>/sidebar` instead.
+    #[serde(default)]
+    pub pinned_terminals: Option<Vec<String>>,
     pub spaces: Vec<Space>,
     pub tasks: Vec<Task>,
     pub tabs: Vec<Tab>,
@@ -544,6 +549,7 @@ impl Workspace {
 
 mod edit;
 pub use edit::{Edit, SeenSession};
+mod pins;
 mod space;
 mod task_log;
 pub use task_log::{NOTE_LIMIT, TaskLog, TaskNote, short_id};

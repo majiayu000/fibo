@@ -200,6 +200,8 @@ pub struct View {
     pub machine: Option<Machine>,
     pub spaces: Vec<Space>,
     pub terminals: Vec<Card>,
+    /// Its terminals in 置顶, as its host keeps them; None from a host before it did.
+    pub pins: Option<Vec<String>>,
 }
 
 /// A short exchange over `ssh <host> fibo remote --stdio`, for what the native link has no
@@ -262,6 +264,7 @@ impl Remote {
             machine: None,
             spaces: Vec::new(),
             terminals: Vec::new(),
+            pins: None,
         };
         Self {
             view: Arc::new(Mutex::new(view)),
@@ -277,6 +280,7 @@ impl Remote {
             machine: None,
             spaces,
             terminals,
+            pins: None,
         };
         Self {
             view: Arc::new(Mutex::new(view)),

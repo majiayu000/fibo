@@ -63,6 +63,8 @@ pub(super) struct LayoutState {
     pub(super) adding_machine_space: Option<super::sidebar_machines::AddingSpace>,
     /// A sidebar session row's right-click menu: the session and where it was opened.
     pub(super) session_menu: Option<(String, gpui::Point<gpui::Pixels>)>,
+    /// Another machine's row's right-click menu: the machine, its terminal and where.
+    pub(super) remote_menu: Option<(usize, String, gpui::Point<gpui::Pixels>)>,
     /// The ✓ row unfolded in place: a session you marked complete opens nothing on a
     /// click, it shows what it ended with and offers 继续对话 and 撤销完成.
     pub(super) done_open: Option<String>,

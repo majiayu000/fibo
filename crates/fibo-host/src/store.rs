@@ -92,6 +92,7 @@ impl Store {
             CREATE TABLE IF NOT EXISTS removed_spaces (space_id TEXT PRIMARY KEY REFERENCES spaces(id));
             CREATE TABLE IF NOT EXISTS quiet_spaces (space_id TEXT PRIMARY KEY REFERENCES spaces(id));
             CREATE TABLE IF NOT EXISTS space_last_cwd (space_id TEXT PRIMARY KEY REFERENCES spaces(id), cwd TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS pinned_terminals (terminal_id TEXT PRIMARY KEY, position INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS tab_order (tab_id TEXT PRIMARY KEY REFERENCES tabs(id), position INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS task_criteria (task_id TEXT NOT NULL REFERENCES tasks(id), id TEXT NOT NULL, position INTEGER NOT NULL,
                 description TEXT NOT NULL, evidence TEXT, PRIMARY KEY(task_id,id), UNIQUE(task_id,position));
@@ -295,6 +296,18 @@ impl Store {
             let (id, cwd) = row.map_err(db_error)?;
             w.space_last_cwd.insert(id, cwd);
         }
+        // Always Some: windows read None as a host that keeps no pins.
+        let mut pins = Vec::new();
+        for row in self
+            .0
+            .prepare("SELECT terminal_id FROM pinned_terminals ORDER BY position")
+            .map_err(db_error)?
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(db_error)?
+        {
+            pins.push(row.map_err(db_error)?);
+        }
+        w.pinned_terminals = Some(pins);
         let mut statement = self
             .0
             .prepare("SELECT id,space_id,title,description,runtime FROM tasks ORDER BY rowid")
@@ -486,6 +499,17 @@ impl Store {
                 tx.execute(
                     "INSERT OR REPLACE INTO space_last_cwd VALUES(?1,?2)",
                     [id, cwd],
+                )
+                .map_err(db_error)?;
+            }
+        }
+        if before.pinned_terminals != w.pinned_terminals {
+            tx.execute("DELETE FROM pinned_terminals", [])
+                .map_err(db_error)?;
+            for (position, id) in w.pinned_terminals.iter().flatten().enumerate() {
+                tx.execute(
+                    "INSERT OR IGNORE INTO pinned_terminals VALUES(?1,?2)",
+                    params![id, i64::try_from(position).map_err(db_error)?],
                 )
                 .map_err(db_error)?;
             }

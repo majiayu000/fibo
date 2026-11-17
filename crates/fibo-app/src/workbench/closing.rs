@@ -62,6 +62,7 @@ impl Workbench {
         self.layout.menu = None;
         self.layout.tab_menu = None;
         self.layout.session_menu = None;
+        self.layout.remote_menu = None;
         self.layout.space_menu = None;
         let quiet = match closing {
             // A host that hands its terminals over ends none of them: nothing to confirm.

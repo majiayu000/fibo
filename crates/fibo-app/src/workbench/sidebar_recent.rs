@@ -59,7 +59,9 @@ impl Workbench {
         out: &mut Vec<gpui::AnyElement>,
         cx: &Context<Self>,
     ) {
-        let remote = self.listed_remote_rows();
+        // Pinned ones are in 置顶, above (`session_list`).
+        let mut remote = self.listed_remote_rows();
+        remote.retain(|r| r.pin.is_none());
         let when = |l: &Listed| match self.row_bucket(l) {
             Bucket::Running => self
                 .turn_started(l.0)

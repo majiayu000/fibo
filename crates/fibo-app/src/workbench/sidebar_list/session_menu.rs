@@ -26,8 +26,8 @@ impl Workbench {
         };
         let terminal = live_terminal(&self.workspace, session).map(|t| t.id.clone());
         let mut out = vec![(t!("打开"), SessionAction::Open)];
-        if let Some(t) = &terminal {
-            let pinned = self.sidebar.pinned.contains(t);
+        if let Some(t) = terminal.as_ref().filter(|_| self.can_pin()) {
+            let pinned = self.pins().contains(t);
             out.push((
                 if pinned {
                     t!("取消置顶")

@@ -609,3 +609,58 @@ fn a_space_put_aside_survives_a_restart_and_so_does_taking_it_back() {
     assert!(reopened.quiet_spaces.is_empty());
     let _ = std::fs::remove_dir_all(&root);
 }
+/// 置顶 lives in the host so another machine's window sees it: kept in order across a
+/// restart, and a database from before pins reads as having none, never as unknown.
+#[test]
+fn pins_survive_a_restart_in_order() {
+    let root = std::env::temp_dir().join(format!("kl-pins-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let (mut store, mut w) = Store::open(&root).unwrap();
+    assert_eq!(w.pinned_terminals, Some(Vec::new()));
+    let before = w.clone();
+    w.spaces.push(Space {
+        id: "s".into(),
+        name: "s".into(),
+        cwd: "/tmp".into(),
+    });
+    for id in ["one", "two"] {
+        w.terminals.push(Terminal {
+            id: id.into(),
+            space: "s".into(),
+            argv: vec!["/bin/sh".into()],
+            cwd: "/tmp".into(),
+            pid: Some(1),
+            state: ProcessState::Running,
+            exit_code: None,
+            error: None,
+        });
+    }
+    store.save(&before, &w).unwrap();
+    let before = w.clone();
+    for id in ["two", "one"] {
+        let pin = Edit::PinTerminal {
+            id: id.into(),
+            pinned: true,
+        };
+        w.edit(pin).unwrap();
+    }
+    store.save(&before, &w).unwrap();
+    drop(store);
+    // Handed over alive by the host before, as an update does.
+    let kept = ["one".to_string(), "two".to_string()].into();
+    let (mut store, reopened) = Store::open_keeping(&root, &kept).unwrap();
+    let pins = |v: &[&str]| Some(v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+    assert_eq!(reopened.pinned_terminals, pins(&["two", "one"]));
+    let mut w = reopened.clone();
+    let unpin = Edit::PinTerminal {
+        id: "two".into(),
+        pinned: false,
+    };
+    w.edit(unpin).unwrap();
+    store.save(&reopened, &w).unwrap();
+    drop(store);
+    let (_, reopened) = Store::open(&root).unwrap();
+    assert_eq!(reopened.pinned_terminals, pins(&["one"]));
+    let _ = std::fs::remove_dir_all(&root);
+}

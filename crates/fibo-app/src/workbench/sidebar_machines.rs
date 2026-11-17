@@ -13,6 +13,7 @@ use fibo_remote::protocol::{Card, Phase};
 mod add_space;
 pub(super) mod quiet;
 mod quiet_space;
+mod remote_menu;
 
 pub(in crate::workbench) use add_space::AddingSpace;
 
@@ -37,6 +38,8 @@ pub(super) struct RemoteRow {
     pub(super) shown: bool,
     /// Its machine is 先不管: gray, and links coming and going do not show.
     quiet: bool,
+    /// Where it is in its machine's 置顶, when it is there.
+    pub(super) pin: Option<usize>,
 }
 
 /// `user@host` reads as `host`: the short name is what fits a row.
@@ -186,6 +189,7 @@ impl Workbench {
                     bucket: remote_bucket(said, card.needs_you),
                     quiet: view.spec.quiet,
                     when: card.updated.unwrap_or(now),
+                    pin: (view.pins.iter().flatten()).position(|p| *p == card.id),
                     card: card.clone(),
                 }
             })
@@ -360,7 +364,13 @@ impl Workbench {
                         .border_color(T::color(F::selected_line())),
                 )
             })
-            .tooltip(super::diagnostics::tip(vec![tip]))
+            // The hover card would cover the right-click menu.
+            .when(self.layout.remote_menu.is_none(), |d| {
+                d.tooltip(super::diagnostics::tip(vec![tip]))
+            })
+            .when(r.online && !r.quiet, |d| {
+                d.on_mouse_down(gpui::MouseButton::Right, self.open_remote_menu(r, cx))
+            })
             .when_some(open, |d, (index, card, name)| {
                 d.on_click(cx.listener(move |this, _, window, cx| {
                     this.open_remote_peek(index, card.clone(), &name, window, cx);
