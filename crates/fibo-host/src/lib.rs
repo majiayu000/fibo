@@ -20,6 +20,7 @@ mod pty;
 pub mod recognition;
 pub mod redact;
 pub mod screen_ask;
+pub mod screen_lines;
 pub mod screen_rules;
 mod shell_log;
 mod shell_match;

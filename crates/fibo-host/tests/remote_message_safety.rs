@@ -154,3 +154,65 @@ fn mismatched_phone_version_cannot_send_after_a_failed_hello() {
     phone.ok(json!({"op":"hello", "version":fibo_remote::protocol::VERSION}));
     phone.ok(json!({"op":"ping"}));
 }
+
+/// The 11-17 walk: Codex in a 31-column side pane wraps its question, options and footer.
+/// The phone must get an approval it can answer, and no message may reach the menu; nor
+/// may one reach a 「1. Yes」 menu whose question no rule knows.
+#[test]
+fn a_wrapped_or_unknown_approval_still_blocks_chat() {
+    let h = Host::start();
+    let mut phone = Remote::open(&h, None, &[]);
+    let unknown = "• Running rm -rf build\n\n  Allow this command to run?\n\n› 1. Yes, proceed (y)\n  2. No (esc)\n\n  Press enter to confirm\n";
+    for (id, screen) in [
+        (
+            "narrow",
+            include_str!("fixtures/screens/codex/approval-narrow-wrapped-real.txt"),
+        ),
+        ("unknown", unknown),
+    ] {
+        let captured = h.root.join(format!("{id}-input"));
+        let script = h.root.join(format!("{id}.py"));
+        fs::write(&script, format!(
+            "import os,tty\ntty.setraw(0)\nf=open({path},'wb',buffering=0)\nprint({screen},flush=True)\nwhile True:\n b=os.read(0,1)\n f.write(b)\n if b==b'\\x1b': print('\\x1b[2J\\x1b[HREADY',flush=True)\n",
+            path=serde_json::to_string(&captured.to_string_lossy()).unwrap(),
+            screen=serde_json::to_string(&screen.replace('\n', "\r\n")).unwrap(),
+        )).unwrap();
+        h.codex(
+            id,
+            &h.root,
+            &[],
+            &format!("python3 {}", shell_quote(&script.to_string_lossy())),
+        );
+        h.wait_screen(id, "Yes, proceed");
+        // The walk sent twice: a soft warning, then the message went in.
+        for _ in 0..2 {
+            let error =
+                phone.error(json!({"op":"send","terminal":id,"text":"phone-walk","enter":true}));
+            assert!(
+                error.contains("审批") || error.contains("approval"),
+                "{id}: {error}"
+            );
+        }
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(
+            fs::read(&captured).unwrap(),
+            b"",
+            "{id}: chat must not enter the menu"
+        );
+        if id == "narrow" {
+            let ask = phone.ok(json!({"op":"ask","terminal":id}));
+            assert_eq!(
+                ask["question"],
+                "Would you like to run the following command?"
+            );
+            let question = ask["question"].as_str().unwrap().to_owned();
+            phone.ok(json!({"op":"answer","terminal":id,"question":question,"allow":false}));
+            h.wait_screen(id, "READY");
+            assert_eq!(
+                fs::read(&captured).unwrap(),
+                b"\x1b",
+                "only the denial is typed"
+            );
+        }
+    }
+}
