@@ -6,6 +6,13 @@ Applications), plus SHA256SUMS. It does not publish anything; `gh release create
 Needs: `cargo build --release -p fibo-host -p fibo-app` done first (for Intel, add
 `--target x86_64-apple-darwin` there and here), the Developer ID
 identity in the keychain, and a notarytool keychain profile (`xcrun notarytool store-credentials`).
+
+--app PATH packs an already-signed Fibo.app instead, such as the one a walkthrough checked.
+Packaging signs again and a new signature changes the binaries' bytes, so only that bundle still
+has the SHA256s its receipt.json and the RC record hold. It is copied, never changed, and refused
+unless `codesign --verify --deep --strict` passes, its version is the app crate's and its main
+executable is the architecture being packed. A receipt.json beside it must list exactly its
+binaries; it is copied beside the output.
 """
 import argparse
 import hashlib
@@ -13,6 +20,7 @@ import json
 import os
 import pathlib
 import platform
+import plistlib
 import shutil
 import subprocess
 import tomllib
@@ -24,7 +32,11 @@ parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.R
 parser.add_argument('--notary-profile', required=True, help='notarytool keychain profile name')
 parser.add_argument('--out', type=pathlib.Path, help='Architecture-specific output folder; default: target/dist/<arch>')
 parser.add_argument('--skip-notarize', action='store_true', help='local dry run: sign only')
-parser.add_argument('--target', help='a cargo target such as x86_64-apple-darwin; default: this Mac')
+parser.add_argument('--target', help='a cargo target such as x86_64-apple-darwin; default: this Mac. '
+                    'With --app, the architecture that bundle must be')
+parser.add_argument('--app', type=pathlib.Path, metavar='PATH',
+                    help='an already-signed Fibo.app to notarize and pack as is (copied, never changed), '
+                    'instead of packaging the release build')
 args = parser.parse_args()
 
 version = tomllib.loads((root / 'crates/fibo-app/Cargo.toml').read_text())['package']['version']
@@ -32,6 +44,31 @@ arch = {'arm64': 'arm64', 'x86_64': 'x86_64', 'aarch64': 'arm64'}[(args.target o
 release_dir = root / 'target' / args.target / 'release' if args.target else root / 'target/release'
 name = f'Fibo-{version}-{arch}'
 out = (args.out or root / 'target/dist' / arch).resolve()
+source = args.app.resolve() if args.app else None
+if source:
+    # Checked before the output folder is emptied: nothing is removed when the bundle is refused.
+    if source.is_relative_to(out) or out.is_relative_to(source):
+        raise SystemExit(f'--app {source} and --out {out} overlap; the output folder is emptied first')
+    verify = subprocess.run(['codesign', '--verify', '--deep', '--strict', source], capture_output=True, text=True)
+    if verify.returncode:
+        raise SystemExit(f'--app {source}: codesign --verify --deep --strict failed:\n{verify.stderr.strip()}')
+    info = plistlib.loads((source / 'Contents/Info.plist').read_bytes())
+    if info.get('CFBundleShortVersionString') != version:
+        raise SystemExit(f"--app {source} is version {info.get('CFBundleShortVersionString')}, "
+                         f'but crates/fibo-app/Cargo.toml says {version}')
+    executable = source / 'Contents/MacOS' / info.get('CFBundleExecutable', '')
+    archs = subprocess.run(['lipo', '-archs', executable], capture_output=True, text=True).stdout.split()
+    if archs != [arch]:
+        raise SystemExit(f"--app {source}: {executable.name} is {' '.join(archs) or 'not a Mach-O file'}, "
+                         f'but this packs {arch}')
+    receipt = source.parent / 'receipt.json'
+    if receipt.exists():
+        binaries = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                    for p in (source / 'Contents/MacOS').iterdir() if p.is_file() and not p.is_symlink()}
+        listed = json.loads(receipt.read_text()).get('binaries')
+        if listed != binaries:
+            raise SystemExit(f'{receipt} is another build\'s: it lists {listed}\nbut {source} holds {binaries}\n'
+                             'put the right receipt there or move this one away')
 shutil.rmtree(out, ignore_errors=True)
 out.mkdir(parents=True)
 app = out / 'Fibo.app'
@@ -55,7 +92,12 @@ def notarize(path):
         raise SystemExit(f'notarization failed:\n{log.stdout}')
 
 
-run('python3', root / 'package-macos.py', '--release-dir', release_dir, '--output', app)
+if source:
+    run('ditto', source, app)
+    if receipt.exists():
+        run('ditto', receipt, out / 'receipt.json')
+else:
+    run('python3', root / 'package-macos.py', '--release-dir', release_dir, '--output', app)
 
 # The app first: notarize a zip of it, then staple the ticket so it opens offline.
 submit = out / 'submit.zip'
