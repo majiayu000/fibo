@@ -201,21 +201,22 @@ impl Workbench {
         root: gpui::Div,
         cx: &Context<Self>,
     ) -> gpui::Div {
-        root.on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
-            if let Some(action) = crate::keymap::action(&event.keystroke, cx)
-                && this.shortcut(action, window, cx)
-            {
-                cx.stop_propagation();
-            }
-        }))
-        .on_mouse_move(cx.listener(Self::resize_drag))
-        .on_mouse_up(
-            gpui::MouseButton::Left,
-            cx.listener(|this, _, _, cx| this.finish_drag(cx)),
-        )
-        .on_mouse_up_out(
-            gpui::MouseButton::Left,
-            cx.listener(|this, _, _, cx| this.finish_drag(cx)),
-        )
+        root.capture_key_down(cx.listener(Self::layer_key_down))
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                if let Some(action) = crate::keymap::action(&event.keystroke, cx)
+                    && this.shortcut(action, window, cx)
+                {
+                    cx.stop_propagation();
+                }
+            }))
+            .on_mouse_move(cx.listener(Self::resize_drag))
+            .on_mouse_up(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, _, cx| this.finish_drag(cx)),
+            )
+            .on_mouse_up_out(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, _, cx| this.finish_drag(cx)),
+            )
     }
 }
