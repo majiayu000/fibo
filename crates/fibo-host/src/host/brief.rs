@@ -3,7 +3,7 @@
 //! few per client.
 use super::Shared;
 use fibo_core::protocol::{Reply, Request};
-use fibo_core::workspace_delta::{diff, Index};
+use fibo_core::workspace_delta::{diff_with, Hashes, Index};
 use std::collections::VecDeque;
 use std::io;
 use std::sync::Mutex;
@@ -13,6 +13,8 @@ use std::sync::Mutex;
 /// the same process (tests) still describes the same workspace.
 const KEPT: usize = 16;
 static SENT: Mutex<VecDeque<Index>> = Mutex::new(VecDeque::new());
+/// Content hashes from the last reply, for every client: each refreshes on the same change.
+static HASHES: std::sync::LazyLock<Mutex<Hashes>> = std::sync::LazyLock::new(Mutex::default);
 
 pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
     let (since, request, fields) = match request {
@@ -26,7 +28,12 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 .lock()
                 .map_err(|_| io::Error::other("brief lock poisoned"))?;
             let base = since.and_then(|s| sent.iter().find(|i| i.stamp == s));
-            let (delta, index) = diff(w, base, fields).map_err(io::Error::other)?;
+            let mut hashes = HASHES
+                .lock()
+                .map_err(|_| io::Error::other("brief lock poisoned"))?;
+            let (delta, index) =
+                diff_with(w, base, fields, &mut hashes).map_err(io::Error::other)?;
+            drop(hashes);
             if !sent.iter().any(|i| i.stamp == index.stamp) {
                 if sent.len() == KEPT {
                     sent.pop_front();

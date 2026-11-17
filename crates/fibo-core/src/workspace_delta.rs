@@ -51,12 +51,44 @@ pub struct Kept {
     rest: Map<String, Value>,
 }
 
+/// Content hashes worked out before, by session, with the content each is of. Hashing
+/// writes every content out; with a dozen sessions running, the host did that for each
+/// refresh of each client, the most of its CPU (11-17). Comparing to the last one is far
+/// cheaper, and between two refreshes almost all content is the same.
+#[derive(Debug, Default)]
+pub struct Hashes {
+    content: FxHashMap<String, (Content, u64)>,
+}
+
+impl Hashes {
+    fn content(&mut self, id: &str, c: &Content) -> u64 {
+        if let Some((seen, h)) = self.content.get(id)
+            && seen == c
+        {
+            return *h;
+        }
+        let h = hash(c);
+        self.content.insert(id.to_owned(), (c.clone(), h));
+        h
+    }
+}
+
 /// `w` against `base`, or whole without one, with only the fields of the rest that
 /// changed when `fields`; and what to remember of `w`.
 pub fn diff(
+    w: Workspace,
+    base: Option<&Index>,
+    fields: bool,
+) -> serde_json::Result<(Delta, Index)> {
+    diff_with(w, base, fields, &mut Hashes::default())
+}
+
+/// `diff`, reusing the hashes of content that has not changed since `hashes` last saw it.
+pub fn diff_with(
     mut w: Workspace,
     base: Option<&Index>,
     fields: bool,
+    hashes: &mut Hashes,
 ) -> serde_json::Result<(Delta, Index)> {
     let sessions = std::mem::take(&mut w.agent_sessions);
     let content = std::mem::take(&mut w.content);
@@ -67,8 +99,10 @@ pub fn diff(
     rest_hashes.sort_unstable();
     let session_hashes: Vec<u64> = sessions.iter().map(hash).collect();
     let order = hash(&sessions.iter().map(|s| &s.id).collect::<Vec<_>>());
-    let mut content_hashes: Vec<(&String, u64)> =
-        content.iter().map(|(id, c)| (id, hash(c))).collect();
+    let mut content_hashes: Vec<(&String, u64)> = (content.iter())
+        .map(|(id, c)| (id, hashes.content(id, c)))
+        .collect();
+    hashes.content.retain(|id, _| content.contains_key(id));
     content_hashes.sort_unstable();
     let mut stamp = std::hash::DefaultHasher::new();
     (order, &session_hashes, &content_hashes, &rest_hashes).hash(&mut stamp);
