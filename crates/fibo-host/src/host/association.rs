@@ -164,7 +164,7 @@ impl Association {
         let first = terminals.iter().any(|t| t.launched.is_some());
         let mut threads = vec![];
         for t in cached.iter().filter(|t| unbound(t)) {
-            if let Some(thread) = super::screen_match::thread(index, t, first)? {
+            if let Some(thread) = super::screen_match::thread(index, &workspace, t, first)? {
                 let held = super::screen_match::holder(&workspace, t);
                 if !super::screen_match::stays(shared, &thread, held, &submits)? {
                     threads.push(thread);

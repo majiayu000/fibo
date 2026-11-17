@@ -4,9 +4,10 @@
 //! and to Codex 0.169 (`code` drawn without its backticks). Neither shows the task verbatim,
 //! and a task on the command line has no Enter press, so before the host kept what it
 //! started them with, neither ever bound.
-use super::launched::{evidence, launched, resume, same_message, words, First};
+use super::launched::{evidence, launched, resume, same_message, words, First, Live};
 use super::*;
 use fibo_core::model::{AgentStart, Space, Terminal};
+use std::collections::HashSet;
 
 const OPENCODE_TWO_LINES: &str =
     include_str!("../../tests/fixtures/started/opencode-two-lines.txt");
@@ -67,11 +68,7 @@ fn thread<'a>(t: &'a Transcript, prompt: &str, at: u64) -> ScreenThread<'a> {
         at: Some(at),
         began: None,
         cwd: t.cwd.clone(),
-        first: Some(First {
-            text: screen_text(prompt),
-            at,
-            newest: true,
-        }),
+        first: Some(First::logged(prompt, at, true, false)),
     }
 }
 
@@ -86,11 +83,7 @@ fn went_on<'a>(
     ScreenThread {
         key: screen_key(later),
         at: Some(at),
-        first: Some(First {
-            text: screen_text(prompt),
-            at: began,
-            newest: false,
-        }),
+        first: Some(First::logged(prompt, began, false, false)),
         ..thread(t, prompt, began)
     }
 }
@@ -269,6 +262,143 @@ fn a_pane_drawing_its_own_task_is_the_starts_evidence_not_the_screens() {
     );
 }
 
+/// A conversation a terminal ran is no twin's start, however that terminal's own evidence has
+/// aged: the Enter for its prompt no longer among the pane's last eight presses, a newer host
+/// that kept none, or its Agent gone. Pane 1 was started with the same task in the same folder
+/// and never logged its own (#403 review: it took pane 0's conversation, and the phone's chat
+/// for it typed into a TUI that never ran it).
+#[test]
+fn a_conversation_a_terminal_ran_is_no_twins_start() {
+    let task = walked()[3].2;
+    let typed = "only this pane goes on: list the two scripts";
+    let a = log(Agent::Codex, 0);
+    let twin = || pane(1, Agent::Codex, CODEX_BACKTICKS, Some(task));
+    // Never tied to a terminal, it fits the twin by its start: what made the twin take it.
+    let went = went_on(&a, task, 1000, typed, 1010);
+    assert_eq!(
+        bound(&[went], &[twin()]),
+        vec![("pty-1".to_owned(), "t0".to_owned())]
+    );
+    let threads = [tied(went_on(&a, task, 1000, typed, 1010))];
+    // Pane 0 holds it, no press of its left to say so.
+    let mut holder = pane(0, Agent::Codex, "", None);
+    holder.current = Some(("t0".into(), 1010, screen_key(typed)));
+    assert!(bound(&threads, &[holder, twin()]).is_empty());
+    // Pane 0's Agent has ended: no pane holds it now.
+    assert!(bound(&threads, &[twin()]).is_empty());
+    // Tied while its newest prompt is still the task (typed by hand in pane 0), and the twin
+    // draws that task verbatim: neither the start nor that drawing is evidence for it.
+    let b = log(Agent::Codex, 1);
+    let drawing = pane(1, Agent::Codex, CODEX_SAME_TASK, Some(SAME_TASK));
+    assert!(bound(&[tied(thread(&b, SAME_TASK, 1000))], &[drawing]).is_empty());
+}
+
+/// `thread`, run by some terminal already.
+fn tied(mut thread: ScreenThread) -> ScreenThread {
+    thread.first.as_mut().expect("read for a start").ran = true;
+    thread
+}
+
+/// B1 with a picture: the phone's 新任务 hands Codex `--image=<path> <task>`, the start keeps
+/// the task (the command line's message), and Codex 0.169 logs "[Image #1]\n<task>" as the
+/// first user message, as its rollout of such a task on 2026-11-13 did. Read through the
+/// host's own index, it binds by the start like the same task without a picture.
+#[test]
+fn a_codex_task_started_with_a_picture_binds_by_its_start() {
+    let task = walked()[3].2;
+    let (_, sent) = crate::agent_launch(
+        "/bin/zsh",
+        "codex",
+        "codex".into(),
+        Some(task),
+        &["/r/phone-images/a.jpg".to_owned()],
+        false,
+    )
+    .unwrap();
+    assert_eq!(
+        sent.as_deref(),
+        Some(task),
+        "the start a phone's open keeps"
+    );
+    for pictures in [
+        &[][..],
+        &["/r/phone-images/a.jpg"],
+        &["/r/a.jpg", "/r/b.png"],
+    ] {
+        let (first, at) = indexed_first(pictures, task);
+        assert_eq!(
+            first.starts_with("[Image #1]"),
+            !pictures.is_empty(),
+            "{first:?}"
+        );
+        let t = log(Agent::Codex, 0);
+        let logged = thread(&t, &first, at);
+        let started = pane(0, Agent::Codex, CODEX_BACKTICKS, Some(task));
+        assert!(
+            !prompt_evidence(&logged, &started.screen, &[]),
+            "the screen alone ties it after all"
+        );
+        assert_eq!(
+            bound(&[logged], &[started]),
+            vec![("pty-0".to_owned(), "t0".to_owned())],
+            "{pictures:?}: {first:?}"
+        );
+    }
+}
+
+/// The first user message the host's index keeps for a Codex 0.169 rollout of `task` started
+/// with `pictures`, and when it was logged. The record shapes are a real rollout's: no
+/// `event_msg user_message`, only `response_item` user messages; the AGENTS.md and environment
+/// context first, then each `--image` picture wrapped as `<image name=[Image #n] path=…>` …
+/// `</image>` before the task.
+fn indexed_first(pictures: &[&str], task: &str) -> (String, u64) {
+    let root = std::env::temp_dir().join(format!("kl-first-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(root.join("logs")).unwrap();
+    let root = root.canonicalize().unwrap();
+    let ts = |s: u32| format!("2026-11-17T10:00:{s:02}.000Z");
+    let text = |t: String| serde_json::json!({"type": "input_text", "text": t});
+    let mut content = vec![];
+    for (n, p) in pictures.iter().enumerate() {
+        content.push(text(format!(
+            "<image name=[Image #{}] path=\"{p}\">",
+            n + 1
+        )));
+        content.push(
+            serde_json::json!({"type": "input_image", "image_url": "data:image/jpeg;base64,AAAA"}),
+        );
+        content.push(text("</image>".into()));
+    }
+    content.push(text(task.into()));
+    let context = [
+        text(
+            "# AGENTS.md instructions for /w\n\n<INSTRUCTIONS>\nKeep files short.\n</INSTRUCTIONS>"
+                .into(),
+        ),
+        text(
+            "<environment_context>\n  <cwd>/w</cwd>\n  <shell>zsh</shell>\n</environment_context>"
+                .into(),
+        ),
+    ];
+    let user = |s, content| serde_json::json!({"timestamp": ts(s), "type": "response_item", "payload": {"type": "message", "role": "user", "content": content}});
+    let rows = [
+        serde_json::json!({"timestamp": ts(0), "type": "session_meta", "payload": {"id": "t-pic", "cwd": "/w", "originator": "codex-tui", "source": "vscode"}}),
+        serde_json::json!({"timestamp": ts(1), "type": "event_msg", "payload": {"type": "task_started", "turn_id": "1"}}),
+        user(1, serde_json::Value::from(context.to_vec())),
+        user(2, serde_json::Value::from(content)),
+    ];
+    let log = root.join("logs/t-pic.jsonl");
+    let lines: String = rows.iter().map(|r| format!("{r}\n")).collect();
+    std::fs::write(&log, lines).unwrap();
+    let mut index =
+        crate::log_index::Index::open(&root, vec![(Agent::Codex, root.join("logs"))]).unwrap();
+    index.initialize().unwrap();
+    index.update_many([log.clone()], 1).unwrap();
+    index.flush().unwrap();
+    let first = index.first_user(log.to_str().unwrap()).unwrap();
+    let _ = std::fs::remove_dir_all(&root);
+    first.expect("a first user message")
+}
+
 #[test]
 fn only_a_conversation_begun_with_that_task_after_the_start_in_its_folder_and_cli() {
     let prompt = "Line one of two.\nReply with only WALK-RC3-NL-OK";
@@ -281,11 +411,7 @@ fn only_a_conversation_begun_with_that_task_after_the_start_in_its_folder_and_cl
     let other = thread(&t, "Line one of two.\nReply with only WALK-RC3-NL-NO", 1000);
     assert!(bound(&[other], &[ok()]).is_empty());
     let later = ScreenThread {
-        first: Some(First {
-            text: screen_text("先看一下目录结构"),
-            at: 995,
-            newest: false,
-        }),
+        first: Some(First::logged("先看一下目录结构", 995, false, false)),
         ..thread(&t, prompt, 1000)
     };
     assert!(bound(&[later], &[ok()]).is_empty());
@@ -330,6 +456,35 @@ fn the_whole_message_counts_unless_the_log_keeps_only_its_start() {
         "the log's own reading of the message"
     );
     assert_eq!(words(sent), "修这个错误不要改接口");
+}
+
+/// "继续" or "ok" begin many conversations: a start that short says no more than a prompt
+/// that short on the screen does (`screen_key`), and the pane waits for its next prompt
+/// (#403 review: a two-character task was evidence).
+#[test]
+fn a_task_too_short_to_tell_conversations_apart_is_no_evidence() {
+    let t = log(opencode(), 0);
+    for short in ["继续", "ok", "only reply ok"] {
+        assert!(
+            pane(0, opencode(), "", Some(short)).launched.is_none(),
+            "{short}"
+        );
+        assert!(bound(
+            &[thread(&t, short, 1000)],
+            &[pane(0, opencode(), "", Some(short))]
+        )
+        .is_empty());
+    }
+    let twelve = "only reply ok.";
+    assert_eq!(words(twelve).chars().count(), super::KEY_LEAST);
+    assert_eq!(
+        bound(
+            &[thread(&t, twelve, 1000)],
+            &[pane(0, opencode(), "", Some(twelve))]
+        )
+        .len(),
+        1
+    );
 }
 
 fn terminal(id: &str, pid: u32) -> Terminal {
@@ -388,10 +543,13 @@ fn a_terminal_started_resuming_binds_that_conversation_once_its_cli_runs_there()
     let cli = process(101, 100, Some(opencode()), None);
     // Its shell alone, the CLI not started yet: nothing to tie.
     let mut early = w();
-    resume(&mut early, &logs, std::slice::from_ref(&shell));
+    tie(&mut early, &logs, std::slice::from_ref(&shell));
     assert!(early.current_agent("resumed").is_none());
     let mut ready = w();
-    resume(&mut ready, &logs, &[shell.clone(), cli.clone()]);
+    assert_eq!(
+        tie(&mut ready, &logs, &[shell.clone(), cli.clone()]),
+        [(101, "resumed".to_owned())]
+    );
     let s = ready
         .current_agent("resumed")
         .expect("tied once its CLI runs");
@@ -401,22 +559,22 @@ fn a_terminal_started_resuming_binds_that_conversation_once_its_cli_runs_there()
     );
     // Its log unknown: nothing to tie it to.
     let mut unknown = w();
-    resume(&mut unknown, &[], &[shell.clone(), cli.clone()]);
+    tie(&mut unknown, &[], &[shell.clone(), cli.clone()]);
     assert!(unknown.current_agent("resumed").is_none());
     // A command line that names another conversation is that one's (`reconcile`).
     let mut named = w();
     let other = process(101, 100, Some(opencode()), Some("ses_y"));
-    resume(&mut named, &logs, &[shell.clone(), other]);
+    tie(&mut named, &logs, &[shell.clone(), other]);
     assert!(named.current_agent("resumed").is_none());
     // Another CLI in the terminal is not the one started there.
     let mut wrong = w();
     let codex = process(101, 100, Some(Agent::Codex), None);
-    resume(&mut wrong, &logs, &[shell.clone(), codex]);
+    tie(&mut wrong, &logs, &[shell.clone(), codex]);
     assert!(wrong.current_agent("resumed").is_none());
     // Two of it in one terminal: which one resumed it, nothing says.
     let mut two = w();
     let second = process(102, 100, Some(opencode()), None);
-    resume(&mut two, &logs, &[shell.clone(), cli.clone(), second]);
+    tie(&mut two, &logs, &[shell.clone(), cli.clone(), second]);
     assert!(two.current_agent("resumed").is_none());
     // Still running in another terminal: it stays there.
     let mut elsewhere = w();
@@ -424,7 +582,7 @@ fn a_terminal_started_resuming_binds_that_conversation_once_its_cli_runs_there()
     elsewhere
         .observe_agent(super::bound(&logs[0], "old".into(), Binding::Screen))
         .unwrap();
-    resume(&mut elsewhere, &logs, &[shell, cli]);
+    tie(&mut elsewhere, &logs, &[shell, cli]);
     assert_eq!(
         elsewhere
             .current_agent("old")
@@ -432,4 +590,82 @@ fn a_terminal_started_resuming_binds_that_conversation_once_its_cli_runs_there()
         Some("ses_x")
     );
     assert!(elsewhere.current_agent("resumed").is_none());
+}
+
+/// Tied before its CLI shows its input, the phone's first message after 接着做 went into
+/// an OpenCode still loading, which dropped it while the host answered ok (#403 review,
+/// `rc4/fix/r2/opencode-ready`): its process is found, and it waits for its input.
+#[test]
+fn a_resumed_cli_is_tied_once_it_shows_its_input() {
+    let (mut w, logs, shell, cli) = resumed();
+    let live = Live {
+        shown: &HashSet::new(),
+        argv: &argv_of,
+    };
+    let found = resume(&mut w, &logs, &[shell.clone(), cli.clone()], &live);
+    assert_eq!(found, [(101, "resumed".to_owned())], "its CLI is found");
+    assert!(
+        w.current_agent("resumed").is_none(),
+        "tied before its input"
+    );
+    tie(&mut w, &logs, &[shell, cli]);
+    assert!(w.current_agent("resumed").is_some());
+}
+
+/// The resumed id on a CLI's command line says it is the process the host started: one
+/// started by hand in that shell later (the resumed one exited at once, say) begins a
+/// conversation of its own (#403 review). `--session=<id>` counts as well as `--session <id>`.
+#[test]
+fn only_the_cli_the_host_started_with_that_conversation_takes_it() {
+    let (mut w, logs, shell, _) = resumed();
+    let by_hand = process(300, 100, Some(opencode()), None);
+    assert!(tie(&mut w, &logs, &[shell.clone(), by_hand]).is_empty());
+    assert!(w.current_agent("resumed").is_none());
+    let joined = process(301, 100, Some(opencode()), None);
+    tie(&mut w, &logs, &[shell, joined]);
+    assert!(w.current_agent("resumed").is_some());
+}
+
+/// A workspace with one terminal the host started resuming `ses_x` (an OpenCode one), the
+/// log of `ses_x`, that terminal's shell and the CLI it started.
+fn resumed() -> (Workspace, Vec<Transcript>, Process, Process) {
+    let mut w = Workspace::default();
+    w.terminals.push(terminal("resumed", 100));
+    w.agent_starts.insert(
+        "resumed".into(),
+        AgentStart {
+            at: 990,
+            ..AgentStart::resuming(opencode(), "ses_x")
+        },
+    );
+    let logs = vec![Transcript {
+        cli_id: "ses_x".into(),
+        ..log(opencode(), 0)
+    }];
+    let cli = process(101, 100, Some(opencode()), None);
+    (w, logs, process(100, 1, None, None), cli)
+}
+
+/// `resume` with every terminal showing its CLI's input.
+fn tie(w: &mut Workspace, logs: &[Transcript], processes: &[Process]) -> Vec<(u32, String)> {
+    let shown: HashSet<String> = w.agent_starts.keys().cloned().collect();
+    let live = Live {
+        shown: &shown,
+        argv: &argv_of,
+    };
+    resume(w, logs, processes, &live)
+}
+
+/// The command lines of the processes these tests make: the host's resume command for most,
+/// a bare `opencode` typed by hand for 300, the `=` form for 301.
+fn argv_of(pid: u32) -> Vec<String> {
+    match pid {
+        300 => vec!["opencode".into()],
+        301 => ["opencode", "--port", "0", "--session=ses_x"]
+            .map(String::from)
+            .to_vec(),
+        _ => ["opencode", "--port", "0", "--session", "ses_x"]
+            .map(String::from)
+            .to_vec(),
+    }
 }

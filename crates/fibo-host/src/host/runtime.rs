@@ -213,6 +213,7 @@ pub(super) fn serve_runtime(
         unrecorded_pids: HashMap::new(),
         submits: HashMap::new(),
         input_probes: Default::default(),
+        started_clis: HashMap::new(),
         deadlines: None,
         myself: std::sync::Weak::new(),
         http_asks: HashMap::new(),

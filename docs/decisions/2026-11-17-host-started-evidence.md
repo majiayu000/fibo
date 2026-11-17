@@ -71,3 +71,30 @@ cargo test -p fibo-core --lib agent_start
 ## More Information
 
 重开条件：某个 CLI 的日志不再原样保存第一条用户消息（改写、截断得更短），或者出现第一句相同、目录相同、却由 Fibo 管不到的进程同时开始的真实案例。来源：RC3 记录 `v0.1.3-rc3.md` 的阻断 1、2 和 Codex 反引号那条相邻项。
+
+## 2026-11-17 复核第一轮追加（#403）
+
+复核员查出三条（一高两中），都改了，另补两条低的。决定本身不变：后台自己交给 Agent 的东西是证据。改的是它什么时候算、给谁算。
+
+1. **第一句证据只给从没被终端跑过的对话**（`launched::First::ran`）。同一句任务、同一目录的两块终端，在一块里打字之后这块对上自己的对话；但回车只在内存里留最近 8 次，后台重启就清空。之后任何一次画面比对（别的对话出新句、窗口在另一块上点「标记完成」）都可能按第一句把这段对话挪到另一块，而那块从没跑过它，手机发给这段对话的消息就会打进那块的 TUI。现在，一段对话只要被任何终端跑过（记在 `agent_sessions` 的 `terminal` 上，后台重启后也在），就不再给任何一块当第一句证据。「画着自己那句不算画面证据」照旧：第一句仍然读，只是不当证据。复核员的候选修法只挡「别的窗格正在跑的」对话；那块的 Agent 退出后，这段对话没人持有，另一块照样能拿走。所以这里挡的是「跑过」，不是「正在跑」。
+2. **比第一句时两边都去掉 `[Image #n]`**（`fibo_core::prompt_pin::plain`，置顶提问用的也是它）。手机给 Codex 开带图的新任务时，命令行交出的只有文字，Codex 0.169 日志里的第一句却是「[Image #1]\n文字」，原来永远对不上。
+3. **接着做要等 CLI 显示出输入框才对上**（`host::launch_probe::input_shown`）。判断是：在备用屏幕上且终端光标显示（OpenCode 自带的 opentui 只在输入框有焦点时显示光标），或者 `Agent::input_ready` 认得出输入框。OpenCode 1.19.5 先隐藏光标、打开备用屏幕和括号粘贴，然后才加载；在输入框拿到焦点之前打进去的字全部丢掉，后台却照常回复成功。pty 实测（`rc4/fix-r1/tui-ready-*.jsonl`）：首页和会话页各测了两次，在备用屏幕打开之后、光标第一次显示之前粘贴，4 次全丢；光标第一次显示时就粘贴，6 次全部进了输入框。`launch_probe` 看到进程之后每 200 毫秒看一次画面，输入框一出来就去对上，最多看两分钟。另外只对上命令行里带着这段对话 ID 的那个 CLI 进程，ID 是后台自己的恢复命令放进去的。这只用来确认这个进程是后台开的那个，不当身份证据：以后在同一个 shell 里手动开的 CLI 不会被配上这段对话。后台开的那个 CLI 没对上就退出时，这块终端的 start 随之收掉（`launch_probe::cli_exited`）。
+4. **第一句至少 12 个字**（去掉空白后计数），和画面证据的 `screen_key` 用同一个下限（`recognition::KEY_LEAST`）。「继续」「ok」这种第一句能开头很多段对话。
+
+不做：
+
+- 等「括号粘贴开了」或「备用屏幕开了」：两者打开之后，OpenCode 还要约一秒才收字（上面 4 次全丢）。
+- 看到进程之后固定等几秒再对上：负载高时 OpenCode 画得更晚，照样会丢；负载低时又白等。
+- 手机在发送前先等对方就绪：要改手机和 send 的超时。对上的时机推迟之后，手机现有的「尚未识别对话，暂时不能发送」会明说，不会悄悄丢。
+- 只挡「别的窗格正在跑的」对话（复核员的 candidate-fix-2）：那块的 Agent 结束之后就挡不住了。
+- 从命令行解析 OpenCode 的 `--session` 当身份：仍然不做。只拿「命令行里有后台放进去的那个 ID」来确认进程是后台开的。
+
+验证（追加）：
+
+```sh
+cargo test -p fibo-host --lib -- recognition::launched_tests
+cargo test -p fibo-host --test declared_agent -- a_declared_cli_the_host_resumed_binds_once_it_shows_its_input a_resume_start_ends_with_the_cli_it_started
+cargo test -p fibo-host --test managed_session -- started::a_conversation_told_apart_by_typing
+```
+
+真实 CLI 的检查在 `rc4/fix-r1/`。

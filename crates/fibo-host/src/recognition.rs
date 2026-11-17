@@ -482,8 +482,10 @@ pub fn screen_key(prompt: &str) -> Option<String> {
         .filter(|c| !c.is_whitespace())
         .take(160)
         .collect();
-    (key.chars().count() >= 12).then_some(key)
+    (key.chars().count() >= KEY_LEAST).then_some(key)
 }
+/// The fewest non-blank characters a prompt needs to tell one conversation from another.
+pub const KEY_LEAST: usize = 12;
 pub fn screen_text(text: &str) -> String {
     text.chars().filter(|c| !c.is_whitespace()).collect()
 }

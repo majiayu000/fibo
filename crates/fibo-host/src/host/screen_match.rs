@@ -43,11 +43,20 @@ pub(super) fn holder<'a>(workspace: &'a Workspace, t: &Transcript) -> Option<&'a
         .iter()
         .find(|s| s.current && s.runtime == t.runtime && s.cli_session_id == t.cli_id)
 }
+/// Whether a terminal has run `t`: some pane holds it, or held it before its Agent moved on or
+/// ended. Kept with the conversation, so a host that restarted still knows.
+fn ran(workspace: &Workspace, t: &Transcript) -> bool {
+    workspace
+        .agent_sessions
+        .iter()
+        .any(|s| s.runtime == t.runtime && s.cli_session_id == t.cli_id && s.terminal.is_some())
+}
 /// A thread as evidence, or None while its log holds no prompt. With `first`, also what it
-/// began with and whether that is still its newest prompt, for panes whose Agent the host
-/// started with a first message.
+/// began with, whether that is still its newest prompt and whether a terminal has run it, for
+/// panes whose Agent the host started with a first message.
 pub(super) fn thread<'a>(
     index: &crate::log_index::Index,
+    workspace: &Workspace,
     t: &'a Transcript,
     first: bool,
 ) -> io::Result<Option<ScreenThread<'a>>> {
@@ -55,13 +64,14 @@ pub(super) fn thread<'a>(
         return Ok(None);
     };
     let first = match first {
-        true => index
-            .first_user(&t.path)?
-            .map(|(first, at)| crate::recognition::launched::First {
-                newest: first == text,
-                text: crate::recognition::screen_text(&first),
+        true => index.first_user(&t.path)?.map(|(first, at)| {
+            crate::recognition::launched::First::logged(
+                &first,
                 at,
-            }),
+                first == text,
+                ran(workspace, t),
+            )
+        }),
         false => None,
     };
     Ok(Some(ScreenThread {
@@ -286,7 +296,7 @@ pub(super) fn associate_pane(shared: &Shared, id: &str) -> io::Result<Reply> {
         if !crate::recognition::screen_candidate(true, false, held, true) {
             continue;
         }
-        if let Some(thread) = thread(&index, t, first)? {
+        if let Some(thread) = thread(&index, &workspace, t, first)? {
             if !stays(shared, &thread, held, &submits)? {
                 threads.push(thread);
             }

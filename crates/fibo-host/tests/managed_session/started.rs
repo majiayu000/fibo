@@ -19,6 +19,34 @@ fn started_codex(
     gate: Option<&Path>,
     start: Option<AgentStart>,
 ) {
+    fake_codex(h, pane, thread, prompt, Some(shown), gate, start);
+}
+
+/// `started_codex`, but the TUI echoes nothing typed into it and never draws its task: a real
+/// one draws its own input box and scrolls the prompt away under the Agent's output, so a
+/// prompt typed there leaves only its Enter.
+fn quiet_codex(
+    h: &Host,
+    pane: &str,
+    thread: &str,
+    prompt: &str,
+    gate: Option<&Path>,
+    start: Option<AgentStart>,
+) {
+    fake_codex(h, pane, thread, prompt, None, gate, start);
+}
+
+/// The fake behind both: an empty line typed (Enter for an approval, say) logs nothing, and
+/// `/quit` ends it.
+fn fake_codex(
+    h: &Host,
+    pane: &str,
+    thread: &str,
+    prompt: &str,
+    shown: Option<&str>,
+    gate: Option<&Path>,
+    start: Option<AgentStart>,
+) {
     let logs = h.root.join("logs/codex");
     fs::create_dir_all(&logs).unwrap();
     let cli = h.root.join("codex");
@@ -46,18 +74,23 @@ fn started_codex(
         ),
     )
     .unwrap();
-    let drawn = h.root.join(format!("{pane}-shown"));
-    fs::write(&drawn, shown).unwrap();
+    let draw = match shown {
+        Some(shown) => {
+            let drawn = h.root.join(format!("{pane}-shown"));
+            fs::write(&drawn, shown).unwrap();
+            format!("printf '› '; cat {}; printf '\\n'; ", q(&drawn))
+        }
+        None => "stty -echo; printf '› working on the task\\n'; ".to_owned(),
+    };
     let wait = gate.map_or(String::new(), |g| {
         format!("while [ ! -e {} ]; do sleep 0.05; done; ", q(g))
     });
-    let typed = r#"while read -r line; do now=$(/bin/date +%s); printf '{"timestamp":%s,"type":"event_msg","payload":{"type":"user_message","message":"%s"}}\n' "$now" "$line" >&3; done"#;
+    let typed = r#"while read -r line; do [ "$line" = /quit ] && exit 0; [ -z "$line" ] && continue; now=$(/bin/date +%s); printf '{"timestamp":%s,"type":"event_msg","payload":{"type":"user_message","message":"%s"}}\n' "$now" "$line" >&3; done"#;
     let script = format!(
-        "/bin/cat < {fifo} >> {log} & exec 3> {fifo}; cat {meta} >&3; printf '› '; cat {drawn}; printf '\\n'; {wait}sleep 2; cat {turn} >&3; {typed}",
+        "/bin/cat < {fifo} >> {log} & exec 3> {fifo}; cat {meta} >&3; {draw}{wait}sleep 2; cat {turn} >&3; {typed}",
         fifo = q(&fifo),
         log = q(&logs.join(format!("{thread}.jsonl"))),
         meta = q(&meta),
-        drawn = q(&drawn),
         turn = q(&turn),
     );
     launch_started(
@@ -182,20 +215,7 @@ fn told_apart_by_typing(task: (&str, &str)) {
     ));
     let w = h.workspace();
     assert!(w.current_agent("p0").is_none() && w.current_agent("p1").is_none());
-    let (mut stream, _vt, writable) = h.attach("p0", true);
-    assert!(writable);
-    send(
-        &mut stream,
-        CONTROL,
-        &Request::Input {
-            bytes: "only this pane goes on: list the two scripts\r"
-                .as_bytes()
-                .to_vec(),
-            lossy: false,
-        },
-    )
-    .unwrap();
-    assert!(matches!(ack(&mut stream), Reply::Ok));
+    type_into(&h, "p0", "only this pane goes on: list the two scripts\r");
     wait_for(&h, "typing into one pane never told the two apart", |w| {
         assert!(
             !current_is(w, "p0", &b) && !current_is(w, "p1", &a),
@@ -203,6 +223,107 @@ fn told_apart_by_typing(task: (&str, &str)) {
         );
         current_is(w, "p0", &a) && current_is(w, "p1", &b)
     });
+}
+
+fn type_into(h: &Host, pane: &str, bytes: &str) {
+    let (mut stream, _vt, writable) = h.attach(pane, true);
+    assert!(writable);
+    let input = Request::Input {
+        bytes: bytes.as_bytes().to_vec(),
+        lossy: false,
+    };
+    send(&mut stream, CONTROL, &input).unwrap();
+    assert!(matches!(ack(&mut stream), Reply::Ok));
+}
+
+/// Two panes started with one task in one folder; the twin (p1) never logs its own, as Codex
+/// waiting on its trust question there would not, and p0 is told apart by typing into it. Its
+/// conversation stays with p0 however p0's evidence ages, and the twin, which never ran it,
+/// never takes it (#403 review: it did, and the phone's chat for it typed into the twin's TUI).
+/// Returns p0's conversation.
+fn typed_apart(h: &Host) -> String {
+    let [a, b] = ids();
+    let never = h.root.join("never");
+    // The twin first, so p0's task is logged after both starts.
+    quiet_codex(h, "p1", &b, TASK.0, Some(&never), task_start());
+    quiet_codex(h, "p0", &a, TASK.0, None, task_start());
+    wait_for(h, "p0's conversation never logged its task", |w| {
+        logged(w, &[&a])
+    });
+    std::thread::sleep(Duration::from_secs(
+        fibo_host::recognition::SUBMIT_WINDOW + 2,
+    ));
+    type_into(h, "p0", "only this pane goes on: list the two scripts\r");
+    wait_for(h, "typing into p0 never bound it", |w| {
+        current_is(w, "p0", &a)
+    });
+    a
+}
+
+/// For a few seconds the twin never holds `a`, and p0 does when `p0_holds`.
+fn twin_never_takes(h: &Host, a: &str, p0_holds: bool) {
+    let until = Instant::now() + Duration::from_secs(8);
+    while Instant::now() < until {
+        let w = h.workspace();
+        assert!(!current_is(&w, "p1", a), "the twin took p0's conversation");
+        assert!(
+            !p0_holds || current_is(&w, "p0", a),
+            "p0 lost its conversation"
+        );
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+/// p0's prompt drops out of its last eight presses (approvals answered with Enter, which log
+/// nothing), then another conversation's prompt and the window's 标记完成 on the twin
+/// (`AssociateScreen`) compare screens again.
+#[test]
+fn a_conversation_told_apart_by_typing_stays_once_its_enter_is_old() {
+    let h = Host::start();
+    h.setup();
+    let a = typed_apart(&h);
+    std::thread::sleep(Duration::from_secs(
+        fibo_host::recognition::SUBMIT_WINDOW + 2,
+    ));
+    for _ in 0..8 {
+        type_into(&h, "p0", "\r");
+        std::thread::sleep(Duration::from_millis(150));
+    }
+    // Clear of those presses: an Enter in p0 that close to p2's prompt is evidence for p0 too,
+    // and p2 would bind nowhere.
+    std::thread::sleep(Duration::from_secs(
+        fibo_host::recognition::SUBMIT_WINDOW + 2,
+    ));
+    let [c] = ids();
+    let other = "请检查发布脚本里的回滚步骤是否完整，然后只回答 ok";
+    started_codex(&h, "p2", &c, (other, other), None, None);
+    wait_for(&h, "p2 never bound by its screen", |w| {
+        current_is(w, "p2", &c)
+    });
+    h.call(Request::AssociateScreen { id: "p1".into() })
+        .unwrap();
+    twin_never_takes(&h, &a, true);
+}
+
+/// A newer host takes over: the presses an older one saw are not kept.
+#[test]
+fn a_conversation_told_apart_by_typing_stays_after_a_takeover() {
+    let mut h = Host::start();
+    h.setup();
+    let a = typed_apart(&h);
+    let _next = super::restart_binding::take_over(&mut h);
+    twin_never_takes(&h, &a, true);
+}
+
+/// p0's Agent ends: no pane holds the conversation, and the twin still never ran it.
+#[test]
+fn a_conversation_told_apart_by_typing_stays_off_the_twin_once_its_agent_ends() {
+    let h = Host::start();
+    h.setup();
+    let a = typed_apart(&h);
+    type_into(&h, "p0", "/quit\r");
+    wait_for(&h, "p0's Agent never ended", |w| !current_is(w, "p0", &a));
+    twin_never_takes(&h, &a, false);
 }
 
 /// Every one of these conversations is known and has logged its task.

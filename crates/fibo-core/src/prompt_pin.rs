@@ -25,8 +25,9 @@ pub fn key(ask: &str) -> Option<String> {
 }
 
 /// Whitespace and `[Image #n]` placeholders out; the CLI and its transcript disagree on
-/// both.
-fn plain(text: &str) -> String {
+/// both. Also how the host compares the message it started an Agent with to the one its log
+/// kept (`fibo-host` `recognition::launched::words`).
+pub fn plain(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
     while let Some(at) = rest.find("[Image #") {

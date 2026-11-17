@@ -80,6 +80,9 @@ struct Host {
     /// pane a shared-daemon Codex prompt came from.
     submits: HashMap<String, std::collections::VecDeque<u64>>,
     input_probes: std::collections::HashSet<String>,
+    /// The CLIs this host started resuming a conversation, by pid: one that exits untied ends
+    /// its terminal's start (`launch_probe::cli_exited`).
+    started_clis: HashMap<u32, String>,
     deadlines: Option<SyncSender<()>>,
     /// This host behind its lock, for work started from inside a commit.
     myself: std::sync::Weak<Mutex<Host>>,
@@ -324,6 +327,7 @@ impl Host {
         Ok(())
     }
     fn agent_exited(&mut self, pid: u32) -> io::Result<()> {
+        launch_probe::cli_exited(self, pid)?;
         if let Some(terminal) = self
             .unbound_pids
             .remove(&pid)
