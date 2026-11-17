@@ -18,7 +18,6 @@ impl Workbench {
     /// sessions still open count, as on 鸟瞰.
     fn counted_group(&self, s: &AgentSession) -> Option<Status> {
         let (group, _) = session_status(&self.workspace, &self.attention.unseen, s);
-        let group = section(group);
         (s.outcome.needs_review(now())
             && COUNTED.contains(&group)
             && !self.workspace.session_quiet(s))

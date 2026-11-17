@@ -256,7 +256,7 @@ impl Workbench {
                     g,
                     open.iter()
                         .copied()
-                        .filter(|s| section(status_of(&self.workspace, s)) == g)
+                        .filter(|s| status_of(&self.workspace, s) == g)
                         .collect(),
                 )
             })
