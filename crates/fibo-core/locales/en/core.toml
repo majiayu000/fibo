@@ -26,6 +26,11 @@
 "已放弃" = "Abandoned"
 "待办" = "To-do"
 
+[names]
+# Conversations sharing one to-do's title: its Agent, then a number for a second of one Agent.
+"{task} · {agent}" = "{task} · {agent}"
+"{task} · {agent} {n}" = "{task} · {agent} {n}"
+
 [time]
 "今天 {hm}" = "Today {hm}"
 "明天 {hm}" = "Tomorrow {hm}"
