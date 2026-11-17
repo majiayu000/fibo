@@ -43,5 +43,12 @@ jobs:
             target/ios-evidence/simulator-build.log
             target/ios-evidence/Fibo-ios-simulator.zip
             target/ios-evidence/native-smoke
+      - name: Keep the unsigned iPhone archive and its evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-device-unsigned
+          path: |
+            target/ios-device-evidence/Fibo-ios-device-unsigned.zip
             target/ios-device-evidence/build-manifest.txt
             target/ios-device-evidence/device-build.log

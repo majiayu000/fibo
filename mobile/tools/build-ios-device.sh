@@ -19,11 +19,14 @@ CI=1 bunx expo prebuild -p ios --no-install
 ) > "$evidence/device-build.log" 2>&1
 app="$evidence/Fibo.xcarchive/Products/Applications/Fibo.app"
 test -s "$app/main.jsbundle"
+archive="$evidence/Fibo-ios-device-unsigned.zip"
+ditto -c -k --keepParent "$evidence/Fibo.xcarchive" "$archive"
 {
   printf 'Unsigned device archive; not installable until signed.\n'
   git rev-parse HEAD
   git status --short
   xcodebuild -version
   shasum -a 256 "$app/Fibo" "$app/main.jsbundle"
+  shasum -a 256 "$archive"
 } > "$evidence/build-manifest.txt"
-printf 'Unsigned device archive: %s/Fibo.xcarchive\n' "$evidence"
+printf 'Unsigned device archive (not an installable IPA): %s\n' "$archive"
