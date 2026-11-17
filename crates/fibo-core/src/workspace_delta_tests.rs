@@ -121,3 +121,31 @@ fn a_brief_reply_still_reads_as_the_old_delta() {
     assert_eq!(old.rest.tabs.len(), first.tabs.len());
     assert!(!String::from_utf8(wire).unwrap().contains("\"fields\""));
 }
+
+#[test]
+fn remembered_hashes_give_the_same_delta_as_fresh_ones() {
+    let first = every_state();
+    let mut hashes = Hashes::default();
+    let (_, index) = diff_with(first.clone(), None, true, &mut hashes).unwrap();
+    let mut next = first.clone();
+    let session = next.agent_sessions[1].id.clone();
+    next.content.get_mut(&session).unwrap().title = "改了".into();
+    let gone = next.agent_sessions[0].id.clone();
+    next.content.remove(&gone);
+    let (kept, kept_index) = diff_with(next.clone(), Some(&index), true, &mut hashes).unwrap();
+    let (fresh, fresh_index) = diff(next.clone(), Some(&index), true).unwrap();
+    assert_eq!(kept_index.stamp, fresh_index.stamp);
+    assert_eq!(
+        serde_json::to_value(&kept).unwrap(),
+        serde_json::to_value(&fresh).unwrap()
+    );
+    assert_eq!(
+        kept.content.keys().collect::<Vec<_>>(),
+        [&session],
+        "only what changed"
+    );
+    assert!(
+        !hashes.content.contains_key(&gone),
+        "forgets content that left"
+    );
+}
