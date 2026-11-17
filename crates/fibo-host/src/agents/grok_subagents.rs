@@ -12,12 +12,7 @@ pub(super) fn parent(meta: &Path) -> Option<PathBuf> {
     Some(subs.parent()?.join("updates.jsonl"))
 }
 fn time(v: &Value) -> Option<u64> {
-    u64::try_from(
-        chrono::DateTime::parse_from_rfc3339(v.as_str()?)
-            .ok()?
-            .timestamp(),
-    )
-    .ok()
+    u64::try_from(v.as_str()?.parse::<jiff::Timestamp>().ok()?.as_second()).ok()
 }
 pub(super) fn read(transcript: &Path) -> Vec<Subagent> {
     let Some(session) = transcript.parent() else {

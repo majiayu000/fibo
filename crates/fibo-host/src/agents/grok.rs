@@ -328,9 +328,10 @@ fn credits_quota(v: &Value) -> Option<Quota> {
         return None;
     }
     let time = |t: &Value| {
-        chrono::DateTime::parse_from_rfc3339(t.as_str()?)
+        t.as_str()?
+            .parse::<jiff::Timestamp>()
             .ok()
-            .and_then(|t| u64::try_from(t.timestamp()).ok())
+            .and_then(|t| u64::try_from(t.as_second()).ok())
     };
     let config = &v["ctx"]["config"];
     let start = time(&config["currentPeriod"]["start"])?;

@@ -181,9 +181,7 @@ fn kimi_links_namespaced_children_and_recovers_wait_end_and_nested_parent() {
 fn gemini(path: &Path, at: u64, kind: &str, fields: Value) {
     let mut r = fields;
     r["type"] = json!(kind);
-    r["timestamp"] = json!(chrono::DateTime::from_timestamp(at as i64, 0)
-        .unwrap()
-        .to_rfc3339());
+    r["timestamp"] = json!(jiff::Timestamp::from_second(at as i64).unwrap().to_string());
     append(path, r);
 }
 #[test]

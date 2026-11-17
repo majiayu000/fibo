@@ -165,9 +165,14 @@ fn stamped(s: &str) -> Option<u64> {
         hours.parse().ok()?
     };
     let minutes: i32 = minutes.parse().ok()?;
-    let offset = chrono::FixedOffset::east_opt(hours * 3600 + hours.signum() * minutes * 60)?;
-    let naive = chrono::NaiveDateTime::parse_from_str(local, "%A, %b %d, %Y, %I:%M %p").ok()?;
-    let at = naive.and_local_timezone(offset).single()?.timestamp();
+    if !(-23..=23).contains(&hours) || !(0..60).contains(&minutes) {
+        return None;
+    }
+    // Keep the textual sign: UTC-0:30 is half an hour behind UTC, not UTC itself.
+    let sign = if zone.starts_with('-') { -1 } else { 1 };
+    let offset = jiff::tz::Offset::from_seconds(hours * 3600 + sign * minutes * 60).ok()?;
+    let local = jiff::civil::DateTime::strptime("%A, %b %d, %Y, %I:%M %p", local).ok()?;
+    let at = offset.to_timestamp(local).ok()?.as_second();
     u64::try_from(at).ok()
 }
 
@@ -385,6 +390,31 @@ mod tests {
     }
     fn assistant(content: Value) -> Value {
         json!({"role":"assistant","message":{"content":content}})
+    }
+
+    #[test]
+    fn cursor_timestamps_keep_offsets_and_reject_invalid_components() {
+        for (clock, zone, expected) in [
+            ("11:21 AM", "+8", 1_787_628_060),
+            ("11:21 AM", "+5:30", 1_787_637_060),
+            ("11:21 AM", "-3:30", 1_787_669_460),
+            ("11:21 AM", "-0:30", 1_787_658_660),
+            ("12:00 AM", "", 1_787_616_000),
+            ("12:00 PM", "+0", 1_787_659_200),
+        ] {
+            let text = format!("<timestamp>Tuesday, Aug 25, 2026, {clock} (UTC{zone})</timestamp>");
+            assert_eq!(stamped(&text), Some(expected), "{text}");
+        }
+        for zone in ["+24", "+8:60", "+8:-1", "+999999999", "broken"] {
+            let text =
+                format!("<timestamp>Tuesday, Aug 25, 2026, 11:21 AM (UTC{zone})</timestamp>");
+            assert_eq!(stamped(&text), None, "{text}");
+        }
+        assert_eq!(
+            stamped("<timestamp>Tuesday, Feb 30, 2026, 11:21 AM (UTC+8)</timestamp>"),
+            None
+        );
+        assert_eq!(stamped("no timestamp"), None);
     }
 
     #[test]
