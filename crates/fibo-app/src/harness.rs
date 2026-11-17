@@ -15,6 +15,7 @@ mod decoration_evidence;
 mod diagnostic_evidence;
 #[path = "first_run_evidence.rs"]
 mod first_run_evidence;
+mod focus_jump_evidence;
 mod folderless_space_evidence;
 mod follow_input_evidence;
 mod hosts_evidence;
@@ -93,6 +94,7 @@ pub fn start(
         || quiet_space_evidence::start(handle, evidence.clone(), cx)
         || pinned_ask_evidence::start(handle, evidence.clone(), cx)
         || todo_flow_evidence::start(handle, evidence.clone(), cx)
+        || focus_jump_evidence::start(handle, evidence.clone(), cx)
     {
         return;
     }

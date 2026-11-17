@@ -271,6 +271,13 @@ impl Workbench {
             None => cx.notify(),
         }
     }
+    /// Draws the window again next frame the way a pane's change does: the sidebar keeps
+    /// its draw.
+    pub(super) fn next_pane_frame(&self, window: &Window) {
+        if let Some(tick) = self.redraw.as_ref().map(|r| r.tick.clone()) {
+            window.on_next_frame(move |_, cx| tick.update(cx, |_, cx| cx.notify()));
+        }
+    }
     /// A new pane: redraws through `pane_changed`, and its asks (`$EDITOR` for a
     /// ⌘-clicked `file:line` runs in a new tab) reach the workbench.
     pub(super) fn adopt_pane(pane: &Entity<Pane>, cx: &mut Context<Self>) {

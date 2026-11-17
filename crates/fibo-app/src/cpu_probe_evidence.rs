@@ -423,6 +423,9 @@ async fn redraw_check(
         wait(50)
     };
     settle(cx).await;
+    // A jump's ring fades by the clock; held, the plain and the refreshed frame of the
+    // focus step draw it alike, so the step still checks that it needs no refresh.
+    workbench::Workbench::visual_hold_landing(Some(150));
     let mut lines = vec![check("start", cx)];
     frame(cx);
     let drawn = |cx: &mut gpui::AsyncApp| {
@@ -511,6 +514,7 @@ async fn redraw_check(
         end - start,
         chained - chained_start
     ));
+    workbench::Workbench::visual_hold_landing(None);
     let line = lines.join("; ");
     eprintln!("CPU-PROBE redraw-check {line}");
     format!("redraw-check: {line}")

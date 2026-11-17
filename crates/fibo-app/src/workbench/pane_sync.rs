@@ -1,6 +1,12 @@
 //! Matching the shown panes to the current tab.
 use super::*;
 
+/// The zoom a jump to `target` keeps: its own. Another pane zoomed shows alone, so
+/// `sync_panes` would hand the keyboard back to it instead of the pane jumped to.
+pub(super) fn zoom_kept(zoomed: Option<String>, target: &str) -> Option<String> {
+    zoomed.filter(|z| z == target)
+}
+
 impl Workbench {
     pub(super) fn sync_panes(&mut self, cx: &mut Context<Self>) {
         let ids = if self.nav.overview {
@@ -75,5 +81,17 @@ impl Workbench {
             .collect();
         track_unseen(&mut self.attention.phases, &mut self.attention.unseen, live);
         self.mark_pane_agents(cx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::zoom_kept;
+
+    #[test]
+    fn a_jump_to_another_pane_ends_the_zoom_and_one_to_the_zoomed_pane_keeps_it() {
+        assert_eq!(zoom_kept(Some("p0".into()), "p2"), None);
+        assert_eq!(zoom_kept(Some("p2".into()), "p2"), Some("p2".into()));
+        assert_eq!(zoom_kept(None, "p2"), None);
     }
 }

@@ -12,7 +12,9 @@ impl Workbench {
         if interrupted(&self.workspace, id) {
             let reopen = id.to_owned();
             let close = id.to_owned();
+            let ring = self.landing_ring(id, false, window);
             return div()
+                .relative()
                 .size_full()
                 .flex()
                 .flex_col()
@@ -39,6 +41,7 @@ impl Workbench {
                     )
                     .on_click(cx.listener(move |this, _, _, cx| this.close_pane(&close, cx))),
                 )
+                .children(ring)
                 .into_any_element();
         }
         // Panes attach in sync_panes; a leaf drawn before that (a tab switch whose
@@ -504,6 +507,8 @@ impl Workbench {
                     )
                 });
         }
+        // Where a jump landed, over whichever frame this style draws.
+        let pane_box = pane_box.children(self.landing_ring(id, terminal_style, window));
         let pane_box = self
             .pane_landing(id, pane_box, cx)
             .when_some(

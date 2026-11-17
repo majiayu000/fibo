@@ -258,6 +258,7 @@ mod first_run;
 mod forms;
 mod frame_facts;
 mod hooks;
+mod landing;
 mod layout;
 mod machines;
 mod recent_dirs;
@@ -309,6 +310,8 @@ mod folder_tests;
 mod tests;
 #[cfg(feature = "visual-test")]
 mod visual;
+#[cfg(feature = "visual-test")]
+pub use visual::FocusState;
 #[cfg(feature = "visual-test")]
 mod visual_attach;
 #[cfg(feature = "visual-test")]
@@ -549,6 +552,7 @@ impl Workbench {
             },
             layout: LayoutState {
                 panes: HashMap::new(),
+                landing: None,
                 drag: None,
                 split_bounds: HashMap::new(),
                 drop: Default::default(),
