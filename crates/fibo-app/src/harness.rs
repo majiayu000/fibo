@@ -19,6 +19,7 @@ mod folderless_space_evidence;
 mod follow_input_evidence;
 mod hosts_evidence;
 mod keymap_evidence;
+mod layer_keys_evidence;
 mod layout_evidence;
 mod link_evidence;
 mod mouse_taken_evidence;
@@ -93,7 +94,9 @@ pub fn start(
     {
         return;
     }
-    if rename_click_out_evidence::start(handle, evidence.clone(), cx) {
+    if rename_click_out_evidence::start(handle, evidence.clone(), cx)
+        || layer_keys_evidence::start(handle, evidence.clone(), cx)
+    {
         return;
     }
     if complete_evidence::start(handle, evidence.clone(), cx)

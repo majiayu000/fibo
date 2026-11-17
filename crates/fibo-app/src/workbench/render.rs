@@ -4,6 +4,7 @@ use super::*;
 mod bars;
 mod keys;
 mod launch;
+mod layer_keys;
 mod tabs;
 pub(super) use bars::marked_button;
 pub(super) use tabs::TextTip;
