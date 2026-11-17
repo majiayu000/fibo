@@ -351,17 +351,16 @@ impl Workbench {
         })
         .detach();
     }
-    /// A floating menu at `position`; a click outside it runs `dismiss`.
+    /// A floating menu with its corner at `position`, the pointer: below and right of it,
+    /// flipped up or left where the window has no room, as macOS menus open. Measured as
+    /// laid out, not estimated from its rows. A click outside it runs `dismiss`.
     pub(super) fn popup(
         &self,
         position: gpui::Point<gpui::Pixels>,
         entries: Vec<gpui::AnyElement>,
-        window: &Window,
         cx: &Context<Self>,
         dismiss: fn(&mut Self),
     ) -> gpui::AnyElement {
-        let height = px(T::ROW * entries.len() as f32 + T::S12);
-        let viewport = window.viewport_size();
         div()
             .absolute()
             .inset_0()
@@ -374,25 +373,19 @@ impl Workbench {
                 }),
             )
             .child(
-                div()
-                    .id("pane-menu")
-                    .absolute()
-                    .left(
-                        position
-                            .x
-                            .min(viewport.width - px(T::MENU_WIDTH))
-                            .max(px(0.)),
-                    )
-                    .top(position.y.min(viewport.height - height).max(px(0.)))
-                    .w(px(T::MENU_WIDTH))
-                    .p(px(T::S6))
-                    .bg(T::color(T::raised()))
-                    .border(px(T::BORDER_WIDTH))
-                    .border_color(T::color(T::control()))
-                    .rounded(px(T::CONTROL_RADIUS))
-                    .shadow_lg()
-                    .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .children(entries),
+                gpui::anchored().position(position).child(
+                    div()
+                        .id("pane-menu")
+                        .w(px(T::MENU_WIDTH))
+                        .p(px(T::S6))
+                        .bg(T::color(T::raised()))
+                        .border(px(T::BORDER_WIDTH))
+                        .border_color(T::color(T::control()))
+                        .rounded(px(T::CONTROL_RADIUS))
+                        .shadow_lg()
+                        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        .children(entries),
+                ),
             )
             .into_any_element()
     }

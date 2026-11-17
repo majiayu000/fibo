@@ -378,25 +378,25 @@ impl Workbench {
             root = root.child(overlay);
         }
         if let Some(menu) = &self.layout.menu {
-            root = root.child(self.menu_view(menu, window, cx));
+            root = root.child(self.menu_view(menu, cx));
         }
         if let Some(position) = self.sidebar.view_menu {
-            root = root.child(self.view_menu_view(position, window, cx));
+            root = root.child(self.view_menu_view(position, cx));
         }
         if self.phones.open {
             root = root.child(self.phones_panel(window, cx));
         }
         root = root.children(self.overlays(cx));
         if let Some(position) = self.layout.icon_menu {
-            root = root.child(self.icon_menu_view(position, window, cx));
+            root = root.child(self.icon_menu_view(position, cx));
         }
         if let Some((id, position)) = &self.layout.tab_menu {
-            root = root.child(self.tab_menu_view(id, *position, window, cx));
+            root = root.child(self.tab_menu_view(id, *position, cx));
         }
         if let Some((id, position)) = &self.layout.session_menu {
-            root = root.child(self.session_menu_view(id, *position, window, cx));
+            root = root.child(self.session_menu_view(id, *position, cx));
         }
-        root = root.children(self.sidebar_menus(window, cx));
+        root = root.children(self.sidebar_menus(cx));
         if let Some(closing) = &self.layout.confirm_close {
             root = root.child(self.confirm_close_view(closing, cx));
         }

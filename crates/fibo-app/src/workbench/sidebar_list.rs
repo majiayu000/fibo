@@ -377,7 +377,6 @@ impl Workbench {
     pub(super) fn view_menu_view(
         &self,
         position: gpui::Point<gpui::Pixels>,
-        window: &Window,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         let chosen = self.sidebar.preset().id.clone();
@@ -414,9 +413,7 @@ impl Workbench {
                     .into_any_element()
             })
             .collect();
-        self.popup(position, entries, window, cx, |this| {
-            this.sidebar.view_menu = None
-        })
+        self.popup(position, entries, cx, |this| this.sidebar.view_menu = None)
     }
 }
 

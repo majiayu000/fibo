@@ -7,7 +7,6 @@ impl Workbench {
         &self,
         id: &str,
         position: gpui::Point<gpui::Pixels>,
-        window: &Window,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         let rename = id.to_owned();
@@ -153,9 +152,7 @@ impl Workbench {
             .into_any_element(),
         ]);
         entries.extend(self.space_theme_rows(id, cx));
-        self.popup(position, entries, window, cx, |this| {
-            this.layout.space_menu = None
-        })
+        self.popup(position, entries, cx, |this| this.layout.space_menu = None)
     }
     /// For a space with no folder whose terminals were last somewhere: one press makes
     /// that its folder, so it no longer moves with wherever the last tab closed.

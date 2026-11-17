@@ -54,7 +54,6 @@ impl Workbench {
         &self,
         id: &str,
         position: gpui::Point<gpui::Pixels>,
-        window: &Window,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         let entries = self
@@ -78,7 +77,7 @@ impl Workbench {
                 .into_any_element()
             })
             .collect();
-        self.popup(position, entries, window, cx, |this| {
+        self.popup(position, entries, cx, |this| {
             this.layout.session_menu = None
         })
     }
