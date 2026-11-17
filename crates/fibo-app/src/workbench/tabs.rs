@@ -1,35 +1,6 @@
 //! Terminal tabs: their shown name, renaming and order.
 use super::*;
 
-/// A tab being dragged along the strip, drawn under the pointer by its name.
-#[derive(Clone)]
-pub(super) struct DraggedTab {
-    pub(super) id: String,
-    pub(super) title: String,
-}
-impl gpui::Render for DraggedTab {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        drag_chip(self.title.clone())
-    }
-}
-/// What a dragged tab or pane is drawn as under the pointer: its name on a chip.
-pub(super) fn drag_chip(title: String) -> gpui::Div {
-    div()
-        .h(px(T::TABS))
-        .max_w(px(T::TAB_MAX_WIDTH))
-        .px(px(T::S12))
-        .flex()
-        .items_center()
-        .rounded(px(T::S4))
-        .bg(T::color(T::raised()))
-        .border(px(T::BORDER_WIDTH))
-        .border_color(T::color(T::border()))
-        .text_size(px(T::MONO_SIZE))
-        .text_color(T::color(T::primary()))
-        .opacity(0.9)
-        .child(div().truncate().child(title))
-}
-
 impl Workbench {
     /// The tabs of a tab's own space, in strip order.
     pub(super) fn sibling_tabs(&self, id: &str) -> Vec<String> {

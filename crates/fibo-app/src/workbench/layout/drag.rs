@@ -36,7 +36,7 @@ impl gpui::Render for DraggedPane {
 }
 
 /// What marks a pane: its CLI's mark, or a terminal for a plain shell.
-fn mark(agent: Option<Agent>, ink: gpui::Hsla) -> gpui::AnyElement {
+pub(super) fn mark(agent: Option<Agent>, ink: gpui::Hsla) -> gpui::AnyElement {
     match agent {
         Some(a) => super::super::board::agent_mark(a, ink),
         None => gpui::svg()
@@ -93,12 +93,14 @@ pub(in crate::workbench) struct DropState {
     pane: Option<(String, Zone)>,
     /// The tab a dragged pane rests on; it opens after `SPRING`.
     tab: Option<String>,
-    /// The tab a dragged tab is over, and whether it would go after it.
-    strip: Option<(String, bool)>,
+    /// The tab a dragged tab's gap is next to, and whether it is after it.
+    pub(super) strip: Option<(String, bool)>,
     /// The pane being carried, veiled in its old place.
     carrying: Option<String>,
-    /// The tab being dragged along the strip, drawn faded in its old place.
-    lifted: Option<String>,
+    /// The tab being dragged along the strip; the strip shows its gap.
+    pub(super) lifted: Option<String>,
+    /// That tab is pulled out of the strip, over the panes: its gap is outlined.
+    pub(super) pulled: bool,
     /// A dragged pane that could leave its tab is over 「＋」.
     new_tab: bool,
 }
@@ -238,6 +240,8 @@ impl Workbench {
                 let picked = *moving == me && this.layout.drop.carrying.as_ref() != Some(&me);
                 if picked {
                     this.layout.drop.carrying = Some(me.clone());
+                    // A tab drag let go outside the tabs and panes left its gap behind.
+                    this.layout.drop.lifted = None;
                     cx.notify();
                 }
                 let at = (e.bounds.contains(&e.event.position) && *moving != me)
@@ -349,87 +353,51 @@ impl Workbench {
             .and_then(|t| t.layout.as_ref())
             .is_some_and(|l| l.ids().len() > 1)
     }
-    /// A tab in the strip: dragging it moves it, and it takes dragged tabs (before or
-    /// after it, by the half they are over) and dragged panes (they join its panes;
-    /// resting on it opens it first, so a pane can be placed among them).
+    /// A tab in the strip: dragging it carries it along the strip (`tab_lift`), and it
+    /// takes dragged panes (they join its panes; resting on it opens it first, so a pane
+    /// can be placed among them).
     pub(in crate::workbench) fn tab_landing(
         &self,
         tab: Stateful<gpui::Div>,
-        dragged: super::super::tabs::DraggedTab,
+        dragged: DraggedTab,
         cx: &Context<Self>,
     ) -> Stateful<gpui::Div> {
         let id = dragged.id.clone();
-        let drag = cx.has_active_drag();
-        let drop = &self.layout.drop;
-        let lifted = drag && drop.lifted.as_ref() == Some(&id);
-        let mark = (drop.strip.as_ref())
-            .filter(|(t, _)| drag && *t == id)
-            .map(|(_, after)| *after);
-        let resting = drag && drop.tab.as_ref() == Some(&id);
-        let (on_tab, on_pane, take_tab, take_pane) = (id.clone(), id.clone(), id.clone(), id);
-        tab.on_drag(dragged, |tab, _, _, cx| cx.new(|_| tab.clone()))
-            .when(lifted, |d| d.opacity(0.4))
-            .when_some(mark, |d, after| {
-                let line = px(T::BORDER_WIDTH * 2.);
-                (if after {
-                    d.border_r(line)
-                } else {
-                    d.border_l(line)
-                })
-                .border_color(T::color(T::accent()))
-            })
-            .when(resting, |d| d.bg(T::color(T::accent()).opacity(0.14)))
-            .on_drag_move(cx.listener(
-                move |this, e: &DragMoveEvent<super::super::tabs::DraggedTab>, _, cx| {
-                    let moving = &e.drag(cx).id;
-                    let inside = e.bounds.contains(&e.event.position);
-                    let after = e.event.position.x > e.bounds.center().x;
-                    let drop = &mut this.layout.drop;
-                    let mut changed = drop.lifted.as_ref() != Some(moving);
-                    if changed {
-                        drop.lifted = Some(moving.clone());
-                    }
-                    let now = (inside && *moving != on_tab).then(|| (on_tab.clone(), after));
-                    let mine = drop.strip.as_ref().is_some_and(|(t, _)| *t == on_tab);
-                    if (now.is_some() || mine) && drop.strip != now {
-                        drop.strip = now;
-                        changed = true;
-                    }
-                    if changed {
-                        cx.notify();
-                    }
-                },
-            ))
-            .on_drag_move(
-                cx.listener(move |this, e: &DragMoveEvent<DraggedPane>, window, cx| {
-                    let inside = e.bounds.contains(&e.event.position);
-                    let mine = this.layout.drop.tab.as_ref() == Some(&on_pane);
-                    if inside && !mine {
-                        this.layout.drop.tab = Some(on_pane.clone());
-                        this.spring_open(on_pane.clone(), window, cx);
-                        cx.notify();
-                    } else if !inside && mine {
-                        this.layout.drop.tab = None;
-                        cx.notify();
-                    }
-                }),
-            )
-            .on_drop(
-                cx.listener(move |this, t: &super::super::tabs::DraggedTab, _, cx| {
-                    let after = this.layout.drop.strip.take().is_some_and(|(_, a)| a);
-                    this.layout.drop.lifted = None;
-                    this.drop_tab(&t.id, &take_tab, after, cx);
-                }),
-            )
-            .on_drop(cx.listener(move |this, p: &DraggedPane, _, cx| {
-                cx.stop_propagation();
-                this.layout.drop.tab = None;
-                let home = this.workspace.terminal_tab(&p.id).map(|t| t.id.clone());
-                if home.as_ref() != Some(&take_pane) {
-                    this.move_pane(&p.id, Some(&take_pane), cx);
+        let resting = cx.has_active_drag() && self.layout.drop.tab.as_ref() == Some(&id);
+        let (on_tab, on_pane, take_pane) = (id.clone(), id.clone(), id.clone());
+        tab.on_drag(dragged, |tab, grab, _, cx| {
+            cx.new(|_| Workbench::lift_tab(tab, grab))
+        })
+        .map(|d| self.tab_gap(d, &id, cx))
+        .when(resting, |d| d.bg(T::color(T::accent()).opacity(0.14)))
+        .on_drag_move(
+            cx.listener(move |this, e: &DragMoveEvent<DraggedTab>, _, cx| {
+                this.tab_lift_move(&on_tab, e, cx);
+            }),
+        )
+        .on_drag_move(
+            cx.listener(move |this, e: &DragMoveEvent<DraggedPane>, window, cx| {
+                let inside = e.bounds.contains(&e.event.position);
+                let mine = this.layout.drop.tab.as_ref() == Some(&on_pane);
+                if inside && !mine {
+                    this.layout.drop.tab = Some(on_pane.clone());
+                    this.spring_open(on_pane.clone(), window, cx);
+                    cx.notify();
+                } else if !inside && mine {
+                    this.layout.drop.tab = None;
+                    cx.notify();
                 }
-                cx.notify();
-            }))
+            }),
+        )
+        .on_drop(cx.listener(move |this, p: &DraggedPane, _, cx| {
+            cx.stop_propagation();
+            this.layout.drop.tab = None;
+            let home = this.workspace.terminal_tab(&p.id).map(|t| t.id.clone());
+            if home.as_ref() != Some(&take_pane) {
+                this.move_pane(&p.id, Some(&take_pane), cx);
+            }
+            cx.notify();
+        }))
     }
     /// After a pane has rested on a tab for `SPRING`, opens that tab, if the pane is
     /// still there and still being dragged.
@@ -449,7 +417,13 @@ impl Workbench {
         .detach();
     }
     /// `moving` dropped on `target`'s left half goes before it, on its right half after it.
-    fn drop_tab(&mut self, moving: &str, target: &str, after: bool, cx: &mut Context<Self>) {
+    pub(super) fn drop_tab(
+        &mut self,
+        moving: &str,
+        target: &str,
+        after: bool,
+        cx: &mut Context<Self>,
+    ) {
         let before = if after {
             let tabs = self.sibling_tabs(target);
             let at = tabs.iter().position(|t| t == target);
