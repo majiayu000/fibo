@@ -227,8 +227,17 @@ impl Connection {
     }
     pub fn send(&self, request: Request) -> Result<(), String> {
         let state = self.state.lock().map_err(|_| "terminal lock poisoned")?;
-        if state.vt.is_none() || !state.writable {
-            return Err(t!("终端尚未恢复或当前为只读").into());
+        if state.ended {
+            return Err(t!("进程已退出，这次的输入没发").into());
+        }
+        if state.dropped {
+            return Err(t!("连接已断开，正在重连；这次的输入没发").into());
+        }
+        if state.vt.is_none() {
+            return Err(t!("正在恢复终端，这次的输入没发").into());
+        }
+        if !state.writable {
+            return Err(t!("当前为只读，请先点击「接管输入」；这次的输入没发").into());
         }
         drop(state);
         self.outbox.push(request).map_err(|refused| match refused {
