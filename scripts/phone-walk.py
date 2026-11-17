@@ -8,6 +8,7 @@ content: they stay out of the repo.
 
   phone-walk.py start                  new run; records the App and APK versions
   phone-walk.py setup                  test git dir + test Claude session (marker: phone-walk)
+  phone-walk.py setup-codex            a Codex session beside it, stopped at a command approval
   phone-walk.py open-chat [终端]        deep link straight into the test chat, never via home cards
   phone-walk.py shot <编号> [说明]       screenshot + UI dump for a checklist item
   phone-walk.py tap <文字> [--contains]  tap the one element with this text
@@ -294,6 +295,17 @@ def push_image():
     adb("push", str(p), target)
     adb("shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
         "-d", f"file://{target}")
+    # The scan is not done when the broadcast returns: a picker opened at once does not have
+    # the picture yet (2026-11-17, pick-image found none the first time). Wait until it does.
+    name = target.rsplit("/", 1)[1]
+    query = ("content query --uri content://media/external/images/media --projection _display_name"
+             f" --where \"_display_name='{name}'\"")
+    for _ in range(30):
+        if name in adb("shell", query, out=True).decode(errors="replace"):
+            break
+        time.sleep(0.5)
+    else:
+        print(f"phone-walk: 15 秒后相册里还没有 {name}，选图时可能要退出重开", file=sys.stderr)
     s = state()
     s.setdefault("pushed", []).append(target)
     s["pushed_at"] = time.strftime("%H:%M")
@@ -422,6 +434,61 @@ lb.addEventListener('touchend', e => {
 """
 
 
+def screen(terminal, lines=40):
+    return subprocess.run([fibo(), "read", terminal, "--lines", str(lines)],
+                          capture_output=True, text=True).stdout
+
+
+def setup_codex():
+    """A Codex conversation stopped at a command approval, for card.sendguard. It opens in a
+    narrow tab beside the test session, so its question wraps as on a split screen. The shell's
+    `codex` alias and this machine's config skip approvals; the program's path and these flags
+    do not (2026-11-17)."""
+    s = state()
+    tests = s.get("tests", [])
+    if not tests:
+        die("先 setup")
+    first = tests[0]
+    codex = shutil.which("codex") or die("找不到 codex")
+    task = f"{MARKER} codex test: run the shell command touch {MARKER}-codex.txt, then reply codex-done"
+    r = subprocess.run([fibo(), "split", first["terminal"], "--tab", "--cwd", first["dir"], "--json",
+                        "--", codex, "-a", "on-request", "-s", "read-only", task],
+                       capture_output=True, text=True)
+    opened = re.search(r'"id"\s*:\s*"([^"]+)"', r.stdout)
+    if not opened:
+        die(f"开 Codex 终端失败：{r.stderr or r.stdout}")
+    terminal = opened.group(1)
+    tests.append({"dir": first["dir"], "terminal": terminal, "codex": True})
+    save(s)
+    trusted = False
+    for _ in range(120):
+        flat = re.sub(r"\s+", "", screen(terminal))
+        if not trusted and "Trustthisfolder" in flat:
+            # Saved in Codex's config for this dir only; teardown takes it out again.
+            send_keys(terminal, ["enter"])
+            trusted = True
+        elif "Wouldyouliketorun" in flat:
+            print(json.dumps({"dir": first["dir"], "terminal": terminal}, ensure_ascii=False))
+            return
+        time.sleep(0.5)
+    die(f"Codex 一分钟没停在审批上：fibo read {terminal}")
+
+
+def forget_codex_trust(dirs):
+    """Takes the walk's dirs out of Codex's trusted projects, and nothing else of the file."""
+    config = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "config.toml"
+    if not config.exists():
+        return
+    text = config.read_text()
+    kept = text
+    for d in dirs:
+        for path in {d, d.removeprefix("/private")}:
+            block = re.compile(r'^\[projects\."' + re.escape(path) + r'"\]\n(?:(?!\[).*\n)*?(?:\n|(?=\[)|\Z)', re.M)
+            kept = block.sub("", kept)
+    if kept != text:
+        config.write_text(kept)
+
+
 def walk_terminal(t):
     """A terminal the walk opened: its task or screen carries the marker (new.task writes
     `echo phone-walk-task`). Anything else in a test dir is yours."""
@@ -464,6 +531,8 @@ def teardown():
         shutil.rmtree(d, ignore_errors=True)
         slug = re.sub(r"[^A-Za-z0-9]", "-", d)
         shutil.rmtree(Path.home() / ".claude/projects" / slug, ignore_errors=True)
+    if any(t.get("codex") for t in s.get("tests", [])):
+        forget_codex_trust(dirs)
     # Plan mode writes the plan under ~/.claude/plans, named after the first words of the task.
     for plan in (Path.home() / ".claude/plans").glob(f"{MARKER}-*.md"):
         plan.unlink()
@@ -485,6 +554,8 @@ def main(argv):
         start()
     elif cmd == "setup":
         setup()
+    elif cmd == "setup-codex":
+        setup_codex()
     elif cmd == "open-chat":
         open_chat(*rest[:1])
     elif cmd == "shot":

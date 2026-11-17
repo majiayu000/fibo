@@ -14,6 +14,7 @@ w(){ python3 scripts/phone-walk.py "$@"; }
 w start          # 新建本次记录：~/Documents/claude-pages/mooring/<日期>-phone-walk/
 w setup          # 临时 git 目录 + 测试 Claude 会话，自动答「信任这个文件夹」
 w open-chat      # 深链直接进测试会话
+w setup-codex    # card.sendguard 用：旁边开一个停在审批上的 Codex（窄屏，问句折行）
 ```
 
 然后按清单逐项走。每项至少一张截图，看过截图再记结果：

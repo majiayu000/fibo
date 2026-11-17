@@ -12,6 +12,6 @@ const at = (marker: string) => {
 };
 
 test('asks, then errors, then 等你验收, then 在跑, then the rest', () => {
-  const order = ['pinned.forEach(', 'ahead.forEach(', 'label={foldLabel(review)}', 'label={foldLabel(running)}', 'behind.forEach('].map(at);
+  const order = ['pinned.forEach(', 'ahead.forEach(', 'label={foldLabel(review)}', 'label={foldLabel(running)}', 'label={restLabel(behind)}', 'behind.forEach('].map(at);
   expect(order).toEqual([...order].sort((a, b) => a - b));
 });

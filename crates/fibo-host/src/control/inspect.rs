@@ -68,9 +68,23 @@ pub(super) fn list_json(w: &Workspace) -> Vec<serde_json::Value> {
         })
         .collect()
 }
+/// `fibo list`'s rows for people: a conversation by its own name, a bare shell by its tab's.
+pub(super) fn list_lines(w: &Workspace) -> Vec<super::list_text::Line> {
+    list_rows(w)
+        .into_iter()
+        .map(|(t, s, _, tab)| super::list_text::Line {
+            id: t.id.clone(),
+            agent: s.map(|s| agent_label(s.runtime)),
+            status: status(w, &t.id),
+            // The conversation's own name, as the window, the phone and --json say it; a tab
+            // holds several, and its name made two rows read the same (2026-11-17).
+            title: s.map_or(tab, |s| w.session_title(s)),
+            cwd: w.terminal_cwd(t).to_string(),
+        })
+        .collect()
+}
 pub(super) fn list(a: Args) -> io::Result<()> {
     let w = workspace(&a.socket)?;
-    let rows = list_rows(&w);
     if a.has("json") {
         let json = list_json(&w);
         println!(
@@ -79,16 +93,7 @@ pub(super) fn list(a: Args) -> io::Result<()> {
         );
         return Ok(());
     }
-    let lines = rows
-        .into_iter()
-        .map(|(t, s, _, tab)| super::list_text::Line {
-            id: t.id.clone(),
-            agent: s.map(|s| agent_label(s.runtime)),
-            status: status(&w, &t.id),
-            title: tab,
-            cwd: w.terminal_cwd(t).to_string(),
-        })
-        .collect();
+    let lines = list_lines(&w);
     let home = fibo_platform::dirs::home()
         .map(|h| h.to_string_lossy().into_owned())
         .unwrap_or_default();

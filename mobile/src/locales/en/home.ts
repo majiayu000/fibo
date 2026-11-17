@@ -23,6 +23,7 @@ export const home: Record<string, Entry> = {
   扫码配对: 'Scan to pair',
   '其他空间还有 {n} 件等你': (a) => `${a.n} more waiting for you in other spaces`,
   '其他空间 {what}': 'Other spaces: {what}',
+  '其他 · {n}': (a) => `Other · ${a.n}`,
   看全部: 'Show all',
   '看全部 {n} 个': 'Show all {n}',
   没有要处理的事: 'Nothing needs you',
