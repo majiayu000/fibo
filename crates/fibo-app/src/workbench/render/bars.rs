@@ -396,6 +396,9 @@ impl Workbench {
         if let Some((id, position)) = &self.layout.session_menu {
             root = root.child(self.session_menu_view(id, *position, cx));
         }
+        if let Some((index, terminal, position)) = &self.layout.remote_menu {
+            root = root.children(self.remote_menu_view(*index, terminal, *position, cx));
+        }
         root = root.children(self.sidebar_menus(cx));
         if let Some(closing) = &self.layout.confirm_close {
             root = root.child(self.confirm_close_view(closing, cx));

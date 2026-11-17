@@ -1,7 +1,7 @@
 //! `-unknown`: rows whose state this build cannot tell, for screenshots. A terminal here
 //! that no conversation is tied to, and another machine listing one session in a state
 //! word this build does not know and one Agent no conversation is tied to. None of them
-//! may draw 停着's ring.
+//! may draw 停着's ring. Its host keeps the first in 置顶, so the column lists it there.
 use super::Workbench;
 use fibo_remote::protocol::{Card, Space};
 
@@ -64,8 +64,9 @@ impl Workbench {
             ),
         ];
         let spec = crate::machines::Spec::new("studio".into());
-        self.machines
-            .push(crate::machines::Remote::fixed(spec, spaces, terminals));
+        let studio = crate::machines::Remote::fixed(spec, spaces, terminals);
+        studio.view.lock().unwrap().pins = Some(vec!["r-new".into()]);
+        self.machines.push(studio);
         self.facts.forget();
     }
 }

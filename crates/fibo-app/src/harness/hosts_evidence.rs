@@ -284,6 +284,50 @@ pub(super) fn start(
             shoot("hosts-6b-failure.png", cx);
             assert!(error.contains("terminal not found"), "hidden host failure was not shown: {error:?}");
         }
+        // 置顶 is far's host's: pinned from this window's menu on far's row, far's host
+        // keeps it, so far's own window lists it too; changed by another window on far,
+        // this sidebar follows.
+        let terminal = far
+            .read_with(cx, |w, _| w.visual_tab_terminal(&opened))
+            .expect("the tab opened on far has a terminal");
+        let said = handle
+            .update(cx, |v, _, cx| v.visual_remote_menu_pin(0, &terminal, cx))
+            .unwrap();
+        assert_eq!(said, Some(t!("置顶")), "far's row offered no 置顶");
+        let pinned = |pins: &Option<Vec<String>>| pins.iter().flatten().any(|p| *p == terminal);
+        let mut kept = None;
+        for _ in 0..40 * slow {
+            wait(250).await;
+            kept = far.read_with(cx, |w, _| w.visual_host_pins());
+            if pinned(&kept) {
+                break;
+            }
+        }
+        assert!(pinned(&kept), "pinned here, {host}'s host did not keep it: {kept:?}");
+        let follows = async |want: bool, cx: &mut gpui::AsyncApp| {
+            for _ in 0..40 * slow {
+                wait(250).await;
+                let seen = handle.update(cx, |v, _, _| v.visual_machine_pins(0)).unwrap();
+                if pinned(&seen) == want {
+                    return true;
+                }
+            }
+            false
+        };
+        assert!(follows(true, cx).await, "this sidebar did not list far's pin");
+        shoot("hosts-6c-pinned.png", cx);
+        far.read_with(cx, |w, _| w.visual_host_pin(&terminal, false));
+        assert!(follows(false, cx).await, "unpinned on far, this sidebar kept it");
+        far.read_with(cx, |w, _| w.visual_host_pin(&terminal, true));
+        assert!(follows(true, cx).await, "pinned on far, this sidebar did not list it");
+        let said = handle
+            .update(cx, |v, _, cx| v.visual_remote_menu_pin(0, &terminal, cx))
+            .unwrap();
+        assert_eq!(said, Some(t!("取消置顶")), "far's pinned row offered no 取消置顶");
+        assert!(follows(false, cx).await, "unpinned here, this sidebar kept it");
+        let kept = far.read_with(cx, |w, _| w.visual_host_pins());
+        assert!(!pinned(&kept), "unpinned here, {host}'s host kept it: {kept:?}");
+        eprintln!("hosts pins PASS: pinned here kept by {host}'s host, pinned or unpinned there listed here");
         // Leaves far as it was.
         handle
             .update(cx, |_, _, cx| {

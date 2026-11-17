@@ -44,6 +44,7 @@ impl Workbench {
             || self.layout.icon_menu.is_some()
             || self.layout.tab_menu.is_some()
             || self.layout.session_menu.is_some()
+            || self.layout.remote_menu.is_some()
             || self.layout.space_menu.is_some()
             || self.sidebar.machine_menu.is_some()
     }
@@ -54,6 +55,7 @@ impl Workbench {
             || self.sidebar.machine_menu.take().is_some()
             || self.layout.space_menu.take().is_some()
             || self.layout.session_menu.take().is_some()
+            || self.layout.remote_menu.take().is_some()
             || self.layout.tab_menu.take().is_some()
             || self.layout.icon_menu.take().is_some()
             || self.statusbar.take().is_some()

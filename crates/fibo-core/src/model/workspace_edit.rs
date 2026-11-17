@@ -353,6 +353,7 @@ impl Workspace {
                     self.quiet_spaces.remove(&id);
                 }
             }
+            Edit::PinTerminal { id, pinned } => self.pin_terminal(&id, pinned)?,
             Edit::SetOutcome { id, outcome, seen } => {
                 if let Some(seen) = seen {
                     self.check_seen(&id, &seen, &outcome)?;

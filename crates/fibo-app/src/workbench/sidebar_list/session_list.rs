@@ -103,7 +103,7 @@ impl Workbench {
             l.0.terminal
                 .as_ref()
                 .filter(|t| {
-                    self.sidebar.pinned.contains(t) && live_terminal(&self.workspace, l.0).is_some()
+                    self.pins().contains(t) && live_terminal(&self.workspace, l.0).is_some()
                 })
                 .cloned()
         };
@@ -111,15 +111,26 @@ impl Workbench {
             .into_iter()
             .partition(|l| pinned_terminal(l).is_some());
         let all_pinned = !top.is_empty() && sessions.is_empty();
-        if !top.is_empty() {
+        let recent = preset.group == Grouping::Recent;
+        // Where other machines' rows list with these, their pinned ones join 置顶, after
+        // this machine's: each machine's host keeps its own pins.
+        let mut there: Vec<_> = if recent {
+            (self.listed_remote_rows().into_iter())
+                .filter(|r| r.pin.is_some())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        there.sort_by_key(|r| (r.index, r.pin));
+        if !top.is_empty() || !there.is_empty() {
             top.sort_by_key(|l| {
-                pinned_terminal(l).and_then(|t| self.sidebar.pinned.iter().position(|p| *p == t))
+                pinned_terminal(l).and_then(|t| self.pins().iter().position(|p| *p == t))
             });
-            let recent = preset.group == Grouping::Recent;
+            let count = top.len() + there.len();
             out.push(if recent {
-                self.flat_fold("recent:pinned", t!("置顶"), top.len(), true, cx)
+                self.flat_fold("recent:pinned", t!("置顶"), count, true, cx)
             } else {
-                self.heading(t!("置顶").into(), top.len(), cx)
+                self.heading(t!("置顶").into(), count, cx)
                     .mt(px(T::S14))
                     .into_any_element()
             });
@@ -131,6 +142,9 @@ impl Workbench {
                     self.note_row(out.len(), &l);
                     out.push(self.session_row(l, current, d, End::State, cx));
                 }
+            }
+            for r in there.iter().filter(|r| open || r.shown) {
+                out.push(self.remote_row(r, cx));
             }
         }
         let mut budget = preset.row_limit();

@@ -126,6 +126,12 @@ pub enum Edit {
         id: String,
         quiet: bool,
     },
+    /// Puts a running terminal's session in the sidebar's 置顶, last, or takes it off.
+    /// Hosts before it refuse it; a window sends it only to a host that lists pins.
+    PinTerminal {
+        id: String,
+        pinned: bool,
+    },
 }
 
 /// The part of a session an outcome edit depends on, as its sender saw it.

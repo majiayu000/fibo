@@ -417,8 +417,12 @@ impl Workbench {
             rows.retain(|r| r.card.space == space.id);
         }
         out.extend(self.machine_spaces(index, true, rows.len(), cx));
+        // 置顶 first, as that machine's host keeps it; those rows leave their section.
+        let (mut pinned, rows): (Vec<&RemoteRow>, Vec<&RemoteRow>) =
+            rows.iter().partition(|r| r.pin.is_some());
+        pinned.sort_by_key(|r| r.pin);
         let keyed: Vec<(&RemoteRow, Bucket, u64)> =
-            rows.iter().map(|r| (r, r.bucket, r.when)).collect();
+            rows.into_iter().map(|r| (r, r.bucket, r.when)).collect();
         let order = recent_order(&keyed);
         let history = order
             .stopped
@@ -428,6 +432,7 @@ impl Workbench {
             .collect();
         let (today, older) = split_today(history, crate::model::time::now());
         for (part, title, rows) in [
+            ("pinned", t!("置顶"), pinned),
             ("need", fibo_core::status::needs_you_word(), order.need),
             ("running", Status::Running.label(), order.running),
             ("today", t!("今天"), today),

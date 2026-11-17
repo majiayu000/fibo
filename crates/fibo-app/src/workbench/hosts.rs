@@ -304,7 +304,7 @@ impl Workbench {
         let Some(machine) = self.machine_of(host) else {
             return;
         };
-        let (spaces, cards, link) = {
+        let (spaces, cards, link, pins) = {
             let w = view.read(cx);
             let now = fibo_core::content::now();
             let (spaces, _) = fibo_core::remote_cards::spaces(&w.workspace);
@@ -313,13 +313,15 @@ impl Workbench {
                 Some(why) if w.store.cut_off() => Link::Offline(why.to_owned()),
                 _ => Link::Online,
             };
-            (spaces, cards, link)
+            (spaces, cards, link, w.workspace.pinned_terminals.clone())
         };
         let mut v = machine.view.lock().unwrap();
-        let changed = v.link != link || v.spaces != spaces || v.terminals != cards;
+        let changed =
+            v.link != link || v.spaces != spaces || v.terminals != cards || v.pins != pins;
         v.link = link;
         v.spaces = spaces;
         v.terminals = cards;
+        v.pins = pins;
         drop(v);
         if changed {
             cx.notify();

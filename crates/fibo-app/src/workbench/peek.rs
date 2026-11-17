@@ -407,8 +407,15 @@ impl Workbench {
 
 #[cfg(feature = "visual-test")]
 impl Workbench {
+    /// The pins 置顶 lists: those whose terminal still runs.
     pub fn visual_pins(&self) -> Vec<String> {
-        self.sidebar.pinned.clone()
+        (self.pins().iter())
+            .filter(|id| {
+                (self.workspace.terminals.iter())
+                    .any(|t| &t.id == *id && t.state == ProcessState::Running)
+            })
+            .cloned()
+            .collect()
     }
 }
 

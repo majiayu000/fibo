@@ -6,6 +6,7 @@ use fibo_core::sidebar::{self as presets, Bucket, Detail, Grouping, Preset};
 
 mod dense_row;
 mod list_scroll;
+mod pins;
 mod prefs;
 mod session_list;
 mod session_menu;
@@ -129,35 +130,6 @@ impl Workbench {
         self.sidebar.motion.arrive_plain();
         self.sidebar.save();
         cx.notify();
-    }
-    /// The session menu's 置顶: pins its terminal to 置顶, or takes it off.
-    pub(super) fn toggle_pin(&mut self, terminal: &str, cx: &mut Context<Self>) {
-        let pins = &mut self.sidebar.pinned;
-        match pins.iter().position(|t| t == terminal) {
-            Some(i) => {
-                pins.remove(i);
-            }
-            None => pins.push(terminal.to_owned()),
-        }
-        self.sidebar.save();
-        cx.notify();
-    }
-    /// A pin lasts as long as its terminal runs: one that ended or was closed comes off.
-    /// Only against a workspace the host has sent, never the empty one before it.
-    pub(super) fn prune_pins(&mut self) {
-        if self.sidebar.pinned.is_empty() || self.workspace.revision == 0 || self.store.cut_off() {
-            return;
-        }
-        let before = self.sidebar.pinned.len();
-        let w = &self.workspace;
-        self.sidebar.pinned.retain(|id| {
-            w.terminals
-                .iter()
-                .any(|t| &t.id == id && t.state == ProcessState::Running)
-        });
-        if self.sidebar.pinned.len() != before {
-            self.sidebar.save();
-        }
     }
     /// ⌘B: the column folds to a rail and back, as Claude's desktop app does.
     pub(super) fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {

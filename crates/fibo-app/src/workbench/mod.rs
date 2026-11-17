@@ -562,6 +562,7 @@ impl Workbench {
                 tab_menu: None,
                 hovered_tab: None,
                 session_menu: None,
+                remote_menu: None,
                 done_open: None,
                 subagents_toggled: HashMap::new(),
                 subagents_all: HashSet::new(),
