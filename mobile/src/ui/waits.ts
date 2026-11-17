@@ -49,6 +49,14 @@ export function sendBlocked(view: WaitView | null, waiting: string | null | unde
 }
 
 /**
+ * Whether what stopped a send still stands: an approval open, or a wait whose box would take
+ * the words. Once it is gone, the line that said why goes with it.
+ */
+export function stillBlocks(approval: boolean, view: WaitView | null, waiting: string | null | undefined): boolean {
+  return approval || !!sendBlocked(view, waiting, false);
+}
+
+/**
  * An Agent started but no conversation yet: it may be showing a menu of its own first (an
  * update offer, a login choice), which no log or hook reports. The terminal and its keys.
  */

@@ -66,6 +66,36 @@ fn is_question(line: &str) -> bool {
 fn is_tip(line: &str) -> bool {
     line.trim_start().starts_with("Tip:")
 }
+/// Whether `next` is the rest of `line`, wrapped by the CLI: its first word would not have
+/// fit after `line` in a terminal `width` wide. A line already wider than `width` was not
+/// wrapped at it, so the width says nothing.
+fn wraps_into(line: &str, next: &str, width: usize) -> bool {
+    let used = line.trim_end().chars().count();
+    let word = next
+        .split_whitespace()
+        .next()
+        .map_or(0, |w| w.chars().count());
+    word > 0 && used <= width && used + 1 + word > width
+}
+/// The head's lines without the tip, the tip's wrapped lines included: the dashed rule
+/// spans the terminal, so it gives the width a wrap is measured against.
+fn without_tip<'a>(lines: &[&'a str], width: Option<usize>) -> Vec<&'a str> {
+    let mut out = vec![];
+    let mut tip: Option<&str> = None;
+    for &l in lines {
+        if l.trim().is_empty() {
+            tip = None;
+            continue;
+        }
+        if is_tip(l) || tip.zip(width).is_some_and(|(t, w)| wraps_into(t, l, w)) {
+            tip = Some(l);
+            continue;
+        }
+        tip = None;
+        out.push(l);
+    }
+    out
+}
 const TITLES: &[&str] = &[
     "Bash",
     "Run",
@@ -178,11 +208,8 @@ fn between_rules(above: &[&str], bottom: usize) -> ApprovalAsk {
         .iter()
         .rposition(|l| all_of(l, RULE))
         .map_or(0, |r| r + 1);
-    let head: Vec<&str> = above[head_start..head_end]
-        .iter()
-        .copied()
-        .filter(|l| !l.trim().is_empty() && !is_tip(l))
-        .collect();
+    let width = top.map(|t| above[t].trim().chars().count());
+    let head = without_tip(&above[head_start..head_end], width);
     let title = head.iter().position(|l| is_title(l));
     let kind = title.map_or("", |t| head[t].trim()).to_owned();
     let rest: Vec<&str> = match title {
@@ -411,6 +438,40 @@ mod tests {
 
  Esc to cancel · Tab to amend
 ";
+
+    /// A real 63-column terminal (2026-11-17 phone walk): the tip wraps, and its second
+    /// half read as what the command does.
+    const WRAPPED_TIP: &str = " Bash command
+ Tip: auto mode handles these prompts for you — choose \"switch
+ to auto mode\" below
+ Create empty guard marker file
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ touch phone-walk-guard.txt
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and always allow access to /private/var/folders/3_/
+      987z6jz91l9_t8mpvflf73xm0000gp/T/phone-walk-w2vaqckm
+      from this project
+   3. Yes, and switch to auto mode · auto mode handles these
+      prompts for you
+   4. No
+ Esc to cancel · Tab to amend
+";
+
+    #[test]
+    fn a_wrapped_tip_stays_out_of_the_note() {
+        let a = approval_ask(WRAPPED_TIP).unwrap();
+        assert_eq!(a.kind, "Bash command");
+        assert_eq!(a.subject, "touch phone-walk-guard.txt");
+        assert_eq!(a.note, "Create empty guard marker file");
+        // A note short enough to have fit after the tip is the CLI's own line, not the tip.
+        let short = WRAPPED_TIP.replace(" — choose \"switch\n to auto mode\" below", ".");
+        assert_eq!(
+            approval_ask(&short).unwrap().note,
+            "Create empty guard marker file"
+        );
+    }
 
     #[test]
     fn the_subject_is_between_the_rules_never_the_tip() {

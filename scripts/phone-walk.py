@@ -176,7 +176,10 @@ def setup():
         save(s)
         screen = subprocess.run([fibo(), "read", terminal, "--lines", "20"],
                                 capture_output=True, text=True).stdout
-        if "trust this folder" not in screen or str(d.name) not in screen:
+        # The prompt wraps at the terminal's width, often inside the dir's name: compare
+        # without the breaks (2026-11-17 it split `phon` / `e-walk-…`).
+        flat = re.sub(r"\s+", "", screen)
+        if "trustthisfolder" not in flat or d.name not in flat:
             die(f"测试会话停在别的画面上：fibo read {terminal}")
         send_keys(terminal, ["down", "enter"])
         time.sleep(4)
