@@ -1,7 +1,8 @@
 //! Looking for the Agent this host just started in a terminal (`Request::Launch` with a
-//! `start`). Nothing else would: its first message came on the command line, so no Enter
-//! announces it, and a conversation it resumed may write nothing to its log until it is
-//! spoken to, so no log event does either. A few looks while it starts, then none.
+//! `start`), or one an older host started that still waits when its terminal is handed over.
+//! Nothing else would: its first message came on the command line, so no Enter announces it,
+//! and a conversation it resumed may write nothing to its log until it is spoken to, so no log
+//! event does either. A few looks while it starts, then none.
 use super::*;
 use fibo_core::terminal::libghostty_vt::{screen::Screen, terminal::Mode};
 

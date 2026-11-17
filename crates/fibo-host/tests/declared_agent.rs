@@ -36,13 +36,7 @@ impl Host {
         if let Some(declaration) = declaration {
             fs::write(root.join("agents/fake.json"), declaration(&root)).unwrap();
         }
-        let child = Command::new(std::env::current_exe().unwrap())
-            .args(["--ignored", "--exact", "daemon_fixture", "--nocapture"])
-            .env("MOORING_FIXTURE_RUNTIME", &root)
-            .stdout(Stdio::null())
-            .stderr(Stdio::inherit())
-            .spawn_tied()
-            .unwrap();
+        let child = Self::daemon(&root).spawn_tied().unwrap();
         let h = Self { child, root };
         let until = Instant::now() + Duration::from_secs(30);
         while !h.root.join("workbench.sock").exists() {
@@ -59,6 +53,30 @@ impl Host {
         })
         .unwrap();
         h
+    }
+    /// This test binary's daemon, serving `root`.
+    fn daemon(root: &Path) -> Command {
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args(["--ignored", "--exact", "daemon_fixture", "--nocapture"])
+            .env("MOORING_FIXTURE_RUNTIME", root)
+            .stdout(Stdio::null())
+            .stderr(Stdio::inherit());
+        command
+    }
+    /// A newer host takes the terminals over, as a new App's does; the older one exits. Only
+    /// the store and the processes carry across.
+    fn take_over(&mut self) {
+        let next = Self::daemon(&self.root)
+            .env("MOORING_FIXTURE_TAKEOVER", "1")
+            .spawn_tied()
+            .unwrap();
+        let mut older = std::mem::replace(&mut self.child, next);
+        let until = Instant::now() + Duration::from_secs(30);
+        while older.try_wait().unwrap().is_none() || self.call(Request::Workspace).is_err() {
+            assert!(Instant::now() < until, "the takeover never finished");
+            std::thread::sleep(Duration::from_millis(50));
+        }
     }
     fn call(&self, request: Request) -> io::Result<Reply> {
         rpc(&self.root.join("workbench.sock"), &request)
@@ -183,7 +201,11 @@ fn daemon_fixture() {
     for agent in Agent::all().into_iter().filter(|a| *a != fake) {
         roots.push((agent, root.join("logs").join(agent.key())));
     }
-    fibo_host::serve_with_roots(&root, roots).unwrap();
+    if std::env::var_os("MOORING_FIXTURE_TAKEOVER").is_some() {
+        fibo_host::serve_taking_over(&root, roots, 7).unwrap();
+    } else {
+        fibo_host::serve_with_roots(&root, roots).unwrap();
+    }
 }
 
 fn declaration(transcripts: bool) -> impl FnOnce(&Path) -> String {
@@ -506,4 +528,55 @@ fn a_resume_start_ends_with_the_cli_it_started() {
         .terminals
         .iter()
         .any(|t| t.id == "resumed" && t.state == ProcessState::Running));
+}
+
+/// A newer host takes the terminals over while the CLI the older one started resuming a
+/// conversation still loads (a new App swapped in right after the phone's 接着做). Nothing
+/// announces that CLI to the newer host either, so it watches for its input as the older one
+/// did; otherwise the terminal stays untied until it is spoken to, which the phone cannot do
+/// before it is tied (#403 review, round two). Each step waits on a file, so undoing that
+/// watch fails this every time.
+#[test]
+fn a_resume_start_handed_over_while_its_cli_loads_binds_once_it_shows_its_input() {
+    let mut h = Host::start(declaration(true));
+    let row = serde_json::json!({"sid":"fake-old","cwd":"/tmp","role":"user","content":"整理一下发布说明"});
+    fs::write(h.root.join("logs/fake/old.jsonl"), format!("{row}\n")).unwrap();
+    h.wait("the earlier conversation is known", |h| {
+        h.workspace()
+            .agent_sessions
+            .iter()
+            .any(|s| s.cli_session_id == "fake-old")
+    });
+    let focused = h.root.join("focused");
+    // Loading on the alternate screen with the cursor hidden, then its input, drawn anew.
+    let script = format!(
+        "printf '\\033[?25l\\033[?1049hRESUMING'; while [ ! -e {} ]; do sleep 0.05; done; printf '\\033[?1049h\\033[2J\\033[HRESUMED\\033[?25h'; read -r line",
+        shell_quote(&focused.to_string_lossy())
+    );
+    h.run_resuming(
+        "resumed",
+        &script,
+        "fake-old",
+        Some(AgentStart::resuming(Agent::from_key("fake"), "fake-old")),
+    );
+    h.wait("the host never found the CLI it started", |h| {
+        h.recognition().terminal_agents.contains_key("resumed")
+    });
+    h.take_over();
+    assert!(h.workspace().agent_starts.contains_key("resumed"));
+    // Whatever the takeover set off is over, and nothing tied it while its CLI loads.
+    let until = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < until {
+        assert!(
+            h.workspace().current_agent("resumed").is_none(),
+            "tied while its CLI loads"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    fs::write(&focused, "").unwrap();
+    h.wait("never tied once its CLI showed its input", |h| {
+        h.workspace()
+            .current_agent("resumed")
+            .is_some_and(|s| s.cli_session_id == "fake-old")
+    });
 }

@@ -464,13 +464,17 @@ fn the_whole_message_counts_unless_the_log_keeps_only_its_start() {
 #[test]
 fn a_task_too_short_to_tell_conversations_apart_is_no_evidence() {
     let t = log(opencode(), 0);
-    for short in ["继续", "ok", "only reply ok"] {
+    // The least counts what was sent, so a quote too short makes no short task long enough;
+    // and a fenced block alone leaves no words a log would keep to compare.
+    let code_alone = "```\npanic at src/main.rs:3:20\n```";
+    for short in ["继续", "ok", "only reply ok", "> 好\n继续", code_alone] {
         assert!(
             pane(0, opencode(), "", Some(short)).launched.is_none(),
             "{short}"
         );
+        let kept = crate::content::user_text(short);
         assert!(bound(
-            &[thread(&t, short, 1000)],
+            &[thread(&t, &kept, 1000)],
             &[pane(0, opencode(), "", Some(short))]
         )
         .is_empty());
@@ -485,6 +489,40 @@ fn a_task_too_short_to_tell_conversations_apart_is_no_evidence() {
         .len(),
         1
     );
+}
+
+/// A phone's task is often a few words over a pasted error or a quote. The log keeps the words
+/// alone (`content::user_text` drops fenced blocks and quoted lines), fewer than the least,
+/// while what was sent is long: counted on those words, such a task was no start, no screen
+/// key and no Enter, and never bound (#403 review, round two). Counted on what was sent, it
+/// binds by its start, and both sides still compare the words the log keeps.
+#[test]
+fn a_few_words_over_a_code_block_or_a_quote_bind_by_their_start() {
+    for runtime in [Agent::Codex, opencode()] {
+        for sent in [
+            "这个报错怎么修\n```\nerror[E0382]: borrow of moved value: `x`\n  --> src/main.rs:5:20\n```",
+            "修这个错误\n```\npanic at main.rs:3\n```\n> 引用的旧回复\n不要改接口",
+            "> 上一轮你说测试都过了\n> 可是 CI 还是红的\n看下为什么",
+        ] {
+            assert!(words(sent).chars().count() < super::KEY_LEAST, "{sent}");
+            let t = log(runtime, 0);
+            // What the index keeps of it, as it reads every user record.
+            let kept = crate::content::user_text(sent);
+            assert_eq!(
+                bound(&[thread(&t, &kept, 1000)], &[pane(0, runtime, "", Some(sent))]),
+                [("pty-0".to_owned(), "t0".to_owned())],
+                "{runtime:?}: {sent}"
+            );
+            // The words are what tells it apart: a conversation begun with other words over the
+            // same block or quote is not this one.
+            let other = crate::content::user_text(&format!("{sent}\n吧"));
+            assert!(
+                bound(&[thread(&t, &other, 1000)], &[pane(0, runtime, "", Some(sent))])
+                    .is_empty(),
+                "{sent}"
+            );
+        }
+    }
 }
 
 fn terminal(id: &str, pid: u32) -> Terminal {

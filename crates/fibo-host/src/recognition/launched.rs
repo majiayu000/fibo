@@ -46,13 +46,18 @@ impl First {
 }
 
 /// The first message a terminal's Agent was started with, for a pane running that Agent.
-/// None when it was started with none, or with too little a log would keep as the user's to
-/// tell it from other conversations begun there: "继续" or "ok" begin many, so the same least
-/// as a prompt on the screen (`screen_key`).
+/// None when it was started with none, with nothing a log keeps as the user's words (a fenced
+/// block alone), or with too short a message to tell it from other conversations begun there:
+/// "继续" or "ok" begin many, so the same least as a prompt on the screen (`screen_key`). The
+/// least counts the message as it was sent, whitespace aside: a fenced block or quoted lines
+/// the log drops from its words still made it this one message. A phone's few words over a
+/// pasted error are no "继续", and counted on the words alone such a task never bound (#403
+/// review, round two). Both sides still compare only the words.
 pub fn launched(start: &AgentStart, runtime: Agent, cwd: String) -> Option<Launched> {
     let prompt = start.prompt.as_deref().filter(|_| start.agent == runtime)?;
     let text = words(prompt);
-    (text.chars().count() >= super::KEY_LEAST).then_some(Launched {
+    let sent = super::screen_text(prompt).chars().count();
+    (!text.is_empty() && sent >= super::KEY_LEAST).then_some(Launched {
         text,
         at: start.at,
         cwd,

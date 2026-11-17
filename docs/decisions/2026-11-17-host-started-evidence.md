@@ -79,7 +79,7 @@ cargo test -p fibo-core --lib agent_start
 1. **第一句证据只给从没被终端跑过的对话**（`launched::First::ran`）。同一句任务、同一目录的两块终端，在一块里打字之后这块对上自己的对话；但回车只在内存里留最近 8 次，后台重启就清空。之后任何一次画面比对（别的对话出新句、窗口在另一块上点「标记完成」）都可能按第一句把这段对话挪到另一块，而那块从没跑过它，手机发给这段对话的消息就会打进那块的 TUI。现在，一段对话只要被任何终端跑过（记在 `agent_sessions` 的 `terminal` 上，后台重启后也在），就不再给任何一块当第一句证据。「画着自己那句不算画面证据」照旧：第一句仍然读，只是不当证据。复核员的候选修法只挡「别的窗格正在跑的」对话；那块的 Agent 退出后，这段对话没人持有，另一块照样能拿走。所以这里挡的是「跑过」，不是「正在跑」。
 2. **比第一句时两边都去掉 `[Image #n]`**（`fibo_core::prompt_pin::plain`，置顶提问用的也是它）。手机给 Codex 开带图的新任务时，命令行交出的只有文字，Codex 0.169 日志里的第一句却是「[Image #1]\n文字」，原来永远对不上。
 3. **接着做要等 CLI 显示出输入框才对上**（`host::launch_probe::input_shown`）。判断是：在备用屏幕上且终端光标显示（OpenCode 自带的 opentui 只在输入框有焦点时显示光标），或者 `Agent::input_ready` 认得出输入框。OpenCode 1.19.5 先隐藏光标、打开备用屏幕和括号粘贴，然后才加载；在输入框拿到焦点之前打进去的字全部丢掉，后台却照常回复成功。pty 实测（`rc4/fix-r1/tui-ready-*.jsonl`）：首页和会话页各测了两次，在备用屏幕打开之后、光标第一次显示之前粘贴，4 次全丢；光标第一次显示时就粘贴，6 次全部进了输入框。`launch_probe` 看到进程之后每 200 毫秒看一次画面，输入框一出来就去对上，最多看两分钟。另外只对上命令行里带着这段对话 ID 的那个 CLI 进程，ID 是后台自己的恢复命令放进去的。这只用来确认这个进程是后台开的那个，不当身份证据：以后在同一个 shell 里手动开的 CLI 不会被配上这段对话。后台开的那个 CLI 没对上就退出时，这块终端的 start 随之收掉（`launch_probe::cli_exited`）。
-4. **第一句至少 12 个字**（去掉空白后计数），和画面证据的 `screen_key` 用同一个下限（`recognition::KEY_LEAST`）。「继续」「ok」这种第一句能开头很多段对话。
+4. **第一句至少 12 个字**，和画面证据的 `screen_key` 用同一个下限（`recognition::KEY_LEAST`）。「继续」「ok」这种第一句能开头很多段对话。计数的是交出去的那条消息本身去掉空白后的字数，代码块、引用行都算（第二轮起，见下）。两边比较的仍是 `words`，也就是按 `content::user_text` 去掉引用和代码块，再去掉空白和 `[Image #n]` 之后的字。去掉这些之后一个字都不剩的消息（只有代码块）不算证据。
 
 不做：
 
@@ -98,3 +98,27 @@ cargo test -p fibo-host --test managed_session -- started::a_conversation_told_a
 ```
 
 真实 CLI 的检查在 `rc4/fix-r1/`。
+
+## 2026-11-18 复核第二轮追加（#403）
+
+复核员查出一中一低，都改了。决定本身不变。
+
+1. **中：12 字下限改按交出去的原文计**（`launched::launched`）。上一版按 `words` 计，也就是去掉代码块和引用行、再去掉空白之后的字数，这和第 4 条原来写的「去掉空白后计数」对不上。手机新任务常是一两句话加一段贴进来的报错，比如「这个报错怎么修」加一个代码块：发出 60 多个字，`words` 只剩 7 个。于是没有第一句证据；画面 key 读的是同一份去掉代码块的文字，也是 None；命令行交任务又没有回车。这种任务在 Codex、OpenCode 上一直对不上，表现和 B1 一样（复核探针 `rc4/review-r2/probes/`）。现在下限按发出的原文去掉空白后计，比较仍按 `words`。「继续」「ok」「only reply ok」照样挡住；只有代码块、没有一个字的消息也不算。代价是：字很少、带代码块或引用的任务，会拿这几个字去比。能配错的只有这种对话：同一个 CLI、同一目录、开终端之后才开始、没有被任何终端跑过，而且第一句的字完全一样。两块都是 Fibo 开的终端时，按原来的一对一规则两块都不绑。纯短任务（「跑一下测试」「fix the build」）仍不算证据，和 RC3 一样；要不要放开是所有者的取舍。
+2. **低：接管之后，旧后台开的、还在等 Agent 的终端照样去找**（`host/runtime.rs`：交接过来的终端里 `agent_starts` 还在的，各跑一次 `launch_probe::look_for_started`）。原来只在开终端时起探测，新后台只在订阅启动时看一次进程。OpenCode 接着做加载到一半时换了 App，新后台那一次看到的 CLI 还没出输入框，之后没有回车也没有日志，就一直对不上，手机也发不出第一句（B2 回来了）。`started_clis` 只在内存里，但每次看进程时 `resume` 都会把找到的、后台开的 CLI 重新记上，探测一跑就记上了，所以没有另存。
+
+不做：
+
+- 比较也改成按原文：索引只存 `user_text` 之后的字（`session_records.text`），要改索引格式、重建索引；各 CLI 记原文的方式也不同（Codex 给带图的任务前面加 `[Image #1]`），按 `words` 比才不用猜这些。
+- 按 `words` 把下限调低（比如 6 个字）：「修这个错误」只有 5 个字，照样挡住；放进来的反而是更多纯短任务。
+- 纯短任务也放开：「继续」「ok」能开头很多段对话，见第 4 条。
+- 把 `started_clis` 存进库：新后台看一次进程就能重新认出来，存了也没有新的信息。
+
+验证（追加）：
+
+```sh
+cargo test -p fibo-host --lib -- recognition::launched_tests
+cargo test -p fibo-host --test managed_session -- started::a_few_words_over_a_code_block_bind_by_the_start
+cargo test -p fibo-host --test declared_agent -- a_resume_start_handed_over_while_its_cli_loads_binds_once_it_shows_its_input
+```
+
+逐项撤回（下限按 `words` 计、不查有没有字、接管后不找）时对应测试都失败，记录在 `rc4/fix-r2/undo/`。真实 CLI 的检查在 `rc4/fix-r2/`。

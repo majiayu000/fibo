@@ -160,6 +160,30 @@ fn a_task_on_the_command_line_binds_though_the_screen_redraws_it() {
     );
 }
 
+/// A phone's 新任务 of a few words over a pasted error: the log keeps only the words, fewer than
+/// the least, and Codex draws the task its own way. What the host started the pane with is
+/// long enough to tell apart, so the pane binds by its start (#403 review, round two: it never
+/// did, and the phone had no status, chat or approval cards for it).
+#[test]
+fn a_few_words_over_a_code_block_bind_by_the_start() {
+    let h = Host::start();
+    h.setup();
+    let [a] = ids();
+    let task = "这个报错怎么修\n```\nerror[E0382]: borrow of moved value: `x`\n```";
+    let drawn = "这个报错怎么修\n  error[E0382]: borrow of moved value: x";
+    started_codex(
+        &h,
+        "p0",
+        &a,
+        (task, drawn),
+        None,
+        Some(AgentStart::new(Agent::Codex, Some(task.into()))),
+    );
+    wait_for(&h, "a few words over a code block never bound", |w| {
+        current_is(w, "p0", &a)
+    });
+}
+
 /// Binding a pane to another's conversation is worse than none: phone chat would type into
 /// the wrong Agent. Two started with one task in one folder stay unbound.
 #[test]
