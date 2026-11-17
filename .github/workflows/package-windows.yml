@@ -10,6 +10,7 @@ on:
       - main
     paths:
       - crates/**
+      - plugins/**
       - Cargo.lock
       - rust-toolchain.toml
       - bootstrap.sh
@@ -54,6 +55,11 @@ jobs:
         env:
           LIBGHOSTTY_VT_SYS_OPTIMIZE: ReleaseFast
         run: cargo build --release -p fibo-app -p fibo-host
+
+      # Bundled files are trusted with the app; official remote signing stays in sign-catalog.
+      # Keep this index on the disposable runner, never commit it over the signed catalog.
+      - name: Index the plugins bundled with this build
+        run: .\target\release\fibo.exe plugins index plugins
 
       - name: Stage
         run: python packaging/windows/stage.py --output target/windows-stage

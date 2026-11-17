@@ -96,6 +96,49 @@ fn installs_only_listed_files_checked_and_replaces_in_place() {
 }
 
 #[test]
+fn nested_catalog_paths_install_for_current_and_older_versions() {
+    let catalog = tmp("nested-catalog");
+    let into = tmp("nested-install");
+    for (relative, version) in [("nested", "2.0.0"), ("nested/versions/1.0.0", "1.0.0")] {
+        let dir = catalog.join(relative);
+        std::fs::create_dir_all(dir.join("assets")).unwrap();
+        std::fs::write(
+            dir.join("plugin.json"),
+            format!(
+                r#"{{"api":1,"id":"nested","name":"Nested","version":"{version}","mooring":2,"provides":["effects"],"files":["assets/nested.txt"]}}"#
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("effects.json"),
+            r#"{"api":1,"complete":{"style":"sweep"}}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.join("assets/nested.txt"), version).unwrap();
+    }
+    let entry = index_of(&catalog).unwrap().plugins.remove(0);
+    assert_eq!(entry.versions.len(), 1);
+    for version in [&entry, &entry.versions[0]] {
+        assert!(version.files.iter().any(|f| f.path == "assets/nested.txt"));
+        assert!(version.files.iter().all(|f| !f.path.contains('\\')));
+        version.check().unwrap();
+        let installed = Offer {
+            entry: version.clone(),
+            source: Source::Bundled(catalog.clone()),
+            publisher: Publisher::Official,
+        }
+        .install_into(&into)
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(installed.join("assets/nested.txt")).unwrap(),
+            version.version
+        );
+    }
+    let _ = std::fs::remove_dir_all(catalog);
+    let _ = std::fs::remove_dir_all(into);
+}
+
+#[test]
 fn unsafe_entries_are_refused_before_fetching() {
     let file = |path: &str| FileEntry {
         path: path.into(),
