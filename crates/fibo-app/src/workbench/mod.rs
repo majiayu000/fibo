@@ -101,7 +101,7 @@ pub(super) fn usable_cwd(
 /// A space whose folder was set but is gone. A space with no folder set is not missing:
 /// its terminals start in `$HOME` until one is chosen.
 pub(super) fn space_dir_missing(host: &crate::attach::Host, space: &Space) -> bool {
-    !space.cwd.is_empty() && !host.attached() && !Path::new(&space.cwd).is_dir()
+    !space.cwd.is_empty() && !host.attached() && !dir_seen::is_dir(&space.cwd)
 }
 /// The space's folder as shown: its own as `~/…`; for one with none, `start` (where it
 /// will start: its last folder or the one worked in last anywhere), else home.
@@ -251,6 +251,7 @@ mod complete_unbound;
 mod context_ring;
 mod decorations;
 mod diagnostics;
+mod dir_seen;
 mod divergence;
 mod filters;
 mod first_run;
