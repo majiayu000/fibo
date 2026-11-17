@@ -2,7 +2,7 @@
 // And it reads 要你处理 off the host, so what the host brings back shows here too.
 import { describe, expect, test } from 'bun:test';
 import type { Card, Machine } from '../src/remote/hub';
-import { HOLD_NONE, RUNNING_PREVIEW, connectionLine, elsewhereLine, namesComputer, pulse, offlineRows, runningShown, searchCards, undoTo, SCROLL_QUIET_MS, SETTLE_MS, TOUCH_LIMIT_MS, arrange, foldLabel, holdLeft, settleLeft, settleNext, shelve, sort } from '../src/ui/inbox';
+import { HOLD_NONE, RUNNING_PREVIEW, connectionLine, elsewhereLine, namesComputer, pulse, offlineRows, runningShown, searchCards, undoTo, SCROLL_QUIET_MS, SETTLE_MS, TOUCH_LIMIT_MS, arrange, foldLabel, holdLeft, restLabel, settleLeft, settleNext, shelve, sort } from '../src/ui/inbox';
 import { spaceName } from '../src/ui/status';
 
 const card = (id: string, status: string, updated = 0, more: Partial<Card> = {}) =>
@@ -210,6 +210,12 @@ describe('finished work folds, and does not read as nothing to do', () => {
     expect([s.waiting, s.acts]).toEqual([0, 0]);
     expect(ids(s.ahead)).toEqual(['a', 'e']);
     expect(ids(s.review)).toEqual(['r']);
+  });
+  test('what rests has its own line, so it never reads as 在跑 (2026-11-17 phone walk)', () => {
+    const s = lay([card('r', 'running'), card('f1', 'fresh', 0, { status_label: '新开的' }), card('f2', 'fresh', 0, { status_label: '新开的' })]);
+    expect(ids(s.running)).toEqual(['r']);
+    expect(restLabel(s.behind)).toBe('新开的 · 2');
+    expect(restLabel(lay([card('f', 'fresh', 0, { status_label: '新开的' }), card('t', 'shell', 0, { status_label: '' })]).behind)).toBe('其他 · 2');
   });
   test('the fold says the computer\'s word, in the phone\'s language when it can, and its count', async () => {
     expect(foldLabel(lay([review('r1'), review('r2')]).review)).toBe('等你验收 · 2');

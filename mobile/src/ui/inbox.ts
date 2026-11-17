@@ -151,6 +151,17 @@ export const foldLabel = (items: Item[]) => {
   return word ? `${word} · ${items.length}` : `${items.length}`;
 };
 
+/**
+ * The line over what rests (新开的, a bare terminal): its own, or the rows read as part of
+ * 在跑 right above them, even with 在跑 folded (2026-11-17 phone walk: 「在跑 · 4」 over five rows).
+ * One word when they share it, else 其他.
+ */
+export const restLabel = (items: Item[]) => {
+  const words = new Set(items.map((i) => statusWord(i.c)));
+  const [word] = words;
+  return words.size === 1 && word ? `${word} · ${items.length}` : tr('其他 · {n}', { n: items.length });
+};
+
 /** The banner over a filtered list: what asks you elsewhere, then what runs there, in the host's word. */
 export function elsewhereLine(s: Shelf): { asks: string; runs: string } | null {
   if (s.filter === null) return null;

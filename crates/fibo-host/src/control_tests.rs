@@ -1,4 +1,4 @@
-use super::inspect::list_json;
+use super::inspect::{list_json, list_lines};
 use super::open::split_argv;
 use super::*;
 use fibo_core::agent::Agent;
@@ -222,6 +222,20 @@ fn list_reads_every_field_from_its_owner() {
         assert_eq!(row["tab"], w.terminal_tab_title(t), "{t}");
         let term = w.terminals.iter().find(|x| x.id == t).unwrap();
         assert_eq!(row["cwd"], w.terminal_cwd(term), "{t}");
+    }
+}
+#[test]
+fn the_text_list_names_a_conversation_by_its_own_title() {
+    // A tab's name read the same for every conversation in it (2026-11-17 phone walk).
+    let w = fixture();
+    let lines = list_lines(&w);
+    assert!(!lines.is_empty());
+    for l in lines {
+        let want = match w.current_agent(&l.id) {
+            Some(s) => w.session_title(s),
+            None => w.terminal_tab_title(&l.id),
+        };
+        assert_eq!(l.title, want, "{}", l.id);
     }
 }
 #[test]

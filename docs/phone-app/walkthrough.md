@@ -39,7 +39,7 @@
 | `chat.image` | 对话 | `push-image` 推一张测试图 → ＋ → 照片 → 选最新那张 → 发。系统选图页会露出相册里的私人照片，不截这一页 | 缩略图在；Claude 能描述出图上的字 | 测试项 |
 | `chat.keyboard` | 对话 | 点输入框弹出键盘 | 输入框贴着键盘，不被挡，也不多空一截 | 测试项 |
 | `card.approve` | 审批 | 先在 `chat.sheet` 把权限换成「逐个确认」，再让它 `touch phone-walk-approved.txt` → 卡片 → 允许 | 卡片写对命令；允许后命令执行；卡片消失 | 测试项 |
-| `card.sendguard` | 审批中发消息 | Claude 和 Codex 各让测试命令停在审批；从聊天页连续两次发送，再断网排一条消息后重连。Codex 要在测试终端旁开窄旁屏：`fibo split <测试终端> --tab --cwd <测试目录> -- $(whence -p codex) -a on-request -s read-only "phone-walk …touch…"`（shell 里的 `codex` 别名带了跳过审批的参数，本机全局也是 `approval_policy = never`）；窄屏下问句会折行，正好也测折行 | 消息保留或等待，审批仍在，测试命令没执行；明确拒绝后说明才发送 | 测试项 |
+| `card.sendguard` | 审批中发消息 | Claude 和 Codex 各让测试命令停在审批；从聊天页连续两次发送，再断网排一条消息后重连。Codex 用 `phone-walk.py setup-codex`：在测试会话旁边开窄旁屏，绕开 shell 别名和本机 `approval_policy = never`，停在 touch 的审批上；窄屏下问句会折行，正好也测折行，收尾时 teardown 会删掉它写进 Codex 配置的信任记录 | 消息保留或等待，审批仍在，测试命令没执行；明确拒绝后说明才发送 | 测试项 |
 | `card.reject` | 审批 | 再要一次审批 → 拒绝，并告诉它一句话 | 拒绝的理由到了 Claude 那边 | 测试项 |
 | `card.question` | 提问 | 让它用提问框问三选一 → 在手机上点一个 | 题目和选项都在；点完 Claude 收到答案 | 测试项 |
 | `card.plan` | 计划 | 计划模式下让它出计划 → 批准 | 计划显示在卡片里；步骤号不变成按钮；↑ ↓ 回车能批准 | 测试项 |

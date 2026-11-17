@@ -23,7 +23,7 @@ import { StickyBelow, StickyOffset } from '@/ui/sticky';
 import { chipSpace } from '@/ui/spaces';
 import { FiboTitle } from '@/ui/fibomark';
 import { getDraft, setDraft } from '@/store/draft';
-import { type Arranged, type Item, arrange, connectionLine, elsewhereLine, foldLabel, itemKey, pulse, namesComputer, offlineRows, runningShown, shelve, undoTo } from '@/ui/inbox';
+import { type Arranged, type Item, arrange, connectionLine, elsewhereLine, foldLabel, itemKey, pulse, namesComputer, offlineRows, restLabel, runningShown, shelve, undoTo } from '@/ui/inbox';
 import { TabBar } from '@/ui/tabs';
 import { statusColor } from '@/ui/status';
 import { Swipe, justSwiped } from '@/ui/swipe';
@@ -235,6 +235,7 @@ export default function Inbox() {
         </Pressable>,
       );
   }
+  if (behind.length > 0) stick('g-rest', <Group label={restLabel(behind)} />);
   behind.forEach((i) => nodes.push(<Swiped key={itemKey(i)} m={i.m} c={i.c} t={t} named={named} onSettle={onSettle} />));
   if (loaded && machines.some((m) => m.status === 'online') && shelf.empty)
     nodes.push(
