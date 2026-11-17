@@ -118,6 +118,7 @@ impl Workbench {
         };
         let terminal = id();
         // Where the pane goes, as one operation the host applies to its layout then.
+        let replaced = replace.clone();
         let place = if let Some(old) = replace {
             if !tab
                 .layout
@@ -227,6 +228,9 @@ impl Workbench {
                         this.nav.pending_focus = true;
                         this.nav.overview = false;
                         this.sync_panes(cx);
+                        if let Some(old) = &replaced {
+                            this.ring_landing_again(old, &terminal, cx);
+                        }
                         if let (Some((command, text)), Some(pane)) =
                             (&start, this.layout.panes.get(&terminal))
                         {

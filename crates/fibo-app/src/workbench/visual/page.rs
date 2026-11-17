@@ -3,6 +3,7 @@ use super::*;
 
 impl Workbench {
     pub fn visual_page(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
+        Self::visual_hold_landing(None);
         self.tasks.form = None;
         self.tasks.quick_task = None;
         self.tasks.picking = None;
@@ -68,6 +69,8 @@ impl Workbench {
             }
             // In the split, typing in p0, a click on p2's sidebar row: where it landed.
             "FocusJump" => {
+                // Its ring as it shows 150 ms after the click, in every frame drawn.
+                Self::visual_hold_landing(Some(150));
                 self.nav.focused = Some("p0".into());
                 let row = self.workspace.agent_sessions.iter();
                 let row = row.into_iter().find(|s| s.cli_session_id == "visual-2");

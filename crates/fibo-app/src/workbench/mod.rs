@@ -258,6 +258,7 @@ mod first_run;
 mod forms;
 mod frame_facts;
 mod hooks;
+mod landing;
 mod layout;
 mod machines;
 mod recent_dirs;
@@ -551,6 +552,7 @@ impl Workbench {
             },
             layout: LayoutState {
                 panes: HashMap::new(),
+                landing: None,
                 drag: None,
                 split_bounds: HashMap::new(),
                 drop: Default::default(),

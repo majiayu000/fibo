@@ -2,7 +2,7 @@
 //! tab (p0 | p1 / p2, all three under one todo). A sidebar row's click and ⌘J, from the same
 //! tab, another tab, another space and a zoomed pane: the window's focused pane, the pane
 //! holding the keyboard and the sidebar's selected row must all be the target, and stay so
-//! a few frames later. Run against `scripts/visual-fixture.py prepare`.
+//! a few frames later, and the pane rings when it shares the view (none alone). Run against `scripts/visual-fixture.py prepare`.
 use super::*;
 use workbench::Workbench;
 
@@ -66,30 +66,34 @@ pub(super) fn start(
         };
         let mut wrong = Vec::new();
         // Lands on `want`, and is still there after a pause and more frames.
-        let mut expect =
-            async |case: &str, want: &str, tab: Option<&str>, cx: &mut gpui::AsyncApp| {
-                frames(cx);
-                let now = state(cx);
-                wait(400).await;
-                frames(cx);
-                let later = state(cx);
-                let lands = |s: &workbench::FocusState| {
-                    s.focused.as_deref() == Some(want)
-                        && s.keyboard.as_deref() == Some(want)
-                        && s.row.as_deref() == Some(want)
-                        && s.zoomed.as_deref().is_none_or(|z| z == want)
-                        && tab.is_none_or(|t| s.tab.as_deref() == Some(t))
-                };
-                let ok = lands(&now) && lands(&later);
-                eprintln!(
-                    "FOCUS-JUMP {case}: want {want} -> {} now {now:?} later {later:?}",
-                    if ok { "ok" } else { "WRONG" }
-                );
-                if !ok {
-                    wrong.push(case.to_owned());
-                }
-                shot(&format!("{case}.png"), cx);
+        let mut expect = async |case: &str,
+                                want: &str,
+                                tab: Option<&str>,
+                                cx: &mut gpui::AsyncApp| {
+            frames(cx);
+            let now = state(cx);
+            // Among three panes the one landed on rings while it fades.
+            let ring = handle.update(cx, |v, _, _| v.visual_landing()).unwrap();
+            wait(400).await;
+            frames(cx);
+            let later = state(cx);
+            let lands = |s: &workbench::FocusState| {
+                s.focused.as_deref() == Some(want)
+                    && s.keyboard.as_deref() == Some(want)
+                    && s.row.as_deref() == Some(want)
+                    && s.zoomed.as_deref().is_none_or(|z| z == want)
+                    && tab.is_none_or(|t| s.tab.as_deref() == Some(t))
             };
+            let ok = lands(&now) && lands(&later) && ring.as_deref() == Some(want);
+            eprintln!(
+                "FOCUS-JUMP {case}: want {want} -> {} ring {ring:?} now {now:?} later {later:?}",
+                if ok { "ok" } else { "WRONG" }
+            );
+            if !ok {
+                wrong.push(case.to_owned());
+            }
+            shot(&format!("{case}.png"), cx);
+        };
         let page = |cx: &mut gpui::AsyncApp| {
             handle
                 .update(cx, |v, w, cx| v.visual_page("Main", w, cx))
@@ -161,6 +165,27 @@ pub(super) fn start(
             .update(cx, |v, w, cx| v.visual_focus_terminal(&p2, w, cx))
             .unwrap();
         expect("zoomed-terminal", &p2, tab, cx).await;
+
+        // 7. A pane alone in its tab is the whole main area: it lands without a ring.
+        handle
+            .update(cx, |v, _, cx| v.visual_show_tab("start", cx))
+            .unwrap();
+        frames(cx);
+        handle
+            .update(cx, |v, w, cx| v.visual_focus_terminal("pstart", w, cx))
+            .unwrap();
+        frames(cx);
+        let alone = state(cx);
+        let ring = handle.update(cx, |v, _, _| v.visual_landing()).unwrap();
+        let ok = alone.keyboard.as_deref() == Some("pstart") && ring.is_none();
+        eprintln!(
+            "FOCUS-JUMP single-pane: {} ring {ring:?} {alone:?}",
+            if ok { "ok" } else { "WRONG" }
+        );
+        if !ok {
+            wrong.push("single-pane".into());
+        }
+        shot("single-pane.png", cx);
 
         assert!(wrong.is_empty(), "focus landed elsewhere: {wrong:?}");
         eprintln!("focus jump native PASS: every jump lands on its pane and stays");

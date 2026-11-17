@@ -43,6 +43,7 @@ impl Workbench {
         if let Some(pane) = self.layout.panes.get(terminal_id) {
             window.focus(&pane.focus_handle(cx), cx);
         }
+        self.ring_landing(terminal_id, cx);
         cx.notify();
         true
     }
