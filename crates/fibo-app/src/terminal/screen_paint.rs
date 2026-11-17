@@ -1,4 +1,7 @@
 use super::*;
+/// Runs handed to CoreText, for the CPU probe to see what a frame shaped.
+#[cfg(feature = "visual-test")]
+pub static SHAPED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 pub fn shape_cell(
     run: &Run,
     font: Font,
@@ -6,6 +9,8 @@ pub fn shape_cell(
     window: &Window,
 ) -> (ShapedLine, Pixels) {
     // Cell backgrounds/decorations retain full width; trailing ASCII blanks have no ink.
+    #[cfg(feature = "visual-test")]
+    SHAPED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let text = run.text.trim_end_matches(' ');
     let tr = TextRun {
         len: text.len(),
@@ -88,7 +93,7 @@ pub(super) fn printable_cells(run: &Run) -> bool {
 #[derive(Default)]
 pub struct LayoutCache {
     key: Option<(Font, CellMetrics, u64)>,
-    rows: Vec<Vec<(Run, ShapedLine, Pixels)>>,
+    rows: super::shape_cache::Rows<(ShapedLine, Pixels)>,
     pub(super) ascii: [Option<Option<AsciiGlyphs>>; 4],
 }
 impl LayoutCache {
@@ -99,7 +104,7 @@ impl LayoutCache {
             self.ascii = Default::default();
             self.key = Some((font.clone(), metrics, generation));
         }
-        self.rows.resize_with(rows, Vec::new);
+        self.rows.begin(rows);
     }
 }
 /// How the cursor is drawn this frame.
@@ -223,7 +228,6 @@ fn paint_grid(
         if oy > bounds.origin.y + bounds.size.height {
             break;
         }
-        let cached = &mut cache.rows[y];
         let mut index = 0;
         for run in row {
             let ox = bounds.origin.x + cw * run.col as f32;
@@ -270,16 +274,9 @@ fn paint_grid(
             {
                 continue;
             }
-            if cached.get(index).is_none_or(|(old, _, _)| old != run) {
-                let (line, offset) = shape_cell(run, run_font(run, f), metrics, window);
-                let entry = (run.clone(), line, offset);
-                if index < cached.len() {
-                    cached[index] = entry;
-                } else {
-                    cached.push(entry);
-                }
-            }
-            let (_, line, offset) = &cached[index];
+            let (line, offset) = cache.rows.get(y, index, run, || {
+                shape_cell(run, run_font(run, f), metrics, window)
+            });
             index += 1;
             if run.text.is_ascii() {
                 // One glyph per column: place each on its cell, since the cell width is
@@ -307,7 +304,7 @@ fn paint_grid(
                 cx,
             );
         }
-        cached.truncate(index);
+        cache.rows.end_row(y, index);
     }
 }
 

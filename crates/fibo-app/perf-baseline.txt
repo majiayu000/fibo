@@ -9,6 +9,7 @@ frames-motion 53.67
 frames-pane 6.96
 frames-rail 49.21
 frames-railrest 64.89
+frames-scroll 52.00
 frames-section 51.91
 frames-themeglass 6.18
 frames-themeimage 6.46
