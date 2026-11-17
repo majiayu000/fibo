@@ -148,6 +148,23 @@ fn workflow_legacy_meta_and_changed_journal_have_explicit_fallbacks() {
 }
 
 #[test]
+fn workflow_changed_directory_keeps_only_a_snapshot_summary() {
+    let f = Fixture::new();
+    f.prepare();
+    fs::remove_dir_all(f.dir()).unwrap();
+    let snapshot = f.log().with_extension("").join("workflows/wf_test.json");
+    let mut v: Value = serde_json::from_slice(&fs::read(&snapshot).unwrap()).unwrap();
+    v["agentCount"] = json!(6);
+    fs::write(snapshot, v.to_string()).unwrap();
+    let c = f.read();
+    let run = &c.subagents[0];
+    let w = run.workflow.as_ref().unwrap();
+    assert!(!w.detailed && w.steps.is_empty());
+    assert_eq!(w.total, 6);
+    assert!(run.workflow_summary(true).unwrap().contains("6 步"));
+}
+
+#[test]
 fn workflow_journal_and_snapshot_refresh_parent_without_parent_log_writes_and_survive_restart() {
     let f = Fixture::new();
     f.prepare();
@@ -264,12 +281,7 @@ fn replay_loom_workflow_read_only() {
     let all = fibo_host::agent_adapter(Agent::Claude)
         .subagents(&log)
         .unwrap();
-    // Display the interrupted run even if a later user prompt is now in the source.
-    let mut c = Content {
-        turn: Turn::Running,
-        updated: p.card.updated,
-        ..Default::default()
-    };
+    let mut c = p.card;
     c.keep_subagents(all);
     let run = c
         .subagents
