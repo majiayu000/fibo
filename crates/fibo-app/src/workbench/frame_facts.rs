@@ -29,6 +29,10 @@ pub(super) struct FrameFacts {
     /// The session each terminal ran latest, for a pane whose conversation has ended.
     latest: FxHashMap<String, usize>,
     needs_you: Vec<usize>,
+    /// Whether one that needs you asks, or failed: the color of 下一个要你的, which the title
+    /// row draws every frame.
+    pub(super) needs_asking: bool,
+    pub(super) needs_failed: bool,
     /// How many sessions the window lists, open in a tab and not hidden, in every space:
     /// 「本机 · N 个会话」.
     pub(super) listed: usize,
@@ -91,11 +95,24 @@ impl FrameFacts {
                 }
             }
         }
+        let (mut needs_asking, mut needs_failed) = (false, false);
+        for s in needs_you
+            .iter()
+            .filter_map(|index| w.agent_sessions.get(*index))
+        {
+            match fibo_core::status::of(w, s, now) {
+                Status::Waiting => needs_asking = true,
+                Status::Error => needs_failed = true,
+                _ => (),
+            }
+        }
         Self {
             inputs,
             current,
             latest,
             needs_you,
+            needs_asking,
+            needs_failed,
             listed,
             working,
             review,
