@@ -42,9 +42,7 @@ fn card(index: &Index, path: &Path) -> Content {
     index.card(path.to_str().unwrap()).unwrap().unwrap()
 }
 fn stamp(at: u64) -> String {
-    chrono::DateTime::from_timestamp(at as i64, 0)
-        .unwrap()
-        .to_rfc3339()
+    jiff::Timestamp::from_second(at as i64).unwrap().to_string()
 }
 fn qoder_record(at: u64, child: bool, role: &str, content: Value) -> Value {
     json!({"type":role,"sessionId":PARENT,"cwd":"/repo","timestamp":stamp(at),
