@@ -257,12 +257,13 @@ fn shared_files(w: &Workspace, s: &AgentSession, now: u64) -> Vec<String> {
 pub fn status_of(w: &Workspace, s: &AgentSession) -> Status {
     fibo_core::status::of(w, s, now())
 }
-/// The overview's and the palette's sections, in their order: one per state, except
-/// that 等后台 sits in 在跑's section.
-pub const SECTIONS: [Status; 9] = [
+/// The overview's sections, in their order: one per state. 等后台 sits beside 等你验收,
+/// as on the board: both wait for you to look.
+pub const SECTIONS: [Status; 10] = [
     Status::Waiting,
     Status::Error,
     Status::Review,
+    Status::Background,
     Status::Paused,
     Status::Running,
     Status::Fresh,
@@ -270,13 +271,6 @@ pub const SECTIONS: [Status; 9] = [
     Status::Deferred,
     Status::Closed,
 ];
-pub fn section(status: Status) -> Status {
-    if status.working() {
-        Status::Running
-    } else {
-        status
-    }
-}
 /// The state with whether it asks for you: waiting or failed in a Fibo terminal and
 /// not yet handled, or a turn that ended out of view (`unseen`) and was not looked at.
 pub fn session_status(w: &Workspace, unseen: &HashSet<String>, s: &AgentSession) -> (Status, bool) {
@@ -343,6 +337,18 @@ mod resume_tests {
             resume_terminal(&w, &resumed, &gone).map(|t| t.id.as_str()),
             Some("pty-review")
         );
+    }
+}
+#[cfg(test)]
+mod section_tests {
+    use super::*;
+    /// Every state has its one section on 鸟瞰, so no open session is left off it.
+    #[test]
+    fn every_state_has_one_overview_section() {
+        for status in Status::ALL {
+            let n = SECTIONS.iter().filter(|g| **g == status).count();
+            assert_eq!(n, 1, "{status:?}");
+        }
     }
 }
 #[cfg(test)]
