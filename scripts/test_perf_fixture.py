@@ -65,6 +65,15 @@ class CleanupTests(unittest.TestCase):
         self.saved = {int(pid): row for pid, row in state['processes'].items()}
         return state
 
+    def run_or_report(self, args, root, timeout):
+        """Fail with the child's output and the tail of host.log, which tearDown deletes."""
+        r = subprocess.run(args, capture_output=True, text=True, errors='replace', timeout=timeout)
+        if r.returncode:
+            log = root / 'host.log'
+            tail = ''.join(log.read_text(errors='replace').splitlines(True)[-200:]) if log.exists() else '(none)\n'
+            self.fail(f'{args} exited {r.returncode}\n--- stdout ---\n{r.stdout}\n--- stderr ---\n{r.stderr}'
+                      f'\n--- {log} (last 200 lines) ---\n{tail}')
+
     def assert_gone(self, saved):
         current = fixture.processes()
         alive = [pid for pid, row in saved.items()
@@ -83,8 +92,7 @@ class CleanupTests(unittest.TestCase):
     def test_cli_prepare_and_stop_use_the_explicit_run_directory(self):
         root = self.root()
         command = [sys.executable, '-I', str(Path(__file__).with_name('perf-fixture.py'))]
-        subprocess.run(command + ['prepare', str(root), str(BINDIR), '8', '4'],
-                       check=True, capture_output=True, timeout=30)
+        self.run_or_report(command + ['prepare', str(root), str(BINDIR), '8', '4'], root, timeout=30)
         state = json.loads((root / 'state.json').read_text())
         saved = {int(pid): row for pid, row in state['processes'].items()}
         subprocess.run(command + ['stop', str(root)], check=True, timeout=15)
