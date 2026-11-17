@@ -19,6 +19,7 @@ mod focus_jump_evidence;
 mod folderless_space_evidence;
 mod follow_input_evidence;
 mod hosts_evidence;
+mod input_owner_evidence;
 mod keymap_evidence;
 mod layer_keys_evidence;
 mod layout_evidence;
@@ -79,7 +80,8 @@ pub fn start(
     evidence: Option<PathBuf>,
     cx: &mut App,
 ) {
-    if agent_picker_evidence::start(handle, evidence.clone(), cx)
+    if input_owner_evidence::start(handle, evidence.clone(), cx)
+        || agent_picker_evidence::start(handle, evidence.clone(), cx)
         || first_run_evidence::start(handle, evidence.clone(), cx)
         || settings_evidence::start(handle, evidence.clone(), cx)
         || phones_evidence::start(handle, evidence.clone(), cx)

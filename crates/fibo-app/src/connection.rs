@@ -355,6 +355,66 @@ mod tests {
     use futures::StreamExt;
 
     #[test]
+    fn input_refusals_describe_the_state_and_never_replay_after_promotion() {
+        let connection = Connection {
+            state: Arc::new(Mutex::new(State {
+                vt: None,
+                writable: false,
+                error: None,
+                cols: 80,
+                rows: 24,
+                socket: None,
+                ended: false,
+                dropped: false,
+                scheme: None,
+                cursor_shape: None,
+            })),
+            dirty: Arc::new(AtomicBool::new(false)),
+            bells: Arc::new(AtomicU64::new(0)),
+            clipboard: Arc::new(Mutex::new(None)),
+            outbox: Arc::new(Outbox::new(OUTBOX_LIMIT)),
+        };
+        let input = || Request::Input {
+            bytes: b"blocked".to_vec(),
+            lossy: false,
+        };
+        assert_eq!(
+            connection.send(input()).unwrap_err(),
+            t!("正在恢复终端，这次的输入没发")
+        );
+        connection.state.lock().unwrap().vt = Some(Vt::new(80, 24).unwrap());
+        assert_eq!(
+            connection.send(input()).unwrap_err(),
+            t!("当前为只读，请先点击「接管输入」；这次的输入没发")
+        );
+        connection.state.lock().unwrap().dropped = true;
+        assert_eq!(
+            connection.send(input()).unwrap_err(),
+            t!("连接已断开，正在重连；这次的输入没发")
+        );
+        connection.state.lock().unwrap().ended = true;
+        assert_eq!(
+            connection.send(input()).unwrap_err(),
+            t!("进程已退出，这次的输入没发")
+        );
+        {
+            let mut state = connection.state.lock().unwrap();
+            state.ended = false;
+            state.dropped = false;
+            state.writable = true;
+        }
+        connection
+            .send(Request::Input {
+                bytes: b"after-promotion".to_vec(),
+                lossy: false,
+            })
+            .unwrap();
+        let sent = connection.outbox.take().unwrap();
+        assert_eq!(sent.len(), 1);
+        assert!(matches!(&sent[0], Request::Input { bytes, .. } if bytes == b"after-promotion"));
+    }
+
+    #[test]
     fn a_first_connection_failure_wakes_the_pane_for_retry() {
         let path = std::env::temp_dir().join(format!("fibo-absent-{}.sock", std::process::id()));
         let (tx, mut wake) = futures::channel::mpsc::unbounded();
