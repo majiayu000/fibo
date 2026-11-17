@@ -1992,7 +1992,6 @@ name = "fibo-host"
 version = "0.1.3"
 dependencies = [
  "base64",
- "chrono",
  "fibo-core",
  "fibo-platform",
  "fibo-relay",

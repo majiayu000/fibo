@@ -221,8 +221,8 @@ pub(crate) fn question_summary(v: &Value) -> String {
 }
 pub fn seconds(v: &Value) -> u64 {
     v.as_str()
-        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-        .map(|d| d.timestamp().max(0) as u64)
+        .and_then(|s| s.parse::<jiff::Timestamp>().ok())
+        .map(|d| d.as_second().max(0) as u64)
         .or_else(|| v.as_u64())
         .unwrap_or(0)
 }

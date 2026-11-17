@@ -14,9 +14,9 @@ fn user(cwd: &str, text: &str) -> Value {
     json!({"type":"user","uuid":uuid::Uuid::new_v4().to_string(),"cwd":cwd,"entrypoint":"cli","userType":"external","permissionMode":"default","message":{"content":text}})
 }
 fn timed(mut v: Value, at: u64) -> Value {
-    v["timestamp"] = chrono::DateTime::from_timestamp(at as i64, 0)
+    v["timestamp"] = jiff::Timestamp::from_second(at as i64)
         .unwrap()
-        .to_rfc3339()
+        .to_string()
         .into();
     v
 }

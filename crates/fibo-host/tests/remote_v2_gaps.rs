@@ -28,9 +28,7 @@ fn user(uuid: &str, cwd: &Path, text: &str) -> Value {
     json!({"type":"user","uuid":uuid,"cwd":cwd,"entrypoint":"cli","userType":"external","message":{"content":text}})
 }
 fn iso(at: u64) -> String {
-    chrono::DateTime::from_timestamp(at as i64, 0)
-        .unwrap()
-        .to_rfc3339()
+    jiff::Timestamp::from_second(at as i64).unwrap().to_string()
 }
 
 /// `list` is called on every burst of events: the branch comes from the repository's files.
