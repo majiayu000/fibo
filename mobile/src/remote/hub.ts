@@ -57,6 +57,7 @@ export type Card = {
   running_since?: number | null;
   /** While running, what its log says it does now: 「运行 cargo test」. */
   doing?: string | null;
+  workflows?: string[];
   /** The model that last answered, and its permission mode in words to show. */
   model?: string | null;
   permission?: string | null;

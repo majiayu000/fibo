@@ -4,7 +4,7 @@ mod plain;
 use crate::model::AgentSession;
 #[cfg(test)]
 use crate::model::Workspace;
-pub use crate::subagents::Subagent;
+pub use crate::subagents::{Subagent, Workflow, WorkflowRun, WorkflowStep};
 pub use plain::plain_line;
 use serde::{Deserialize, Serialize};
 
@@ -143,6 +143,10 @@ pub struct Content {
     /// Subagents a task notification in this log reported as not finished, by id.
     #[serde(default)]
     pub stopped_subagents: Vec<String>,
+    #[serde(default)]
+    pub finished_subagents: Vec<String>,
+    #[serde(default)]
+    pub workflow_tasks: Option<(u64, Vec<String>)>,
     /// The background shells the last Stop listed as running (Claude Code names each with
     /// its description and command). Which of them is a job the agent waits for is live
     /// evidence the host adds to its snapshot; stored, every one is `job: false`.

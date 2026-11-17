@@ -20,6 +20,32 @@ pub struct Subagent {
     /// It failed or was stopped before finishing.
     #[serde(default)]
     pub stopped: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow: Option<Workflow>,
+}
+/// A workflow stays one child row; attempts are already reduced to logical steps by
+/// its adapter. An unknown journal format keeps the summary but has no expansion.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Workflow {
+    pub phase: String,
+    pub phases: Vec<String>,
+    pub steps: Vec<WorkflowStep>,
+    pub detailed: bool,
+    pub total: usize,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowStep {
+    pub key: String,
+    pub phase: String,
+    pub agent: Subagent,
+}
+impl Workflow {
+    pub fn completed(&self, live: bool) -> usize {
+        self.steps
+            .iter()
+            .filter(|s| !s.agent.stopped && (!live || !s.agent.running()))
+            .count()
+    }
 }
 impl Subagent {
     pub fn running(&self) -> bool {

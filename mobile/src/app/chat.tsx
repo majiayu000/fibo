@@ -426,14 +426,15 @@ export default function Chat() {
           onEndReachedThreshold={0.3}
           contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14, gap: 10 }}
           ListHeaderComponent={
-            running && session && (card?.doing || supports(m, 'toolcalls') || supports(m, 'read')) ? (
+            session && ((card?.workflows?.length ?? 0) > 0 || running && (card?.doing || supports(m, 'toolcalls') || supports(m, 'read'))) ? (
               <LiveWork
                 machine={machine}
                 terminal={terminal}
                 session={session}
                 doing={card?.doing}
-                steps={supports(m, 'toolslast')}
-                screen={supports(m, 'read')}
+                workflows={card?.workflows}
+                steps={running && supports(m, 'toolslast')}
+                screen={running && supports(m, 'read')}
                 focused={focused}
                 onOpen={supports(m, 'toolcalls') ? () => toTools() : undefined}
               />

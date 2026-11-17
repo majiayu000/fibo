@@ -73,6 +73,7 @@ pub(super) struct LayoutState {
     pub(super) subagents_toggled: HashMap<String, bool>,
     /// Session rows whose subagent list shows every subagent, not the first few.
     pub(super) subagents_all: HashSet<String>,
+    pub(super) workflows_open: HashSet<String>,
     /// A tab's right-click menu: the tab and where it was opened.
     pub(super) tab_menu: Option<(String, gpui::Point<gpui::Pixels>)>,
     /// The tab under the pointer: its turning mark stands still while × shows in its slot.

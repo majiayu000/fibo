@@ -27,6 +27,7 @@ export const LiveWork = memo(function LiveWork({
   terminal,
   session,
   doing,
+  workflows,
   steps: canSteps,
   screen: canScreen,
   focused,
@@ -37,6 +38,7 @@ export const LiveWork = memo(function LiveWork({
   session: string;
   /** The card's phrase for it (`运行 cargo build`); none when it has said nothing yet. */
   doing?: string | null;
+  workflows?: string[];
   /** The computer answers `toolcalls` with `last`. */
   steps: boolean;
   /** The computer answers `read`. */
@@ -92,7 +94,7 @@ export const LiveWork = memo(function LiveWork({
 
   return (
     <View style={[s.box, { borderColor: t.sep }]}>
-      <View style={s.head}>
+      {(canSteps || canScreen || doing) && <View style={s.head}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={tr('{head}，看它到现在做了什么', { head })}
@@ -122,7 +124,10 @@ export const LiveWork = memo(function LiveWork({
             ))}
           </View>
         )}
-      </View>
+      </View>}
+      {workflows?.map((line, i) => (
+        <Text key={i} numberOfLines={1} style={{ fontSize: 12.5, color: t.text }}>◇ {line}</Text>
+      ))}
       {shown === 'steps' &&
         calls.map((c) => (
           <View key={c.id} style={s.step}>

@@ -273,7 +273,7 @@ pub struct Parser {
     pub(crate) rules: u32,
 }
 /// Bumped when parsing rules change what a saved state means; such states are reseeded.
-pub const RULES: u32 = 15;
+pub const RULES: u32 = 16;
 fn current_rules<S: serde::Serializer>(_: &u32, s: S) -> Result<S::Ok, S::Error> {
     s.serialize_u32(RULES)
 }
@@ -515,6 +515,7 @@ impl Parser {
     }
     pub fn hook(&mut self, event: &str, facts: &HookFacts, at: u64, source: Source) {
         let before = self.card.turn;
+        self.card.workflow_stop(event, facts, at);
         self.hook_event(event, facts, at, &source);
         let detail = match &facts.notification {
             _ if self.card.turn == before => String::new(),
@@ -782,6 +783,7 @@ pub fn hook_facts(v: &Value) -> HookFacts {
         b
     });
     HookFacts {
+        workflow_tasks: crate::agents::claude_workflows::tasks(v, &ENDED),
         background,
         notification: v["notification_type"].as_str().map(str::to_owned),
         subagent: v["agent_id"].as_str().is_some_and(|id| !id.is_empty()),
