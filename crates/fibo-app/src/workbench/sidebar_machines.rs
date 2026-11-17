@@ -409,17 +409,11 @@ impl Workbench {
         if let Some(window) = self.hosts.window_wants {
             return window;
         }
+        // Worked out once a second per snapshot: the title row asks every frame.
+        let facts = self.facts();
+        let (waiting, error) = (facts.needs_asking, facts.needs_failed);
         let needs = self.needs_you();
         let (there, asks, failed) = self.remote_wants();
-        // One look at each: a state is a walk over every terminal.
-        let (mut waiting, mut error) = (false, false);
-        for s in &needs {
-            match status_of(&self.workspace, s) {
-                Status::Waiting => waiting = true,
-                Status::Error => error = true,
-                _ => (),
-            }
-        }
         let group = if asks || waiting {
             Status::Waiting
         } else if failed || error {

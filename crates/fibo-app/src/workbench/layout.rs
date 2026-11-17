@@ -23,6 +23,8 @@ mod turn_bar;
 /// The visible panes and what is open over them: menus, drags and pending closes.
 pub(super) struct LayoutState {
     pub(super) panes: HashMap<String, Entity<Pane>>,
+    /// The pane a jump last landed on, ringing while it fades (`landing`).
+    pub(super) landing: Option<super::landing::Landing>,
     pub(super) menu: Option<PaneMenu>,
     pub(super) split_target: Option<(String, Axis)>,
     /// A plugin action waiting for its new pane: the command and the directory to run it in.

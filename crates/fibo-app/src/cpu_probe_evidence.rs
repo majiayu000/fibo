@@ -10,6 +10,7 @@
 //! - `frames-section`: a frame of 本机's whole section folding under 按机器. Needs a machine in
 //!   machines.json, so the gate does not run it: `perf-fixture.py` with MACHINE=1 at prepare.
 //! - `frames-rail`: the same machine's rail layout, at rest and with the list arriving.
+//! - `frames-scroll`: Agent output scrolling a line a frame, in `cpu_probe_evidence/scroll.rs`.
 //! - `frames-turning`: the running mark turning, in `cpu_probe_evidence/turning.rs`.
 //! - `frames-plugins`: 设置 › 插件 and the themes with a picture or a see-through window, in
 //!   `cpu_probe_evidence/plugins.rs`.
@@ -29,6 +30,8 @@ use super::*;
 use gpui::WindowHandle;
 #[path = "cpu_probe_evidence/plugins.rs"]
 mod plugins;
+#[path = "cpu_probe_evidence/scroll.rs"]
+mod scroll;
 #[path = "cpu_probe_evidence/turning.rs"]
 mod turning;
 use std::time::{Duration, Instant};
@@ -304,6 +307,8 @@ pub(super) fn start(
                 )
             } else if name == "frames-changes" {
                 changes_frames(handle, &pane, cx).await
+            } else if name == "frames-scroll" {
+                scroll::run(handle, &pane, cx).await
             } else if name == "frames-turning" {
                 turning::run(handle, &directory, cx).await
             } else if name == "frames-board-motion" {
@@ -423,6 +428,9 @@ async fn redraw_check(
         wait(50)
     };
     settle(cx).await;
+    // A jump's ring fades by the clock; held, the plain and the refreshed frame of the
+    // focus step draw it alike, so the step still checks that it needs no refresh.
+    workbench::Workbench::visual_hold_landing(Some(150));
     let mut lines = vec![check("start", cx)];
     frame(cx);
     let drawn = |cx: &mut gpui::AsyncApp| {
@@ -511,6 +519,7 @@ async fn redraw_check(
         end - start,
         chained - chained_start
     ));
+    workbench::Workbench::visual_hold_landing(None);
     let line = lines.join("; ");
     eprintln!("CPU-PROBE redraw-check {line}");
     format!("redraw-check: {line}")

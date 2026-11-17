@@ -34,6 +34,7 @@ impl Workbench {
         let Some(tab) = self.workspace.terminal_tab(terminal_id) else {
             return false;
         };
+        self.nav.zoomed = super::pane_sync::zoom_kept(self.nav.zoomed.take(), terminal_id);
         self.nav.space = tab.space.clone();
         self.nav.tab = Some(tab.id.clone());
         self.leave_host(cx);
@@ -42,6 +43,7 @@ impl Workbench {
         if let Some(pane) = self.layout.panes.get(terminal_id) {
             window.focus(&pane.focus_handle(cx), cx);
         }
+        self.ring_landing(terminal_id, cx);
         cx.notify();
         true
     }
