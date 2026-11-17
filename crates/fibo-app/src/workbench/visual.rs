@@ -2,6 +2,8 @@
 use super::*;
 mod crowded;
 mod fixture;
+mod focus_jump;
+pub use focus_jump::FocusState;
 mod layer_keys;
 mod page;
 mod resize;

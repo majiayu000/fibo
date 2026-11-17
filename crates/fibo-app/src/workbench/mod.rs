@@ -310,6 +310,8 @@ mod tests;
 #[cfg(feature = "visual-test")]
 mod visual;
 #[cfg(feature = "visual-test")]
+pub use visual::FocusState;
+#[cfg(feature = "visual-test")]
 mod visual_attach;
 #[cfg(feature = "visual-test")]
 mod visual_unknown;

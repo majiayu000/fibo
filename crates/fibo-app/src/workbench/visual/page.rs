@@ -66,6 +66,15 @@ impl Workbench {
                 self.layout.menu = None;
                 self.complete_unbound("pstart".into(), cx)
             }
+            // In the split, typing in p0, a click on p2's sidebar row: where it landed.
+            "FocusJump" => {
+                self.nav.focused = Some("p0".into());
+                let row = self.workspace.agent_sessions.iter();
+                let row = row.into_iter().find(|s| s.cli_session_id == "visual-2");
+                if let Some(s) = row.cloned() {
+                    self.click_row(&s, false, window, cx);
+                }
+            }
             "HereClickOut" => {
                 self.overview.here = self.workspace.current_agent("p0").map(|s| s.id.clone())
             }
