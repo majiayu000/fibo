@@ -161,6 +161,29 @@ pub(super) fn start(
         assert_eq!(column(cx).1, None, "the next the next-waiting key comes back");
         let peek = handle.update(cx, |v, _, _| v.visual_peek_key()).unwrap();
         assert!(peek.is_none(), "coming back left the other machine's peek open");
+        // Each machine's space shown alone stays so when the row ⌘J lands on is in it, and
+        // lists every space again when it is not; this machine's session is in `s`.
+        let filter = |cx: &mut gpui::AsyncApp| {
+            handle.update(cx, |v, _, _| v.visual_stored_space_filter()).unwrap()
+        };
+        for (space, kept) in [("empty", None), ("s", Some("s"))] {
+            press(cx);
+            wait(1000).await;
+            assert_eq!(column(cx).1, Some(0), "the next-waiting key did not go across again");
+            handle
+                .update(cx, |v, _, cx| v.visual_narrow_to_space(space, cx))
+                .unwrap();
+            press(cx);
+            wait(500).await;
+            assert_eq!(
+                filter(cx).as_deref(),
+                kept,
+                "coming back to a session in s with {space} shown alone"
+            );
+        }
+        handle
+            .update(cx, |v, _, cx| v.visual_narrow_to_space("s", cx))
+            .unwrap();
 
         // The column's motion, each moment held still and looked at. It moves nothing right
         // of the column, and once it ends the column is what it was and nothing is asked.

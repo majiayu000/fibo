@@ -517,18 +517,30 @@ impl Workbench {
                 if self.peek.as_ref().is_some_and(|p| p.remote.is_some()) {
                     self.close_peek(cx);
                 }
-                self.reveal_machine(None);
+                let space = self.workspace.session_space(&session).map(str::to_owned);
+                self.reveal_machine(None, space.as_deref());
                 self.enter_card(&session, window, cx);
             }
             Next::There(index, card, name) => {
-                self.reveal_machine(Some(index));
+                self.reveal_machine(Some(index), Some(&card.space));
                 self.open_remote_peek(index, *card, &name, window, cx);
             }
         }
     }
-    /// Makes sure the row ⌘J went to is on the list.
-    fn reveal_machine(&mut self, index: Option<usize>) {
-        self.sidebar.machine_space = None;
+    /// Makes sure the row ⌘J went to, in `space`, is on the list: a space shown alone stays
+    /// so when the row is in it, on this machine and on another alike.
+    fn reveal_machine(&mut self, index: Option<usize>, space: Option<&str>) {
+        let filter = match index {
+            None => &mut self.sidebar.space_filter,
+            Some(_) => {
+                // This machine's space alone lists no other machine's rows.
+                self.sidebar.space_filter = None;
+                &mut self.sidebar.machine_space
+            }
+        };
+        if filter.as_deref() != space {
+            *filter = None;
+        }
         let host = index.and_then(|i| self.machine_host(i));
         match self.machine_layout() {
             Machines::Rail => self.set_machine_scope(host),
