@@ -1,0 +1,419 @@
+<!doctype html>
+<!-- 2026-11-06 落选稿：侧栏简化的三个方向（一张清单、在跑压成一行、标签切换），和现状同数据并排比。当时用户说「侧栏不能动」，原型 a1535d17 恢复原样，主线侧栏仍是 docs/sidebar-redesign/flat.html 那版。重新考虑侧栏时从这里看。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>侧栏简化方向</title>
+<style>
+:root{
+  --bg:#fff;--side:#f5f5f6;--raised:#f4f5f7;--hover:#ececee;--sel:#e6e7ea;--line:#e3e5ea;--control:#c9ccd3;
+  --text:#17181c;--body:#2b2d33;--sub:#5d6270;--muted:#767b87;--faint:#a0a4ad;
+  --run:#c49a12;--ask:#e96d27;--ok:#1f8a5b;--stop:#7486a0;
+  --solid:#17181c;--on-solid:#fff;--mark:#4b4fd6;--wash:#eef0fd;--need-wash:#e9f6ef;--need-ink:#1c7a50;
+  --term:#17181b;--term-text:#d6d8dd;--term-dim:#8b8e96;--shadow:0 14px 44px rgba(20,22,30,.15);
+  --mono:"SF Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#21252c;--side:#1c2026;--raised:#2a2f37;--hover:#323842;--sel:#383e49;--line:#3a404a;--control:#555c69;
+  --text:#e9ebef;--body:#d7dae0;--sub:#bcc1ca;--muted:#979da8;--faint:#767c87;
+  --run:#e0bd52;--ask:#f0975a;--ok:#5ac48d;--stop:#8a9bb0;
+  --solid:#e9ebef;--on-solid:#1c2026;--mark:#9db0f5;--wash:#2d3450;--need-wash:#25392f;--need-ink:#5ac48d;
+  --term:#14161a;--shadow:0 14px 44px rgba(0,0,0,.42);
+}}
+:root[data-theme="dark"]{
+  --bg:#21252c;--side:#1c2026;--raised:#2a2f37;--hover:#323842;--sel:#383e49;--line:#3a404a;--control:#555c69;
+  --text:#e9ebef;--body:#d7dae0;--sub:#bcc1ca;--muted:#979da8;--faint:#767c87;
+  --run:#e0bd52;--ask:#f0975a;--ok:#5ac48d;--stop:#8a9bb0;
+  --solid:#e9ebef;--on-solid:#1c2026;--mark:#9db0f5;--wash:#2d3450;--need-wash:#25392f;--need-ink:#5ac48d;
+  --term:#14161a;--shadow:0 14px 44px rgba(0,0,0,.42);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:13px/1.42 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;overflow-x:hidden}
+button,input{font:inherit;color:inherit}
+button{background:none;border:0;padding:0;cursor:pointer;text-align:left}
+:focus-visible{outline:2px solid var(--mark);outline-offset:-1px}
+svg{display:block;flex:none}
+
+/* 演示条：不属于产品 */
+.strip{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-height:44px;padding:6px 14px;background:#17181c;color:#f2f3f5}
+.sg{display:inline-flex;flex-wrap:wrap;max-width:100%;padding:2px;border-radius:7px;background:#30323a}
+.sg button{height:24px;padding:0 10px;border-radius:5px;color:#c3c6cc;white-space:nowrap;font-size:12.5px}
+.sg button.on{background:#f2f3f5;color:#17181c}
+.tip{flex:1;min-width:240px;font-size:12.5px;color:#e5e7eb}.tip b{font-weight:600;color:#fff}
+.sl{font-size:12px;color:#c3c6cc;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}.sl:hover{color:#fff}
+
+/* 窗口 */
+.app{position:relative;display:flex;height:calc(100vh - 44px);min-height:620px;overflow:hidden;border-bottom:1px solid var(--line)}
+.side{flex:0 0 316px;width:316px;display:flex;flex-direction:column;min-height:0;background:var(--side);border-right:1px solid var(--line)}
+.lights{display:flex;gap:8px;height:45px;flex:none;align-items:center;padding:0 16px}.lights i{width:12px;height:12px;border-radius:50%}
+.brand{display:flex;align-items:center;justify-content:space-between;padding:6px 18px 10px;font-size:12.5px;flex:none}
+.brand b{letter-spacing:.2em;font-weight:600}.brand span{display:flex;align-items:center;gap:5px;color:var(--sub);font-size:11.5px}.brand i{width:5px;height:5px;border-radius:50%;background:var(--ok)}
+.find{display:flex;justify-content:space-between;margin:2px 12px 12px;padding:6px 12px;border:1px solid var(--line);border-radius:7px;color:var(--muted);background:var(--bg);flex:none}
+.scroll{flex:1;min-height:0;overflow-y:auto;padding:0 12px 8px}
+.mach{display:flex;align-items:center;gap:6px;height:32px;margin:0 -12px 12px;padding:0 16px;background:var(--hover);font-weight:500}
+.mach small{font-weight:400;color:var(--muted);font-size:12px}.mach em{margin-left:auto}
+.badge{display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 5px;border-radius:9px;background:var(--ask);color:#fff;font-size:10.5px;font-weight:600;font-style:normal}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.cp{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border:1px solid var(--line);border-radius:13px;background:var(--bg);white-space:nowrap}
+.cp.dash{width:26px;padding:0;justify-content:center;border-style:dashed;color:var(--muted)}
+.orb{flex:none;width:10px;height:10px;border-radius:50%}
+.say{padding:0 6px;color:var(--sub);font-size:12px}
+.mini{display:block;padding:4px 7px;margin-top:2px;font-size:12px;color:var(--sub);border-radius:6px}.mini:hover{background:var(--hover)}
+.sh{display:flex;justify-content:space-between;align-items:center;width:100%;margin:14px 0 4px;padding:0 6px;color:var(--muted);font-size:12px}
+.sh:hover{color:var(--text)}
+.r{display:flex;align-items:center;gap:9px;width:100%;height:26px;padding:0 6px;border-radius:6px;color:var(--text)}
+.r:hover{background:var(--hover)}.r.on{background:var(--sel)}
+.r .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r small{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:11.5px;white-space:nowrap}
+.r small .orb{width:7px;height:7px}
+.r small time{min-width:24px;text-align:right}
+.r.flash{animation:flash 1.4s ease-out}
+@keyframes flash{from{background:var(--wash)}}
+.s{flex:none;width:9px;height:9px;border-radius:50%;background:var(--ok)}
+.s.seen{background:none;border:1.5px solid var(--ok)}
+.s.wait{background:var(--ask)}
+.s.stop{background:none;border:1.5px solid var(--stop)}
+.s.run{background:none;border:1.5px solid color-mix(in srgb,var(--run) 30%,transparent);border-top-color:var(--run);animation:spin 1.2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.pinm{flex:none;width:9px;color:var(--muted);font-size:9px;line-height:1;text-align:center}
+.gap{height:10px}
+.fold{display:flex;align-items:center;gap:9px;width:100%;height:28px;padding:0 6px;border-radius:6px;color:var(--sub);font-size:12px}
+.fold:hover{background:var(--hover);color:var(--text)}
+.fold .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fold .c{color:var(--muted)}
+.fold.top{color:var(--body);margin-bottom:2px}
+.fold .s{margin:0}
+.tabsb{display:flex;gap:2px;padding:2px;margin:2px 0 8px;border-radius:7px;background:var(--hover)}
+.tabsb button{flex:1;display:flex;align-items:center;justify-content:center;gap:3px;height:24px;padding:0 3px;border-radius:5px;color:var(--muted);font-size:12px;white-space:nowrap;text-align:center}
+.tabsb button.on{background:var(--bg);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.1)}
+.tabsb small{font-size:11px;opacity:.8}
+.foot{flex:none;display:flex;align-items:center;gap:6px;height:38px;padding:0 10px 0 16px;border-top:1px solid var(--line);font-size:12px;color:var(--sub)}
+.foot .lab{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tt{height:24px;padding:0 7px;border-radius:6px;background:var(--hover);white-space:nowrap}.tt:hover{background:var(--line);color:var(--text)}
+.ic{width:24px;height:24px;display:grid;place-items:center;border-radius:6px;color:var(--muted);font-size:13px;text-align:center}.ic:hover{background:var(--hover);color:var(--text)}
+.mline{flex:none;display:flex;justify-content:space-between;height:34px;align-items:center;padding:0 18px;border-top:1px solid var(--line);font-size:12px;color:var(--sub)}.mline b{font-weight:500;color:var(--text)}
+.kline{flex:none;display:flex;align-items:center;gap:6px;height:32px;padding:0 16px;border-top:1px solid var(--line);font-size:12px;color:var(--sub)}
+.kbd{padding:0 3px;border:1px solid currentColor;border-radius:3px;font:10px var(--mono);opacity:.7}
+.quick{flex:none;padding:8px 12px;border-top:1px solid var(--line);background:var(--side)}
+.quick input{width:100%;height:28px;padding:0 9px;border:1px solid var(--control);border-radius:6px;background:var(--bg);outline:0;font-size:12.5px}
+.quick input:focus{border-color:var(--sub)}
+.quick small{display:block;margin-top:5px;color:var(--muted);font-size:11px}
+.squick{padding:0 2px 6px}.squick input{width:100%;height:28px;padding:0 9px;border:1px solid var(--control);border-radius:6px;background:var(--bg);outline:0;font-size:12.5px}
+.squick div{display:flex;gap:1px;margin-top:5px}.squick button{height:22px;padding:0 7px;border-radius:5px;font-size:11.5px}.squick button:hover{background:var(--hover)}.squick button.p{background:var(--solid);color:var(--on-solid)}
+
+/* 右边：和现在一样，不改 */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.bar{display:flex;align-items:center;gap:16px;height:45px;flex:none;padding:0 16px;border-bottom:1px solid var(--line);white-space:nowrap}
+.crumb{color:var(--sub);max-width:320px;overflow:hidden;text-overflow:ellipsis}.crumb b{font-weight:500;color:var(--text)}
+.tabs{flex:1;min-width:0;display:flex;gap:26px;overflow:hidden;color:var(--sub);padding-left:18px;border-left:1px solid var(--line)}
+.needb{display:flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:6px;background:var(--need-wash);color:var(--need-ink);font-weight:500}.needb i{width:5px;height:5px;border-radius:50%;background:currentColor}
+.bird{display:flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:6px;color:var(--sub)}.bird.on{background:var(--hover);color:var(--text)}.bird:hover{background:var(--hover)}
+.term{flex:1;min-height:0;padding:16px 18px;background:var(--term);color:var(--term-text);font:12.5px/1.65 var(--mono);white-space:pre-wrap;overflow:auto}
+.term .d{color:var(--term-dim)}
+.cur{display:inline-block;width:8px;height:15px;margin-left:1px;vertical-align:-2px;background:#d6d8dd}
+.status{display:flex;align-items:center;gap:8px;height:28px;flex:none;padding:0 16px;border-top:1px solid var(--line);font-size:11.5px;color:var(--sub);white-space:nowrap;overflow:hidden}.status i{width:5px;height:5px;border-radius:50%;background:var(--ok)}.sp{flex:1}
+.head{display:flex;align-items:center;gap:10px;padding:20px 28px 14px;flex:none}.head h1{margin:0;font-size:20px;font-weight:600}.head span{color:var(--muted);font-size:12px}
+.board{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,minmax(190px,1fr));gap:14px;padding:0 28px 12px;overflow:auto}
+.colh{display:flex;align-items:center;gap:8px;height:34px;padding:0 4px;font-weight:500}.colh small{color:var(--muted);font-weight:400;font-size:12.5px}
+.colh .add{margin-left:auto;padding:0 7px;height:24px;border-radius:6px;color:var(--sub);font-size:12px;font-weight:400;white-space:nowrap}.colh .add:hover{background:var(--hover)}
+.card{margin-bottom:8px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:13.5px}
+.card small{display:block;color:var(--muted);font-size:11.5px;margin-bottom:5px}
+.comp{margin-bottom:8px;padding:9px 11px;border:1px solid var(--sub);border-radius:10px}
+.comp input{width:100%;border:0;outline:0;background:none;font-size:13.5px}
+.comp small{display:block;margin-top:6px;color:var(--muted);font-size:11.5px}
+.toast{border:1px solid rgba(127,127,127,.45);position:fixed;left:50%;bottom:44px;transform:translateX(-50%);display:flex;gap:12px;align-items:center;padding:7px 12px;border-radius:8px;background:var(--solid);color:var(--on-solid);box-shadow:var(--shadow);z-index:9;font-size:12.5px;white-space:nowrap}
+.toast button{text-decoration:underline;text-underline-offset:3px}
+
+/* 并排 */
+.compare{display:flex;gap:18px;padding:16px;overflow-x:auto;background:var(--raised);min-height:calc(100vh - 44px)}
+.cell{flex:none;width:316px;display:flex;flex-direction:column}
+.cell h3{margin:0 0 3px;font-size:13px;font-weight:600}
+.cell p{margin:0 0 9px;min-height:36px;font-size:12px;color:var(--sub)}
+.cell .side{flex:none;height:calc(100vh - 136px);min-height:620px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+
+/* 说明 */
+.notes{max-width:940px;margin:0 auto;padding:28px 20px 70px}
+.notes h2{margin:26px 0 8px;font-size:16px;font-weight:600}.notes h2:first-child{margin-top:0}
+.notes p,.notes li{color:var(--sub);font-size:13.5px;line-height:1.65}.notes p{margin:6px 0}.notes ul{margin:6px 0;padding-left:18px}.notes b{color:var(--text);font-weight:600}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:640px;font-size:13px}
+th,td{text-align:left;vertical-align:top;padding:7px 14px 7px 0;border-bottom:1px solid var(--line);color:var(--sub)}th{font-weight:500;color:var(--muted)}td:first-child{white-space:nowrap;color:var(--text)}
+code{font:12px var(--mono)}.notes a{color:var(--mark)}
+@media (max-width:900px){
+  .app .main{display:none}.app .side{flex:1;width:100%}.app{height:calc(100vh - 100px);min-height:560px}.toast{white-space:normal;width:90vw}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+<div class="strip" id="strip"></div>
+<div id="root"></div>
+<div id="toastRoot"></div>
+<div class="notes">
+  <h2>这页要定什么</h2>
+  <p><b>决定：</b>默认的会话优先布局选哪种排法；待办要不要搬出会话列表。</p>
+  <p><b>看什么：</b>打开窗口后，能不能一眼找到下一个要处理的会话；看到的概念是不是比现在少；从主屏点到一个会话不多花步骤。</p>
+  <p><b>放弃条件：</b>用一周后如果经常找不到正在跑的会话，或反复展开“停着的”才能找到要的会话，就退回 B（在跑单独一行），再不行恢复分组标题。</p>
+
+  <h2>为什么觉得复杂</h2>
+  <p>侧栏同时回答了三个问题：还没开始的事、正在跑的、跑完的。鸟瞰已经用五列回答过这三个问题了，侧栏又答一遍，而且待办在现在的侧栏里出现了三处：列表上方的提示、“＋ 新建待办”、底部的“待办 N”。</p>
+  <p>所以分工改成：<b>鸟瞰看全局，侧栏只负责跳到下一个要你的会话。</b></p>
+
+  <h2>三个方向</h2>
+  <div class="tw"><table id="metrics">
+    <tr><th>内容</th><th>现在</th><th>A 一张清单（推荐）</th><th>B 在跑压成一行</th><th>C 标签切换</th></tr>
+    <tr><td>列表里的标题或折叠行</td><td data-m="now">–</td><td data-m="a">–</td><td data-m="b">–</td><td data-m="c">–</td></tr>
+    <tr><td>待办出现几处</td><td data-t="now">–</td><td data-t="a">–</td><td data-t="b">–</td><td data-t="c">–</td></tr>
+    <tr><td>第一屏能看到的会话行</td><td>19</td><td>24</td><td>22</td><td>22</td></tr>
+    <tr><td>第一屏看不看得到在跑</td><td>看不到，排在 21 行之后</td><td>看得到，排最上</td><td>看得到一行总数</td><td>看不到，要切标签</td></tr>
+    <tr><td>怎么看状态</td><td>靠分组标题和圆点</td><td>只靠圆点，在跑排最上</td><td>顶部一行在跑，其余靠标题</td><td>切标签，一次只看一种</td></tr>
+    <tr><td>代价</td><td>–</td><td>状态混排，要认得圆点</td><td>在跑的会话要多点一下才能全看到</td><td>在跑的看不到，切来切去；只有这个方向还把待办留在侧栏</td></tr>
+  </table></div>
+
+  <h2>不变的</h2>
+  <ul>
+    <li>顶部标签栏、右边窗格、状态栏都不动；搜索和空间标签也不动。</li>
+    <li>切到新排法后，会话一个都不能少：停着和做完的都收在一行里，点开还是全部。</li>
+    <li>“机器栏”“按机器”“目录”三种布局不在这次范围内；如果 A 定下来，再决定它们的列表要不要跟。</li>
+    <li>不按待办或分支给会话归组（之前的数据已否定：454 个会话挂到待办的是 0 个）。</li>
+  </ul>
+
+  <h2>待办搬到哪</h2>
+  <ul>
+    <li>底部“待办 N”点一下去鸟瞰的待办列，Esc 回来。底部这个位置现在就有这个入口，不用重新学。</li>
+    <li>旁边的“＋”就地记一句：工作区里在底部弹输入框，回车记下，不离开当前会话；在鸟瞰里则打开列内输入卡，和 <a href="../overview-new-todo/index.html">鸟瞰新待办 demo</a> 一致。</li>
+    <li>去掉列表上方的“还没有待办”提示和待办展开列表。</li>
+  </ul>
+
+  <h2>如果要做进 App</h2>
+  <ul>
+    <li>主要改 <code>sidebar/view.rs</code> 的分组和 <code>sidebar/todos.rs</code>；分组归属仍来自 core 的 <code>status::of</code> 和 <code>sidebar_rank</code>，不在界面里重新判断状态。</li>
+    <li>“在跑排最上”要改排序：现在 <code>sidebar_rank</code> 的顺序还没按这个核对过。</li>
+    <li>侧栏性能规则要遵守（<code>docs/performance/index.html</code>），列表变长或折叠的动画都要过门禁。</li>
+    <li>WASM 插件布局（<code>flat</code>、<code>wasm</code>）拿到的数据不变。</li>
+  </ul>
+  <p>第一屏的数字是在 1920×1050 窗口、10 个空间标签下量的。页面里的会话都是示例，数量按你截图的量级取（要你处理 21、今天 21、更早 135），在跑取 2 个方便看折叠。鸟瞰画面只是示意，详细交互看另一个 demo。</p>
+</div>
+
+<script>
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const grad=(a,b)=>`linear-gradient(140deg,${a},${b})`;
+const SP={work:['工作空间',grad('#f59e6b','#d9467a')],code:['code',grad('#5ab0f0','#4b4fd6')],vsr:['vsr',grad('#7bd389','#2f9e66')],code2:['code',grad('#c07be0','#8a3fc0')],lite:['litellm-rs',grad('#6f8ff0','#3a55c8')],her:['her',grad('#b08a3a','#7a5a1e')],moor:['mooring',grad('#f59e6b','#d9467a')],nsp:['新空间',grad('#5ab0f0','#4b4fd6')],nsp2:['新空间 2',grad('#7bd389','#2f9e66')],cdx:['codex 专用',grad('#c07be0','#8a3fc0')]};
+const MODES={now:['现在','和你的截图一样'],a:['A 一张清单','没有分组标题，在跑排最上，靠圆点分。推荐'],b:['B 在跑压成一行','主列表只放要你处理，在跑收成顶部一行'],c:['C 标签切换','一次只看一种，待办还留在侧栏']};
+const NEED=[['梳理开关的交互方案','moor','1时','seen'],['缓存命中率为 0 的原因','her','1时'],['解释今天下方的内容','moor','1时','seen'],['分析测速算法差异','cdx','1时'],['对照远端检查代码库','moor','1时'],['分析项目真实用户数据','cdx','1时'],['分析环境问题修复状态','her','1时','seen'],['检查图标缺失问题','work','1时','seen'],['整理失败项','work','2时'],['电脑卡死排查','work','10时','seen'],['分析并更新额度栏','cdx','11时'],['补充手机应用进度记录','work','11时','seen'],['发布前核对更新日志','moor','11时'],['确认迁移脚本权限','her','12时','wait'],['选一个窗口图标','moor','12时'],['复查旧分支的改动','code','13时','seen'],['核对插件签名','moor','13时'],['给依赖升级写说明','lite','14时','seen'],['检查中继部署','vsr','14时'],['统计本周用量','cdx','15时','seen'],['看一下启动变慢','moor','16时']];
+function seed(){
+  const need=NEED.map((n,i)=>({id:'n'+i,t:n[0],sp:n[1],w:n[2],st:n[3]==='seen'?'seen':n[3]==='wait'?'wait':'review',g:'need'}));
+  const today=Array.from({length:21},(_,i)=>({id:'d'+i,t:['读一遍错误日志','跑一次回归','改标题文案','看测试为什么失败','试新模型','清理临时分支','整理会议笔记'][i%7]+' '+(i+1),sp:['moor','work','code','her','cdx','lite','vsr'][i%7],w:(i+1)+'时',st:'stop',g:'today'}));
+  const older=Array.from({length:135},(_,i)=>({id:'o'+i,t:'更早的会话 '+(i+1),sp:['work','moor','code','her','cdx'][i%5],w:(i%6+1)+'天',st:'stop',g:'older'}));
+  return {
+    pins:[{id:'p0',t:'多终端',sp:'work',w:'11时',st:'seen',g:'pin'},{id:'p1',t:'超分对比测评',sp:'vsr',w:'14时',st:'seen',g:'pin'}],
+    run:[{id:'r0',t:'给列表加键盘导航',sp:'moor',w:'4:13',st:'run',g:'run'},{id:'r1',t:'跑完整回归',sp:'code',w:'0:48',st:'run',g:'run'}],
+    need,today,older};
+}
+const fresh=()=>({mode:'a',view:'win',sel:'r0',main:'term',d:seed(),todos:[{t:'给 CLI 加离线模式',sp:'vsr'},{t:'周五前交报销单',sp:'her'},{t:'写发布说明',sp:'moor'}],hist:false,older:false,runOpen:false,tab:'need',quick:false,qtext:'',sq:false,sqtext:'',comp:false,ctext:'',flash:null,tip:null,focus:null});
+let S=fresh(),toastT=null;
+const needCount=()=>S.d.need.length;
+const stopCount=()=>S.d.today.length+S.d.older.length;
+
+/* ---- 行 ---- */
+function row(s){
+  const dot=`<span class="s ${s.st}"></span>`;
+  const pin=s.g==='pin'&&S.mode!=='now'?'<span class="pinm" title="置顶">◆</span>':'';
+  return `<button class="r${S.sel===s.id?' on':''}${S.flash===s.id?' flash':''}" data-act="sel" data-v="${s.id}" data-row="${s.g}">${dot}<span class="t">${esc(s.t)}</span>${pin}<small><i class="orb" style="background:${SP[s.sp][1]}"></i>${SP[s.sp][0]}<time>${s.w}</time></small></button>`;
+}
+const sh=(t,open,act)=>`<button class="sh" data-head data-act="${act||'noop'}"><span>${t}</span><span>${open?'⌄':'›'}</span></button>`;
+function olderRows(){
+  const shown=S.d.older.slice(0,12).map(row).join('');
+  return `<div class="say" style="margin:8px 0 2px">今天 ${S.d.today.length}</div>${S.d.today.map(row).join('')}
+    <div class="say" style="margin:8px 0 2px">更早 ${S.d.older.length}</div>${shown}
+    <button class="fold" data-act="more" data-fold><span class="t">另有 ${S.d.older.length-12} 个 · 鸟瞰全部</span></button>
+    <button class="r" data-row="note"><span class="s stop"></span><span class="t" style="color:var(--sub)">codex · 空闲 · 看不到对话</span></button>`;
+}
+function stoppedFold(){
+  return `<button class="fold" data-fold data-act="hist"><span class="s stop"></span><span class="t">停着的 ${stopCount()} 个</span><span>${S.hist?'⌄':'›'}</span></button>${S.hist?olderRows():''}`;
+}
+function list(mode){
+  const d=S.d;
+  if(mode==='now'){
+    const hint=!S.sq?`<div class="say" data-todo>还没有待办。先记下要做的事，再点「开始」派给 agent。</div><button class="mini" data-todo data-act="sqOpen">＋ 新建待办</button>`
+      :`<div class="squick" data-todo><input id="sqIn" aria-label="要做什么" placeholder="要做什么（回车保存，Esc 取消）" value="${esc(S.sqtext)}"><div><button class="p" data-act="sqSave">保存并开始</button><button data-act="sqSave">保存</button><button>展开</button><button data-act="sqClose">取消</button></div></div>`;
+    return hint
+      +sh('置顶 2',1)+d.pins.map(row).join('')
+      +sh('要你处理 '+needCount(),1)+d.need.map(row).join('')
+      +sh('在跑 '+d.run.length,1)+d.run.map(row).join('')
+      +sh('今天 '+d.today.length,S.hist,'hist')+(S.hist?d.today.map(row).join(''):'')
+      +`<button class="fold" data-fold data-act="older"><span class="s stop"></span><span class="t">更早 ${d.older.length} 个 · 停着或做完了</span><span>${S.older?'⌄':'›'}</span></button>${S.older?d.older.slice(0,12).map(row).join(''):''}`
+      +`<button class="r" data-row="note"><span class="s stop"></span><span class="t" style="color:var(--sub)">codex · 空闲 · 看不到对话</span></button>`
+      +`<button class="fold" data-fold data-act="more"><span class="t">另有 ${d.older.length-12} 个 · 鸟瞰全部</span></button>`;
+  }
+  if(mode==='a'){
+    return d.pins.map(row).join('')+'<div class="gap"></div>'+d.run.map(row).join('')+d.need.map(row).join('')+'<div class="gap"></div>'+stoppedFold();
+  }
+  if(mode==='b'){
+    const first=d.run[0];
+    const top=d.run.length
+      ?`<button class="fold top" data-fold data-act="runToggle"><span class="s run"></span><span class="t">在跑 ${d.run.length}${d.run.length===1?' · '+esc(first.t):''}</span><span>${S.runOpen?'⌄':'›'}</span></button>${S.runOpen?d.run.map(row).join(''):''}`
+      :'';
+    return top+d.pins.map(row).join('')+sh('要你处理 '+needCount(),1)+d.need.map(row).join('')+'<div class="gap"></div>'+stoppedFold();
+  }
+  const tabs=[['need','要你',needCount()],['run','在跑',d.run.length],['todo','待办',S.todos.length],['old','停着',stopCount()]];
+  const bar=`<div class="tabsb" role="tablist">${tabs.map(([k,n,c])=>`<button class="${S.tab===k?'on':''}" role="tab" aria-selected="${S.tab===k}" data-act="tab" data-v="${k}" ${k==='todo'?'data-todo':''}>${n} <small>${c}</small></button>`).join('')}</div>`;
+  const body=S.tab==='need'?d.pins.map(row).join('')+'<div class="gap"></div>'+d.need.map(row).join('')
+    :S.tab==='run'?d.run.map(row).join('')||'<div class="say">没有在跑的会话</div>'
+    :S.tab==='todo'?S.todos.map(t=>`<div class="r"><span class="s" style="background:none;border:1.5px dashed var(--muted)"></span><span class="t">${esc(t.t)}</span><small><i class="orb" style="background:${SP[t.sp][1]}"></i>${SP[t.sp][0]}</small></div>`).join('')
+    :olderRows();
+  return bar+body;
+}
+function sideHTML(mode,interactive=true){
+  const chips=Object.entries(SP).map(([k,[n,g]])=>{const c=S.d.need.filter(x=>x.sp===k).length;return `<span class="cp"><i class="orb" style="background:${g}"></i>${n}${c?`<em class="badge">${c}</em>`:''}</span>`}).join('');
+  const total=S.d.pins.length+S.d.run.length+S.d.need.length;
+  const quick=interactive&&S.quick&&mode!=='now'?`<div class="quick"><input id="qIn" aria-label="要做什么" placeholder="要做什么" value="${esc(S.qtext)}"><small>回车记下 · Esc 取消 · 记到 mooring</small></div>`:'';
+  const todoFoot=mode==='c'
+    ?''
+    :`<button class="tt" data-todo-foot data-act="toBoard" title="去鸟瞰的待办列">待办 ${S.todos.length}</button>${mode==='now'?'':'<button class="ic" data-act="plus" aria-label="新待办" title="新待办">＋</button>'}`;
+  return `<div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+    <div class="brand"><b>MOORING</b><span><i></i>本机</span></div>
+    <div class="find"><span>找会话、空间或原话</span><span>⌘P</span></div>
+    <div class="scroll" data-scroll="${mode}">
+      <div class="mach">⌄ 本机 <small>${total} 个会话</small><em class="badge">${needCount()}</em></div>
+      <div class="chips">${chips}<span class="cp dash">+</span></div>
+      ${list(mode)}
+    </div>
+    ${quick}
+    <div class="mline"><span>apple · 先不管 · 2 个在等</span><b>接着管</b></div>
+    <div class="kline"><span class="kbd">⌘J</span>下一个要你的</div>
+    <div class="foot"><span class="lab">本机 · 10 个空间</span>${todoFoot}<span class="ic">⇅</span><span class="ic">▯</span><span class="ic">✳︎</span></div>`;
+}
+
+/* ---- 右边 ---- */
+function allSess(){const d=S.d;return [...d.pins,...d.run,...d.need,...d.today,...d.older]}
+function mainHTML(){
+  const cur=allSess().find(s=>s.id===S.sel);
+  const onB=S.main==='board';
+  const crumb=onB?'鸟瞰全部':(cur?esc(cur.t):'zsh');
+  const page=onB?boardHTML():`<div class="term"><span class="d">~/code/${cur?esc(SP[cur.sp][0]):'mooring'}</span> ❯ <span class="cur"></span>\n\n<span class="d">${cur?'这里是「'+esc(cur.t)+'」的终端。右边不改，只跟着你在左边点的会话变。':''}</span></div>`;
+  return `<div class="bar"><span class="crumb">mooring &nbsp;/&nbsp; <b>${crumb}</b></span>
+    <div class="tabs"><span>侧边栏转圈</span><span>长文件清单</span><span>zsh</span><span>Claude Code</span><span>每日问题</span></div>
+    <span class="needb"><i></i>要你处理 ${needCount()} <span class="kbd">⌘J</span></span>
+    <button class="bird ${onB?'on':''}" data-act="bird">▦ 鸟瞰</button></div>
+    ${page}
+    <div class="status"><i></i><span>本机 · ${S.d.pins.length+S.d.run.length+S.d.need.length} 个会话</span><span class="sp"></span><span>周额度 94%</span><span>本机诊断</span><span>⌘P 命令</span></div>`;
+}
+function boardHTML(){
+  const cols=[['待办',S.todos.length],['在跑',S.d.run.length],['要你处理',S.d.need.length],['停下了',S.d.today.length],['做完了',0]];
+  const cards=i=>i===0?(S.comp?`<div class="comp"><input id="cIn" aria-label="要做什么" placeholder="要做什么" value="${esc(S.ctext)}"><small>回车记下 · Esc 收起</small></div>`:'')+S.todos.map(t=>`<div class="card"><small>还没开始 · ${SP[t.sp][0]}</small>${esc(t.t)}</div>`).join('')
+    :i===1?S.d.run.map(s=>`<div class="card"><small>${s.w} · ${SP[s.sp][0]}</small>${esc(s.t)}</div>`).join('')
+    :i===2?S.d.need.slice(0,5).map(s=>`<div class="card"><small>${s.w} · ${SP[s.sp][0]}</small>${esc(s.t)}</div>`).join(''):'';
+  return `<div class="head"><h1>鸟瞰全部</h1><span>待办住在这里 · Esc 回到工作区 · 详细交互看另一个 demo</span></div>
+    <div class="board">${cols.map(([n,c],i)=>`<section><div class="colh">${n} <small>${c}</small>${i===0&&!S.comp?'<button class="add" data-act="compOpen">＋ 新待办</button>':''}</div>${cards(i)}</section>`).join('')}</div>`;
+}
+
+/* ---- 渲染 ---- */
+function tipText(){
+  if(S.tip)return S.tip;
+  if(S.view==='compare')return '四种排法的同一份数据，宽度都是真实的 316。';
+  if(S.quick)return '<b>就地记一句</b>：回车记下，当前会话不动。';
+  return {now:'这是现在：列表里有待办提示、置顶、要你处理、在跑、今天、更早。',a:'<b>A 一张清单</b>：待办搬到底部，跑完的从在跑自然落到下面。试试右上方「模拟跑完一个」。',b:'<b>B</b>：在跑收成顶部一行，点开才展开。主列表只放要你处理。',c:'<b>C</b>：一次只看一种。注意在「要你」标签下看不到在跑的会话。'}[S.mode];
+}
+function render(){
+  const old=$('#root .scroll');const top=old?old.scrollTop:0;
+  $('#strip').innerHTML=`<span class="sg" role="group" aria-label="方向">${Object.keys(MODES).map(k=>`<button class="${S.mode===k&&S.view==='win'?'on':''}" data-act="mode" data-v="${k}">${MODES[k][0]}</button>`).join('')}<button class="${S.view==='compare'?'on':''}" data-act="compare">并排比</button></span>
+    <span class="tip">${tipText()}</span>
+    <button class="sl" data-act="finish">模拟跑完一个</button><button class="sl" data-act="reset">重来</button><button class="sl" data-act="theme">换深浅色</button><button class="sl" data-act="notes">说明 ↓</button>`;
+  if(S.view==='compare'){
+    $('#root').innerHTML=`<div class="compare">${Object.keys(MODES).map(k=>`<div class="cell" data-cell="${k}"><h3>${MODES[k][0]}</h3><p>${MODES[k][1]}</p><aside class="side">${sideHTML(k,false)}</aside></div>`).join('')}</div>`;
+  }else{
+    $('#root').innerHTML=`<div class="app"><aside class="side">${sideHTML(S.mode)}</aside><main class="main">${mainHTML()}</main></div>`;
+    const n=$('#root .scroll');if(n)n.scrollTop=top;
+  }
+  const f=S.focus;S.focus=null;if(f){const i=$(f);if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}
+  S.flash=null;
+}
+function toast(msg,act,fn){
+  const r=$('#toastRoot');clearTimeout(toastT);
+  r.innerHTML=msg?`<div class="toast" role="status"><span>${msg}</span>${act?`<button id="tA">${act}</button>`:''}</div>`:'';
+  if(act)$('#tA').onclick=()=>{fn();toast()};
+  toastT=setTimeout(()=>{r.innerHTML=''},5000);
+}
+
+/* ---- 行为 ---- */
+const addTodo=t=>S.todos.unshift({t,sp:'moor'});
+const A={
+  mode(v){S.mode=v;S.view='win';S.tip=null;S.sq=false;S.quick=false;render()},
+  compare(){S.view='compare';S.quick=false;S.sq=false;render()},
+  reset(){const v=S.view,m=S.mode;S=fresh();S.view=v;S.mode=m;toast();render()},
+  theme(){const r=document.documentElement,dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme:dark)').matches;r.dataset.theme=dark?'light':'dark'},
+  notes(){$('.notes').scrollIntoView({behavior:'smooth'})},
+  sel(v){S.sel=v;S.main='term';render()},
+  hist(){S.hist=!S.hist;render()},
+  older(){S.older=!S.older;render()},
+  more(){S.main='board';render()},
+  runToggle(){S.runOpen=!S.runOpen;render()},
+  tab(v){S.tab=v;render()},
+  bird(){S.main=S.main==='board'?'term':'board';S.comp=false;render()},
+  toBoard(){S.main='board';S.quick=false;S.tip='待办在鸟瞰的第一列。Esc 回到刚才的会话。';render();S.tip=null},
+  plus(){if(S.main==='board'){A.compOpen();return}S.quick=true;S.focus='#qIn';render()},
+  compOpen(){S.comp=true;S.focus='#cIn';render()},
+  sqOpen(){S.sq=true;S.focus='#sqIn';render()},
+  sqClose(){S.sq=false;S.sqtext='';render()},
+  sqSave(){const t=S.sqtext.trim();if(!t)return;addTodo(t);S.sq=false;S.sqtext='';render()},
+  finish(){
+    const r=S.d.run.shift();
+    if(!r){toast('在跑的都跑完了，点「重来」');return}
+    r.st='review';r.g='need';r.w='刚刚';S.d.need.unshift(r);S.flash=r.id;
+    if(S.view==='win'&&S.mode==='c'&&S.tab==='run')S.tab='need';
+    render();toast(`「${esc(r.t)}」跑完了，留在列表里，只是圆点变了`);
+  },
+};
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');if(!b)return;
+  if(b.closest('.cell')){const c=b.dataset.act;if(!['hist','older','runToggle','tab','sel'].includes(c))return}
+  A[b.dataset.act]&&A[b.dataset.act](b.dataset.v);
+});
+document.addEventListener('input',e=>{
+  if(e.target.id==='qIn')S.qtext=e.target.value;
+  if(e.target.id==='sqIn')S.sqtext=e.target.value;
+  if(e.target.id==='cIn')S.ctext=e.target.value;
+});
+document.addEventListener('keydown',e=>{
+  if(e.isComposing||e.keyCode===229)return;
+  const id=e.target.id;
+  if(id==='qIn'){
+    if(e.key==='Enter'){const t=S.qtext.trim();if(!t)return;addTodo(t);S.qtext='';S.quick=false;render();toast(`已记到 mooring，现在 ${S.todos.length} 条`,'去鸟瞰看',()=>A.toBoard())}
+    if(e.key==='Escape'){S.quick=false;S.qtext='';render()}
+    return;
+  }
+  if(id==='sqIn'){
+    if(e.key==='Enter')A.sqSave();
+    if(e.key==='Escape')A.sqClose();
+    return;
+  }
+  if(id==='cIn'){
+    if(e.key==='Enter'){const t=S.ctext.trim();if(!t)return;addTodo(t);S.ctext='';S.focus='#cIn';render()}
+    if(e.key==='Escape'){S.comp=false;render()}
+    return;
+  }
+  if(e.key==='Escape'&&S.main==='board'){S.main='term';render()}
+});
+const P=new URLSearchParams(location.hash.slice(1));
+if(MODES[P.get('mode')])S.mode=P.get('mode');
+if(P.get('view')==='compare')S.view='compare';
+if(P.get('theme'))document.documentElement.dataset.theme=P.get('theme');
+render();
+/* 说明表里的数字从同一份渲染里数，避免写死 */
+(function(){
+  const box=document.createElement('div');box.style.cssText='position:absolute;visibility:hidden;width:316px';document.body.append(box);
+  const a0=S.view;
+  for(const k of Object.keys(MODES)){
+    box.innerHTML=sideHTML(k,false);
+    const m=box.querySelectorAll('.scroll [data-head],.scroll [data-fold],.scroll .tabsb').length;
+    const t=box.querySelectorAll('[data-todo],[data-todo-foot]').length;
+    const a=$(`[data-m="${k}"]`),b=$(`[data-t="${k}"]`);if(a)a.textContent=m+' 个';if(b)b.textContent=t+' 处';
+  }
+  box.remove();S.view=a0;
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,828 @@
+<!doctype html>
+<!-- 2026-11-06 设计 demo（原型分支 feat/todo-session-demo，未 push）。看板部分已按这份落进主线：c5ac8f3d（#145）鸟瞰里记待办、开始时再选 Agent / 普通终端 / 自己完成、开始后待办留下；写回进展用主线的 fibo todo note（#120 系列），没用原型自己的 task_log。这里留作设计记录，界面以 App 为准。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>鸟瞰新待办 demo</title>
+<style>
+:root{
+  --bg:#fff;--side:#f5f5f6;--card:#fff;--raised:#f4f5f7;--hover:#ececee;--line:#e3e5ea;--control:#c9ccd3;
+  --text:#17181c;--body:#2b2d33;--sub:#5d6270;--muted:#767b87;--faint:#a0a4ad;
+  --run:#c49a12;--ask:#e96d27;--ask-ink:#b34a10;--ok:#1f8a5b;--stop:#7486a0;--done:#5d6270;
+  --solid:#17181c;--on-solid:#fff;--mark:#4b4fd6;--mark-wash:#eef0fd;--need-wash:#e9f6ef;--need-ink:#1c7a50;
+  --term:#17181b;--term-text:#d6d8dd;--term-dim:#8b8e96;--shadow:0 14px 44px rgba(20,22,30,.15);
+  --mono:"SF Mono",ui-monospace,Menlo,monospace;--quint:cubic-bezier(.22,1,.36,1);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#21252c;--side:#1c2026;--card:#2a2f37;--raised:#2a2f37;--hover:#323842;--line:#3a404a;--control:#555c69;
+  --text:#e9ebef;--body:#d7dae0;--sub:#bcc1ca;--muted:#979da8;--faint:#767c87;
+  --run:#e0bd52;--ask:#f0975a;--ask-ink:#f0975a;--ok:#5ac48d;--stop:#8a9bb0;--done:#979da8;
+  --solid:#e9ebef;--on-solid:#1c2026;--mark:#9db0f5;--mark-wash:#2d3450;--need-wash:#25392f;--need-ink:#5ac48d;
+  --term:#14161a;--shadow:0 14px 44px rgba(0,0,0,.42);
+}}
+:root[data-theme="dark"]{
+  --bg:#21252c;--side:#1c2026;--card:#2a2f37;--raised:#2a2f37;--hover:#323842;--line:#3a404a;--control:#555c69;
+  --text:#e9ebef;--body:#d7dae0;--sub:#bcc1ca;--muted:#979da8;--faint:#767c87;
+  --run:#e0bd52;--ask:#f0975a;--ask-ink:#f0975a;--ok:#5ac48d;--stop:#8a9bb0;--done:#979da8;
+  --solid:#e9ebef;--on-solid:#1c2026;--mark:#9db0f5;--mark-wash:#2d3450;--need-wash:#25392f;--need-ink:#5ac48d;
+  --term:#14161a;--shadow:0 14px 44px rgba(0,0,0,.42);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:13px/1.42 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;font-variant-numeric:tabular-nums}
+button,input,textarea,select{font:inherit;color:inherit}
+button{background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--mark);outline-offset:1px}
+svg{display:block;flex:none}
+
+/* 演示条：不属于产品 */
+.strip{position:relative;z-index:6;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-height:44px;padding:6px 14px;background:#17181c;color:#f2f3f5}
+.strip .seg{background:#30323a;border:0}.strip .seg button{color:#c3c6cc}
+.strip .seg button.on{background:#f2f3f5;color:#17181c;box-shadow:none}
+.tip{flex:1;min-width:240px;font-size:12.5px;color:#e5e7eb}
+.tip b{font-weight:600;color:#fff}
+.slink{font-size:12px;color:#c3c6cc;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
+.slink:hover{color:#fff}
+
+/* 窗口 */
+.app{position:relative;display:flex;height:calc(100vh - 44px);min-height:620px;overflow:hidden;border-bottom:1px solid var(--line)}
+.side{flex:0 0 316px;display:flex;flex-direction:column;background:var(--side);border-right:1px solid var(--line);min-height:0}
+.sscroll{flex:1;min-height:0;overflow-y:auto;padding:0 12px 8px}
+.lights{display:flex;gap:8px;height:45px;flex:none;align-items:center;padding:0 16px}.lights i{width:12px;height:12px;border-radius:50%}
+.brand{display:flex;align-items:center;justify-content:space-between;padding:6px 18px 10px;font-size:12.5px}
+.brand b{letter-spacing:.2em;font-weight:600}
+.brand span{display:flex;align-items:center;gap:5px;color:var(--sub);font-size:11.5px}
+.brand i{width:5px;height:5px;border-radius:50%;background:var(--ok)}
+.find{display:flex;justify-content:space-between;margin:2px 12px 12px;padding:6px 12px;border:1px solid var(--line);border-radius:7px;color:var(--muted);background:var(--bg)}
+.mach{display:flex;align-items:center;gap:6px;height:32px;margin:0 -12px 12px;padding:0 16px;background:var(--hover);font-weight:500}
+.mach small{font-weight:400;color:var(--muted);font-size:12px}.mach em{margin-left:auto}
+.badge{display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 5px;border-radius:9px;background:var(--ask);color:#fff;font-size:10.5px;font-weight:600;font-style:normal}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.cp{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border:1px solid var(--line);border-radius:12px;background:var(--bg);white-space:nowrap}
+.cp.dash{width:26px;padding:0;justify-content:center;border-style:dashed;color:var(--muted)}
+.orb{flex:none;width:10px;height:10px;border-radius:50%}
+.say{padding:0 3px;color:var(--sub);font-size:12px}
+.sbtn{display:block;padding:4px 7px;font-size:12px;color:var(--sub);border-radius:6px}.sbtn:hover{background:var(--hover)}
+.squick{padding:0 2px 8px}
+.squick input{width:100%;height:27px;padding:0 9px;border:1px solid var(--control);border-radius:6px;background:var(--bg);outline:0;font-size:12px}
+.squick input:focus{border-color:var(--sub)}
+.squick .acts{display:flex;gap:1px;margin-top:5px}
+.squick button{height:21px;padding:0 6px;border-radius:5px;font-size:11.5px}.squick button:hover{background:var(--hover)}
+.squick button.pri{background:var(--solid);color:var(--on-solid)}
+.sh{display:flex;justify-content:space-between;margin:14px 6px 4px;color:var(--muted);font-size:12px}
+.sr{display:flex;align-items:center;gap:9px;height:26px;padding:0 6px;border-radius:6px}.sr:hover{background:var(--hover)}
+.sr .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sr small{color:var(--muted);font-size:11.5px;white-space:nowrap}
+.sr .d{flex:none;width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.sr .d.o{background:none;border:1.5px solid var(--ok)}.sr .d.t{background:none;border:1.5px solid var(--mark)}
+.sr button{font-size:11.5px;color:var(--mark)}
+.smach{display:flex;align-items:center;justify-content:space-between;height:34px;flex:none;padding:0 18px;border-top:1px solid var(--line);font-size:12px;color:var(--sub)}.smach b{font-weight:500;color:var(--text)}
+.skey{display:flex;align-items:center;gap:6px;height:32px;flex:none;padding:0 16px;border-top:1px solid var(--line);font-size:12px;color:var(--sub)}
+.sfoot{display:flex;align-items:center;gap:6px;height:38px;flex:none;padding:0 16px;border-top:1px solid var(--line);font-size:12px;color:var(--sub)}
+.sfoot .tag{margin-left:auto;padding:1px 6px;border-radius:6px;background:var(--hover);white-space:nowrap}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
+.bar{display:flex;align-items:center;gap:16px;height:45px;flex:none;padding:0 16px;border-bottom:1px solid var(--line);white-space:nowrap}
+.crumb{color:var(--sub)}.crumb b{font-weight:500;color:var(--text)}
+.tabs{flex:1;min-width:0;display:flex;gap:26px;overflow:hidden;color:var(--sub);padding-left:18px;border-left:1px solid var(--line)}
+.tabs button:hover{color:var(--text)}
+.needb{display:flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:6px;background:var(--need-wash);color:var(--need-ink);font-weight:500}
+.needb i{width:5px;height:5px;border-radius:50%;background:currentColor}
+.kbd{padding:0 3px;border:1px solid currentColor;border-radius:3px;font:10px var(--mono);opacity:.7}
+.bird{display:flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:6px;color:var(--sub)}
+.bird.on{background:var(--hover);color:var(--text)}
+.bird:hover{background:var(--hover)}
+.head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:20px 28px 12px;flex:none}
+.head h1{margin:0 2px 0 0;font-size:20px;font-weight:600}
+.head .sum{color:var(--muted);font-size:12px}
+.fc{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px 0 6px;border:1px solid var(--line);border-radius:5px;font-size:12px;color:var(--body)}
+.fc:hover{border-color:var(--control)}.fc small{color:var(--muted);font-size:12px}
+.fc.on{background:var(--hover);border-color:var(--control);color:var(--text)}.fc.dim{opacity:.5}
+.sp{flex:1}
+.lk{padding:0 6px;color:var(--sub);font-size:12px;white-space:nowrap}.lk:hover{color:var(--text)}
+.seg{display:inline-flex;padding:2px;border-radius:7px;background:var(--hover);flex:none}
+.seg button{height:22px;padding:0 10px;border-radius:5px;color:var(--muted);white-space:nowrap;font-size:12px}
+.seg button.on{background:var(--bg);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.1)}
+.quietm{display:flex;gap:14px;padding:2px 28px 12px;color:var(--sub);font-size:12px;flex:none}
+.quietm b{font-weight:500;color:var(--text)}
+
+/* 看板 */
+.board{position:relative;flex:1;min-height:0;display:grid;gap:14px;padding:2px 28px 12px;overflow-x:auto}
+.col{display:flex;flex-direction:column;min-height:0;min-width:0}
+.colh{display:flex;align-items:center;gap:8px;height:34px;padding:0 4px;flex:none;font-weight:500}
+.colh small{color:var(--muted);font-size:12.5px;font-weight:400}
+.spin{animation:spin 1.6s linear infinite;transform-origin:50% 50%}
+@keyframes spin{to{transform:rotate(360deg)}}
+.list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:1px 1px 24px}
+.card{position:relative;flex:none;display:flex;flex-direction:column;gap:7px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--card);transition:border-color .15s}
+.card:hover{border-color:var(--control)}
+.card.todo{cursor:pointer}
+.r1{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11.5px}
+.r1 .av{margin-left:auto;width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+.ai{display:inline-grid;place-items:center;width:15px;height:15px;color:var(--sub);font:600 11px var(--mono);flex:none}.ai svg{width:15px;height:15px;fill:currentColor}.ai.claude{color:#d97757}.ai.codex{color:#3d4fd8}
+:root[data-theme="dark"] .ai.codex{color:#8b98f0}
+.ttl{font-size:13.5px;line-height:1.4;color:var(--text);overflow-wrap:anywhere}
+.status .q{display:inline-flex;align-items:center;gap:6px}.status .q u{display:block;width:30px;height:3px;border-radius:2px;background:var(--line);overflow:hidden}.status .q u::after{content:"";display:block;height:100%;background:var(--ask);width:var(--w)}.status .q.g u::after{background:var(--ok)}
+.card .q{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r3{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11.5px;min-height:24px;white-space:nowrap}
+.r3 .pill{min-width:0;flex-shrink:1;overflow:hidden;text-overflow:ellipsis}.r3 .pill i{flex:none}
+.pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border:1px solid var(--line);border-radius:10px;font-size:11.5px;color:var(--body);white-space:nowrap}
+.pill i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.pill.ask{color:var(--ask-ink);border-color:color-mix(in srgb,var(--ask) 42%,transparent)}
+.pill.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 42%,transparent)}
+.pill.stop{color:var(--stop);border-color:color-mix(in srgb,var(--stop) 42%,transparent)}
+.go{margin-left:auto;height:24px;padding:0 9px;border-radius:6px;background:var(--hover);color:var(--text);white-space:nowrap;font-size:12px}
+.go:hover{background:var(--line)}
+.addr{flex:none;display:flex;align-items:center;gap:6px;width:100%;height:30px;padding:0 9px;border-radius:7px;color:var(--sub);text-align:left}
+.addr:hover{background:var(--hover);color:var(--text)}
+.add{margin-left:auto;display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 7px;border-radius:6px;color:var(--sub);font-size:12px;font-weight:400;white-space:nowrap}
+.add:hover{background:var(--hover);color:var(--text)}
+.add .dr{color:var(--mark);font-size:11.5px}
+
+/* 列内新建 */
+.grow{display:grid;grid-template-rows:1fr;flex:none}
+.grow>*{min-height:0;overflow:hidden}
+.grow.in{animation:grow .26s var(--quint)}
+@keyframes grow{from{grid-template-rows:0fr}}
+.comp.in{animation:compin .18s ease-out}
+@keyframes compin{from{opacity:.35}}
+.comp{display:flex;flex-direction:column;gap:6px;padding:9px 11px;border:1px solid var(--sub);border-radius:10px;background:var(--card)}
+.comp textarea{display:block;width:100%;min-height:20px;padding:0;border:0;outline:0;resize:none;overflow:hidden;background:none;font-size:13.5px;line-height:1.4}
+.comp textarea::placeholder{color:var(--faint)}
+.cmeta{display:flex;flex-wrap:wrap;gap:5px}
+.pick{position:relative;display:inline-flex;align-items:center;gap:5px;height:22px;max-width:100%;padding:0 7px;border:1px solid var(--line);border-radius:11px;font-size:11.5px;color:var(--body);white-space:nowrap}
+.pick:hover{border-color:var(--control)}
+.pick select{position:absolute;inset:0;width:100%;opacity:0;cursor:pointer}
+.pick .car{color:var(--muted);font-size:9px}
+.pick:focus-within{outline:2px solid var(--mark);outline-offset:1px}
+.cact{display:flex;align-items:center;gap:6px;margin-top:1px}
+.cact .more{color:var(--muted);font-size:11.5px}.cact .more:hover{color:var(--text)}
+.cact .sp{flex:1}
+.save{height:24px;padding:0 8px;border-radius:6px;font-size:12px;color:var(--text);background:var(--hover);white-space:nowrap}
+.save:hover{background:var(--line)}
+.save.pri{background:var(--solid);color:var(--on-solid)}.save.pri:hover{opacity:.88;background:var(--solid)}
+.save[disabled]{opacity:.42;cursor:default}
+.cb{font:10px var(--mono);opacity:.65;margin-left:3px}
+/* 待办和会话的关联 */
+.card.linked{border-color:var(--mark);box-shadow:0 0 0 1px var(--mark)}
+.prog{color:var(--body)}.prog em{font-style:normal;color:var(--ask-ink)}
+.tlink{align-self:flex-start;max-width:100%;font-size:11.5px;color:var(--mark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tlink:hover{text-decoration:underline;text-underline-offset:2px}
+.attach{position:relative;display:inline-flex;align-items:center;height:20px;margin-left:auto;padding:0 6px;border-radius:5px;color:var(--muted);font-size:11.5px;opacity:0;white-space:nowrap}
+.card:hover .attach,.attach:focus-within{opacity:1}.attach:hover{background:var(--hover);color:var(--text)}
+.attach select{position:absolute;inset:0;width:100%;opacity:0;cursor:pointer}
+.lsec{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--sub)}
+.lrow{display:flex;align-items:center;gap:7px;width:100%;height:28px;padding:0 7px;border-radius:6px;color:var(--text);text-align:left;font-size:12.5px}
+.lrow:hover{background:var(--hover)}.lrow .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lrow small{color:var(--muted);font-size:11.5px;white-space:nowrap}
+.dotk{flex:none;width:8px;height:8px;border-radius:50%;background:var(--stop)}.dotk.run{background:var(--run)}.dotk.need{background:var(--ask)}.dotk.done{background:var(--done)}
+.lnone{padding:2px 0;color:var(--muted)}
+/* 开始时选 */
+.picker{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding-top:7px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);cursor:default}
+.picker .lab{width:100%}
+.pk{height:24px;padding:0 8px;border-radius:6px;background:var(--hover);color:var(--text);font-size:12px;white-space:nowrap}
+.pk:hover{background:var(--line)}.pk.first{background:var(--solid);color:var(--on-solid)}
+.pk.q{background:none;color:var(--muted)}
+.sr-pick{padding:4px 6px 6px}
+.okb{margin-left:auto;height:24px;padding:0 8px;border-radius:6px;color:var(--sub);font-size:12px}
+.okb:hover{background:var(--hover);color:var(--text)}
+.okb+.go{margin-left:0}
+.selfm{display:inline-grid;place-items:center;width:15px;height:15px;color:var(--done);font-size:12px}
+/* 新建空间 */
+.newsp{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:7px 8px;border-radius:7px;background:var(--raised)}
+.newsp input{flex:1 1 90px;min-width:0;height:24px;padding:0 7px;border:1px solid var(--control);border-radius:5px;background:var(--bg);outline:0;font-size:12px}
+.newsp input:focus{border-color:var(--sub)}
+.newsp small{width:100%;color:var(--muted);font-size:11px}
+.arrive .card{animation:wash 1.4s ease-out}
+@keyframes wash{from{background:var(--mark-wash);border-color:var(--mark)}}
+
+/* 空板提示 */
+.none{position:absolute;top:110px;left:calc(20% + 24px);right:28px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;color:var(--sub);pointer-events:none}
+.none b{font-size:14px;font-weight:500;color:var(--text)}
+.none span{font-size:12.5px;color:var(--muted)}
+.none .row{display:flex;gap:6px;pointer-events:auto}
+
+/* 右侧抽屉 */
+.drawer{position:absolute;top:45px;right:0;bottom:28px;width:min(430px,100%);display:flex;flex-direction:column;gap:12px;padding:16px;background:var(--card);border-left:1px solid var(--line);box-shadow:var(--shadow);z-index:4;animation:slide .26s var(--quint);overflow-y:auto}
+@keyframes slide{from{transform:translateX(26px);opacity:.4}}
+.dh{display:flex;align-items:baseline;gap:8px}
+.dh h2{margin:0;font-size:16px;font-weight:600}
+.dh small{color:var(--muted);font-size:12px}
+.x{margin-left:auto;width:24px;height:24px;border-radius:6px;color:var(--muted);font-size:16px}.x:hover{background:var(--hover)}
+.drawer label:not(.pick){display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--sub)}
+.drawer textarea{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg);outline:0;resize:vertical;font-size:13px}
+.drawer textarea:focus{border-color:var(--sub)}
+.dacts{display:flex;gap:6px}
+
+/* 终端 */
+.termv{flex:1;min-height:0;padding:16px 18px;background:var(--term);color:var(--term-text);font:12.5px/1.65 var(--mono);white-space:pre-wrap;overflow:auto}
+.termv .dim{color:var(--term-dim)}
+.termv .cur{display:inline-block;width:8px;height:15px;margin-left:1px;vertical-align:-2px;background:#d6d8dd;animation:blink 1.1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.pre{margin-top:12px;font-family:-apple-system,"PingFang SC",sans-serif;color:var(--term-dim);font-size:12px}
+.pre button{color:#fff;text-decoration:underline;text-underline-offset:3px}
+.formp{flex:1;padding:28px;overflow:auto}
+.formc{max-width:560px;margin:0 auto;padding:18px;border:1px solid var(--line);border-radius:10px}
+
+.status{display:flex;align-items:center;gap:8px;height:28px;flex:none;padding:0 16px;border-top:1px solid var(--line);font-size:11.5px;color:var(--sub);white-space:nowrap;overflow:hidden}
+.status i{width:5px;height:5px;border-radius:50%;background:var(--ok)}
+.toast{position:fixed;left:calc(50% + 158px);bottom:44px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;max-width:min(560px,92vw);padding:7px 12px;border-radius:8px;background:var(--solid);color:var(--on-solid);box-shadow:var(--shadow);z-index:9;font-size:12.5px;animation:rise .24s var(--quint)}
+@keyframes rise{from{transform:translate(-50%,10px);opacity:0}}
+.toast button{text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
+
+/* 说明 */
+.notes{max-width:920px;margin:0 auto;padding:28px 20px 70px}
+.notes h2{margin:26px 0 8px;font-size:16px;font-weight:600}.notes h2:first-child{margin-top:0}
+.notes p,.notes li{color:var(--sub);font-size:13.5px;line-height:1.65}.notes p{margin:6px 0}
+.notes ul{margin:6px 0;padding-left:18px}
+.notes b{color:var(--text);font-weight:600}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:600px;font-size:13px}
+th,td{text-align:left;vertical-align:top;padding:7px 14px 7px 0;border-bottom:1px solid var(--line);color:var(--sub)}
+th{font-weight:500;color:var(--muted)}td:first-child{white-space:nowrap;color:var(--text)}
+code{font:12px var(--mono)}
+
+@media (max-width:1280px){.side{flex-basis:248px}.toast{left:calc(50% + 124px)}}
+@media (max-width:900px){
+  .side{display:none}
+  .app{height:calc(100vh - 100px);min-height:520px}
+  .board{padding:2px 16px 12px;grid-template-columns:repeat(var(--n),240px)!important}
+  .head,.quietm{padding-left:16px;padding-right:16px}
+  .tabs{display:none}.crumb{flex:1}
+  .none{left:280px;right:auto;width:360px}
+  .toast{left:50%}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="strip" id="strip"></div>
+<div class="app" id="app"></div>
+<div id="toastRoot"></div>
+
+<div class="notes">
+  <h2>这个 demo 要定什么</h2>
+  <p><b>决定：</b>鸟瞰里的新待办，要不要从“退出鸟瞰、去左栏输入”改成“待办列里原地输入”。</p>
+  <p><b>看什么：</b>切到“新设计”，从鸟瞰连记三条，再开始其中一条。整个过程眼睛不用离开待办列，也不用碰鼠标，才算过关。</p>
+  <p><b>放弃条件：</b>如果你觉得输入卡挤占待办列、比现在更打断，或者你其实几乎只在工作区记待办，就不改鸟瞰，只把左栏的入口做好。</p>
+
+  <h2>参考了之前什么，改了什么</h2>
+  <div class="tw"><table>
+    <tr><th>内容</th><th>之前的看板稿</th><th>现在的 App</th><th>这个 demo</th></tr>
+    <tr><td>新建入口</td><td>待办列头悬停才出现 <code>+</code>，没有绑点击，新建这一步没有设计过</td><td>列表最后一行“＋ 新待办”，卡多了要滚到底</td><td>回到旧稿的列头位置，但常驻显示、真能点；不占列表高度，各列第一张卡对齐，卡再多也不用滚；另加快捷键 N</td></tr>
+    <tr><td>输入位置</td><td>无</td><td>退出鸟瞰，去左栏</td><td>列头下方展开输入卡，新卡落在它下面</td></tr>
+    <tr><td>卡片外观</td><td>圆角、细边、渐变圆点、胶囊</td><td>同左，首行“还没开始”，末行“开始 →”</td><td>沿用；输入卡和待办卡同宽同圆角，只有边框加深</td></tr>
+    <tr><td>Agent</td><td>卡片写死一个 Agent 标记</td><td>新建时默认一个，点“开始”才真正选</td><td>新建时不问、卡上不写，只在开始时选</td></tr>
+    <tr><td>开始</td><td>“命令填进新终端”，按回车才启动</td><td>同左，只能选 Agent</td><td>同左；⌘↵ 先选怎么开始，多一个“普通终端”</td></tr>
+    <tr><td>不开会话</td><td>无</td><td>能标结局，但鸟瞰卡片上没有入口</td><td>卡上有“完成”，直接进“做完了”，可撤销</td></tr>
+    <tr><td>新建空间</td><td>无</td><td>在左栏点 +，名字直接可改，不要目录</td><td>输入卡的空间菜单里也能建，规则相同，写的字不丢</td></tr>
+    <tr><td>更多字段</td><td>点卡片从右侧滑出抽屉</td><td>整页表单，同样退出鸟瞰</td><td>沿用抽屉，看板还看得到，写到一半的字带过去</td></tr>
+    <tr><td>撤销</td><td>底部提示条带撤销</td><td>拖动才有</td><td>沿用，记下后也能撤销</td></tr>
+    <tr><td>动效</td><td>弹簧、倾斜、卡片让位</td><td>高度生长，没有倾斜和让位</td><td>新卡片用 App 现有的 260 ms 高度生长，不做倾斜（已否定）；输入卡只淡入，高度从 0 长起来时中文输入的字序会反</td></tr>
+  </table></div>
+
+  <h2>定下的规则</h2>
+  <ul>
+    <li><b>在哪点，就在哪输入。</b>工作区里仍然在左栏输入；鸟瞰里连左栏的“新建待办”也打开列内输入卡。</li>
+    <li><b>回车不换地方。</b>记下后输入卡还在、光标还在，可以接着写。</li>
+    <li><b>Esc 一次只退一层。</b>先收起输入卡，再按才回工作区；写了字的草稿留着，不会丢。</li>
+    <li><b>待办和会话各管各的。</b>待办是你负责的事，你点完成才结束；会话是一次运行，可以没有待办。一条待办可以连多个会话，也可以一个都没有。</li>
+    <li><b>开始后待办不消失。</b>卡片显示“在做 · N 个会话”，点开能进这些会话；会话卡上也写着来自哪条待办。</li>
+    <li><b>标完成不停会话。</b>关联会话留在原来的列，各自处理。</li>
+    <li><b>记下不等于派活。</b>待办可以是任何事，新建时不问 Agent；要开始时再选 Agent 或普通终端，也可以自己做完点“完成”。</li>
+    <li><b>记到哪写清楚。</b>空间默认当前空间，显示在输入卡上；没有合适的就当场新建，只要一个名字。</li>
+    <li><b>新卡不能消失。</b>待办还没交给谁，所以按 Agent 筛选时也留着。</li>
+    <li><b>空板要说原因。</b>五列全空但筛选项有数时，说明它们都在“很久没动”，给一键显示。</li>
+  </ul>
+
+  <h2>如果要做进 App</h2>
+  <ul>
+    <li>鸟瞰的按钮不再调用 <code>show_quick_task</code>（<code>tasks.rs:206</code> 第一行就关鸟瞰），输入卡写进新文件。</li>
+    <li>输入卡放在虚拟列表之上，和拖拽空位相同（<code>board/column.rs</code> 的 slot），否则滚动和列表重建会丢输入框。</li>
+    <li>中文输入法选词时的回车不能算保存，这点在真机上要专门验。</li>
+    <li>现在 <code>status::open_todos</code> 把有会话的待办排除（<code>status.rs:157</code>），要改成只看结局；手机端的待办列表也读这份数据，要一起看。</li>
+    <li>挂到已有待办可用 core 的 <code>Edit::AssignTask</code>，把会话存成待办已有 <code>Edit::SaveSessionTask</code>；界面入口要核对。</li>
+    <li>同一件事会有待办卡和会话卡两张，待办列可能变长，真实数据下要再看一次。</li>
+    <li><code>Task.agent</code> 现在必填，要改成可选或者在鸟瞰里不再显示、不再参与筛选（<code>board.rs:263</code>），旧数据要兼容。</li>
+    <li>“完成”可以用现有的 <code>Outcome::Completed</code>，但现在“做完了”列只放会话，完成的待办会直接消失，要补一种卡片。</li>
+    <li>选择器（<code>agent_picker</code>）现在只列 Agent，普通终端是新增项；开了普通终端的待办怎么关联，还没想定，demo 里只是留在待办列。</li>
+    <li>N 键在鸟瞰里目前没发现冲突，但没有穷举 <code>keymap</code>，做之前要确认。</li>
+  </ul>
+  <p>本页的卡片标题都是示例，字体和配色取自 <code>ui/theme.rs</code> 和截图，Claude 和 Codex 的图标取自 <code>assets/agent-icons</code>，Grok 和 App 一样显示首字母；抽屉里的字段比 App 的完整表单少（没有“保存并开始之后”的预览）。</p>
+</div>
+
+<script>
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const grad=(a,b)=>`linear-gradient(140deg,${a},${b})`;
+const SPACE_TILES=[grad('#f59e6b','#d9467a'),grad('#5ab0f0','#4b4fd6'),grad('#7bd389','#2f9e66'),grad('#c07be0','#8a3fc0'),grad('#6f8ff0','#3a55c8'),grad('#b08a3a','#7a5a1e')];
+const SPACES=[
+  {id:'work',name:'工作空间',g:grad('#f59e6b','#d9467a')},
+  {id:'code',name:'code',g:grad('#5ab0f0','#4b4fd6')},
+  {id:'vsr',name:'vsr',g:grad('#7bd389','#2f9e66')},
+  {id:'code2',name:'code',g:grad('#c07be0','#8a3fc0')},
+  {id:'lite',name:'litellm-rs',g:grad('#6f8ff0','#3a55c8')},
+  {id:'her',name:'her',g:grad('#b08a3a','#7a5a1e')},
+  {id:'mooring',name:'mooring',g:grad('#f59e6b','#d9467a')},
+  {id:'codexs',name:'codex 专用',g:grad('#c07be0','#8a3fc0')},
+];
+const mark=d=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="${d}"/></svg>`;
+const AGENTS={claude:{name:'Claude Code',m:mark('M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487v-2.921H3V14.05H0V10.95h3V5h17.998v5.949zM6 10.949h1.488V8.102H6v2.847zm10.51 0H18V8.102h-1.49v2.847z')},codex:{name:'Codex',m:mark('M9.064 3.344a4.578 4.578 0 012.285-.312c1 .115 1.891.54 2.673 1.275.01.01.024.017.037.021a.09.09 0 00.043 0 4.55 4.55 0 013.046.275l.047.022.116.057a4.581 4.581 0 012.188 2.399c.209.51.313 1.041.315 1.595a4.24 4.24 0 01-.134 1.223.123.123 0 00.03.115c.594.607.988 1.33 1.183 2.17.289 1.425-.007 2.71-.887 3.854l-.136.166a4.548 4.548 0 01-2.201 1.388.123.123 0 00-.081.076c-.191.551-.383 1.023-.74 1.494-.9 1.187-2.222 1.846-3.711 1.838-1.187-.006-2.239-.44-3.157-1.302a.107.107 0 00-.105-.024c-.388.125-.78.143-1.204.138a4.441 4.441 0 01-1.945-.466 4.544 4.544 0 01-1.61-1.335c-.152-.202-.303-.392-.414-.617a5.81 5.81 0 01-.37-.961 4.582 4.582 0 01-.014-2.298.124.124 0 00.006-.056.085.085 0 00-.027-.048 4.467 4.467 0 01-1.034-1.651 3.896 3.896 0 01-.251-1.192 5.189 5.189 0 01.141-1.6c.337-1.112.982-1.985 1.933-2.618.212-.141.413-.251.601-.33.215-.089.43-.164.646-.227a.098.098 0 00.065-.066 4.51 4.51 0 01.829-1.615 4.535 4.535 0 011.837-1.388zm3.482 10.565a.637.637 0 000 1.272h3.636a.637.637 0 100-1.272h-3.636zM8.462 9.23a.637.637 0 00-1.106.631l1.272 2.224-1.266 2.136a.636.636 0 101.095.649l1.454-2.455a.636.636 0 00.005-.64L8.462 9.23z')},grok:{name:'Grok Build',m:'G'}};
+const COLS=[
+  {id:'todo',name:'待办'},{id:'run',name:'在跑'},{id:'need',name:'要你处理'},{id:'stop',name:'停下了'},{id:'done',name:'做完了'},
+];
+const STALE={id:'stale',name:'很久没动'};
+const sp=id=>SPACES.find(s=>s.id===id)||SPACES[6];
+const dirOf=id=>sp(id).unset?'~':'~/code/'+sp(id).name;
+const realSessions=()=>S.sessions.filter(s=>s.agent);
+const HERE='mooring',DEFAULT_AGENT='claude';
+const ic={
+  todo:'<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="2 2.6"/></svg>',
+  run:'<svg class="spin" width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="var(--line)" stroke-width="1.6"/><path d="M8 2a6 6 0 0 1 6 6" stroke="var(--run)" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  need:'<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="var(--ask)" stroke-width="1.6"/><circle cx="8" cy="8" r="2.6" fill="var(--ask)"/></svg>',
+  stop:'<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="var(--stop)" stroke-width="1.6"/><path d="M8 2a6 6 0 0 0 0 12z" fill="var(--stop)" opacity=".55"/></svg>',
+  done:'<svg width="15" height="15" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.8" fill="var(--done)"/><path d="M5 8.2l2.1 2.1L11 6.3" fill="none" stroke="var(--bg)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  stale:'<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="var(--faint)" stroke-width="1.6"/><path d="M8 4.8V8l2.2 1.4" stroke="var(--faint)" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  grid:'<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="5.2" height="5.2" rx="1.4"/><rect x="9.3" y="1.5" width="5.2" height="5.2" rx="1.4"/><rect x="1.5" y="9.3" width="5.2" height="5.2" rx="1.4"/><rect x="9.3" y="9.3" width="5.2" height="5.2" rx="1.4"/></svg>',
+};
+const seedSessions=()=>{
+  const mk=(id,agent,col,title,space,when,extra={})=>({id,agent,col,title,space,when,...extra});
+  return [
+    mk('A812','claude','run','给列表加键盘导航','mooring','4:13',{branch:'feat/list-keys'}),
+    mk('F3C1','claude','need','推送前确认 PR 标题','mooring','3 分钟',{ask:'等你回答',q:'改动已经完成，是否允许推送？'}),
+    mk('77B1','codex','need','反馈接口加每分钟限流','code','25 分钟',{ask:'等你回答',q:'需要你定一个每分钟上限'}),
+    mk('2B6D','claude','need','核对导出命令的验收','her','1 小时',{ok:'等你验收',q:'三条验收都写了证据'}),
+    mk('91D0','codex','stop','迁移旧会话表','codexs','2 小时',{stopped:'停下了',branch:'chore/migrate'}),
+    mk('8D03','claude','stop','空状态文案','work','3 小时',{stopped:'停下了'}),
+    mk('55AA','claude','done','窗口切换时保留滚动位置','mooring','5 小时',{branch:'main'}),
+    mk('71C2','codex','done','rustfmt 折行','vsr','8 小时',{branch:'main'}),
+    ...[['G01A','整理插件目录','code'],['G02B','清理旧脚本','her'],['G03C','试跑新模型','lite'],['G04D','对比测速结果','codexs'],['G05E','检查图标来源','work'],['G06F','补充进度记录','work'],['G07A','读日志找超时','mooring'],['G08B','看依赖更新','vsr']]
+      .map(([i,t,s],n)=>mk(i,'grok','stale',t,s,(9+n)+' 天',{q:'很久没动了'})),
+  ];
+};
+const seedTodos=mode=>[
+  ...(mode==='new'?[{id:'t0',title:'键盘操作补齐',space:'work',agent:null,acc:0}]:[]),
+  {id:'t1',title:'给 CLI 加离线模式',space:'vsr',agent:mode==='old'?'codex':null,acc:0},
+  {id:'t2',title:'周五前交报销单',space:'her',agent:mode==='old'?'claude':null,acc:2},
+];
+let S,nextId=10,toastTimer=null;
+function seedLinks(mode){
+  const all=seedSessions();
+  all.splice(2,0,{id:'E4A2',agent:'claude',col:'need',title:'补快捷键文档',space:'mooring',when:'6 分钟',ok:'等你验收',q:'文档写好了，等你看'});
+  if(mode==='new')all.forEach(s=>{if(s.id==='A812'||s.id==='E4A2'){s.task='t0';s.taskTitle='键盘操作补齐';s.space='work'}});
+  return all;
+}
+const linked=id=>S.sessions.filter(s=>s.task===id);
+const BASE_SPACES=SPACES.length;
+function fresh(mode='new'){SPACES.length=BASE_SPACES;return {
+  mode,view:'board',filter:null,showStale:false,
+  todos:seedTodos(mode),sessions:seedLinks(mode),pick:null,focusPick:false,lastAgent:DEFAULT_AGENT,newSpace:null,
+  comp:{open:false,text:'',space:HERE,grow:false,focus:false},
+  drawer:null,side:{open:false,text:'',focus:false},todosOpen:false,
+  term:null,arrive:null,focusForm:false,tip:null,hiddenNew:false,
+}}
+
+/* ---- 数据 ---- */
+const visTodos=()=>S.todos.filter(t=>!t.agent||!S.filter||t.agent===S.filter);
+const visSess=c=>S.sessions.filter(s=>s.col===c&&(!s.agent||!S.filter||s.agent===S.filter));
+const allOf=a=>S.sessions.filter(s=>s.agent===a&&s.col!=='done').length;
+const sessEmpty=()=>['run','need','stop','done'].every(c=>!visSess(c).length);
+const hereTodos=()=>S.todos.filter(t=>t.space===HERE);
+
+/* ---- 演示条 ---- */
+function tipText(){
+  if(S.tip)return S.tip;
+  if(S.mode==='old'){
+    if(S.side.open)return '<b>你在右边点的，鸟瞰却被关了</b>，输入框跑到左栏。按 Esc 只收起输入框，回不到鸟瞰。';
+    if(S.view==='board')return '这是现在的行为：点待办列的「＋ 新待办」试试。';
+    return '现在停在工作区。要看刚记的卡片，得再点右上角「鸟瞰」。';
+  }
+  if(S.view==='term'&&S.term&&S.term.plain)return '<b>普通终端不跟踪状态</b>：待办还留在待办列，做完回来点「完成」。Esc 回鸟瞰。';
+  if(S.view==='term'&&S.term&&S.term.opened)return '这是从待办详情进来的会话。Esc 回鸟瞰，筛选和位置都还在。';
+  if(S.view==='term')return S.term&&!S.term.started?'<b>命令只预填</b>：回车才启动，这时才多一张会话卡，待办卡一直留着。Esc 回鸟瞰。':'Esc 或点右上角「鸟瞰」回去，筛选和滚动都还在。';
+  if(S.drawer)return '<b>更多字段也不离开鸟瞰</b>：字带过来了，看板还看得到。Esc 收起。';
+  if(S.pick)return '<b>开始时才选</b>：回车用高亮的，数字键 1–4 直选，普通终端也算。Esc 取消，待办还在。';
+  if(S.newSpace)return '<b>只要一个名字</b>：目录以后再设，和现在 App 的新建空间一样。回车建好，写的待办不会丢。';
+  if(S.comp.open)return '<b>回车</b>记下接着写 · <b>⌘↵</b> 记下再选怎么开始 · <b>Esc</b> 收起，草稿留着。';
+  if(S.filter==='grok'&&sessEmpty())return '这是你截图里的筛选：会话列全空，现在会说明原因。待办还没交给谁，所以筛选时也留着。';
+  return '<b>待办和会话各管各的</b>：鼠标移到「键盘操作补齐」看它连着谁；开始后待办卡留下。没有待办的会话也照常。';
+}
+function renderStrip(){
+  $('#strip').innerHTML=`<span class="seg" role="group" aria-label="对比">
+      <button class="${S.mode==='old'?'on':''}" data-act="mode" data-v="old">现在</button>
+      <button class="${S.mode==='new'?'on':''}" data-act="mode" data-v="new">新设计</button></span>
+    <span class="tip">${tipText()}</span>
+    <button class="slink" data-act="emptyScene">看 Grok 空板</button>
+    <button class="slink" data-act="reset">重来</button>
+    <button class="slink" data-act="theme">换深浅色</button>
+    <button class="slink" data-act="notes">说明 ↓</button>`;
+}
+
+/* ---- 侧栏 ---- */
+function sideHTML(){
+  const needs=S.sessions.filter(s=>s.col==='need');
+  const quick=S.side.open?`<div class="squick"><input id="sideIn" placeholder="要做什么（回车保存，Esc 取消）" aria-label="要做什么" value="${esc(S.side.text)}">
+    <div class="acts"><button class="pri" data-act="sideSave" data-v="1">保存并开始</button><button data-act="sideSave">保存</button><button data-act="sideExpand">展开</button><button data-act="sideCancel">取消</button></div></div>`:'';
+  const emptyHint=!S.side.open&&!hereTodos().length?`<div class="say">还没有待办。先记下要做的事，再点「开始」派给 agent。</div><button class="sbtn" data-act="newFromSide">＋ 新建待办</button>`:'';
+  const todoRows=S.todosOpen?hereTodos().map(t=>`<div class="sr"><span class="d t"></span><span class="t">${esc(t.title)}</span><button data-act="start" data-v="${t.id}">开始</button></div>${S.pick===t.id?`<div class="sr-pick">${pickerHTML(t)}</div>`:''}`).join(''):'';
+  return `<div class="brand"><b>MOORING</b><span><i></i>本机</span></div>
+  <div class="find"><span>找会话、空间或原话</span><span>⌘P</span></div>
+  <div class="sscroll">
+    <div class="mach">⌄ 本机 <small>${realSessions().length} 个会话</small><em class="badge">${needs.length}</em></div>
+    <div class="chips">${SPACES.map(s=>`<span class="cp"><i class="orb" style="background:${s.g}"></i>${s.name}${needs.filter(x=>x.space===s.id).length?`<em class="badge">${needs.filter(x=>x.space===s.id).length}</em>`:''}</span>`).join('')}<span class="cp dash">+</span></div>
+    ${quick}${emptyHint}${todoRows}
+    <div class="sh"><span>置顶 2</span><span>⌄</span></div>
+    <div class="sr"><span class="d o"></span><span class="t">多终端</span><small>工作空间 11时</small></div>
+    <div class="sr"><span class="d o"></span><span class="t">超分对比测评</span><small>vsr 14时</small></div>
+    <div class="sh"><span>要你处理 ${needs.length}</span><span>⌄</span></div>
+    ${needs.map(s=>`<div class="sr"><span class="d"></span><span class="t">${esc(s.title)}</span><small>${sp(s.space).name}</small></div>`).join('')}
+    <div class="sh"><span>在跑 ${S.sessions.filter(s=>s.col==='run').length}</span><span>⌄</span></div>
+    <div class="sh"><span>今天</span><span>›</span></div>
+  </div>
+  <div class="smach"><span>apple · 先不管 · 2 个在等</span><b>接着管</b></div>
+  <div class="skey"><span class="kbd">⌘J</span>下一个要你的</div>
+  <div class="sfoot"><span>本机 · ${SPACES.length} 个空间</span><span class="tag">待办 ${S.todos.length}</span></div>`;
+}
+
+/* ---- 卡片 ---- */
+const aiM=a=>`<span class="ai ${a}" title="${AGENTS[a].name}">${AGENTS[a].m}</span>`;
+function pickerHTML(t){
+  const order=[S.lastAgent,...Object.keys(AGENTS).filter(a=>a!==S.lastAgent)];
+  const items=order.map((a,i)=>`<button class="pk${i===0?' first':''}" data-act="pickAgent" data-v="${a}" data-key="${i+1}">${AGENTS[a].name}</button>`);
+  if(S.mode==='new')items.push(`<button class="pk" data-act="pickPlain" data-key="4">普通终端</button>`);
+  return `<div class="picker" data-act="noop"><span class="lab">「${esc(t.title.slice(0,12))}」用什么开始</span>${items.join('')}<button class="pk q" data-act="pickCancel">取消</button></div>`;
+}
+function todoCard(t,arrive){
+  const old=S.mode==='old';
+  const foot=old
+    ?`<span class="pill">${AGENTS[t.agent].name}</span><span>${t.acc} 条验收</span><button class="go" data-act="start" data-v="${t.id}">开始 →</button>`
+    :`${t.acc?`<span>${t.acc} 条验收</span>`:''}<button class="okb" data-act="done" data-v="${t.id}">完成</button><button class="go" data-act="start" data-v="${t.id}">${linked(t.id).length?'再开一个':'开始 →'}</button>`;
+  const ls=old?[]:linked(t.id),needN=ls.filter(x=>x.col==='need').length;
+  const state=ls.length?`<span class="prog">在做 · ${ls.length} 个会话${needN?` · <em>${needN} 个要你处理</em>`:''}</span>`:'<span>还没开始</span>';
+  const c=`<div class="card todo" data-task="${t.id}" data-act="openTodo" data-v="${t.id}">
+    <div class="r1">${old?aiM(t.agent):''}${state}<span class="av" title="${esc(sp(t.space).name)}" style="background:${sp(t.space).g}"></span></div>
+    <div class="ttl">${esc(t.title)}</div>
+    <div class="r3">${foot}</div>${S.pick===t.id&&S.view==='board'?pickerHTML(t):''}</div>`;
+  return arrive?`<div class="grow in arrive"><div>${c}</div></div>`:c;
+}
+function sessCard(s,arrive){
+  const pills=[];
+  if(s.ask)pills.push(`<span class="pill ask"><i></i>${s.ask}</span>`);
+  if(s.ok)pills.push(`<span class="pill ok"><i></i>${s.ok}</span>`);
+  if(s.stopped)pills.push(`<span class="pill stop"><i></i>${s.stopped}</span>`);
+  if(s.branch)pills.push(`<span class="pill">${esc(s.branch)}</span>`);
+  if(s.col==='stale')pills.push('<span class="pill stop"><i></i>很久没动</span>');
+  if(S.mode==='new'&&s.agent&&!s.task&&s.col!=='done')pills.push(`<label class="attach">挂到待办<select aria-label="挂到待办" data-change="attach:${s.id}"><option value="" selected disabled>选一条</option>${S.todos.map(t=>`<option value="${t.id}">${esc(t.title)}</option>`).join('')}<option value="__new">＋ 用这个会话新建待办</option></select></label>`);
+  const open=s.task&&S.todos.some(t=>t.id===s.task);
+  const tl=s.task?(open?`<button class="tlink" data-act="openTodo" data-v="${s.task}">待办 · ${esc(s.taskTitle)} ›</button>`:`<span class="tlink" style="color:var(--muted)">待办已完成 · ${esc(s.taskTitle)}</span>`):'';
+  const c=`<div class="card"${s.task?` data-task="${s.task}"`:''}><div class="r1">${s.agent?aiM(s.agent):'<span class="selfm">✓</span>'}<span>${s.agent?s.id+' · '+s.when:(s.sessionsN?`你标完成 · ${s.sessionsN} 个会话 · `:'自己完成 · ')+s.when}</span><span class="av" title="${esc(sp(s.space).name)}" style="background:${sp(s.space).g}"></span></div>
+    <div class="ttl">${esc(s.title)}</div>${s.q?`<div class="q">${esc(s.q)}</div>`:''}${tl}
+    ${pills.length?`<div class="r3">${pills.join('')}</div>`:''}</div>`;
+  return arrive?`<div class="grow in arrive"><div>${c}</div></div>`:c;
+}
+function spacePick(space,act){
+  return `<label class="pick" title="记到哪个空间"><i class="orb" style="background:${sp(space).g}"></i>${esc(sp(space).name)}<span class="car">▾</span>
+    <select aria-label="空间" data-change="${act}">${SPACES.map(s=>`<option value="${s.id}"${s.id===space?' selected':''}>${esc(s.name)}</option>`).join('')}<option value="__new">＋ 新建空间…</option></select></label>`;
+}
+function newSpaceRow(){
+  return S.newSpace?`<div class="newsp"><input id="spaceIn" aria-label="新空间的名字" value="${esc(S.newSpace.name)}"><button class="save" data-act="spaceSave">建好</button><button class="save" data-act="spaceCancel">取消</button><small>目录以后再设，没设时从 ~ 开始</small></div>`:'';
+}
+function agentPick(agent,act){
+  return `<label class="pick" title="交给哪个 Agent">${aiM(agent)}${AGENTS[agent].name}<span class="car">▾</span>
+    <select aria-label="Agent" data-change="${act}">${Object.keys(AGENTS).map(a=>`<option value="${a}"${a===agent?' selected':''}>${AGENTS[a].name}</option>`).join('')}</select></label>`;
+}
+function composer(){
+  const c=S.comp;
+  const box=`<div class="comp${c.grow?' in':''}" id="comp">
+    <textarea id="compIn" rows="1" placeholder="要做什么" aria-label="要做什么">${esc(c.text)}</textarea>
+    <div class="cmeta">${spacePick(c.space,'compSpace')}</div>${S.newSpace&&S.newSpace.target==='comp'?newSpaceRow():''}
+    <div class="cact"><button class="more" data-act="compMore">更多字段</button><span class="sp"></span>
+      <button class="save" data-act="compSave" data-need>记下<span class="cb">↵</span></button>
+      <button class="save pri" data-act="compStart" data-need>开始<span class="cb">⌘↵</span></button></div></div>`;
+  return box;
+}
+function todoColumn(){
+  const list=visTodos().map(t=>todoCard(t,S.arrive===t.id)).join('');
+  if(S.mode==='old'){
+    return list+`<button class="addr" data-act="oldNew">＋ 新待办</button>`;
+  }
+  return (S.comp.open?composer():'')+list;
+}
+
+/* ---- 主区 ---- */
+function boardHTML(){
+  const cols=[...COLS,...(S.showStale?[STALE]:[])];
+  const staleN=visSess('stale').length;
+  const open=S.sessions.filter(s=>s.col!=='done'&&(!S.filter||s.agent===S.filter)).length;
+  const chips=Object.keys(AGENTS).map(a=>`<button class="fc ${S.filter===a?'on':S.filter?'dim':''}" data-act="filter" data-v="${a}">${aiM(a)}${AGENTS[a].name} <small>${allOf(a)}</small></button>`).join('');
+  const hint=S.mode==='new'&&!S.showStale&&sessEmpty()&&staleN?`<div class="none"><b>${AGENTS[S.filter]?AGENTS[S.filter].name+' 的 ':''}${staleN} 个会话都很久没动了</b>
+    <span>它们收在「很久没动」里，所以这几列是空的。</span>
+    <div class="row"><button class="go" data-act="stale">显示很久没动</button><button class="go" data-act="filter" data-v="${S.filter}">看全部 Agent</button></div></div>`:'';
+  return `<div class="head"><h1>鸟瞰全部</h1><span class="sum">${open} 个没收尾 · Esc 回到工作区</span>${chips}<span class="sp"></span>
+      ${staleN?`<button class="lk" data-act="stale">${S.showStale?'收起很久没动':'很久没动'} ${staleN}</button>`:''}
+      <button class="lk">稍后再看与已结束</button>
+      <span class="seg"><button class="on">全部空间</button><button>只看有变化</button></span></div>
+    <div class="quietm"><span>apple · 先不管 · 2 个在等</span><b>接着管</b></div>
+    <div class="board" style="--n:${cols.length};grid-template-columns:repeat(${cols.length},minmax(208px,1fr))">
+      ${cols.map(c=>{
+        const n=c.id==='todo'?visTodos().length:visSess(c.id).length;
+        const body=c.id==='todo'?todoColumn():visSess(c.id).map(s=>sessCard(s,S.arrive===s.id)).join('');
+        return `<section class="col"><div class="colh">${ic[c.id]}<span>${c.name}</span><small>${n}</small>${c.id==='todo'&&S.mode==='new'&&!S.comp.open?`<button class="add" data-act="compOpen" title="新待办（N）">＋ 新待办${S.comp.text?'<span class="dr">· 有草稿</span>':''}</button>`:''}</div><div class="list" data-col="${c.id}">${body}</div></section>`;
+      }).join('')}
+      ${hint}
+    </div>`;
+}
+function termHTML(){
+  const t=S.term;
+  let inner='<span class="dim">~/code/mooring</span> ❯ <span class="cur"></span>';
+  if(t&&t.plain){
+    inner=`<span class="dim">${esc(dirOf(t.space))}</span> ❯ <span class="cur"></span>\n<div class="pre">「${esc(t.title)}」还留在待办列，做完回来点「完成」 · Esc 回鸟瞰${sp(t.space).unset?' · 这个空间还没设目录，从 ~ 开始':''}</div>`;
+  }else if(t){
+    const cmd=`${t.agent==='codex'?'codex':t.agent==='grok'?'grok':'claude'} "${t.title}"`;
+    inner=t.started
+      ? `<span class="dim">${esc(dirOf(t.space))}</span> ❯ ${esc(cmd)}\n\n<span class="dim">Agent 已启动，正在读需求…</span> <span class="cur"></span>`
+      : `<span class="dim">${esc(dirOf(t.space))}</span> ❯ ${esc(cmd)}<span class="cur"></span>\n<div class="pre">命令只预填，<button data-act="termGo">按回车才启动</button> · Esc 回鸟瞰${sp(t.space).unset?' · 这个空间还没设目录，从 ~ 开始':''}</div>`;
+  }
+  return `<div class="termv">${inner}</div>`;
+}
+function formHTML(){
+  return `<div class="formp"><div class="formc">${formBody()}</div></div>`;
+}
+function formBody(){
+  const d=S.drawer;
+  return `<div class="dh"><h2>${d.id?'编辑待办':'新建待办'}</h2><small>${S.mode==='new'?'保存后留在鸟瞰':'保存后不会回到鸟瞰'}</small><button class="x" data-act="drawerClose" aria-label="关闭">×</button></div>
+    <label>要做什么<textarea id="dTitle" rows="2">${esc(d.title)}</textarea></label>
+    <label>说明（可选 · 原样交给 Agent）<textarea id="dDesc" rows="3"></textarea></label>
+    <label>验收条件（可选，一行一条）<textarea id="dAcc" rows="3">${esc(d.acc||'')}</textarea></label>
+    <div class="cmeta">${spacePick(d.space,'dSpace')}${S.mode==='old'?agentPick(d.agent,'dAgent'):''}</div>${S.newSpace&&S.newSpace.target==='drawer'?newSpaceRow():''}
+    ${d.id&&S.mode==='new'?`<div class="lsec"><span>关联会话 ${linked(d.id).length}</span>${linked(d.id).map(x=>`<button class="lrow" data-act="openSess" data-v="${x.id}"><i class="dotk ${x.col}"></i><span class="t">${esc(x.title)}</span><small>${esc(x.ok||x.ask||x.stopped||(x.col==='run'?'在跑':''))}</small></button>`).join('')||'<div class="lnone">还没有，可以再开一个，或在会话卡上「挂到待办」</div>'}</div>`:''}
+    <div class="dacts"><button class="save pri" data-act="drawerSave" data-v="1">保存，再选怎么开始</button><button class="save" data-act="drawerSave">保存</button></div>`;
+}
+function mainHTML(){
+  const on=S.view==='board';
+  const page=S.view==='board'?boardHTML():S.view==='form'?formHTML():termHTML();
+  const crumb=on?'鸟瞰全部':S.view==='form'?'新建待办':'zsh';
+  const needN=S.sessions.filter(s=>s.col==='need').length;
+  return `<div class="bar"><span class="crumb">mooring &nbsp;/&nbsp; <b>${crumb}</b></span>
+      <div class="tabs"><button data-act="toTerm">列表键盘导航</button><button data-act="toTerm">超长文件清单</button><button data-act="toTerm">zsh</button><button data-act="toTerm">Claude Code</button><button data-act="toTerm">每日问题</button></div>
+      <span class="needb"><i></i>要你处理 ${needN} <span class="kbd">⌘J</span></span>
+      <button class="bird ${on?'on':''}" data-act="bird">${ic.grid}鸟瞰</button></div>
+    ${page}
+    ${S.drawer&&S.view==='board'?`<aside class="drawer" aria-label="待办详情">${formBody()}</aside>`:''}
+    <div class="status"><i></i><span>本机 · ${realSessions().length} 个会话</span><span class="sp"></span><span class="q" style="--w:94%">${aiM('claude')}周 <u></u> 94%</span><span class="q g" style="--w:34%">${aiM('codex')}周 <u></u> 34%</span><span>本机诊断</span><span>⌘P 命令</span></div>`;
+}
+
+/* ---- 渲染 ---- */
+function render(){
+  const app=$('#app');
+  const scroll={};
+  app.querySelectorAll('.list').forEach(l=>scroll[l.dataset.col]=l.scrollTop);
+  const ss=app.querySelector('.sscroll');const sTop=ss?ss.scrollTop:0;
+  app.innerHTML=`<aside class="side"><div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>${sideHTML()}</aside><main class="main">${mainHTML()}</main>`;
+  app.querySelectorAll('.list').forEach(l=>{if(scroll[l.dataset.col])l.scrollTop=scroll[l.dataset.col]});
+  const s2=app.querySelector('.sscroll');if(s2)s2.scrollTop=sTop;
+  renderStrip();
+  const ci=$('#compIn');
+  if(ci){sizeArea(ci);syncNeed();if(S.comp.focus){ci.focus();ci.setSelectionRange(ci.value.length,ci.value.length);S.comp.focus=false}}
+  if(S.side.focus){const i=$('#sideIn');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}S.side.focus=false}
+  if(S.newSpace&&S.newSpace.focus){const i=$('#spaceIn');if(i){i.focus();i.select()}S.newSpace.focus=false}
+  if(S.focusPick){const b=$('.pk');if(b)b.focus();S.focusPick=false}
+  if(S.focusForm){const d=$('#dTitle');if(d){d.focus();d.setSelectionRange(d.value.length,d.value.length)}S.focusForm=false}
+  S.comp.grow=false;S.arrive=null;
+}
+function sizeArea(a){a.style.height='auto';a.style.height=a.scrollHeight+'px'}
+function syncNeed(){const has=S.comp.text.trim().length>0;document.querySelectorAll('[data-need]').forEach(b=>b.disabled=!has)}
+function toast(msg,action,fn){
+  const r=$('#toastRoot');clearTimeout(toastTimer);
+  if(!msg){r.innerHTML='';return}
+  r.innerHTML=`<div class="toast" role="status"><span>${msg}</span>${action?'<button id="toastAct">'+action+'</button>':''}</div>`;
+  if(action)$('#toastAct').onclick=()=>{fn();toast()};
+  toastTimer=setTimeout(()=>{r.innerHTML=''},5200);
+}
+
+/* ---- 行为 ---- */
+function newId(){return 't'+(nextId++)}
+function addTodo(title,space,agent,acc=0){
+  const t={id:newId(),title:title.trim(),space,agent:S.mode==='old'?agent:null,acc};
+  S.todos.unshift(t);S.arrive=t.id;return t;
+}
+function afterSave(t){
+  const undo=()=>{S.todos=S.todos.filter(x=>x!==t);render()};
+  toast(`已记到 ${esc(sp(t.space).name)}`,'撤销',undo);
+}
+function openComp(){
+  S.comp.open=true;S.comp.grow=true;S.comp.focus=true;
+  if(!S.comp.text&&!sp(S.comp.space).unset)S.comp.space=HERE;
+  render();
+}
+function compSave(){
+  const text=S.comp.text.trim();if(!text)return;
+  const t=addTodo(text,S.comp.space,DEFAULT_AGENT);
+  S.comp.text='';S.comp.focus=true;
+  render();afterSave(t);
+}
+function askPick(t){S.pick=t.id;S.focusPick=true;S.arrive=null;S.drawer=null;toast();render()}
+function startTerm(t,agent,plain=false){
+  S.pick=null;S.drawer=null;
+  if(agent)S.lastAgent=agent;
+  S.term={todoId:t.id,title:t.title,space:t.space,agent,plain,started:false};
+  S.view='term';toast();render();
+}
+function compStart(){
+  const text=S.comp.text.trim();if(!text)return;
+  const t=addTodo(text,S.comp.space,DEFAULT_AGENT);
+  S.comp.text='';S.comp.open=false;askPick(t);
+}
+function termGo(){
+  const t=S.term;if(!t||t.started||t.plain)return;
+  t.started=true;
+  const todo=S.todos.find(x=>x.id===t.todoId);
+  if(S.mode==='old')S.todos=S.todos.filter(x=>x.id!==t.todoId);
+  if(todo){const id=Math.random().toString(16).slice(2,6).toUpperCase();
+    S.sessions.unshift({id,agent:t.agent,col:'run',title:todo.title,space:todo.space,when:'0:00',branch:'feat/new',...(S.mode==='new'?{task:todo.id,taskTitle:todo.title}:{})});S.arrive=id}
+  render();
+}
+function backToBoard(){
+  S.pick=null;S.view='board';S.term=null;if(S.mode==='new'&&S.comp.open)S.comp.focus=true;render();
+}
+function sideSave(start){
+  const text=S.side.text.trim();if(!text){S.tip='<b>先写要做什么</b>';render();S.tip=null;return}
+  const t=addTodo(text,HERE,DEFAULT_AGENT);
+  S.side.open=false;S.side.text='';S.arrive=null;
+  if(start){S.todosOpen=true;askPick(t);return}
+  if(S.mode==='old'&&S.filter&&t.agent!==S.filter)S.tip=`待办记下了，但回到鸟瞰也<b>看不到</b>：它是 Claude Code 的，筛选还停在 ${AGENTS[S.filter].name}。`;
+  else if(S.mode==='old')S.tip='待办记下了，但<b>看不到它落在哪</b>：要再点右上角「鸟瞰」。';
+  render();
+}
+const A={
+  mode(v){S=fresh(v);toast();render()},
+  reset(){S=fresh(S.mode);toast();render()},
+  emptyScene(){S=fresh(S.mode);S.filter='grok';toast();render()},
+  theme(){const r=document.documentElement,dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme:dark)').matches;r.dataset.theme=dark?'light':'dark'},
+  notes(){$('.notes').scrollIntoView({behavior:'smooth'})},
+  filter(v){S.filter=S.filter===v?null:v;S.tip=null;if(S.comp.open&&!S.comp.text)S.comp.agent=S.filter||DEFAULT_AGENT;render()},
+  stale(){S.showStale=!S.showStale;render()},
+  bird(){if(S.view==='board'){S.view='term';S.tip=null;render();return}S.tip=null;S.side.open&&S.mode==='old'&&(S.side.open=false);S.drawer=S.view==='form'?null:S.drawer;backToBoard()},
+  toTerm(){S.view='term';S.term=null;S.drawer=null;S.tip=null;render()},
+  compOpen(){openComp()},
+  compSave,compStart,
+  compMore(){S.drawer={id:null,title:S.comp.text,space:S.comp.space,agent:S.comp.agent};S.focusForm=true;render()},
+  oldNew(){S.view='term';S.term=null;S.todosOpen=true;S.side.open=true;S.side.focus=true;S.tip=null;render()},
+  newFromSide(){
+    if(S.mode==='new'&&S.view==='board'){openComp();return}
+    S.view='term'===S.view||S.mode==='old'?'term':S.view;S.term=S.view==='term'?S.term:null;
+    S.todosOpen=true;S.side.open=true;S.side.focus=true;S.tip=null;render();
+  },
+  sideSave(v){sideSave(!!v)},
+  sideCancel(){S.side.open=false;S.side.text='';render()},
+  sideExpand(){S.drawer={id:null,title:S.side.text,space:HERE,agent:DEFAULT_AGENT};S.side.open=false;S.side.text='';S.view=S.mode==='old'?'form':S.view;S.focusForm=true;render()},
+  openTodo(v){if(S.mode==='old')return;const t=S.todos.find(x=>x.id===v);if(t){S.drawer={id:t.id,title:t.title,space:t.space,agent:t.agent,acc:''};S.focusForm=true;render()}},
+  start(v){const t=S.todos.find(x=>x.id===v);if(t)askPick(t)},
+  pickAgent(v){const t=S.todos.find(x=>x.id===S.pick);if(t)startTerm(t,v)},
+  pickPlain(){const t=S.todos.find(x=>x.id===S.pick);if(t)startTerm(t,null,true)},
+  pickCancel(){S.pick=null;render()},
+  done(v){
+    const t=S.todos.find(x=>x.id===v);if(!t)return;
+    S.todos=S.todos.filter(x=>x!==t);
+    const rec={id:t.id+'-done',agent:null,col:'done',title:t.title,space:t.space,when:'刚刚',sessionsN:linked(t.id).length};
+    S.sessions.unshift(rec);S.pick=null;S.arrive=rec.id;render();
+    toast(rec.sessionsN?`已完成，${rec.sessionsN} 个关联会话不会被停掉，留在原来的列`:'已完成，没开任何会话','撤销',()=>{S.sessions=S.sessions.filter(x=>x!==rec);S.todos.unshift(t);render()});
+  },
+  openSess(v){const x=S.sessions.find(y=>y.id===v);if(!x)return;S.drawer=null;S.term={title:x.title,space:x.space,agent:x.agent||'claude',started:true,opened:true};S.view='term';toast();render()},
+  spaceSave(){saveSpace()},
+  spaceCancel(){cancelSpace()},
+  termGo,
+  drawerClose(){closeDrawer()},
+  drawerSave(v){
+    const d=S.drawer,title=$('#dTitle').value.trim();
+    if(!title){$('#dTitle').focus();return}
+    const n=$('#dAcc').value.split('\n').filter(x=>x.trim()).length;
+    let t;
+    if(d.id){t=S.todos.find(x=>x.id===d.id);Object.assign(t,{title,space:d.space,agent:d.agent,acc:Math.max(n,t.acc)})}
+    else{t=addTodo(title,d.space,d.agent,n);S.comp.text='';S.comp.open=S.comp.open&&S.mode==='new'}
+    S.drawer=null;
+    if(v){askPick(t);return}
+    if(S.mode==='old'&&S.view==='form')S.view='term';
+    if(S.comp.open)S.comp.focus=true;
+    render();if(!d.id&&S.mode==='new')afterSave(t);
+  },
+};
+function newSpaceName(){for(let i=1;;i++){const n=i===1?'新空间':'新空间 '+i;if(!SPACES.some(s=>s.name===n))return n}}
+function saveSpace(){
+  const ns=S.newSpace;if(!ns)return;
+  const i=$('#spaceIn'),name=(i?i.value:ns.name).trim();
+  if(!name){if(i)i.focus();return}
+  const sid='s'+(nextId++);
+  SPACES.push({id:sid,name,g:SPACE_TILES[SPACES.length%SPACE_TILES.length],unset:true});
+  S.newSpace=null;
+  if(ns.target==='comp'){S.comp.space=sid;S.comp.focus=true}
+  else if(S.drawer){S.drawer.space=sid;S.focusForm=true}
+  render();toast(`建好了空间「${esc(name)}」，目录以后再设`);
+}
+function cancelSpace(){
+  const ns=S.newSpace;if(!ns)return;
+  S.newSpace=null;if(ns.target==='comp')S.comp.focus=true;else S.focusForm=true;render();
+}
+function closeDrawer(){
+  const d=S.drawer;if(!d)return;
+  if(!d.id&&S.mode==='new'&&S.comp.open){S.comp.text=$('#dTitle').value;S.comp.focus=true}
+  if(S.view==='form')S.view='term';
+  S.drawer=null;render();
+}
+
+/* 事件 */
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');
+  if(b&&!b.disabled){
+    e.stopPropagation();
+    // 卡片里的按钮优先；select 不触发打开卡片
+    if(e.target.closest('select'))return;
+    A[b.dataset.act]&&A[b.dataset.act](b.dataset.v);
+    return;
+  }
+  // 点到别处：没写字就收起，写了字就留着
+  if(S.mode==='new'&&S.comp.open&&!S.drawer&&!e.target.closest('#comp')&&!S.comp.text.trim()){S.comp.open=false;render()}
+});
+document.addEventListener('input',e=>{
+  if(e.target.id==='compIn'){S.comp.text=e.target.value.replace(/\n/g,' ');sizeArea(e.target);syncNeed()}
+  if(e.target.id==='sideIn')S.side.text=e.target.value;
+});
+document.addEventListener('change',e=>{
+  const k=e.target.dataset&&e.target.dataset.change;if(!k)return;
+  const v=e.target.value;
+  if(k.startsWith('attach:')){
+    const x=S.sessions.find(y=>y.id===k.slice(7));if(!x)return;
+    let t=S.todos.find(y=>y.id===v);
+    if(v==='__new'){t={id:newId(),title:x.title,space:x.space,agent:null,acc:0};S.todos.unshift(t);S.arrive=t.id}
+    if(!t)return;
+    x.task=t.id;x.taskTitle=t.title;render();
+    toast(`已挂到「${esc(t.title)}」`,'撤销',()=>{delete x.task;delete x.taskTitle;if(v==='__new')S.todos=S.todos.filter(y=>y!==t);render()});
+    return;
+  }
+  if(v==='__new'){
+    const target=k==='compSpace'?'comp':'drawer';
+    if(target==='drawer'){const t=$('#dTitle');if(t)S.drawer.title=t.value}
+    S.newSpace={target,name:newSpaceName(),focus:true};render();return;
+  }
+  if(k==='compSpace'){S.comp.space=v;S.comp.focus=true}
+  if(k==='dSpace')S.drawer.space=v;
+  if(k==='dAgent')S.drawer.agent=v;
+  if(k[0]==='d'){const t=$('#dTitle');if(t)S.drawer.title=t.value}
+  render();
+});
+document.addEventListener('keydown',e=>{
+  if(e.isComposing||e.keyCode===229)return; // 输入法选词的回车不算保存
+  const id=e.target.id,tag=e.target.tagName;
+  if(id==='spaceIn'){
+    if(e.key==='Enter'){e.preventDefault();saveSpace();return}
+    if(e.key==='Escape'){e.preventDefault();e.stopPropagation();cancelSpace();return}
+    return;
+  }
+  if(S.pick&&!(tag==='TEXTAREA'||tag==='INPUT')){
+    if(e.key==='Escape'){e.preventDefault();S.pick=null;if(S.mode==='new'&&S.comp.open)S.comp.focus=true;render();return}
+    const pk=[...document.querySelectorAll('.pk[data-key]')];
+    const hit=pk.find(b=>b.dataset.key===e.key);
+    if(hit){e.preventDefault();hit.click();return}
+    if(e.key==='ArrowRight'||e.key==='ArrowLeft'){
+      e.preventDefault();const i=pk.indexOf(document.activeElement);
+      pk[(i+(e.key==='ArrowRight'?1:pk.length-1))%pk.length].focus();return;
+    }
+  }
+  if(id==='compIn'){
+    if(e.key==='Enter'){e.preventDefault();(e.metaKey||e.ctrlKey)?compStart():compSave();return}
+    if(e.key==='Escape'){e.preventDefault();S.comp.open=false;render();return}
+    return;
+  }
+  if(id==='sideIn'){
+    if(e.key==='Enter'){e.preventDefault();sideSave(false);return}
+    if(e.key==='Escape'){e.preventDefault();S.side.open=false;S.side.text='';render();return}
+    return;
+  }
+  const typing=tag==='TEXTAREA'||tag==='INPUT'||tag==='SELECT';
+  if(e.key==='Escape'){
+    if(S.drawer){e.preventDefault();closeDrawer();return}
+    if(S.mode==='new'&&S.view==='term'){e.preventDefault();backToBoard();return}
+    if(S.mode==='new'&&S.comp.open){S.comp.open=false;render();return}
+    if(S.view==='board'&&!typing){S.view='term';S.term=null;S.tip=null;render();return}
+    return;
+  }
+  if(typing||e.metaKey||e.ctrlKey||e.altKey)return;
+  if(e.key==='Enter'&&S.view==='term'&&S.term&&!S.term.started&&tag!=='BUTTON'){e.preventDefault();termGo();return}
+  if((e.key==='n'||e.key==='N')&&S.mode==='new'&&S.view==='board'&&!S.drawer){e.preventDefault();openComp()}
+});
+
+document.addEventListener('mouseover',e=>{
+  const c=e.target.closest&&e.target.closest('[data-task]');
+  document.querySelectorAll('.card.linked').forEach(x=>x.classList.remove('linked'));
+  if(c&&S.mode==='new'&&S.view==='board')document.querySelectorAll(`[data-task="${c.dataset.task}"]`).forEach(x=>x.classList.add('linked'));
+});
+
+/* 地址参数，便于截图复现：#mode=old&filter=grok */
+const P=new URLSearchParams(location.hash.slice(1));
+S=fresh(P.get('mode')==='old'?'old':'new');
+if(P.get('filter'))S.filter=P.get('filter');
+render();
+if(P.get('theme'))document.documentElement.dataset.theme=P.get('theme');
+</script>
+</body>
+</html>
