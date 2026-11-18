@@ -16,6 +16,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use fibo_remote::role::{acts, Role};
 
+mod lock;
+use lock::lock;
+
 pub fn role_label(role: Role) -> &'static str {
     match role {
         Role::View => t!("只看"),
@@ -210,41 +213,6 @@ fn clear_abandoned(socket: &Path) {
             let _ = std::fs::remove_file(entry.path());
         }
     }
-}
-
-/// Held from reading the phones to writing them back: the host and a `fibo remote` both
-/// change them, and a change made from a stale list brings back a phone just unpaired.
-/// Released when dropped. flock belongs to the open file, so this excludes other threads
-/// too, and whoever holds it must not ask for it again: it would wait on itself.
-fn lock(socket: &Path) -> io::Result<std::fs::File> {
-    let file = fibo_platform::fs::private_file()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .open(socket.with_file_name("remote-devices.lock"))?;
-    // A suspended writer can hold this lock indefinitely. Bound only our wait; never
-    // unlink its lock or change the device list without owning the same lock it holds.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    loop {
-        match file.try_lock() {
-            Ok(()) => break,
-            Err(std::fs::TryLockError::Error(e)) => return Err(e),
-            Err(std::fs::TryLockError::WouldBlock) => {
-                let left = deadline.saturating_duration_since(std::time::Instant::now());
-                if left.is_zero() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::TimedOut,
-                        t!("设备文件正被另一项操作占用，请稍后重试"),
-                    ));
-                }
-                // Writes normally hold the lock for only a few milliseconds; a long
-                // polling interval lets a busy writer repeatedly win before we wake.
-                std::thread::sleep(left.min(std::time::Duration::from_millis(1)));
-            }
-        }
-    }
-    clear_abandoned(socket);
-    Ok(file)
 }
 
 fn file(socket: &Path) -> PathBuf {
