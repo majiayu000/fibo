@@ -13,6 +13,7 @@ import { useAsk } from '@/remote/useAsk';
 import { useSuggestion } from '@/remote/useSuggestion';
 import { cacheChat, cachedChat } from '@/store/chatCache';
 import { drop, enqueue, retry, useOutbox } from '@/store/outbox';
+import { type Pending, updatePending, usePending } from '@/store/pending';
 import { rememberSent, useSentPictures } from '@/store/sentPictures';
 import { countUse } from '@/store/suggestionCounts';
 import { suggestionStats } from '@/store/suggestions';
@@ -39,9 +40,6 @@ import { picturesFor, sameWords, sendTarget, shownWords, wordsBeside } from '@/u
 import { useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
 import { tr } from '@/i18n';
-
-/** `queued`: sent while the Agent worked; what that means depends on the CLI (ui/busy.ts). */
-type Pending = { text: string; at: number; queued?: boolean; pictures?: number; how?: How; now?: boolean };
 
 const POLL_MS = 2000;
 
@@ -77,7 +75,9 @@ export default function Chat() {
   const paging = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [pending, setPending] = useState<Pending[]>([]);
+  // Kept per terminal, not in this screen: a deep link to another conversation reuses it.
+  const pending = usePending(machine, terminal);
+  const setPending = useCallback((change: (p: Pending[]) => Pending[]) => updatePending(machine, terminal, change), [machine, terminal]);
   const [term, setTerm] = useState(false);
   const [queuedOpen, setQueuedOpen] = useState(false);
   // The box keeps its focus under the sheet, and Android hands it back when the sheet closes:
@@ -182,17 +182,18 @@ export default function Chat() {
   // Agent's own queue until the step at hand is done, which can take minutes: it stays as long
   // as the turn runs, and half a minute after.
   const working = online && card?.phase === 'working';
-  const ranAt = useRef(0);
-  if (working) ranAt.current = Date.now() / 1000;
+  const ranAt = useRef({ terminal: '', at: 0 });
+  if (ranAt.current.terminal !== `${machine}\n${terminal}`) ranAt.current = { terminal: `${machine}\n${terminal}`, at: 0 };
+  if (working) ranAt.current.at = Date.now() / 1000;
   useEffect(() => {
     setPending((p) =>
       p.filter(
         (x) =>
-          Date.now() / 1000 - Math.max(x.at, ranAt.current) < 30 &&
+          Date.now() / 1000 - Math.max(x.at, ranAt.current.at) < 30 &&
           !messages.some((m) => m.role === 'user' && m.at >= x.at - 5 && sameWords(m.text, x.text, x.pictures)),
       ),
     );
-  }, [messages, working]);
+  }, [messages, working, setPending]);
 
   const canReadBack = partial && !more && !readAll && supports(m, 'backfill');
   // Scrolled to the top: the next page, or when the index ends, the next stretch of the log.
