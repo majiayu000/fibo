@@ -34,8 +34,12 @@ pub(super) fn credential(interactive: bool) -> Result<Credential, String> {
         .unwrap_or_else(|| home.join(".claude"));
     // A custom profile must never fall through to another account's global keychain entry.
     let bytes = if custom.is_none() {
-        fibo_platform::keychain::password("Claude Code-credentials", interactive).map_err(|_| {
-            t!("无法读取 Claude 登录凭据；请在终端运行 fibo claude-quota refresh 授权读取")
+        // The system code tells a refused dialog (-128) from one that could not be shown.
+        fibo_platform::keychain::password("Claude Code-credentials", interactive).map_err(|e| {
+            format!(
+                "{} ({e})",
+                t!("无法读取 Claude 登录凭据；请在终端运行 fibo claude-quota refresh 授权读取")
+            )
         })?
     } else {
         None
