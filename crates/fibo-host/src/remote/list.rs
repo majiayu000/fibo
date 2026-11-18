@@ -269,6 +269,38 @@ mod tests {
         assert_eq!(card.doing.as_deref(), Some("后台留着 1 个服务 · 端口 5569"));
     }
 
+    /// Another machine's window lists a session's subagents under its row from the card;
+    /// a card from a host before 11-18 has none and reads as having none.
+    #[test]
+    fn a_card_carries_its_sessions_subagents() {
+        let mut w = fibo_core::sample::every_state();
+        let session = (w.agent_sessions.iter())
+            .find(|s| status::live_terminal(&w, s).is_some())
+            .expect("the sample has a live session")
+            .id
+            .clone();
+        let sub = fibo_core::content::Subagent {
+            id: "a1".into(),
+            name: "找出慢的测试".into(),
+            started: 100,
+            ..Default::default()
+        };
+        w.content.get_mut(&session).unwrap().subagents = vec![sub.clone()];
+        let dir = std::env::temp_dir().join(format!("fibo-subs-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut json = list(&w, &Default::default(), &dir.join("sock")).unwrap();
+        let list: rp::List = serde_json::from_value(json.clone()).unwrap();
+        let card = (list.terminals.iter())
+            .find(|c| c.session.as_deref() == Some(session.as_str()))
+            .unwrap();
+        assert_eq!(card.subagents, vec![sub]);
+        for card in json["terminals"].as_array_mut().unwrap() {
+            card.as_object_mut().unwrap().remove("subagents");
+        }
+        let old: rp::List = serde_json::from_value(json).unwrap();
+        assert!(old.terminals.iter().all(|c| c.subagents.is_empty()));
+    }
+
     #[test]
     fn an_agent_without_a_conversation_lists_with_its_note() {
         let mut w = fibo_core::sample::every_state();

@@ -235,8 +235,13 @@ impl Workbench {
     /// row is faded, says 断开 where its time goes, and opens nothing.
     pub(super) fn remote_row(&self, r: &RemoteRow, cx: &Context<Self>) -> gpui::AnyElement {
         let card = &r.card;
-        let asks = r.asks();
-        let two = asks.is_some();
+        // Subagents take the second line, except on a row that asks you something.
+        let subs = Some(card.subagents.as_slice())
+            .filter(|s| !s.is_empty() && r.bucket != Bucket::Attention);
+        let asks = r.asks().filter(|_| subs.is_none());
+        let subs_live = matches!(r.status, Status::Running | Status::Background);
+        let subs_open = self.subagents_open(&r.key, r.shown);
+        let two = asks.is_some() || subs.is_some();
         let time = if !r.online && !r.quiet {
             t!("断开").to_owned()
         } else {
@@ -352,6 +357,25 @@ impl Workbench {
                                 .text_color(r.status.colors().1)
                                 .child(text),
                         )
+                    })
+                    .when_some(subs, |d, subs| {
+                        d.child(self.subagent_line(&r.key, subs, subs_live, subs_open, cx))
+                            .when(subs_open, |d| {
+                                let open = open.clone();
+                                let click: super::sidebar_subagents::Click =
+                                    std::rc::Rc::new(move |this, window, cx| {
+                                        if let Some((index, card, name)) = &open {
+                                            this.open_remote_peek(
+                                                *index,
+                                                card.clone(),
+                                                name,
+                                                window,
+                                                cx,
+                                            );
+                                        }
+                                    });
+                                d.child(self.subagent_tree(&r.key, click, subs, subs_live, cx))
+                            })
                     }),
             )
             .when(r.shown, |d| {

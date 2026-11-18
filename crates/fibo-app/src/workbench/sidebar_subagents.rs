@@ -11,6 +11,9 @@ use crate::ui::theme::Flat as F;
 use crate::ui::tone::Tone;
 use fibo_core::content::Subagent;
 
+/// What a session row's click does, for its branches to do too.
+pub(super) type Click = std::rc::Rc<dyn Fn(&mut Workbench, &mut Window, &mut Context<Workbench>)>;
+
 fn ink(v: u32) -> gpui::Hsla {
     T::color(v)
 }
@@ -181,15 +184,15 @@ impl Workbench {
     /// The opened list: a branch per subagent hung from under the row's state mark, a
     /// gap ring and its time so far while it runs, a ✓ or ✕ and how long it took once
     /// ended; then what folds away, or 收起 once the whole list is open.
+    /// `session` keys what is opened; `open` is the row's click, which a branch's does.
     pub(super) fn subagent_tree(
         &self,
-        row: &AgentSession,
-        done: bool,
+        session: &str,
+        open: Click,
         subs: &[Subagent],
         live: bool,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
-        let session = row.id.as_str();
         let whole = self.layout.subagents_all.contains(session);
         let shown = shown(subs, live, whole);
         let fold = if shown.folded.any() {
@@ -257,7 +260,7 @@ impl Workbench {
                     (false, Some(end)) => turn_clock(end.saturating_sub(s.started)),
                     (false, None) => String::new(),
                 };
-                let open = row.clone();
+                let open = open.clone();
                 leaf(i)
                     .id(gpui::SharedString::from(format!("subagent-{session}-{i}")))
                     .cursor_pointer()
@@ -308,7 +311,7 @@ impl Workbench {
                     )
                     .on_click(cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();
-                        this.click_row(&open, done, window, cx);
+                        open(this, window, cx);
                     }))
             })
             .collect::<Vec<_>>();

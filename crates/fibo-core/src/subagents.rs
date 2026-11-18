@@ -1,32 +1,8 @@
 //! The subagents a session lists under its sidebar row: what one is, which of them the
 //! session keeps, and which ones did not finish.
 use crate::content::{Content, Turn};
-use serde::{Deserialize, Serialize};
 
-/// One subagent a session started: its description (its type without one), and when it
-/// started and ended.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Subagent {
-    /// The CLI's id for it, which a task notification names it by.
-    #[serde(default)]
-    pub id: String,
-    pub name: String,
-    pub started: u64,
-    /// `None` while it runs.
-    #[serde(default)]
-    pub ended: Option<u64>,
-    /// The parent turn waits on it.
-    #[serde(default)]
-    pub foreground: bool,
-    /// It failed or was stopped before finishing.
-    #[serde(default)]
-    pub stopped: bool,
-}
-impl Subagent {
-    pub fn running(&self) -> bool {
-        self.ended.is_none()
-    }
-}
+pub use fibo_remote::subagent::Subagent;
 
 /// What a `<task-notification>` says: the tasks it names (one can name several, when a
 /// resumed session reports what the last one left behind) and whether they did not finish.
