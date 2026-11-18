@@ -11,7 +11,7 @@ import { Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, Vi
 import { oops } from '@/actions';
 import { tr } from '@/i18n';
 import { NOT_YET, refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
-import { resetDraft, setDraft, useDraft } from '@/store/draft';
+import { getDraft, resetDraft, setDraft, useDraft } from '@/store/draft';
 import { rememberSent } from '@/store/sentPictures';
 import { Icon } from '@/ui/icons';
 import { Btn, Label, Nav, Notice, Wide, mono, noOutline } from '@/ui/kit';
@@ -42,9 +42,10 @@ export default function NewTask() {
   const online = machines.filter((m) => m.status === 'online');
   const m = machines.find((x) => x.id === draft.machine) ?? online[0] ?? machines[0];
 
+  const selectedMachine = m?.id;
   useEffect(() => {
-    if (m && draft.machine !== m.id) setDraft({ machine: m.id });
-  }, [m?.id]);
+    if (selectedMachine && draft.machine !== selectedMachine) setDraft({ machine: selectedMachine });
+  }, [selectedMachine, draft.machine]);
 
   const able = supports(m, 'open') && speaksV2(m);
   const spaces = m?.spaceList ?? [];
@@ -73,7 +74,7 @@ export default function NewTask() {
   // Another directory, Agent or computer: another 「上次」.
   useEffect(() => {
     setNote('');
-    if (draft.resume) setDraft({ resume: undefined });
+    if (getDraft().resume) setDraft({ resume: undefined });
   }, [draft.cwd, draft.agent, draft.machine]);
 
   /** Finds the last conversation here. One still running is not opened again: you go to it. */

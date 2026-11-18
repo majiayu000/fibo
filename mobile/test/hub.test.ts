@@ -23,6 +23,7 @@ mock.module('../src/store/machines', () => ({
   forgetMachine: async () => { if (forgetFailure) throw new Error('Keychain delete failed'); },
   machineId: (l: any) => l.machine,
 }));
+mock.module('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} }));
 mock.module('../src/store/quota', () => ({ forgetQuota: async () => undefined }));
 
 const hub = await import('../src/remote/hub');
@@ -78,7 +79,7 @@ async function failAll() {
   await settle();
 }
 
-const LINK = { machine: 'm1', name: 'mac', device: 'phone', relay: 'ws://x', code: 'c', key: 'k' } as any;
+const LINK = { machine: 'm1', name: 'mac', device: 'phone', relay: 'ws://x', code: new Uint8Array(32), key: new Uint8Array(32) } as any;
 const started = (async () => {
   hub.stage([LINK], (link: any) => new Promise((resolve, reject) => dials.push({ link, resolve: resolve as any, reject })));
   await hub.start();
@@ -285,3 +286,17 @@ test('an old computer shows update guidance and receives no list or queued input
     protocolVersion = 2;
   }
 });
+test('an identical refresh preserves the machine reference for subscribers', async () => {
+  const before = hub.getMachine('m1');
+  await hub.refresh('m1');
+  await hub.refresh('m1');
+  expect(hub.getMachine('m1')).toBe(before);
+});
+
+
+test('a heartbeat updates latency without replacing the machine used by every page', async () => {
+  const before = hub.getMachine('m1');
+  await new Promise(done => setTimeout(done, 15_100));
+  expect(hub.getMachine('m1')).toBe(before);
+  expect(hub.getMachine('m1')?.status).toBe('online');
+}, 20_000);

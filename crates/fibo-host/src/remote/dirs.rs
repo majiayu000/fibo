@@ -278,14 +278,9 @@ fn changes(found: &[PathBuf], repos: &[Option<Repo>]) -> Vec<Option<u32>> {
 }
 
 fn status_command(dir: &Path) -> Command {
-    let mut c = Command::new("git");
-    c.arg("-C")
-        .arg(dir)
-        .args(["-c", "core.fsmonitor=false", "status", "--porcelain", "-z"])
-        .env("GIT_OPTIONAL_LOCKS", "0")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+    let mut c = fibo_core::git::command(dir);
+    c.args(["status", "--porcelain", "-z"])
+        .stdout(Stdio::piped());
     c
 }
 

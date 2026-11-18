@@ -267,4 +267,27 @@ mod tests {
         assert_eq!(relative(cwd, Some(cwd)), None);
         assert_eq!(relative(Path::new("/work/app/a"), None), None);
     }
+    #[test]
+    fn encoded_file_links_use_the_executable_opening_policy() {
+        let (uri, expected) = if cfg!(windows) {
+            ("file:///C:/a%20harmless.command", r"C:\a harmless.command")
+        } else {
+            (
+                "file:///tmp/a%20harmless.command",
+                "/tmp/a harmless.command",
+            )
+        };
+        let path = crate::terminal::screen::file_uri(uri).unwrap();
+        assert_eq!(path, PathBuf::from(expected));
+        assert_eq!(
+            plan(&path, None, Editor::System, false, |_| None),
+            Plan::Reveal { executable: true }
+        );
+        assert_eq!(
+            plan(&path, None, Editor::System, true, |_| None),
+            Plan::Reveal { executable: false }
+        );
+        assert!(crate::terminal::screen::file_uri("file://remote.example/a.command").is_none());
+        assert!(crate::terminal::screen::file_uri("https://example.com/a.command").is_none());
+    }
 }

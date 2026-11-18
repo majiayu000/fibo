@@ -105,14 +105,10 @@ export type Machine = {
   /** Spaces put aside on the computer (先不管): their conversations do not come here. */
   quietSpaces?: Space[];
   todos?: Todo[];
-  /** Seconds since the epoch of the last list. */
-  updated?: number;
   /** `macos` or `linux`; from hosts that speak the 11-04 contract (v2-plan.md). */
   os?: string;
   /** The host's app version, when it says. */
   appVersion?: string;
-  /** Round trip of the last `ping`, measured here, in ms. */
-  latency?: number;
   /** Seconds since the epoch when it was last online. */
   seen?: number;
 };
@@ -135,11 +131,18 @@ export function stage(links: Link[], d: Dial) {
   // A clean hub for whoever stages it: test files share this module in one process.
   state = { ...state, loaded: false, machines: [] };
   remotes.clear();
+  beats.clear();
   dialing.clear();
   flights.clear();
   for (const id of [...retry.keys()]) stopRetry(id);
 }
 const listeners = new Set<() => void>();
+// Only the computer details subscribe to latency; a heartbeat does not redraw every page.
+const beats = new Map<string, { latency: number; seen: number }>();
+const beatListeners = new Set<() => void>();
+export function useLatency(id: string) {
+  return useSyncExternalStore((l) => { beatListeners.add(l); return () => { beatListeners.delete(l); }; }, () => beats.get(id)?.latency);
+}
 const remotes = new Map<string, Remote>();
 const retry = new Map<string, { delay: number; timer?: ReturnType<typeof setTimeout> }>();
 /** The dial in flight for a machine: one at a time, and one that is no longer wanted closes. */
@@ -153,9 +156,16 @@ function stopRetry(id: string) {
 }
 
 function set(id: string, patch: Partial<Machine>) {
+  const current = get(id);
+  if (!current) return;
+  const changed = Object.fromEntries(Object.entries(patch).filter(([key, value]) => {
+    const before = current[key as keyof Machine];
+    return !Object.is(before, value) && JSON.stringify(before) !== JSON.stringify(value);
+  }));
+  if (!Object.keys(changed).length) return;
   state = {
     ...state,
-    machines: state.machines.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    machines: state.machines.map((m) => (m.id === id ? { ...m, ...changed } : m)),
   };
   listeners.forEach((l) => l());
 }
@@ -174,7 +184,6 @@ function listed(list: { spaces?: any[]; quiet?: any[] | null; todos?: Todo[]; ma
     ...(list.todos && { todos: list.todos }),
     name: list.machine?.name || get(id)?.name || '',
     ...(list.machine && { agentNames: list.machine.agent_names ?? {} }),
-    updated: Date.now() / 1000,
   };
 }
 
@@ -300,7 +309,11 @@ function ping(id: string, r: Remote) {
   const sent = Date.now();
   r.request('ping')
     .then(() => {
-      if (remotes.get(id) === r) set(id, { latency: Date.now() - sent, seen: Date.now() / 1000 });
+      if (remotes.get(id) !== r) return;
+      const latency = Date.now() - sent;
+      const changed = beats.get(id)?.latency !== latency;
+      beats.set(id, { latency, seen: Date.now() / 1000 });
+      if (changed) beatListeners.forEach((l) => l());
     })
     .catch(() => undefined);
 }
@@ -310,7 +323,7 @@ function ended(id: string, code: number | undefined, fallback?: string, reason?:
   if (!get(id)) return;
   const o = closeOutcome(code, reason);
   // Without a code, what the connection said (a timeout, a bad handshake) says more.
-  set(id, { status: o.status, error: code === undefined && fallback ? fallback : o.text });
+  set(id, { status: o.status, error: code === undefined && fallback ? fallback : o.text, seen: beats.get(id)?.seen ?? get(id)?.seen });
   if (o.retry === 'now') {
     stopRetry(id);
     connect(id);
@@ -408,6 +421,8 @@ export async function forget(id: string) {
   dialing.delete(id);
   stopRetry(id);
   await forgetQuota(id);
+  beats.delete(id);
+  beatListeners.forEach((l) => l());
   state = { ...state, machines: state.machines.filter((m) => m.id !== id) };
   listeners.forEach((l) => l());
 }

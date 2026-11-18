@@ -193,7 +193,7 @@
 "会话等你回答、出错或做完时弹一条 macOS 通知；App 没开也会发。可以设成只在出错时通知" = "Send macOS notifications for questions, errors, or completed conversations, even with the app closed. Can be limited to errors."
 "从 OpenCode 的 SQLite 库读会话和子 Agent：父子归属、回合状态、权限提示和回答、中断、报错与改动证据" = "Read OpenCode SQLite sessions and subagents: parent links, turn state, permissions, answers, interruptions, errors, and change evidence."
 "窗格信息" = "Pane details"
-"窗格标题栏显示上一条命令失败的退出码和 git 未提交的改动数，悬停标题看上一条命令用时和最近一次提交" = "Show failed exit codes and uncommitted Git changes in the title. Hover for command duration and the latest commit."
+"窗格标题栏显示上一条命令失败的退出码和 git 已暂存文件数，悬停标题看上一条命令用时和最近一次提交" = "Show failed exit codes and staged Git file counts in the title. Hover for command duration and the latest commit."
 "项目自带的检查脚本" = "Project checks"
 "把 just test、scripts/ci.sh 这类项目自己的检查命令也算作跑过验证" = "Count project commands such as just test and scripts/ci.sh as verification."
 "状态左栏（WASM 示例）" = "Status sidebar (WASM example)"

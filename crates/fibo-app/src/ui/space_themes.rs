@@ -32,13 +32,24 @@ impl SpaceThemes {
             ..Self::default()
         }
     }
-    fn save(&self) -> Result<(), String> {
-        let dir = config_dir().ok_or(t!("找不到配置目录"))?;
-        let text = serde_json::to_string_pretty(&self.chosen).map_err(|e| e.to_string())?;
-        std::fs::create_dir_all(&dir)
+    fn save_at(
+        path: &std::path::Path,
+        space: &str,
+        theme: Option<&str>,
+    ) -> Result<BTreeMap<String, String>, String> {
+        let mut chosen: BTreeMap<String, String> =
+            fibo_core::state_file::read_for_update(path).map_err(|e| e.to_string())?;
+        match theme {
+            Some(id) => chosen.insert(space.to_owned(), id.to_owned()),
+            None => chosen.remove(space),
+        };
+        let dir = path.parent().ok_or(t!("找不到配置目录"))?;
+        let text = serde_json::to_string_pretty(&chosen).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(dir)
             .map_err(|e| t!("无法保存 {path}：{e}", path = dir.display(), e))?;
-        super::status_colors::write_atomic(&dir.join(FILE), text.as_bytes())
-            .map_err(|e| t!("无法保存 {path}：{e}", path = dir.join(FILE).display(), e))
+        super::status_colors::write_atomic(path, text.as_bytes())
+            .map_err(|e| t!("无法保存 {path}：{e}", path = path.display(), e))?;
+        Ok(chosen)
     }
     pub fn of(&self, space: &str) -> Option<&str> {
         self.chosen.get(space).map(String::as_str)
@@ -66,12 +77,9 @@ pub fn follow(space: &str, cx: &mut App) {
 /// Give a space a theme, or `None` to have it follow 外观 again.
 pub fn set(space: &str, theme: Option<&str>, cx: &mut App) -> Result<(), String> {
     let mut spaces = cx.try_global::<SpaceThemes>().cloned().unwrap_or_default();
-    match theme {
-        Some(id) => spaces.chosen.insert(space.to_owned(), id.to_owned()),
-        None => spaces.chosen.remove(space),
-    };
+    let path = config_dir().ok_or(t!("找不到配置目录"))?.join(FILE);
+    spaces.chosen = SpaceThemes::save_at(&path, space, theme)?;
     spaces.current = Some(space.to_owned());
-    spaces.save()?;
     cx.set_global(spaces);
     super::appearance::apply(cx);
     crate::set_menus(cx);
@@ -112,5 +120,25 @@ mod tests {
         };
         assert_eq!(spaces.of("s1"), Some("slate"));
         assert_eq!(spaces.of("s2"), None);
+    }
+    #[test]
+    fn saving_after_a_broken_load_keeps_the_original_file() {
+        let dir = std::env::temp_dir().join(format!("fibo-space-themes-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(FILE);
+        for bad in ["{", "[]", r#"{"space":42}"#] {
+            std::fs::write(&path, bad).unwrap();
+            assert!(
+                SpaceThemes::save_at(&path, "s1", Some("pine"))
+                    .unwrap_err()
+                    .contains(FILE)
+            );
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), bad);
+        }
+        std::fs::write(&path, r#"{"other":"slate"}"#).unwrap();
+        let saved = SpaceThemes::save_at(&path, "s1", Some("pine")).unwrap();
+        assert_eq!(saved.get("other").unwrap(), "slate");
+        assert_eq!(saved.get("s1").unwrap(), "pine");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

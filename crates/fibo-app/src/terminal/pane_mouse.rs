@@ -110,7 +110,17 @@ impl Pane {
             && let Some((y, x)) = self.cell_at(event.position)
             && let Some(link) = self.screen.link_at(y, x)
         {
-            cx.open_url(&link.uri);
+            if let Some(path) = screen::file_uri(&link.uri) {
+                let target = super::Hovered {
+                    path,
+                    at: None,
+                    whole: true,
+                    cwd: self.cwd.clone(),
+                };
+                self.open_target(&target, event.modifiers.alt, cx);
+            } else {
+                cx.open_url(&link.uri);
+            }
             cx.stop_propagation();
             return;
         }

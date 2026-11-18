@@ -12,3 +12,6 @@ libghostty-vt = { path = ".deps/libghostty-rs/crates/libghostty-vt" }
 
 [profile.dev]
 debug = 0
+
+[profile.release]
+strip = "symbols"

@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { confirm, oops } from '@/actions';
 import { tk, tr } from '@/i18n';
-import { type Machine, forget, reconnect, useHub } from '@/remote/hub';
+import { type Machine, forget, reconnect, useHub, useLatency } from '@/remote/hub';
 import { Btn, Label, Nav, Round, Wide, useBottom } from '@/ui/kit';
 import { relayPlace } from '@/ui/parse';
 import { type Theme, ago, useTheme } from '@/ui/theme';
@@ -36,6 +36,7 @@ function Stat({ k, v, unit, t }: { k: string; v: string; unit?: string; t: Theme
 }
 
 function MachineCard({ m, t }: { m: Machine; t: Theme }) {
+  const latency = useLatency(m.id);
   const place = relayPlace(m.link.relay);
   const online = m.status === 'online';
   const conversations = m.cards.filter((c) => c.agent && c.phase !== 'shell').length;
@@ -62,7 +63,7 @@ function MachineCard({ m, t }: { m: Machine; t: Theme }) {
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Stat t={t} k={tr('对话')} v={String(conversations)} />
             <Stat t={t} k={tr('连接')} v={place.lan ? tr('局域网') : tr('中继')} />
-            <Stat t={t} k={tr('延迟')} v={m.latency === undefined ? '—' : m.latency < 1 ? '<1' : String(m.latency)} unit={m.latency !== undefined ? 'ms' : undefined} />
+            <Stat t={t} k={tr('延迟')} v={latency === undefined ? '—' : latency < 1 ? '<1' : String(latency)} unit={latency !== undefined ? 'ms' : undefined} />
           </View>
           <Text style={{ fontSize: 13, color: t.dim }} numberOfLines={2}>
             {[...facts, tr('经 {host}', { host: place.host })].join(' · ')}

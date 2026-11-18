@@ -444,7 +444,7 @@ impl Workbench {
                             role = role_label(p.role)
                         ))
                         .child(label(t!(
-                            "这个码只给这一台手机，别截图发给别人；关掉后不再显示。"
+                            "请在 10 分钟内首次扫码，过期后重新配对。这个码只给这一台手机，别发给别人。"
                         ))),
                 )
                 .child(

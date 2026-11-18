@@ -6,10 +6,11 @@ field background	crates/fibo-app/src/terminal/screen_extras.rs	1
 field background	crates/fibo-app/src/terminal/screen_paint.rs	2
 field background	crates/fibo-app/src/ui/theme.rs	1
 field background	crates/fibo-app/src/workbench/sidebar_list/session_row.rs	1
-field background	crates/fibo-host/src/host/mod.rs	1
 field background	crates/fibo-host/src/host/report_back.rs	1
 field background	crates/fibo-host/src/host/shell_watch.rs	4
+field background	crates/fibo-host/src/host/snapshot.rs	1
 field content-name	crates/fibo-host/src/control.rs	1
+field content-name	crates/fibo-host/src/plugins_cmd.rs	1
 field content-name	mobile/src/ui/livework.tsx	1
 field content-title	crates/fibo-app/src/native.m	1
 field content-title	crates/fibo-app/src/workbench/board/remote.rs	2
@@ -18,8 +19,8 @@ field content-title	crates/fibo-app/src/workbench/machines.rs	1
 field content-title	mobile/src/ui/format.ts	1
 field session-updated	crates/fibo-app/src/model/session_state.rs	1
 field session-updated	crates/fibo-host/src/host/association.rs	2
-field session-updated	crates/fibo-host/src/host/mod.rs	1
 field session-updated	crates/fibo-host/src/host/screen_match.rs	1
+field session-updated	crates/fibo-host/src/host/snapshot.rs	1
 field solid-surface	crates/fibo-app/src/main.rs	1
 field solid-surface	crates/fibo-app/src/terminal/pane_render.rs	1
 field solid-surface	crates/fibo-app/src/ui/field.rs	1
@@ -40,13 +41,12 @@ field turn	crates/fibo-host/examples/claim_scan.rs	1
 field turn	crates/fibo-host/src/control/explain.rs	2
 field turn	crates/fibo-host/src/host/client.rs	1
 field turn	crates/fibo-host/src/host/found_shells.rs	3
-field turn	crates/fibo-host/src/host/mod.rs	6
 field turn	crates/fibo-host/src/host/report_back.rs	2
+field turn	crates/fibo-host/src/host/snapshot.rs	6
 field turn	crates/fibo-host/src/host/status.rs	1
 field turn	crates/fibo-host/src/plugin_hooks.rs	1
 field turn	mobile/src/actions.ts	2
 field turn	mobile/src/app/chat.tsx	1
-field turn_started	crates/fibo-app/src/desktop.rs	1
 field turn_started	crates/fibo-app/src/workbench/board/card.rs	1
 field turn_started	crates/fibo-app/src/workbench/sessions/here_card.rs	3
 field turn_started	crates/fibo-app/src/workbench/sidebar/view.rs	1
@@ -55,9 +55,7 @@ field turn_started	crates/fibo-app/src/workbench/sidebar_list/dense_row.rs	1
 field turn_started	crates/fibo-app/src/workbench/sidebar_recent.rs	1
 field turn_started	crates/fibo-app/src/workbench/sidebar_wasm.rs	2
 field turn_started	crates/fibo-host/src/host/association.rs	1
-field turn_started	crates/fibo-host/src/host/mod.rs	1
-field turn_started	crates/fibo-host/src/host/report_back.rs	3
-field turn_started	crates/fibo-host/src/plugin_hooks.rs	3
+field turn_started	crates/fibo-host/src/host/snapshot.rs	1
 keycap	crates/fibo-app/src/terminal/open_path.rs	7
 keycap	crates/fibo-app/src/terminal/pane_links.rs	1
 keycap	crates/fibo-app/src/workbench/board/composer.rs	1
@@ -79,13 +77,14 @@ word 停下了	crates/fibo-app/src/model/session_state.rs	1
 word 出错(无了)	crates/fibo-app/src/model/session_state.rs	1
 word 出错(无了)	crates/fibo-app/src/workbench/settings/notifications.rs	2
 word 出错(无了)	crates/fibo-app/src/workbench/sidebar_wasm.rs	1
+word 出错(无了)	crates/fibo-core/src/content.rs	1
 word 出错(无了)	crates/fibo-core/src/market.rs	1
 word 出错了	crates/fibo-host/src/host/report_back.rs	1
 word 出错了	mobile/src/app/settings.tsx	2
 word 在跑	crates/fibo-app/src/model/session_state.rs	3
 word 在跑	crates/fibo-app/src/workbench/layout/confirm_close.rs	1
 word 在跑	crates/fibo-host/src/agents/mod.rs	1
-word 在跑	crates/fibo-host/src/host/mod.rs	2
+word 在跑	crates/fibo-host/src/host/snapshot.rs	2
 word 工作中	crates/fibo-host/src/agents/codex.rs	1
 word 工作中	crates/fibo-host/src/agents/codex_items.rs	1
 word 已完成	crates/fibo-app/src/workbench/mod.rs	1
@@ -115,6 +114,7 @@ word 等你验收	crates/fibo-app/src/model/session_state.rs	1
 word 等你验收	crates/fibo-app/src/workbench/task_detail.rs	1
 word 等你验收	mobile/src/app/settings.tsx	2
 word 等后台	crates/fibo-app/src/model/session_state.rs	1
+word 等后台	crates/fibo-core/src/content.rs	5
 word 要你处理	crates/fibo-app/src/remote_board_evidence.rs	2
 word 要你处理	crates/fibo-host/src/agents/codex_items.rs	1
 word 需要你	crates/fibo-app/src/workbench/settings.rs	1

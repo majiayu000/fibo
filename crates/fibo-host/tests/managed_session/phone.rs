@@ -149,12 +149,12 @@ fn remote_chat_pages_a_conversation_by_terminal_and_session() {
     child.wait().ok();
 }
 
-/// The phone app's own client (`next/mobile/src/remote`, TypeScript) against this machine
+/// The phone app's own client (`mobile/src/remote`, TypeScript) against this machine
 /// through a real relay: Noise handshake, hello, events, list, chat, a message sent into
 /// the conversation and the Agent's reply read back. Needs bun and `bun install` in
-/// `next/mobile`, so it runs only when asked: `cargo test … -- --ignored the_js_phone`.
+/// `mobile`, installed by the Linux CI job. To run it locally: `cargo test … -- --ignored the_js_phone`.
 #[test]
-#[ignore = "needs bun and next/mobile's node_modules"]
+#[ignore = "needs bun and mobile's node_modules"]
 fn the_js_phone_client_chats_through_a_real_relay() {
     use serde_json::{json, Value};
     let h = Host::start();

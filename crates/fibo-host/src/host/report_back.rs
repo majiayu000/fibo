@@ -96,9 +96,8 @@ fn turn_end(w: &Workspace, child: &str) -> Option<(String, String)> {
     let c = w.content.get(&s.id)?;
     let event = crate::plugin_hooks::event(status::of(w, s, now()), c.turn)?;
     let agent = s.runtime.name();
-    let (key, body, hint) = match event {
+    let (body, hint) = match event {
         Event::Done => (
-            format!("done:{}:{}", c.turn_key, c.turn_started),
             // The turn ended before its reply was read: report it once the reply is.
             match c.last_reply.trim() {
                 "" => return None,
@@ -107,17 +106,12 @@ fn turn_end(w: &Workspace, child: &str) -> Option<(String, String)> {
             t!("要它接着做：fibo prompt {child} \"…\"；看画面：fibo read {child}", child),
         ),
         Event::Waiting => (
-            format!(
-                "waiting:{}:{}:{}",
-                c.turn_key, c.turn_started, c.waiting_episode
-            ),
             t!("它在等回答：{question}", question = c.waiting.trim()),
             t!(
                 "看画面：fibo read {child}；替它回答前先问用户，用户同意后 fibo prompt {child} --force \"…\"", child
             ),
         ),
         Event::Error => (
-            format!("error:{}:{}:{}", c.turn_key, c.turn_started, c.error),
             t!("出错了：{error}", error = c.error.trim()),
             t!("看画面：fibo read {child}", child),
         ),
@@ -133,7 +127,7 @@ fn turn_end(w: &Workspace, child: &str) -> Option<(String, String)> {
         event.name(),
         clean(&body),
     );
-    Some((key, text))
+    Some((c.event_key(event), text))
 }
 
 /// One paste's worth of plain text: no control characters but line breaks and tabs.

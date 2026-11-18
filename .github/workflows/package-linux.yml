@@ -3,7 +3,7 @@ name: Linux installer
 on:
   pull_request:
     branches: [main]
-    paths: ['crates/**', 'packaging/linux/**', 'Cargo.lock', 'rust-toolchain.toml', 'bootstrap.sh', 'patches/**', '.github/workflows/package-linux.yml']
+    paths: ['crates/**', 'plugins/**', 'packaging/linux/**', 'Cargo.lock', 'rust-toolchain.toml', 'bootstrap.sh', 'patches/**', '.github/workflows/package-linux.yml']
   workflow_dispatch:
 
 permissions:
@@ -38,6 +38,10 @@ jobs:
       - run: sh bootstrap.sh
       - name: Build the window and host
         run: cargo build --release -p fibo-app -p fibo-host
+      # Bundled files are trusted with the app; official remote signing stays in sign-catalog.
+      # Keep this index on the disposable runner, never commit it over the signed catalog.
+      - name: Index the plugins bundled with this build
+        run: target/release/fibo plugins index plugins
       - name: Package and install
         run: |
           python3 packaging/linux/package.py

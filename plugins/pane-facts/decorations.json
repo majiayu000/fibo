@@ -11,7 +11,7 @@
     },
     {
       "id": "changes",
-      "command": "n=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' '); [ \"$n\" -gt 0 ] && echo \"改动 $n\"",
+      "command": "n=$(git diff --cached --name-only --no-ext-diff --no-textconv --no-renames 2>/dev/null | wc -l | tr -d ' '); [ \"$n\" -gt 0 ] && echo \"已暂存 $n\"",
       "place": "title",
       "refresh_s": 10
     },

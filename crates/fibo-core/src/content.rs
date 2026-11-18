@@ -1,4 +1,5 @@
 //! Small, sourced projections. The transcript and mechanical receipts remain distinct.
+mod event;
 mod plain;
 use crate::model::AgentSession;
 #[cfg(test)]

@@ -4,6 +4,7 @@
 // it falls back to localStorage.
 import { type Link, linkText, parseLink } from '../remote/link';
 import { kv as store } from './kv';
+import { tr } from '../i18n';
 
 const INDEX = 'mooring.machines';
 const entry = (id: string) => `mooring.machine.${id.replace(/[^A-Za-z0-9._-]/g, '_')}`;
@@ -12,11 +13,9 @@ const entry = (id: string) => `mooring.machine.${id.replace(/[^A-Za-z0-9._-]/g, 
 export const machineId = (l: Link) => l.machine || `device-${l.device}`;
 
 async function ids(): Promise<string[]> {
-  try {
-    return JSON.parse((await store.get(INDEX)) ?? '[]');
-  } catch {
-    return [];
-  }
+  const value: unknown = JSON.parse((await store.get(INDEX)) ?? '[]');
+  if (!Array.isArray(value) || !value.every((id) => typeof id === 'string')) throw new Error(tr('本地数据格式不正确'));
+  return value;
 }
 
 export async function loadMachines(): Promise<Link[]> {
@@ -36,12 +35,13 @@ export async function loadMachines(): Promise<Link[]> {
 /** Pairing the same machine again replaces its old link. */
 export async function saveMachine(link: Link): Promise<void> {
   const id = machineId(link);
-  await store.set(entry(id), linkText(link));
   const all = await ids();
+  await store.set(entry(id), linkText(link));
   if (!all.includes(id)) await store.set(INDEX, JSON.stringify([...all, id]));
 }
 
 export async function forgetMachine(id: string): Promise<void> {
+  const all = await ids();
   await store.del(entry(id));
-  await store.set(INDEX, JSON.stringify((await ids()).filter((x) => x !== id)));
+  await store.set(INDEX, JSON.stringify(all.filter((x) => x !== id)));
 }

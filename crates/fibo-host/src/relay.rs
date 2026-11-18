@@ -222,7 +222,7 @@ fn pair(socket: &Path, relay: &str, name: &str, role: Role) -> io::Result<()> {
         out,
         "{}",
         t!(
-            "这一行只给这一台手机用，别发给别人。取消它：fibo remote --revoke {id}",
+            "请在 10 分钟内首次配对，过期后重新生成。这一行别发给别人。取消它：fibo remote --revoke {id}",
             id = device.id
         )
     )

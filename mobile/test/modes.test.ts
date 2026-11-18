@@ -23,12 +23,7 @@ mock.module('expo-local-authentication', () => ({
   hasHardwareAsync: async () => true,
   authenticateAsync: async () => ({ success: passes }),
 }));
-mock.module('../src/store/machines', () => ({
-  loadMachines: async () => [],
-  saveMachine: async () => undefined,
-  forgetMachine: async () => undefined,
-  machineId: (l: any) => l.machine,
-}));
+mock.module('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} }));
 mock.module('../src/store/quota', () => ({ forgetQuota: async () => undefined }));
 mock.module('../src/store/settings', () => ({ settings: { get: () => ({ lock, confirmDanger: true }) }, readSettings: async () => ({ lock, confirmDanger: true }) }));
 const hub = await import('../src/remote/hub');

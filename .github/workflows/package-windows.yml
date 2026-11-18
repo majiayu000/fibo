@@ -10,6 +10,7 @@ on:
       - main
     paths:
       - crates/**
+      - plugins/**
       - Cargo.lock
       - rust-toolchain.toml
       - bootstrap.sh
@@ -36,7 +37,7 @@ jobs:
       - name: Keep line endings
         run: git config --global core.autocrlf false
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install the pinned Rust toolchain
         run: rustup toolchain install --no-self-update
@@ -54,6 +55,11 @@ jobs:
         env:
           LIBGHOSTTY_VT_SYS_OPTIMIZE: ReleaseFast
         run: cargo build --release -p fibo-app -p fibo-host
+
+      # Bundled files are trusted with the app; official remote signing stays in sign-catalog.
+      # Keep this index on the disposable runner, never commit it over the signed catalog.
+      - name: Index the plugins bundled with this build
+        run: .\target\release\fibo.exe plugins index plugins
 
       - name: Stage
         run: python packaging/windows/stage.py --output target/windows-stage
@@ -94,7 +100,7 @@ jobs:
           $manifest = @{ source = (git rev-parse HEAD); installer = (Split-Path $setup -Leaf); sha256 = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower(); signed = ((Get-AuthenticodeSignature $setup).Status -eq 'Valid'); published = $false }
           $manifest | ConvertTo-Json | Set-Content target\installer\manifest.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Fibo-Setup-windows-x64
           path: target/installer/

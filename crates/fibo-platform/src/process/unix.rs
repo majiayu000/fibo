@@ -58,6 +58,16 @@ pub fn kill_group(group: i32) -> io::Result<()> {
     signal_group(group, libc::SIGKILL)
 }
 
+pub fn group_members(group: i32) -> Vec<u32> {
+    crate::inspect::all_pids()
+        .into_iter()
+        .filter(|&pid| {
+            // SAFETY: asks for one process's group; a process that just exited returns -1.
+            unsafe { libc::getpgid(pid as i32) == group }
+        })
+        .collect()
+}
+
 pub fn was_signalled(status: &std::process::ExitStatus) -> bool {
     use std::os::unix::process::ExitStatusExt;
     status.signal().is_some()

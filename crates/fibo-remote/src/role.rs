@@ -36,8 +36,14 @@ impl Role {
             "send" | "keys" | "input" | "resize" | "open" | "end" | "outcome" | "dirs"
             | "mkdir" | "stop" | "lastsession" | "addspace" | "spacequiet" | "trust" | "modes"
             | "setmode" | "todoadd" | "todooutcome" | "image" | "sendnow" => self == Self::Full,
+            // Words `hello` lists to say what an op also takes: each goes with its op.
+            "steer" | "effort" | "openimages" => self == Self::Full,
+            "toolslast" => true,
             "answer" => self != Self::View,
-            _ => true,
+            "hello" | "ping" | "list" | "cards" | "read" | "chat" | "watch" | "events"
+            | "close" | "diff" | "quota" | "usage" | "toolcalls" | "toolcall" | "backfill"
+            | "suggestion" | "ask" => true,
+            _ => false,
         }
     }
 }
@@ -71,6 +77,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_listed_op_reaches_a_full_phone() {
+        for op in crate::ops::OPS {
+            assert!(
+                Role::Full.allows(op),
+                "{op} is listed in hello but no role allows it"
+            );
+        }
+    }
+
+    #[test]
     fn roles_allow_only_what_they_name() {
         for op in [
             "hello",
@@ -86,6 +102,7 @@ mod tests {
             "usage",
             "toolcalls",
             "toolcall",
+            "toolslast",
             "backfill",
             "suggestion",
             "ask",
@@ -105,12 +122,20 @@ mod tests {
             "todooutcome",
             "image",
             "sendnow",
+            "steer",
+            "effort",
+            "openimages",
         ] {
             assert!(!Role::Answer.allows(op) && Role::Full.allows(op), "{op}");
         }
         assert!(!Role::View.allows("answer") && !Role::View.allows("send"));
         assert!(Role::Answer.allows("answer") && !Role::Answer.allows("keys"));
         assert!(Role::Full.allows("send") && Role::Full.allows("keys"));
+        for role in [Role::View, Role::Answer, Role::Full] {
+            assert!(!role.allows("future_operation"));
+            assert!(!role.allows(""));
+            assert!(role.allows("ping"));
+        }
         assert_eq!(Role::parse("admin"), None);
         assert_eq!(serde_json::to_string(&Role::Answer).unwrap(), r#""answer""#);
         assert!(acts("keys") && acts("mkdir") && acts("addspace") && !acts("watch"));

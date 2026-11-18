@@ -256,7 +256,7 @@
 "已取消配对 {name}（{id}），它正连着的会话一秒内断开" = "Revoked pairing for {name} ({id}); active session will disconnect"
 "--relay 需要中继地址，例如 https://relay.example.com" = "--relay requires a relay URL, e.g. https://relay.example.com"
 "「{name}」（{id}，权限：{role}）：用手机 App 扫码配对，或者粘贴这一行：" = "\"{name}\" ({id}, role: {role}): scan QR code in the phone app or paste this pairing URI:"
-"这一行只给这一台手机用，别发给别人。取消它：fibo remote --revoke {id}" = "Single-device pairing secret — do not share. Revoke anytime with: fibo remote --revoke {id}"
+"请在 10 分钟内首次配对，过期后重新生成。这一行别发给别人。取消它：fibo remote --revoke {id}" = "Pair for the first time within 10 minutes; generate a new link if it expires. Do not share it. Revoke with: fibo remote --revoke {id}"
 "还没有配对的设备：fibo remote --pair --relay <中继地址> --name <名字>" = "No paired devices yet: `fibo remote --pair --relay <url> --name <name>`"
 "{id}  {name}  {role}  配对于 {paired}  最近连接 {last}" = "{id}  {name}  {role}  paired {paired}  last seen {last}"
 "fibo remote 要选一种用法：\n{usage}" = "`fibo remote` requires a mode flag:\n{usage}"

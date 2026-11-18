@@ -2,6 +2,9 @@ import type { Entry } from './index';
 
 /** State words, as the desktop says them (crates/fibo-core/locales/en/core.toml). */
 export const common: Record<string, Entry> = {
+  '连接长时间没有传输进展，正在重连': 'No transfer progress for too long. Reconnecting…',
+  '本地数据格式不正确': 'The local data has an invalid format',
+
   等你回答: 'Waiting for you',
   出错了: 'Error',
   在跑: 'Running',

@@ -67,13 +67,14 @@ fn start_deadlines(shared: &Shared) -> io::Result<()> {
     });
     Ok(())
 }
-/// A terminal received from the previous host.
+/// A terminal fully prepared while the previous host still owns its process.
 struct Taken {
-    handed: Handed,
-    snapshot: Vec<u8>,
-    master: fibo_platform::terminal::Master,
+    id: String,
+    live: Live,
+    reader: term::Reader,
+    replies: Arc<Mutex<Vec<u8>>>,
 }
-fn take_over(root: &Path) -> io::Result<Vec<Taken>> {
+fn take_over(root: &Path) -> io::Result<(local::Stream, Vec<Taken>)> {
     let mut stream = local::Stream::connect(root.join("workbench.sock"))?;
     stream.set_read_timeout(Some(Duration::from_secs(15)))?;
     send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
@@ -104,20 +105,55 @@ fn take_over(root: &Path) -> io::Result<Vec<Taken>> {
         snapshots.push(snapshot);
     }
     let masters = term::receive_masters(&stream, terminals.len())?;
-    write_frame(&mut stream, ACK, HANDOFF_TAKEN)?;
-    Ok(terminals
+    let taken = terminals
         .into_iter()
         .zip(snapshots)
         .zip(masters)
-        .map(|((handed, snapshot), master)| Taken {
-            handed,
-            snapshot,
-            master,
+        .map(|((handed, snapshot), master)| {
+            let mut vt = Vt::restore(&snapshot)?;
+            let replies = Arc::new(Mutex::new(Vec::new()));
+            let out = Arc::clone(&replies);
+            vt.on_reply(move |bytes| {
+                if let Ok(mut out) = out.lock() {
+                    out.extend_from_slice(bytes);
+                }
+            })?;
+            let cell = CellPixels::default();
+            cell.set(handed.cell.0, handed.cell.1);
+            vt.answer_queries(cell.clone())?;
+            let reader = master.reader()?;
+            Ok(Taken {
+                id: handed.id,
+                live: Live {
+                    vt,
+                    master,
+                    cols: handed.cols,
+                    rows: handed.rows,
+                    pid: handed.pid,
+                    owner: None,
+                    subscribers: HashMap::new(),
+                    watchers: Default::default(),
+                    exited: false,
+                    drained: false,
+                    status: None,
+                    exit_code: None,
+                    title: handed.title,
+                    cell,
+                    input_at: None,
+                    marks: Default::default(),
+                    reports: Default::default(),
+                },
+                reader,
+                replies,
+            })
         })
-        .collect())
+        .collect::<io::Result<Vec<_>>>()?;
+    // No ACK yet: failure while preparing the store, watcher or listening socket must
+    // leave the old host alive. Dropping this connection makes it resume serving.
+    Ok((stream, taken))
 }
 /// What starting would trip over that does not wait on the old host leaving: an entry
-/// where the listening socket goes that is not one, a store this user cannot read.
+/// where either listening socket goes that is not one.
 fn ready_to_take_over(root: &Path) -> io::Result<()> {
     for name in ["workbench.sock", ".sock-start"] {
         if local::at_path(&root.join(name))? == local::AtPath::Other {
@@ -126,15 +162,6 @@ fn ready_to_take_over(root: &Path) -> io::Result<()> {
             )));
         }
     }
-    let db = rusqlite::Connection::open_with_flags(
-        root.join("workbench.sqlite"),
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .map_err(|e| io::Error::other(format!("not taking over: the store does not open: {e}")))?;
-    db.query_row("SELECT count(*) FROM sqlite_master", [], |r| {
-        r.get::<_, i64>(0)
-    })
-    .map_err(|e| io::Error::other(format!("not taking over: the store does not read: {e}")))?;
     Ok(())
 }
 pub(super) fn serve_runtime(
@@ -151,34 +178,20 @@ pub(super) fn serve_runtime(
         );
     }
     fibo_platform::fs::secure_dir(root)?;
-    let taken = if takeover {
-        // The old host lets go of every terminal once told they are taken, so what can
-        // fail without it gone is tried first: failing later would hang them all up.
-        ready_to_take_over(root)?;
-        take_over(root)?
-    } else {
-        vec![]
-    };
     let instance_lock = fibo_platform::fs::lock_file(&root.join("host.lock"))?;
-    // After a handoff the old host exits on its own; wait for it to let go of the runtime.
-    let until = Instant::now() + Duration::from_secs(if takeover { 10 } else { 0 });
-    while instance_lock.try_lock().is_err() {
-        if Instant::now() >= until {
-            return Err(io::Error::other("a daemon already owns this runtime"));
-        }
-        thread::sleep(Duration::from_millis(20));
+    if !takeover {
+        instance_lock
+            .try_lock()
+            .map_err(|_| io::Error::other("a daemon already owns this runtime"))?;
     }
-    wait_log::start(root);
+    ready_to_take_over(root)?;
+    let (handoff, taken) = if takeover {
+        let (stream, taken) = take_over(root)?;
+        (Some(stream), taken)
+    } else {
+        (None, vec![])
+    };
     let socket = root.join("workbench.sock");
-    match local::at_path(&socket)? {
-        local::AtPath::MySocket => fs::remove_file(&socket)?,
-        local::AtPath::Nothing => (),
-        local::AtPath::Other => {
-            return Err(io::Error::other(
-                "refusing to replace a non-socket runtime entry",
-            ));
-        }
-    }
     // Without it hooks fall back to the process tree alone.
     if let Err(e) = pty::announce_host(root) {
         eprintln!("announce host to terminals: {e}");
@@ -187,7 +200,7 @@ pub(super) fn serve_runtime(
     if let Err(e) = pty::install_shell_integration(root) {
         eprintln!("install shell integration: {e}");
     }
-    let kept = taken.iter().map(|t| t.handed.id.clone()).collect();
+    let kept = taken.iter().map(|t| t.id.clone()).collect();
     let (store, mut workspace) = Store::open_keeping(root, &kept)?;
     let mut index = crate::log_index::Index::open(root, roots)?;
     index.recent_days = recent_days;
@@ -238,46 +251,38 @@ pub(super) fn serve_runtime(
             }
         }
     })?);
-    for t in taken {
-        let mut vt = Vt::restore(&t.snapshot)?;
-        let replies = Arc::new(Mutex::new(Vec::new()));
-        let out = Arc::clone(&replies);
-        vt.on_reply(move |bytes| {
-            if let Ok(mut out) = out.lock() {
-                out.extend_from_slice(bytes);
+    // Prepare the replacement listener without unlinking the old host's public socket.
+    // A failing VT, store read, watcher or bind above/below therefore has no cutover.
+    let pending_socket = root.join(".sock-start");
+    if local::at_path(&pending_socket)? == local::AtPath::MySocket {
+        fs::remove_file(&pending_socket)?;
+    }
+    let listener = local::Listener::bind(&pending_socket)?;
+    local::restrict(&pending_socket)?;
+    if let Some(mut stream) = handoff {
+        write_frame(&mut stream, ACK, HANDOFF_TAKEN)?;
+        let until = Instant::now() + Duration::from_secs(10);
+        while instance_lock.try_lock().is_err() {
+            if Instant::now() >= until {
+                return Err(io::Error::other(
+                    "previous daemon did not release the runtime",
+                ));
             }
-        })?;
-        let cell = CellPixels::default();
-        cell.set(t.handed.cell.0, t.handed.cell.1);
-        vt.answer_queries(cell.clone())?;
-        let reader = t.master.reader()?;
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+    wait_log::start(root);
+    for t in taken {
+        let pid = t.live.pid;
         let mut guard = lock(&host)?;
         run_live(
             &mut guard,
             &host,
-            t.handed.id,
-            Live {
-                vt,
-                master: t.master,
-                cols: t.handed.cols,
-                rows: t.handed.rows,
-                pid: t.handed.pid,
-                owner: None,
-                subscribers: HashMap::new(),
-                watchers: Default::default(),
-                exited: false,
-                drained: false,
-                status: None,
-                exit_code: None,
-                title: t.handed.title,
-                cell,
-                input_at: None,
-                marks: Default::default(),
-                reports: Default::default(),
-            },
-            reader,
-            replies,
-            Reaper::Pid(t.handed.pid),
+            t.id,
+            t.live,
+            t.reader,
+            t.replies,
+            Reaper::Pid(pid),
         );
     }
     // A terminal the older host started with an Agent may still wait on it, and nothing here
@@ -305,23 +310,11 @@ pub(super) fn serve_runtime(
         });
         let mut h = lock(&host)?;
         h.remote = Some(supervisor);
-        h.remote_changed()?;
-    }
-    // bind(2) creates the pathname before listen(2) makes it connectable. Under
-    // scheduler pressure a client seeing that pathname can get ECONNREFUSED.
-    // Publish only an initialized, listening socket, while holding host.lock.
-    let pending_socket = root.join(".sock-start");
-    match local::at_path(&pending_socket)? {
-        local::AtPath::MySocket => fs::remove_file(&pending_socket)?,
-        local::AtPath::Nothing => (),
-        local::AtPath::Other => {
-            return Err(io::Error::other(
-                "refusing to replace pending non-socket entry",
-            ));
+        if let Err(e) = h.remote_changed() {
+            eprintln!("publish remote status: {e}");
         }
     }
-    let listener = local::Listener::bind(&pending_socket)?;
-    local::restrict(&pending_socket)?;
+    // bind(2) creates a pathname before listen(2): publish only after startup is ready.
     fs::rename(&pending_socket, &socket)?;
     eprintln!("fibo listening on {}", socket.display());
     for index in 1u64.. {

@@ -371,8 +371,10 @@ pub fn index_of(dir: &Path) -> Result<Index, String> {
             let path = file
                 .strip_prefix(&p.dir)
                 .map_err(|_| t!("{file} 不在插件目录里", file = file.display()))?
-                .to_string_lossy()
-                .into_owned();
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("/");
             files.push(FileEntry {
                 path,
                 sha256: sha256(&bytes),
@@ -432,8 +434,10 @@ fn older_versions(dir: &Path, id: &str) -> Result<Vec<Entry>, String> {
                 path: file
                     .strip_prefix(&p.dir)
                     .map_err(|_| t!("{file} 不在插件目录里", file = file.display()))?
-                    .to_string_lossy()
-                    .into_owned(),
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/"),
                 sha256: sha256(&bytes),
                 size: bytes.len() as u64,
             });
@@ -544,6 +548,7 @@ fn curl(url: &str) -> Result<Vec<u8>, String> {
         .arg(MAX_FILE.to_string())
         .arg("--proto")
         .arg("=https,file")
+        .args(["--proto-redir", "=https"])
         .arg(url)
         .stdin(std::process::Stdio::null())
         .output()

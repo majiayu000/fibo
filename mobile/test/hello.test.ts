@@ -6,12 +6,7 @@ import { RemoteError } from '../src/remote/client';
 import type { Link } from '../src/remote/link';
 
 mock.module('react-native', () => rn());
-mock.module('../src/store/machines', () => ({
-  machineId: (l: Link) => l.machine || `device-${l.device}`,
-  loadMachines: async () => [],
-  saveMachine: async () => undefined,
-  forgetMachine: async () => undefined,
-}));
+mock.module('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} }));
 mock.module('../src/store/quota', () => ({ forgetQuota: async () => undefined }));
 
 const hub = await import('../src/remote/hub');

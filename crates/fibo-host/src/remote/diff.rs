@@ -63,15 +63,7 @@ fn fit(diff: &mut rp::Diff) {
 }
 
 fn git(dir: &Path) -> Command {
-    let mut c = Command::new("git");
-    c.arg("-C")
-        .arg(dir)
-        .args(["-c", "core.fsmonitor=false", "-c", "core.quotepath=false"])
-        .args(["-c", "safe.bareRepository=explicit"])
-        .env("GIT_OPTIONAL_LOCKS", "0")
-        .stdin(Stdio::null())
-        .stderr(Stdio::null());
-    c
+    fibo_core::git::command(dir)
 }
 fn output(c: &mut Command) -> io::Result<Option<Vec<u8>>> {
     let out = c.output()?;
