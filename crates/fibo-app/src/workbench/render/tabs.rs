@@ -216,14 +216,28 @@ pub(in crate::workbench) fn hidden_tabs(
     scroll: &gpui::ScrollHandle,
     count: usize,
 ) -> (Vec<usize>, Vec<usize>) {
-    let view = scroll.bounds();
-    let shift = scroll.offset().x;
+    let tabs = (0..count).map_while(|ix| scroll.bounds_for_item(ix));
+    hidden_past_edges(
+        scroll.bounds(),
+        scroll.offset().x,
+        scroll.max_offset().x,
+        tabs,
+    )
+}
+
+/// A wheel turn moves the offset at once and the strip clamps it only at its next
+/// layout, so a render in between reads an offset past the end. Clamped here, a strip
+/// whose tabs all fit counts none hidden however hard the wheel turns.
+fn hidden_past_edges(
+    view: gpui::Bounds<gpui::Pixels>,
+    offset: gpui::Pixels,
+    max: gpui::Pixels,
+    tabs: impl Iterator<Item = gpui::Bounds<gpui::Pixels>>,
+) -> (Vec<usize>, Vec<usize>) {
+    let shift = offset.clamp(-max.max(px(0.)), px(0.));
     let slack = px(T::BORDER_WIDTH);
     let (mut left, mut right) = (Vec::new(), Vec::new());
-    for ix in 0..count {
-        let Some(tab) = scroll.bounds_for_item(ix) else {
-            break;
-        };
+    for (ix, tab) in tabs.enumerate() {
         if tab.left() + shift < view.left() - slack {
             left.push(ix);
         } else if tab.right() + shift > view.right() + slack {
@@ -372,3 +386,7 @@ impl Render for TabTip {
             .when_some(self.cwd.clone(), |d, cwd| d.child(label(cwd)))
     }
 }
+
+#[cfg(test)]
+#[path = "tabs_tests.rs"]
+mod tests;
