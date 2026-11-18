@@ -214,7 +214,13 @@ impl Workbench {
         }
         self.begin_busy(None, cx);
         let spaces = new_tab.then(|| self.workspace.spaces.clone());
-        let job = cx.background_spawn(self.store.launch(cwd_source, spaces, request, place));
+        let job = cx.background_spawn(self.store.launch(
+            cwd_source,
+            spaces,
+            request,
+            place,
+            task_id.clone(),
+        ));
         cx.spawn(async move |this, cx| {
             let reply = job.await;
             let _ = this.update(cx, |this, cx| {

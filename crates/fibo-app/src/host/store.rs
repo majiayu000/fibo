@@ -219,13 +219,16 @@ impl Store {
     /// Launches a terminal, then places it (`place`: a new tab, a split, a relaunch in
     /// an old pane's place), each resent with the same id while the host is away. A split from a running
     /// shell first asks the host for that shell's current directory. Given `spaces`, a
-    /// new tab whose directory lies in a space inside its own goes to that space.
+    /// new tab whose directory lies in a space inside its own goes to that space. Given
+    /// `task`, the terminal is started for that to-do before it is placed, so a split into
+    /// the to-do's tab takes it (a split there otherwise does not).
     pub fn launch(
         &self,
         cwd_source: Option<String>,
         spaces: Option<Vec<Space>>,
         mut request: Request,
         mut place: Edit,
+        task: Option<String>,
     ) -> impl Future<Output = io::Result<Reply>> + use<> {
         let socket = self.socket.clone();
         let (held, brief) = (self.deltas.clone(), Understood::of(&self.recognition));
@@ -247,9 +250,23 @@ impl Store {
                 space.clone_from(&narrower.id);
                 tab.space.clone_from(&narrower.id);
             }
+            let terminal = match &request {
+                Request::Launch { id, .. } => Some(id.clone()),
+                _ => None,
+            };
             let Reply::Workspace(_) = held.deliver(&socket, request, brief).into_result()? else {
                 return Err(std::io::Error::other("launch response missing"));
             };
+            if let (Some(task), Some(terminal)) = (task, terminal) {
+                let pending = Request::Edit {
+                    request: Some(RequestId::fresh()),
+                    edit: Edit::SetPendingTask {
+                        terminal,
+                        task: Some(task),
+                    },
+                };
+                held.deliver(&socket, pending, brief).into_result()?;
+            }
             let place = Request::Edit {
                 request: Some(RequestId::fresh()),
                 edit: place,

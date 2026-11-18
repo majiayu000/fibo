@@ -449,37 +449,18 @@ impl Workspace {
             .find(|t| t.layout.as_ref().is_some_and(|l| l.contains(id)))
     }
     /// What a conversation is called and where that name comes from, best first: the
-    /// name the user gave it, the task it was started for or given (with its Agent when
-    /// the task has several, `task_names`), the one its CLI keeps, its first ask. `None`
-    /// when none of those is known. Like Claude Desktop's title sources, a name the user
-    /// or a task chose is never replaced by a generated one.
+    /// name the user gave it, the one its CLI keeps, its first ask, the task it was
+    /// started for or given. `None` when none of those is known. Its own words come before
+    /// the task's: the conversations of one task do different things, and the tab they
+    /// share is the one called by the task. Two of one task called the same also say
+    /// their Agent (`task_names`).
     pub fn session_naming(&self, s: &AgentSession) -> Option<(String, NameSource)> {
         let named = s.name.trim();
         if !named.is_empty() {
             return Some((named.to_owned(), NameSource::User));
         }
-        if let Some((id, title)) = s
-            .task
-            .as_ref()
-            .and_then(|id| self.tasks.iter().find(|t| &t.id == id))
-            .map(|t| (t.id.as_str(), t.title.trim()))
-            .filter(|(_, t)| !t.is_empty())
-        {
-            return Some((self.task_session_name(s, id, title), NameSource::Task));
-        }
-        let c = self.content.get(&s.id)?;
-        let named = crate::content::topic(&c.name);
-        if !named.is_empty() {
-            return Some((crate::content::short(&named, 70), NameSource::Agent));
-        }
-        // The first ask keeps its lines, so pasted chrome above the words can go.
-        let first = match c.asks.first() {
-            Some(q) if c.first_ask_known => q.text.as_str(),
-            _ => c.title.as_str(),
-        };
-        Some(crate::content::short(&crate::content::topic(first), 70))
-            .filter(|t| !t.is_empty())
-            .map(|t| (t, NameSource::FirstAsk))
+        let (name, source) = self.automatic_naming(s)?;
+        Some((self.distinct_name(s, name), source))
     }
     /// The tab a running conversation has to itself: a name given to that tab names
     /// the conversation too, so the tab and the sidebar never disagree.
@@ -574,3 +555,5 @@ mod workspace_edit;
 mod identity_tests;
 #[cfg(test)]
 mod side_tab_tests;
+#[cfg(test)]
+mod split_task_tests;

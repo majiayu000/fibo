@@ -98,11 +98,21 @@ impl Workspace {
                 if self.terminal_tab(&terminal).is_some() {
                     return Err(t!("终端已经摆在别的画面里").into());
                 }
-                let placed = self
-                    .pane_layout(&target)?
-                    .split_beside(&target, terminal, axis, before, share);
+                let todo = (self.terminal_tab(&target)).is_some_and(|t| t.default_task.is_some());
+                let placed = self.pane_layout(&target)?.split_beside(
+                    &target,
+                    terminal.clone(),
+                    axis,
+                    before,
+                    share,
+                );
                 if !placed {
                     return Err(t!("画面不存在").into());
+                }
+                // A pane split into a to-do's tab is other work: its conversation takes the
+                // tab's to-do only when it was started for it, which says so first.
+                if todo {
+                    self.pending_tasks.entry(terminal).or_insert(None);
                 }
             }
             Edit::MovePane {
