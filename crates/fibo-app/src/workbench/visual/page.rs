@@ -409,7 +409,7 @@ impl Workbench {
                 });
                 self.sync_panes(cx);
             }
-            // `Dense-{directory|wasm|first}-{standard|terminal}-{light|dark}[-open|-fold|-menu|-bg|-peek|-pop|-sub|-many|-manyall]`:
+            // `Dense-{directory|wasm|first}-{standard|terminal}-{light|dark}[-open|-fold|-menu|-bg|-peek|-pop|-sub|-many|-manyall|-twins]`:
             // the denser presets over sessions shaped like sidebar-density.html's; `-bg`
             // stops the second running turn while a sub-agent of it still runs; `-pop` opens
             // the status bar's 工作中 popover beside the column.
@@ -430,6 +430,7 @@ impl Workbench {
                 self.visual_bare_space(parts.get(4).copied());
                 self.visual_unknown_state(parts.get(4).copied());
                 self.visual_crowded(parts.get(4).copied());
+                self.visual_twins(parts.get(4).copied());
                 if parts.get(4) == Some(&"open") {
                     for key in ["status:rest", "wasm:wasm-status:rest"] {
                         self.sidebar.toggled.insert(key.into(), true);
