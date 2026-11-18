@@ -252,7 +252,7 @@ impl Workbench {
                         updated: self.session_updated(s),
                         running_since: content
                             .filter(|_| b == Bucket::Running)
-                            .map(|c| c.turn_started)
+                            .map(|c| c.clock_from())
                             .filter(|t| *t > 0),
                         line: content
                             .map(|c| fibo_core::content::short(&c.headline(), 100))

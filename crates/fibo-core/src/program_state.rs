@@ -57,7 +57,8 @@ pub fn apply(c: &mut Content, r: &ProgramReport) {
                 said.clone()
             };
         }
-        c.turn = turn;
+        let before = std::mem::replace(&mut c.turn, turn);
+        c.end_wait(before, r.since);
     }
     if turn != Turn::Running && !idle {
         c.background = None;

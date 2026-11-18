@@ -75,6 +75,7 @@ impl Host {
                 .is_some_and(|e| e.question().is_some());
             if c.turn == fibo_core::content::Turn::Waiting && !asking && since >= c.signal_at {
                 c.turn = fibo_core::content::Turn::Running;
+                c.end_wait(fibo_core::content::Turn::Waiting, since);
                 c.waiting.clear();
                 c.choices.clear();
                 c.signal = cue.into();

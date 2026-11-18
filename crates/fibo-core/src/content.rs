@@ -1,12 +1,14 @@
 //! Small, sourced projections. The transcript and mechanical receipts remain distinct.
 mod event;
 mod plain;
+mod waited;
 use crate::model::AgentSession;
 #[cfg(test)]
 use crate::model::Workspace;
 pub use crate::subagents::{Subagent, Workflow, WorkflowRun, WorkflowStep};
 pub use plain::plain_line;
 use serde::{Deserialize, Serialize};
+pub use waited::Waited;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Source {
@@ -92,6 +94,10 @@ pub struct Content {
     /// Counts entries into Waiting, so one dialog reported by several signals is one event.
     #[serde(default)]
     pub waiting_episode: u32,
+    /// How long this turn waited on the user (`clock_from`). Absent in cards written
+    /// before 2026-11-18, whose clock counts from the turn's start as before.
+    #[serde(default)]
+    pub waited: Waited,
     /// Which signal set the current turn: 日志, Hook, 画面 or 官方状态.
     #[serde(default)]
     pub signal: String,
@@ -507,7 +513,8 @@ impl Content {
     /// `hidden_reason` for this session: one Fibo started in its own terminal was
     /// started by the user, so a temporary working directory alone does not hide it.
     /// Sub-agents, SDK and print-mode runs stay hidden wherever they run.
-    /// When the unfinished turn began: one still running, or one that stopped while its
+    /// Where the clock of the unfinished turn starts (`clock_from`: its start, moved on by
+    /// the time it waited on the user): one still running, or one that stopped while its
     /// sub-agents, a monitor or a scheduled wakeup keep it open. `None` once it settled.
     pub fn running_since(&self) -> Option<u64> {
         let open = self.turn == Turn::Running
@@ -515,7 +522,7 @@ impl Content {
                 && self
                     .background
                     .is_some_and(|b| b.keeps_working() || b.wakes());
-        (open && self.turn_started > 0).then_some(self.turn_started)
+        (open && self.turn_started > 0).then_some(self.clock_from())
     }
     /// What a finished turn left running that nothing waits for: 「后台留着 1 个服务 · 端口
     /// 5569」. A shell with no port or not looked at yet is only known to be a process.

@@ -22,10 +22,10 @@ impl Workbench {
         let save = session.clone();
         let (group, _) = session_status(&self.workspace, &self.attention.unseen, session);
         let mut meta = vec![session.runtime.executable().to_owned()];
-        if card.turn_started > 0 && card.updated > card.turn_started {
+        if card.turn_started > 0 && card.updated > card.clock_from() {
             meta.push(t!(
                 "本轮 {v1}",
-                v1 = span_label(card.updated - card.turn_started)
+                v1 = span_label(card.updated - card.clock_from())
             ));
         }
         meta.push(ago(self.session_updated(session), now()));

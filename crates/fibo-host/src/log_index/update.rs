@@ -136,6 +136,7 @@ impl Index {
             if probe.card.turn != fibo_core::content::Turn::Unknown {
                 parser.card.turn = probe.card.turn;
                 parser.card.turn_started = probe.card.turn_started;
+                parser.card.waited = probe.card.waited;
                 parser.card.turn_key = probe.card.turn_key;
                 return Ok(());
             }
