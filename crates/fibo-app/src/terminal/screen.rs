@@ -432,8 +432,28 @@ use gpui::{
     TextRun, UnderlineStyle, Window, fill, point, px, size,
 };
 /// Terminal text size in points; settings and zoom shortcuts share one saved value.
+/// While a pane draws at a size of its own (`DrawnSize`), that size.
 pub fn font_size() -> f32 {
-    crate::ui::terminal_text::size()
+    DRAWN_SIZE
+        .with(std::cell::Cell::get)
+        .unwrap_or_else(crate::ui::terminal_text::size)
+}
+/// The smallest and largest text size zoom and a read-only pane's fit go to.
+pub const SIZE_RANGE: (f32, f32) = (8., 36.);
+thread_local! {
+    static DRAWN_SIZE: std::cell::Cell<Option<f32>> = const { std::cell::Cell::new(None) };
+}
+/// Measures and paints at `size` instead of the saved size until dropped.
+pub struct DrawnSize(Option<f32>);
+impl DrawnSize {
+    pub fn set(size: Option<f32>) -> Self {
+        Self(DRAWN_SIZE.with(|s| s.replace(size)))
+    }
+}
+impl Drop for DrawnSize {
+    fn drop(&mut self) {
+        DRAWN_SIZE.with(|s| s.set(self.0));
+    }
 }
 pub fn zoom(step: Option<i8>) -> Result<f32, String> {
     let mut text = crate::ui::terminal_text::current();
@@ -444,7 +464,7 @@ pub fn zoom(step: Option<i8>) -> Result<f32, String> {
 }
 fn zoomed(size: f32, step: Option<i8>) -> f32 {
     step.map_or(crate::ui::theme::Theme::TERMINAL_FONT_SIZE, |s| {
-        (size + f32::from(s)).clamp(8., 36.)
+        (size + f32::from(s)).clamp(SIZE_RANGE.0, SIZE_RANGE.1)
     })
 }
 

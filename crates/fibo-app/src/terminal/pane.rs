@@ -1,5 +1,7 @@
 #[path = "pane_ask.rs"]
 mod ask;
+#[path = "pane_fit.rs"]
+mod fit;
 #[path = "pane_handoff.rs"]
 mod handoff;
 #[path = "pane_ime.rs"]
@@ -65,6 +67,9 @@ pub struct Pane {
     marked: String,
     selection: Range<usize>,
     bounds: Option<Bounds<Pixels>>,
+    /// Cells at the saved text size; `metrics` are what this frame draws with.
+    base_metrics: Option<screen::CellMetrics>,
+    fit: Option<fit::Fit>,
     metrics: Option<screen::CellMetrics>,
     cursor_anchor: screen::CursorAnchor,
     requested_size: (u16, u16),
@@ -226,6 +231,8 @@ impl Pane {
             marked: String::new(),
             selection: 0..0,
             bounds: None,
+            base_metrics: None,
+            fit: None,
             metrics: None,
             cursor_anchor: screen::CursorAnchor::default(),
             requested_size: (0, 0),
