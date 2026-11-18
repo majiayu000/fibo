@@ -564,7 +564,8 @@ pub fn entered(thread: &ScreenThread, submits: &[u64]) -> bool {
 /// no longer goes by its start. Two panes started with one task in one folder then tell
 /// apart once either is typed into. A started pane drawing the very message it was started
 /// with is that start's evidence, not the screen's: Codex draws a two-line task verbatim, and
-/// two panes started with it would otherwise each show the other's thread for good.
+/// two panes started with it would otherwise each show the other's thread for good. And a
+/// screen alone gives way to a start: the words shown say nothing about where they were sent.
 pub fn screen_bindings<'a>(
     threads: &[ScreenThread<'a>],
     terminals: &[ScreenTerminal],
@@ -591,22 +592,42 @@ pub fn screen_bindings<'a>(
                 .any(|t| entered_in(t, p) && !launched::still_the_start(t, p))
         })
         .collect();
+    let open = |thread: &ScreenThread, terminal: &ScreenTerminal| {
+        here(thread, terminal)
+            && terminal.current.as_ref().is_none_or(|(id, updated, key)| {
+                id != &thread.transcript.cli_id
+                    && thread.transcript.updated >= *updated
+                    && (thread.key.is_none() || key.as_ref() != thread.key.as_ref())
+            })
+    };
+    let started: Vec<Vec<bool>> = (threads.iter().enumerate())
+        .map(|(i, thread)| {
+            (terminals.iter().enumerate())
+                .map(|(j, terminal)| {
+                    open(thread, terminal)
+                        && !went_on[i]
+                        && !moved_on[j]
+                        && launched::evidence(thread, terminal)
+                })
+                .collect()
+        })
+        .collect();
+    // Words on a screen say only that they are shown there: an answer quoting them, the pane
+    // they were copied from. They do not say the prompt was sent from there, so a screen alone
+    // does not stand against a start: not for a thread a start ties to another pane, nor for
+    // a pane whose start ties it to another thread (RC4 phone walk, 2026-11-18: a Codex pane
+    // whose answer showed a two-line task left the phone's new task bound to neither). Enter
+    // is still sent from somewhere and stands against a start as before.
     let fits = |i: usize, j: usize| {
         let (thread, terminal) = (&threads[i], &terminals[j]);
         let shown = !launched::still_the_start(thread, terminal)
             && thread
                 .key
                 .as_ref()
-                .is_some_and(|key| terminal.screen.contains(key));
-        here(thread, terminal)
-            && (shown
-                || entered(thread, &terminal.submits)
-                || (!went_on[i] && !moved_on[j] && launched::evidence(thread, terminal)))
-            && terminal.current.as_ref().is_none_or(|(id, updated, key)| {
-                id != &thread.transcript.cli_id
-                    && thread.transcript.updated >= *updated
-                    && (thread.key.is_none() || key.as_ref() != thread.key.as_ref())
-            })
+                .is_some_and(|key| terminal.screen.contains(key))
+            && !started[i].iter().any(|&s| s)
+            && !started.iter().any(|row| row[j]);
+        open(thread, terminal) && (shown || entered(thread, &terminal.submits) || started[i][j])
     };
     let mut out = vec![];
     for (i, thread) in threads.iter().enumerate() {
