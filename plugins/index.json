@@ -575,8 +575,8 @@
     {
       "id": "pane-facts",
       "name": "窗格信息",
-      "version": "0.1.1",
-      "description": "窗格标题栏显示上一条命令失败的退出码和 git 未提交的改动数，悬停标题看上一条命令用时和最近一次提交",
+      "version": "0.1.2",
+      "description": "窗格标题栏显示上一条命令失败的退出码和 git 已暂存文件数，悬停标题看上一条命令用时和最近一次提交",
       "provides": [
         "decorations"
       ],
@@ -584,13 +584,13 @@
       "files": [
         {
           "path": "decorations.json",
-          "sha256": "b48f5215e2b5978f78fe1d5ff44de68fdd5fd096a38a1037825d73d11b78c72c",
-          "size": 942
+          "sha256": "0f3d9b5557aa81f5bdd74e6623fe201cd1a7e07b499c464185dc954c4a54dd4b",
+          "size": 993
         },
         {
           "path": "plugin.json",
-          "sha256": "3a67ef1a393154e0ccafda3c214124f30a8b65450c318ca32b66ac06e897b99d",
-          "size": 308
+          "sha256": "fb2f3d45f6b17320929f314102f8d23a8ce575055c8dd632932678db56acfcb2",
+          "size": 305
         }
       ]
     },
