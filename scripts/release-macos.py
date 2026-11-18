@@ -76,19 +76,24 @@ app = out / 'Fibo.app'
 
 def run(*cmd, **kw):
     print('+', ' '.join(map(str, cmd)), flush=True)
-    return subprocess.run(list(map(str, cmd)), check=True, **kw)
+    return subprocess.run(list(map(str, cmd)), **{'check': True, **kw})
 
 
 def notarize(path):
     if args.skip_notarize:
         return
+    # Only stdout (the JSON) is read; stderr goes to the terminal, because when an upload or the
+    # credentials fail, notarytool exits non-zero and its stderr is the only reason given.
     result = run('xcrun', 'notarytool', 'submit', path, '--keychain-profile', args.notary_profile,
-                 '--wait', '--output-format', 'json', capture_output=True, text=True)
+                 '--wait', '--output-format', 'json', stdout=subprocess.PIPE, text=True, check=False)
+    if result.returncode:
+        raise SystemExit(f'notarytool submit {path.name} exited {result.returncode} '
+                         f'(its stderr is above):\n{result.stdout.strip()}')
     status = json.loads(result.stdout)
     print(json.dumps(status, indent=2))
     if status.get('status') != 'Accepted':
         log = run('xcrun', 'notarytool', 'log', status['id'], '--keychain-profile', args.notary_profile,
-                  capture_output=True, text=True)
+                  stdout=subprocess.PIPE, text=True)
         raise SystemExit(f'notarization failed:\n{log.stdout}')
 
 
