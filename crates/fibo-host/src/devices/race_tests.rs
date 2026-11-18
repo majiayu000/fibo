@@ -400,3 +400,28 @@ fn a_stalled_writer_times_out_without_changing_the_device_list() {
     add(&dir.socket(), "after release", Role::Full).unwrap();
     assert_eq!(load(&dir.socket()).len(), 2);
 }
+
+/// A lock that keeps changing hands is busy, not stalled: a pairing waits for its turn
+/// past the stalled-writer limit. Each holder stamps the lock file; here one holder
+/// stamps as the next would, so no gap lets the waiter in early by luck.
+#[test]
+fn a_lock_changing_hands_past_the_limit_is_waited_for() {
+    use std::io::{Seek, SeekFrom};
+    let dir = Dir::new();
+    let mut held = lock(&dir.socket()).unwrap();
+    let socket = dir.socket();
+    let waiter = std::thread::spawn(move || add(&socket, "waited", Role::View).map(drop));
+    let start = std::time::Instant::now();
+    while start.elapsed() < std::time::Duration::from_secs(7) {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        held.seek(SeekFrom::Start(0)).unwrap();
+        held.write_all(uuid::Uuid::new_v4().simple().to_string().as_bytes())
+            .unwrap();
+    }
+    drop(held);
+    waiter
+        .join()
+        .unwrap()
+        .expect("等的是一把一直在换手的锁，不该超时");
+    assert_eq!(load(&dir.socket()).len(), 1);
+}
