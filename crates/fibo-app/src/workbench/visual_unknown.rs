@@ -1,7 +1,7 @@
 //! `-unknown`: rows whose state this build cannot tell, for screenshots. A terminal here
 //! that no conversation is tied to, and another machine listing one session in a state
 //! word this build does not know and one Agent no conversation is tied to. None of them
-//! may draw 停着's ring. Its host keeps the first in 置顶, so the column lists it there.
+//! may draw 停着's ring. A third session there runs with subagents under its row. Its host keeps the first in 置顶, so the column lists it there.
 use super::Workbench;
 use fibo_remote::protocol::{Card, Space};
 
@@ -34,11 +34,12 @@ impl Workbench {
             );
             self.store.set_recognition(recognition);
         }
+        let now = crate::model::time::now();
         let card = |id: &str, extra: serde_json::Value| -> Card {
             let mut base = serde_json::json!({
                 "id": id, "space": "s1", "tab": id, "cwd": "/work/app",
                 "phase": "idle", "agent": "codex", "needs_you": false,
-                "updated": crate::model::time::now().saturating_sub(600),
+                "updated": now.saturating_sub(600),
             });
             base.as_object_mut()
                 .unwrap()
@@ -61,6 +62,18 @@ impl Workbench {
             card(
                 "r-unbound",
                 serde_json::json!({ "note": "codex · 看不到对话" }),
+            ),
+            // Known and running, with subagents its row lists as this machine's do.
+            card(
+                "r-subs",
+                serde_json::json!({
+                    "session": "y", "title": "跑完整套测试", "agent": "claude",
+                    "phase": "working", "status": "running",
+                    "subagents": [
+                        { "id": "a1", "name": "找出慢的测试", "started": now - 300, "ended": now - 240 },
+                        { "id": "a2", "name": "修 flaky 用例", "started": now - 200, "foreground": true },
+                    ],
+                }),
             ),
         ];
         let spec = crate::machines::Spec::new("studio".into());
