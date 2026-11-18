@@ -81,7 +81,7 @@ impl Workbench {
             this.layout.session_menu = None
         })
     }
-    fn session_action(
+    pub(in crate::workbench) fn session_action(
         &mut self,
         id: &str,
         action: &SessionAction,

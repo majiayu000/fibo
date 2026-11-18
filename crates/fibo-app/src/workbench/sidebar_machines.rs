@@ -241,6 +241,7 @@ impl Workbench {
         let asks = r.asks().filter(|_| subs.is_none());
         let subs_live = matches!(r.status, Status::Running | Status::Background);
         let subs_open = self.subagents_open(&r.key, r.shown);
+        let renaming = self.remote_renaming(r.index, card.session.as_deref(), cx);
         let two = asks.is_some() || subs.is_some();
         let time = if !r.online && !r.quiet {
             t!("断开").to_owned()
@@ -321,8 +322,9 @@ impl Workbench {
                             .flex()
                             .items_center()
                             .gap(px(T::S8))
-                            .child(
-                                div()
+                            .child(match renaming {
+                                Some(field) => div().flex_1().min_w_0().child(field),
+                                None => div()
                                     .flex_1()
                                     .min_w_0()
                                     .truncate()
@@ -330,7 +332,7 @@ impl Workbench {
                                     .line_height(px(F::TITLE_LINE))
                                     .text_color(T::color(title_ink))
                                     .child(shown_title(card)),
-                            )
+                            })
                             .children(mark)
                             .children(space)
                             .child(
