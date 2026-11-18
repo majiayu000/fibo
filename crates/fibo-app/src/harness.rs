@@ -67,6 +67,7 @@ mod tab_drag_evidence;
 mod tab_evidence;
 mod tab_geometry_evidence;
 mod tab_overflow_evidence;
+mod tab_wheel_evidence;
 #[path = "todo_flow_evidence.rs"]
 mod todo_flow_evidence;
 mod wheel_evidence;
@@ -164,6 +165,9 @@ pub fn start(
         return;
     }
     if tab_overflow_evidence::start(handle, evidence.clone(), cx) {
+        return;
+    }
+    if tab_wheel_evidence::start(handle, evidence.clone(), cx) {
         return;
     }
     tab_evidence::start(handle, evidence.clone(), cx);
