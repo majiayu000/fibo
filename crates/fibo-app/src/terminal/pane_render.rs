@@ -104,16 +104,28 @@ impl Render for Pane {
             && !state.ended
             && !self.tint_note_dismissed
             && self.started_under.is_some_and(|s| s != T::term());
-        let status = if state.ended {
-            t!("进程已退出")
+        // Another window sets the grid's size: draw that grid scaled to fill this pane.
+        let grid = state
+            .vt
+            .as_ref()
+            .filter(|_| !state.writable && !state.ended && !self.peek)
+            .and_then(|vt| Some((vt.terminal().cols().ok()?, vt.terminal().rows().ok()?)));
+        let status: String = if state.ended {
+            t!("进程已退出").into()
         } else if state.dropped || self.reconnect_delay > 0 {
-            t!("连接断开 · 正在重连…")
+            t!("连接断开 · 正在重连…").into()
         } else if state.vt.is_none() {
-            t!("正在恢复终端…")
+            t!("正在恢复终端…").into()
         } else if state.writable {
-            t!("终端已连接")
+            t!("终端已连接").into()
+        } else if let Some((cols, rows)) = grid {
+            t!(
+                "只读 · 尺寸跟另一个窗口（{cols}×{rows}）· 可明确接管",
+                cols,
+                rows
+            )
         } else {
-            t!("只读 · 可明确接管")
+            t!("只读 · 可明确接管").into()
         };
         let writable = state.writable;
         drop(state);
@@ -178,11 +190,16 @@ impl Render for Pane {
                         crate::ui::terminal_text::line_height(),
                         scale,
                     );
-                    if pane.metrics_font.as_ref() != Some(&key) || pane.metrics.is_none() {
-                        pane.metrics = screen::CellMetrics::measure(&font, window);
+                    if pane.metrics_font.as_ref() != Some(&key) || pane.base_metrics.is_none() {
+                        pane.base_metrics = screen::CellMetrics::measure(&font, window);
                         pane.metrics_font = Some(key);
                     }
-                    let Some(metrics) = pane.metrics else { return };
+                    let Some(base) = pane.base_metrics else {
+                        return;
+                    };
+                    let (drawn, metrics) = pane.fit_metrics(base, grid, bounds.size, &font, window);
+                    pane.metrics = Some(metrics);
+                    let _drawn = screen::DrawnSize::set(drawn);
                     let focused = pane.focus.is_focused(window);
                     let look = crate::ui::terminal_text::current();
                     let cursor = overlays::cursor_paint(
