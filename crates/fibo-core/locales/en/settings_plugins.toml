@@ -152,7 +152,7 @@
 "接入 Agent" = "Agents"
 
 "Claude 额度" = "Claude quota"
-"接上 Claude Code 的状态栏，把它给的 5 小时和每周额度显示在 Fibo 状态栏；原来的状态栏照常显示，卸载时还原。默认只读本机；打开「联网读 /usage」后，让 Claude Code 自己查额度，不用等状态栏刷新，还能看到按模型的周额度，不花钱也不留会话" = "Show Claude Code five-hour and weekly limits in the Fibo status bar. Keeps the existing status bar and restores it on uninstall. Local reads by default; optional online /usage refreshes limits and per-model weekly usage without paid requests or saved conversations."
+"通过 Claude Code 的登录凭据查询账号额度，所有会话共用最近一次采集；每两分钟刷新，重置后补查。状态栏只收集各会话上下文，原来的状态栏照常显示。不会启动 Claude CLI 或发送模型请求。" = "Reads account limits with Claude Code's sign-in, shared by every session from the latest reading; refreshes every two minutes and again after a reset. The status bar only collects each session's context and keeps showing as before. Never starts the Claude CLI or sends model requests."
 "常用命令" = "Common commands"
 "右键菜单与 ⌘P 里的几条常用命令，也是 actions.json 的写法示例" = "Common context-menu and Command Palette commands, with actions.json examples."
 "完成动画：退格收工" = "Completion: Backspace"

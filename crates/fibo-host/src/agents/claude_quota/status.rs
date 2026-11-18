@@ -1,6 +1,5 @@
-//! Claude Code runs this as its status line. It keeps the payload when it carries the account's
-//! limits (API-key sign-ins and the first render of a session have none) and each conversation's
-//! own copy for how full its context is, then hands the same payload to the status line set
+//! Claude Code runs this as its status line. It keeps each conversation's context usage,
+//! then hands the same payload to the status line set
 //! before, which prints as ever. A reading it can't save must not cost the user that line.
 use fibo_platform::fs::{create_private_dir, write_private};
 use serde_json::Value;
@@ -23,11 +22,8 @@ pub(super) fn run(data: std::path::PathBuf) -> io::Result<()> {
 }
 
 fn save(data: &Path, payload: &[u8], doc: &Value) -> io::Result<()> {
-    let limits = doc["rate_limits"].as_object();
-    if limits.is_some_and(|l| l.contains_key("five_hour") || l.contains_key("seven_day")) {
-        write_private(&data.join("statusline.json"), payload)?;
-    }
-    // The file above holds only the conversation that spoke last.
+    // These rate limits have no account identity or observation time. They cannot
+    // update the account snapshot, even when this status line was rendered just now.
     if let (Some(id), true) = (
         doc["session_id"].as_str().filter(|id| plain_id(id)),
         doc.get("context_window").is_some(),

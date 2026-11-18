@@ -438,6 +438,7 @@ mod tests {
     fn quotas_show_a_new_reading_by_the_next_second_or_revision() {
         let reading = |used| Content {
             quota: Some(Quota {
+                error: String::new(),
                 at: 1000,
                 plan: String::new(),
                 windows: vec![Window {

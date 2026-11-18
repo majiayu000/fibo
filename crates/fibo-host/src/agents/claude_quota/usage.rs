@@ -1,236 +1,137 @@
-//! The 「联网读 /usage」 setting: asks Claude Code what its own `/usage` says and prints the
-//! windows for `quota.json`. Claude Code answers it without a model, at no cost, but goes online
-//! to do so, which is why it is off until asked. The app runs this every minute; most runs only
-//! print what was kept. A read is due 5 to 15 minutes after the last, drawn at random so nothing
-//! runs on a clock (1 minute near the limit), and only once Claude Code has been used since: a
-//! limit nobody used has not moved. The app and the host each run this; a lock lets one read.
-use super::{settings, usage_text};
-use fibo_core::model::Agent;
-use fibo_core::plugin_command::{self, Failed, Leftovers, Run};
-use fibo_platform::fs::write_private;
-use serde_json::Value;
-use std::ffi::OsString;
-use std::fs;
+//! One credential-scoped HTTP snapshot shared by all plugin readers. The OS lock covers
+//! deciding, fetching and publishing: no overlapping fetch can publish an older answer later.
+use super::{oauth, settings};
+use fibo_core::t;
+use fibo_platform::fs::{lock_file, write_private};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-const WAIT_FROM: u64 = 300;
-const WAIT_SPREAD: u64 = 601;
-const WAIT_NEAR: u64 = 60;
-/// Under the 90 seconds `quota.json` gives this command, so the read ends here, lock released.
-/// It usually takes 6 seconds, and over 20 on a machine that is busy.
-const READ_TIMEOUT: Duration = Duration::from_secs(80);
-/// A lock this old was left by a run something stopped.
-const LOCK_STALE: Duration = Duration::from_secs(120);
+const REFRESH: u64 = 120;
 
-struct Files {
-    saved: PathBuf,
-    tried: PathBuf,
-    failed: PathBuf,
-    lock: PathBuf,
+#[derive(Default, Serialize, Deserialize)]
+struct Cache {
+    credential: String,
+    next_attempt: u64,
+    #[serde(default)]
+    retry_at: u64,
+    #[serde(default)]
+    snapshot: Option<Value>,
+    #[serde(default)]
+    error: String,
 }
 
-pub(super) fn run(data: &Path) -> io::Result<()> {
-    let _ = settings::repair(data);
-    let files = Files {
-        saved: data.join("usage.json"),
-        tried: data.join("usage.tried"),
-        failed: data.join("usage.failed"),
-        lock: data.join("usage.lock"),
-    };
-    if std::env::var("MOORING_OPTION_USAGE").as_deref() != Ok("1") {
-        // Off leaves nothing behind: turned on again, it reads at once, nothing old first.
-        for file in [&files.saved, &files.tried, &files.failed] {
-            let _ = fs::remove_file(file);
-        }
-        return print("{}");
-    }
-    let now = SystemTime::now()
+pub(super) fn now() -> u64 {
+    SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
-    if !due(&files, now) {
-        return show(&files);
-    }
-    let Some(_lock) = Lock::take(&files.lock) else {
-        return show(&files);
-    };
-    // Marked first: a read that hangs or fails waits its turn like any other.
-    let wait = WAIT_FROM + u64::from(uuid::Uuid::new_v4().as_bytes()[0]) * WAIT_SPREAD / 256;
-    write_private(&files.tried, format!("{now}\n{wait}\n").as_bytes())?;
-    match ask(data, now as i64) {
-        Ok(doc) => {
-            write_private(&files.saved, doc.to_string().as_bytes())?;
-            let _ = fs::remove_file(&files.failed);
-        }
-        Err(why) => fs::write(&files.failed, why)?,
-    }
-    show(&files)
+        .map_or(0, |d| d.as_secs())
 }
 
-/// A failure stays out loud until a read works: exiting non-zero is what keeps the app's last
-/// reading on screen and puts the reason in the plugin's log.
-fn show(files: &Files) -> io::Result<()> {
-    if let Ok(why) = fs::read_to_string(&files.failed) {
-        if !why.is_empty() {
-            return Err(io::Error::other(why));
-        }
-    }
-    match fs::read_to_string(&files.saved) {
-        Ok(doc) if !doc.is_empty() => print(&doc),
-        _ => print("{}"),
-    }
+pub(super) fn run(data: &Path, manual: bool) -> io::Result<()> {
+    let _ = settings::repair(data);
+    let doc = collect(
+        data,
+        manual,
+        now(),
+        || oauth::credential(manual),
+        oauth::fetch,
+    )
+    .unwrap_or_else(|_| json!({"at": 0, "error": t!("额度缓存无法读取或保存，等待重试")}));
+    writeln!(io::stdout(), "{doc}")
 }
 
-fn print(text: &str) -> io::Result<()> {
-    writeln!(io::stdout(), "{}", text.trim_end())
-}
-
-fn due(files: &Files, now: u64) -> bool {
-    let Ok(text) = fs::read_to_string(&files.tried) else {
-        return true;
+fn collect(
+    data: &Path,
+    manual: bool,
+    at: u64,
+    mut credential: impl FnMut() -> Result<oauth::Credential, String>,
+    fetch: impl FnOnce(&oauth::Credential) -> Result<Value, oauth::Failure>,
+) -> io::Result<Value> {
+    let path = data.join("http-usage.json");
+    let lock = lock_file(&data.join("http-usage.lock"))?;
+    // Locks are released by the OS on exit; no stale-lock deletion can create two owners.
+    let held = match lock.try_lock() {
+        Ok(()) => true,
+        Err(std::fs::TryLockError::WouldBlock) => false,
+        Err(std::fs::TryLockError::Error(e)) => return Err(e),
     };
-    let mut lines = text.lines().map(|l| l.trim().parse::<u64>());
-    let (Some(Ok(last)), Some(Ok(wait))) = (lines.next(), lines.next()) else {
-        return true;
+    let identity = match credential() {
+        Ok(c) => c,
+        Err(error) => return Ok(json!({"at": 0, "error": error})),
     };
-    let near = fs::read(&files.saved)
-        .ok()
-        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
-        .is_some_and(|doc| doc["near"] == true);
-    let wait = if near { WAIT_NEAR } else { wait };
-    if now.saturating_sub(last) < wait {
-        return false;
+    let mut cache = match std::fs::read(&path) {
+        Ok(bytes) => serde_json::from_slice::<Cache>(&bytes).map_err(io::Error::other)?,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Cache::default(),
+        Err(e) => return Err(e),
+    };
+    if cache.credential != identity.scope {
+        cache = Cache {
+            credential: identity.scope.clone(),
+            ..Default::default()
+        };
     }
-    fs::metadata(&files.tried)
-        .and_then(|m| m.modified())
-        .is_ok_and(used_since)
-}
-
-/// One of Claude Code's conversations was written to since: a `.jsonl` in a project's folder.
-fn used_since(since: SystemTime) -> bool {
-    let Some(home) = fibo_platform::dirs::home() else {
-        return true;
-    };
-    let projects = crate::agents::hooks::target(Agent::Claude, &home)
-        .ok()
-        .and_then(|h| h.settings.parent().map(|d| d.join("projects")));
-    let Some(Ok(folders)) = projects.map(fs::read_dir) else {
-        return false;
-    };
-    folders.flatten().any(|folder| {
-        fs::read_dir(folder.path()).is_ok_and(|mut files| {
-            files.any(|f| {
-                f.is_ok_and(|f| {
-                    f.path().extension().is_some_and(|e| e == "jsonl")
-                        && f.metadata()
-                            .and_then(|m| m.modified())
-                            .is_ok_and(|at| at > since)
-                })
-            })
+    let reset = cache.snapshot.as_ref().is_some_and(|snapshot| {
+        let sampled = snapshot["at"].as_u64().unwrap_or(0);
+        all_windows(snapshot).any(|w| {
+            w["resets_at"]
+                .as_u64()
+                .is_some_and(|r| r > sampled && r <= at)
         })
-    })
-}
-
-struct Lock(PathBuf);
-impl Lock {
-    fn take(path: &Path) -> Option<Lock> {
-        let stale = fs::metadata(path)
-            .and_then(|m| m.modified())
-            .ok()
-            .and_then(|at| at.elapsed().ok())
-            .is_some_and(|age| age > LOCK_STALE);
-        if stale {
-            let _ = fs::remove_dir(path);
+    });
+    if !held || at < cache.retry_at || (!manual && at < cache.next_attempt && !reset) {
+        return Ok(display(&cache));
+    }
+    // A terminated command cannot hammer the endpoint. Busy readers only use their own scope.
+    cache.next_attempt = at.saturating_add(REFRESH);
+    cache.retry_at = at.saturating_add(60);
+    save(&path, &cache)?;
+    let result = fetch(&identity);
+    // A switch/rotation during HTTP invalidates its answer, including errors.
+    if !credential().is_ok_and(|current| current.scope == identity.scope) {
+        save(&path, &Cache::default())?;
+        return Ok(json!({"at": 0, "error": t!("Claude 登录已变化，等待新账号额度")}));
+    }
+    match result {
+        Ok(mut snapshot) => {
+            snapshot["at"] = json!(at);
+            cache.snapshot = Some(snapshot);
+            cache.error.clear();
+            cache.retry_at = 0;
         }
-        fs::create_dir(path).ok().map(|()| Lock(path.to_owned()))
-    }
-}
-impl Drop for Lock {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir(&self.0);
-    }
-}
-
-/// Claude Code's own installers, and npm's name for it on Windows.
-fn find_claude() -> Option<PathBuf> {
-    let home = fibo_platform::dirs::home();
-    let installed = home
-        .iter()
-        .flat_map(|h| [h.join(".local/bin"), h.join(".claude/local")]);
-    // The login shell's PATH comes up empty when it takes over 3 seconds, as on a busy machine.
-    let path = std::env::var_os("PATH").unwrap_or_default();
-    let mut dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
-    dirs.extend(installed);
-    dirs.iter().find_map(|dir| {
-        ["claude", "claude.exe", "claude.cmd"]
-            .iter()
-            .map(|name| dir.join(name))
-            .find(|file| file.is_file())
-    })
-}
-
-fn ask(data: &Path, now: i64) -> Result<Value, String> {
-    let claude = find_claude().ok_or("找不到 claude 命令")?;
-    // A run from inside a Claude session must not read as nested in it.
-    std::env::remove_var("CLAUDECODE");
-    std::env::remove_var("CLAUDE_CODE_ENTRYPOINT");
-    let mut env: Vec<(String, String)> = [
-        ("DISABLE_TELEMETRY", "1"),
-        ("DISABLE_ERROR_REPORTING", "1"),
-        ("DISABLE_AUTOUPDATER", "1"),
-    ]
-    .map(|(k, v)| (k.to_owned(), v.to_owned()))
-    .to_vec();
-    // Without USER Claude Code can't find its sign-in in the keychain and reads as signed out,
-    // which would look like an account with no limits. A bare environment has none.
-    if std::env::var_os("USER").is_none() {
-        if let Some(name) = fibo_platform::dirs::user_name() {
-            env.push(("USER".to_owned(), name));
+        Err(error) => {
+            if error.discard {
+                cache.snapshot = None;
+            }
+            cache.error = error.message;
+            cache.retry_at = error.retry_at.unwrap_or(at.saturating_add(REFRESH));
+            cache.next_attempt = cache.retry_at;
         }
     }
-    // No session file, hooks, tools or MCP: it must not show up as a conversation of the user's.
-    // In its own folder, since Claude Code keeps a little per folder and this is not a project.
-    let args = [
-        "-p",
-        "/usage",
-        "--output-format",
-        "json",
-        "--tools",
-        "",
-        "--strict-mcp-config",
-        "--setting-sources",
-        "",
-        "--settings",
-        r#"{"disableDeepLinkRegistration":"disable"}"#,
-        "--no-session-persistence",
-    ];
-    let done = plugin_command::run(Run {
-        program: claude.into_os_string(),
-        args: args.iter().map(OsString::from).collect(),
-        cwd: Some(data),
-        env,
-        stdin: None,
-        timeout: READ_TIMEOUT,
-        keep: 1024 * 1024,
-        leftovers: Leftovers::End,
-    })
-    .map_err(|e| match e {
-        Failed::Start(why) => format!("claude 启动不了：{why}"),
-        Failed::TimedOut => "claude /usage 超时".to_owned(),
-    })?;
-    if !done.status.success() {
-        return Err(format!("claude /usage 失败：{}", done.said()));
-    }
-    let said: Value = serde_json::from_slice(&done.stdout)
-        .map_err(|e| format!("claude /usage 的输出读不懂：{e}"))?;
-    let text = said["result"].as_str().unwrap_or_default();
-    if said["is_error"] == true {
-        let first = text
-            .lines()
-            .next()
-            .unwrap_or("Claude Code 报错，没有说原因");
-        return Err(first.to_owned());
-    }
-    usage_text::read(text, now)
+    save(&path, &cache)?;
+    Ok(display(&cache))
 }
+
+fn all_windows(snapshot: &Value) -> impl Iterator<Item = &Value> {
+    [snapshot.get("session"), snapshot.get("week")]
+        .into_iter()
+        .flatten()
+        .chain(snapshot["models"].as_array().into_iter().flatten())
+}
+
+fn display(cache: &Cache) -> Value {
+    let mut doc = cache.snapshot.clone().unwrap_or_else(|| json!({"at": 0}));
+    if !cache.error.is_empty() {
+        doc["error"] = cache.error.clone().into();
+    }
+    doc
+}
+
+fn save(path: &Path, cache: &Cache) -> io::Result<()> {
+    write_private(path, &serde_json::to_vec(cache).map_err(io::Error::other)?)
+}
+
+#[cfg(test)]
+#[path = "usage_tests.rs"]
+mod tests;

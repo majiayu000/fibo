@@ -455,6 +455,7 @@ fn quota(v: &Value, at: u64) -> Option<Quota> {
     }
     windows.sort_by_key(|w| w.minutes);
     Some(Quota {
+        error: String::new(),
         at,
         plan: v["plan_type"].as_str().unwrap_or("").into(),
         windows,

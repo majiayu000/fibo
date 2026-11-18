@@ -1,9 +1,9 @@
 //! Account usage limits. Built in: what a CLI records on this machine anyway, Codex in
 //! its conversation logs and Grok in its own log when it starts. Everything else comes
-//! from plugins (`quota.json`): a file a plugin keeps up to date (the `claude-quota`
-//! plugin saves what Claude Code hands its status line) or a command it runs. Fibo
-//! itself never asks a provider: a reading is only as fresh as its source, so every use
-//! keeps its time. A plugin's command may go online, and says so in its manifest.
+//! from plugins (`quota.json`): a file a plugin keeps up to date or a command it runs.
+//! The `claude-quota` command queries HTTP and shares a credential-scoped snapshot.
+//! A reading is only as fresh as its source, so every use keeps its sample time.
+//! A plugin's command may go online, and says so in its manifest.
 use crate::agent::Loaded;
 use crate::model::{Agent, Workspace};
 use serde::{Deserialize, Serialize};
@@ -27,6 +27,9 @@ const SPARE_WINDOW_MINUTES: u32 = 10_080;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Quota {
+    /// A failed refresh keeps its old sample time and explicitly marks the reading stale.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub error: String,
     /// When the CLI recorded it, Unix seconds.
     pub at: u64,
     /// The plan the CLI reported (plus, pro, max…); empty when it gave none.
@@ -49,11 +52,15 @@ pub struct Window {
 impl Quota {
     /// A reading older than an hour is historical, even if its window has not reset.
     pub fn fresh_until(&self) -> u64 {
-        self.at.saturating_add(3600)
+        if self.error.is_empty() {
+            self.at.saturating_add(3600)
+        } else {
+            0
+        }
     }
 
     pub fn stale(&self, now: u64) -> bool {
-        now > self.fresh_until()
+        !self.error.is_empty() || now > self.fresh_until()
     }
 
     /// Most used first; ties keep the source's shortest-window-first order.
@@ -132,7 +139,7 @@ pub fn latest(w: &Workspace, plugins: &[(Agent, Quota)], now: u64) -> Vec<(Agent
             .map(|q| (s.runtime, q))
     });
     for (agent, q) in sessions.chain(plugins.iter().map(|(a, q)| (*a, q))) {
-        if q.windows.is_empty() || now.saturating_sub(q.at) > SHOWN_FOR {
+        if q.error.is_empty() && (q.windows.is_empty() || now.saturating_sub(q.at) > SHOWN_FOR) {
             continue;
         }
         readings.entry(agent).or_default().push(q);
@@ -159,6 +166,9 @@ pub const API: u32 = 1;
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Source {
+    /// A refresh error in the output document (plugin level 9).
+    #[serde(default)]
+    pub error: Option<String>,
     /// The Agent's executable (`claude`) or name (`Claude`).
     pub agent: String,
     /// A JSON file: relative to the plugin's data directory (`MOORING_PLUGIN_DATA`), or
@@ -253,7 +263,15 @@ impl Source {
                 })
             })
             .collect();
-        (!windows.is_empty()).then(|| Quota {
+        let error = self
+            .error
+            .as_deref()
+            .and_then(|p| doc.pointer(p))
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        (!windows.is_empty() || !error.is_empty()).then(|| Quota {
+            error,
             at: self
                 .at
                 .as_deref()
@@ -348,7 +366,7 @@ fn read(file: &Path) -> Result<Vec<Source>, String> {
             .iter()
             .flat_map(|w| [Some(&w.used), w.resets_at.as_ref(), w.name.as_ref()]);
         if let Some(bad) = pointers
-            .chain([s.at.as_ref(), s.plan.as_ref()])
+            .chain([s.at.as_ref(), s.plan.as_ref(), s.error.as_ref()])
             .flatten()
             .find(|p| !p.starts_with('/'))
         {
@@ -562,6 +580,7 @@ mod tests {
     fn reading(at: u64, used: u16) -> Content {
         Content {
             quota: Some(Quota {
+                error: String::new(),
                 at,
                 plan: String::new(),
                 windows: vec![Window {
@@ -637,7 +656,7 @@ mod tests {
     }
 
     #[test]
-    fn the_claude_plugin_reads_what_its_status_line_kept() {
+    fn the_claude_plugin_reads_only_http_samples_and_keeps_their_time() {
         let root = std::env::temp_dir().join(format!("kl-quota-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let dir = root.join("plugins/claude-quota");
@@ -649,19 +668,15 @@ mod tests {
         let (sources, report) = load(vec![dir.join("quota.json")]);
         assert!(report[0].result.is_ok(), "{report:?}");
         let s = &sources[0];
-        assert_eq!(
-            s.path().unwrap(),
-            root.join("plugin-data/claude-quota/statusline.json")
-        );
+        assert_eq!(sources.len(), 1);
+        assert!(s.path().is_none());
         let doc = serde_json::json!({
-            "session_id": "abc",
-            "rate_limits": {
-                "five_hour": {"used_percentage": 23.6, "resets_at": 1_798_000_000},
-                "seven_day": {"used_percentage": 41, "resets_at": 1_798_400_000},
-                "seven_day_opus": null
-            }
+            "at": 1_793_605_648u64,
+            "session": {"used": 23.6, "resets_at": 1_798_000_000},
+            "week": {"used": 41, "resets_at": 1_798_400_000},
+            "models": []
         });
-        let q = s.reading(&doc, 1_793_605_648).unwrap();
+        let q = s.reading(&doc, 1_793_605_999).unwrap();
         assert_eq!(q.at, 1_793_605_648);
         assert_eq!(
             q.windows,
@@ -680,7 +695,7 @@ mod tests {
                 },
             ]
         );
-        // API-key sign-ins: no limits, nothing to show.
+        // A legacy status line is never another account quota source.
         assert_eq!(
             s.reading(&serde_json::json!({"rate_limits": null}), 1),
             None

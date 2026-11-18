@@ -59,6 +59,7 @@ mod tests {
     }
     fn reading(at: u64, windows: Vec<Window>) -> Quota {
         Quota {
+            error: String::new(),
             at,
             plan: String::new(),
             windows,
@@ -130,9 +131,15 @@ mod tests {
             .join("../../plugins/claude-quota/quota.json");
         let file: serde_json::Value =
             serde_json::from_slice(&std::fs::read(shipped).unwrap()).unwrap();
-        let source: Source = serde_json::from_value(file["sources"][1].clone()).unwrap();
-        // Six seconds usually, and over 20 on a busy machine: the default would cut it off.
-        assert!(source.timeout_ms.is_some_and(|t| t >= 60_000));
+        assert_eq!(
+            file["sources"].as_array().unwrap().len(),
+            1,
+            "old statusline files must not be another account quota source"
+        );
+        let source: Source = serde_json::from_value(file["sources"][0].clone()).unwrap();
+        assert!(source.file.is_none());
+        // Native HTTP is bounded; no full Claude Code startup.
+        assert!(source.timeout_ms.is_some_and(|t| t <= 20_000));
         let doc = serde_json::json!({"at": 500,
             "session": {"used": 2, "resets_at": 900},
             "week": {"used": 19, "resets_at": 901},
@@ -149,6 +156,39 @@ mod tests {
         );
         // No window: the reading is none, which is what clears it.
         assert_eq!(source.reading(&serde_json::json!({"at": 500}), 1), None);
+    }
+
+    #[test]
+    fn refresh_failure_stays_stale_without_renewing_the_sample_time() {
+        let source: Source = serde_json::from_value(serde_json::json!({
+            "agent":"claude", "command":"read", "at":"/at", "error":"/error",
+            "windows":[{"minutes":300,"used":"/session/used","resets_at":"/session/reset"}]
+        }))
+        .unwrap();
+        let q = source
+            .reading(
+                &serde_json::json!({
+                    "at":1000,"error":"offline","session":{"used":19,"reset":1100}
+                }),
+                1050,
+            )
+            .unwrap();
+        assert_eq!(q.at, 1000);
+        assert!(q.stale(1050));
+        assert_eq!(q.fresh_until(), 0);
+        assert!(!q.windows[0].reset(1050));
+        assert!(q.windows[0].reset(1100));
+        let missing = source
+            .reading(&serde_json::json!({"at":0,"error":"sign in"}), 1050)
+            .unwrap();
+        let all = crate::quota::latest(
+            &Default::default(),
+            &[(crate::model::Agent::Claude, missing)],
+            1050,
+        );
+        assert_eq!(all.len(), 1);
+        assert!(all[0].1.windows.is_empty());
+        assert_eq!(all[0].1.error, "sign in");
     }
 
     /// A reading stored before names existed reads back, and one without a name stores as before.
