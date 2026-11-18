@@ -216,14 +216,28 @@ pub(in crate::workbench) fn hidden_tabs(
     scroll: &gpui::ScrollHandle,
     count: usize,
 ) -> (Vec<usize>, Vec<usize>) {
-    let view = scroll.bounds();
-    let shift = scroll.offset().x;
+    let tabs = (0..count).map_while(|ix| scroll.bounds_for_item(ix));
+    hidden_past_edges(
+        scroll.bounds(),
+        scroll.offset().x,
+        scroll.max_offset().x,
+        tabs,
+    )
+}
+
+/// A wheel turn moves the offset at once and the strip clamps it only at its next
+/// layout, so a render in between reads an offset past the end. Clamped here, a strip
+/// whose tabs all fit counts none hidden however hard the wheel turns.
+fn hidden_past_edges(
+    view: gpui::Bounds<gpui::Pixels>,
+    offset: gpui::Pixels,
+    max: gpui::Pixels,
+    tabs: impl Iterator<Item = gpui::Bounds<gpui::Pixels>>,
+) -> (Vec<usize>, Vec<usize>) {
+    let shift = offset.clamp(-max.max(px(0.)), px(0.));
     let slack = px(T::BORDER_WIDTH);
     let (mut left, mut right) = (Vec::new(), Vec::new());
-    for ix in 0..count {
-        let Some(tab) = scroll.bounds_for_item(ix) else {
-            break;
-        };
+    for (ix, tab) in tabs.enumerate() {
         if tab.left() + shift < view.left() - slack {
             left.push(ix);
         } else if tab.right() + shift > view.right() + slack {
@@ -231,6 +245,44 @@ pub(in crate::workbench) fn hidden_tabs(
         }
     }
     (left, right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{Bounds, point, size};
+
+    fn strip(widths: &[f32]) -> (Bounds<gpui::Pixels>, Vec<Bounds<gpui::Pixels>>) {
+        let mut x = 0.;
+        let tabs = widths
+            .iter()
+            .map(|w| {
+                let b = Bounds::new(point(px(x), px(0.)), size(px(*w), px(30.)));
+                x += w;
+                b
+            })
+            .collect();
+        (
+            Bounds::new(point(px(0.), px(0.)), size(px(300.), px(30.))),
+            tabs,
+        )
+    }
+
+    #[test]
+    fn a_wheel_turn_past_the_end_hides_no_tab_that_fits() {
+        let (view, tabs) = strip(&[100., 100., 100.]);
+        let hidden = hidden_past_edges(view, px(-90.), px(0.), tabs.into_iter());
+        assert_eq!(hidden, (vec![], vec![]));
+    }
+
+    #[test]
+    fn an_overflowing_strip_counts_only_up_to_its_end() {
+        let (view, tabs) = strip(&[100., 100., 100., 100.]);
+        let hidden = hidden_past_edges(view, px(-400.), px(100.), tabs.clone().into_iter());
+        assert_eq!(hidden, (vec![0], vec![]));
+        let hidden = hidden_past_edges(view, px(0.), px(100.), tabs.into_iter());
+        assert_eq!(hidden, (vec![], vec![3]));
+    }
 }
 
 /// A plain hover note.
