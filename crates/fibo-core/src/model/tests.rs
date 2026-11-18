@@ -660,7 +660,7 @@ fn task_prompt_and_per_criterion_evidence_are_independent() {
     );
 }
 #[test]
-fn session_names_prefer_the_user_then_the_task_then_the_cli_then_the_first_ask() {
+fn session_names_prefer_the_user_then_the_cli_then_the_first_ask_then_the_task() {
     let mut w = Workspace::default();
     w.observe_agent(AgentSession {
         terminal: None,
@@ -693,7 +693,8 @@ fn session_names_prefer_the_user_then_the_task_then_the_cli_then_the_first_ask()
         w.session_naming(&session(&w)),
         Some(("总结页面".into(), NameSource::Agent))
     );
-    // A task it was started for or given outranks what the CLI generated.
+    // What the CLI generated outranks the task it was started for or given: the tab
+    // holding the task's conversations is the one called by the task.
     w.tasks.push(Task {
         id: "t".into(),
         space: "s".into(),
@@ -705,7 +706,7 @@ fn session_names_prefer_the_user_then_the_task_then_the_cli_then_the_first_ask()
     w.agent_sessions[0].task = Some("t".into());
     assert_eq!(
         w.session_naming(&session(&w)),
-        Some(("修复登录跳转".into(), NameSource::Task))
+        Some(("总结页面".into(), NameSource::Agent))
     );
     w.edit(Edit::RenameSession {
         id: id.clone(),

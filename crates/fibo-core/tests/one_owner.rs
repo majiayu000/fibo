@@ -35,7 +35,8 @@ fn every_sample_reads_one_name_one_state() {
     let at = now();
     let by = |id: &str| w.agent_sessions.iter().find(|s| s.id == id).unwrap();
     assert_eq!(w.session_title(by("renamed")), "我起的名");
-    assert_eq!(w.session_title(by("tasked")), "修登录");
+    // Its own first ask comes before the to-do's title; the tab is the one the to-do names.
+    assert_eq!(w.session_title(by("tasked")), "第一句话 帮我看看登录");
     // A name pinned on the tab before names had one owner moved onto its conversation.
     assert_eq!(w.session_title(by("tab-named")), "部署");
     assert_eq!(w.terminal_tab_title("pty-tab-named"), "部署");
