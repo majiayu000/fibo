@@ -47,6 +47,7 @@ impl Workbench {
             return;
         }
         self.sidebar.space_filter = Some(id.to_owned());
+        self.sidebar.machine_space = None;
         self.set_machine_scope(None);
         self.pick_space(id, cx);
     }

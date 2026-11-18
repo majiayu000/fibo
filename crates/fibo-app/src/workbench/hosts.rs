@@ -623,6 +623,23 @@ impl Workbench {
         let go = space.map(|s| Go::Space(s.to_owned()));
         self.show_host(host.to_owned(), go, window, cx);
     }
+    /// `host`'s space chip in this sidebar clicked.
+    pub fn visual_pick_machine_space(
+        &mut self,
+        host: &str,
+        space: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let index = (self.machines.iter())
+            .position(|m| m.view.lock().unwrap().spec.host == host)
+            .expect("a machine in machines.json");
+        self.pick_machine_space(index, space, window, cx);
+    }
+    /// The one space of another machine the list is narrowed to.
+    pub fn visual_machine_space_filter(&self) -> Option<String> {
+        self.sidebar.machine_space.clone()
+    }
     pub fn visual_go_home(&mut self, cx: &mut Context<Self>) {
         cx.emit(HostEvent::Home);
     }
