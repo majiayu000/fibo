@@ -231,10 +231,17 @@ def in_front():
     return PACKAGE in line, line.strip()
 
 
-def tap(text, contains=False):
+def need_front(what):
+    """Stop unless Fibo is on screen. Typing, keys and screenshots were unguarded: on
+    2026-11-18 the person picked up the phone mid-walk, and two test sentences went into a
+    food-delivery app's text field and its order page into a screenshot."""
     ours, line = in_front()
     if not ours and "--any-app" not in sys.argv:
-        die(f"前台不是 Fibo（{line}），不点「{text}」。系统选图之类要点别的 App 时加 --any-app")
+        die(f"前台不是 Fibo（{line}），不{what}。系统选图之类要用别的 App 时加 --any-app")
+
+
+def tap(text, contains=False):
+    need_front(f"点「{text}」")
     if any(w in text for w in NEVER):
         die(f"「{text}」在永远不按的名单里")
     xml, found = nodes()
@@ -253,6 +260,7 @@ def tap(text, contains=False):
 
 
 def shot(item, note=""):
+    need_front("截图（别的 App 里可能是私人内容）")
     ids = [c["id"] for c in checklist()]
     if item not in ids:
         die(f"{item} 不在清单里：{ids}")
@@ -563,10 +571,12 @@ def main(argv):
     elif cmd == "tap":
         tap(rest[0], "--contains" in rest)
     elif cmd == "type":
+        need_front("打字")
         # The phone's shell parses the line again: quote it, and `input text` wants %s for spaces.
         text = rest[0].replace(" ", "%s").replace("'", "'\\''")
         adb("shell", "input", "text", f"'{text}'")
     elif cmd == "key":
+        need_front(f"按 {rest[0]}")
         if rest[0] == "hide":
             # Back only while the keyboard is up: with it down, Back leaves the page, and twice
             # it left the chat for other screens mid-walk (2026-11-09).
