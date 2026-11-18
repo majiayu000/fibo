@@ -387,7 +387,12 @@ impl Workbench {
                     .when_some(subs, |d, subs| {
                         d.child(self.subagent_line(&session.id, subs, subs_live, subs_open, cx))
                             .when(subs_open, |d| {
-                                d.child(self.subagent_tree(session, done, subs, subs_live, cx))
+                                let row = session.clone();
+                                let click: super::sidebar_subagents::Click =
+                                    std::rc::Rc::new(move |this, window, cx| {
+                                        this.click_row(&row, done, window, cx)
+                                    });
+                                d.child(self.subagent_tree(&session.id, click, subs, subs_live, cx))
                             })
                     })
                     .when(unfolded, |d| d.child(self.done_card(session, cx))),

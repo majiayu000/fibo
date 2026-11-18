@@ -138,6 +138,7 @@ fn card(w: &Workspace, seen: &RecognitionStatus, t: &Terminal, now: u64) -> rp::
         permission: set_permission
             .or_else(|| content.and_then(|c| said(&c.permission)))
             .map(|p| crate::i18n::say(&p).to_owned()),
+        subagents: content.map(|c| c.subagents.clone()).unwrap_or_default(),
     }
 }
 

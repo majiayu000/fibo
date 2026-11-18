@@ -25,6 +25,7 @@ pub mod ops;
 pub mod protocol;
 pub mod role;
 pub mod secure;
+pub mod subagent;
 pub mod tools;
 pub mod usage;
 pub mod wire;

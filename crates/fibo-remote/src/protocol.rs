@@ -564,6 +564,9 @@ pub struct Card {
     /// Semantic flag from the CLI; None means it has not been read.
     #[serde(default)]
     pub permission_full: Option<bool>,
+    /// The subagents its sidebar row lists; none from hosts before 11-18.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subagents: Vec<crate::subagent::Subagent>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

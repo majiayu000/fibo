@@ -235,8 +235,14 @@ impl Workbench {
     /// row is faded, says 断开 where its time goes, and opens nothing.
     pub(super) fn remote_row(&self, r: &RemoteRow, cx: &Context<Self>) -> gpui::AnyElement {
         let card = &r.card;
-        let asks = r.asks();
-        let two = asks.is_some();
+        // Subagents take the second line, except on a row that asks you something.
+        let subs = Some(card.subagents.as_slice())
+            .filter(|s| !s.is_empty() && r.bucket != Bucket::Attention);
+        let asks = r.asks().filter(|_| subs.is_none());
+        let subs_live = matches!(r.status, Status::Running | Status::Background);
+        let subs_open = self.subagents_open(&r.key, r.shown);
+        let renaming = self.remote_renaming(r.index, card.session.as_deref(), cx);
+        let two = asks.is_some() || subs.is_some();
         let time = if !r.online && !r.quiet {
             t!("断开").to_owned()
         } else {
@@ -316,8 +322,9 @@ impl Workbench {
                             .flex()
                             .items_center()
                             .gap(px(T::S8))
-                            .child(
-                                div()
+                            .child(match renaming {
+                                Some(field) => div().flex_1().min_w_0().child(field),
+                                None => div()
                                     .flex_1()
                                     .min_w_0()
                                     .truncate()
@@ -325,7 +332,7 @@ impl Workbench {
                                     .line_height(px(F::TITLE_LINE))
                                     .text_color(T::color(title_ink))
                                     .child(shown_title(card)),
-                            )
+                            })
                             .children(mark)
                             .children(space)
                             .child(
@@ -352,6 +359,25 @@ impl Workbench {
                                 .text_color(r.status.colors().1)
                                 .child(text),
                         )
+                    })
+                    .when_some(subs, |d, subs| {
+                        d.child(self.subagent_line(&r.key, subs, subs_live, subs_open, cx))
+                            .when(subs_open, |d| {
+                                let open = open.clone();
+                                let click: super::sidebar_subagents::Click =
+                                    std::rc::Rc::new(move |this, window, cx| {
+                                        if let Some((index, card, name)) = &open {
+                                            this.open_remote_peek(
+                                                *index,
+                                                card.clone(),
+                                                name,
+                                                window,
+                                                cx,
+                                            );
+                                        }
+                                    });
+                                d.child(self.subagent_tree(&r.key, click, subs, subs_live, cx))
+                            })
                     }),
             )
             .when(r.shown, |d| {
@@ -517,18 +543,30 @@ impl Workbench {
                 if self.peek.as_ref().is_some_and(|p| p.remote.is_some()) {
                     self.close_peek(cx);
                 }
-                self.reveal_machine(None);
+                let space = self.workspace.session_space(&session).map(str::to_owned);
+                self.reveal_machine(None, space.as_deref());
                 self.enter_card(&session, window, cx);
             }
             Next::There(index, card, name) => {
-                self.reveal_machine(Some(index));
+                self.reveal_machine(Some(index), Some(&card.space));
                 self.open_remote_peek(index, *card, &name, window, cx);
             }
         }
     }
-    /// Makes sure the row ⌘J went to is on the list.
-    fn reveal_machine(&mut self, index: Option<usize>) {
-        self.sidebar.machine_space = None;
+    /// Makes sure the row ⌘J went to, in `space`, is on the list: a space shown alone stays
+    /// so when the row is in it, on this machine and on another alike.
+    fn reveal_machine(&mut self, index: Option<usize>, space: Option<&str>) {
+        let filter = match index {
+            None => &mut self.sidebar.space_filter,
+            Some(_) => {
+                // This machine's space alone lists no other machine's rows.
+                self.sidebar.space_filter = None;
+                &mut self.sidebar.machine_space
+            }
+        };
+        if filter.as_deref() != space {
+            *filter = None;
+        }
         let host = index.and_then(|i| self.machine_host(i));
         match self.machine_layout() {
             Machines::Rail => self.set_machine_scope(host),
