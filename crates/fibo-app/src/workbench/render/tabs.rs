@@ -247,44 +247,6 @@ fn hidden_past_edges(
     (left, right)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use gpui::{Bounds, point, size};
-
-    fn strip(widths: &[f32]) -> (Bounds<gpui::Pixels>, Vec<Bounds<gpui::Pixels>>) {
-        let mut x = 0.;
-        let tabs = widths
-            .iter()
-            .map(|w| {
-                let b = Bounds::new(point(px(x), px(0.)), size(px(*w), px(30.)));
-                x += w;
-                b
-            })
-            .collect();
-        (
-            Bounds::new(point(px(0.), px(0.)), size(px(300.), px(30.))),
-            tabs,
-        )
-    }
-
-    #[test]
-    fn a_wheel_turn_past_the_end_hides_no_tab_that_fits() {
-        let (view, tabs) = strip(&[100., 100., 100.]);
-        let hidden = hidden_past_edges(view, px(-90.), px(0.), tabs.into_iter());
-        assert_eq!(hidden, (vec![], vec![]));
-    }
-
-    #[test]
-    fn an_overflowing_strip_counts_only_up_to_its_end() {
-        let (view, tabs) = strip(&[100., 100., 100., 100.]);
-        let hidden = hidden_past_edges(view, px(-400.), px(100.), tabs.clone().into_iter());
-        assert_eq!(hidden, (vec![0], vec![]));
-        let hidden = hidden_past_edges(view, px(0.), px(100.), tabs.into_iter());
-        assert_eq!(hidden, (vec![], vec![3]));
-    }
-}
-
 /// A plain hover note.
 pub(in crate::workbench) struct TextTip(pub(in crate::workbench) gpui::SharedString);
 impl Render for TextTip {
@@ -424,3 +386,7 @@ impl Render for TabTip {
             .when_some(self.cwd.clone(), |d, cwd| d.child(label(cwd)))
     }
 }
+
+#[cfg(test)]
+#[path = "tabs_tests.rs"]
+mod tests;
