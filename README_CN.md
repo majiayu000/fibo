@@ -14,7 +14,7 @@
 [![Commit activity](https://img.shields.io/github/commit-activity/m/majiayu000/fibo?style=flat-square)](https://github.com/majiayu000/fibo/pulse)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-[![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon%20%26%20Intel-black?style=flat-square&logo=apple)](https://github.com/majiayu000/fibo/releases/latest) [![Windows preview](https://img.shields.io/badge/Windows-x64%20preview-black?style=flat-square)](https://github.com/majiayu000/fibo/releases/latest)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon%20%26%20Intel-black?style=flat-square&logo=apple)](https://github.com/majiayu000/fibo/releases/latest) [![Windows preview](https://img.shields.io/badge/Windows-x64%20preview-black?style=flat-square)](https://github.com/majiayu000/fibo/releases/latest) [![Linux preview](https://img.shields.io/badge/Linux-Ubuntu%2024.04%20preview-black?style=flat-square)](https://github.com/majiayu000/fibo/releases/latest)
 [![Homebrew](https://img.shields.io/badge/brew-majiayu000%2Ftap%2Ffibo-orange?style=flat-square&logo=homebrew)](https://github.com/majiayu000/homebrew-tap)
 [![Rust](https://img.shields.io/badge/Rust-1.99-B7410E?style=flat-square&logo=rust&logoColor=white)](rust-toolchain.toml)
 [![GPUI](https://img.shields.io/badge/UI-GPUI-084CCF?style=flat-square&logo=zedindustries&logoColor=white)](https://github.com/zed-industries/zed/tree/main/crates/gpui)
@@ -40,7 +40,7 @@
 
 ---
 
-> **现状：** 最新发布版 [v0.1.2](https://github.com/majiayu000/fibo/releases/latest)：Apple 芯片和 Intel 的 Mac，macOS 14 及以上，已签名并经 Apple 公证；Windows x64 为预览版（未签名，在 Windows 11 上试过）。Fibo 原名 Mooring，更早叫 Keepline，之前放在 [majiayu000/keepline](https://github.com/majiayu000/keepline) 的 `next/` 目录里；那个仓库保留上一代（Bun 命令行、网页仪表盘、Tauri 菜单栏）。
+> **现状：** 最新发布版 [v0.1.3](https://github.com/majiayu000/fibo/releases/latest)：Apple 芯片和 Intel 的 Mac，macOS 14 及以上，已签名并经 Apple 公证；Windows x64 和 Ubuntu 24.04（x64、arm64）为预览版，目前只在 CI 上试过，还没在真桌面上试（Windows 安装程序没有代码签名）。Fibo 原名 Mooring，更早叫 Keepline，之前放在 [majiayu000/keepline](https://github.com/majiayu000/keepline) 的 `next/` 目录里；那个仓库保留上一代（Bun 命令行、网页仪表盘、Tauri 菜单栏）。
 
 ## 安装
 
@@ -52,7 +52,9 @@ brew install --cask majiayu000/tap/fibo
 
 打开 Fibo，在它的终端里运行 `claude` 或 `codex`，会话就会出现在左栏。从 GitHub 下载的发布版会自己更新，用 Homebrew 装的用 `brew upgrade --cask fibo` 更新（见[常见问题](#常见问题)里的「怎么更新」）。
 
-**Windows（预览版）：** 运行 `Fibo-Setup-<版本>.exe`，只装给当前用户，不用管理员权限。安装程序还没有代码签名，SmartScreen 会提示「未知发布者」：点「更多信息」，再点「仍要运行」。Windows 版不会自己更新，要更新就运行新版安装程序。目前只在 Windows 11 x64 上试过。
+**Windows（预览版）：** 运行 `Fibo-Setup-<版本>.exe`，只装给当前用户，不用管理员权限。安装程序还没有代码签名，SmartScreen 会提示「未知发布者」：点「更多信息」，再点「仍要运行」。Windows 版不会自己更新，要更新就运行新版安装程序。0.1.2 在 Windows 11 x64 上试过，0.1.3 目前只在 CI 上试过。
+
+**Linux（预览版）：** Ubuntu 24.04，x64 或 arm64：`sudo apt install ./fibo_<版本>_amd64.deb`（或 `fibo_<版本>_arm64.deb`）。不会自己更新，要更新就装新版的包。目前在 CI 和全新容器里装过、跑过，还没在真桌面上试。
 
 ### 从源码构建
 
@@ -122,7 +124,7 @@ tmux 能让终端在窗口关掉后继续跑，Fibo 的后台也一样。tmux �
 退出或更新 App，终端都继续跑。重启电脑会结束它们，被打断的会话会提示在原目录接着聊。
 
 **有 Windows 或 Linux 版吗？**
-Apple silicon 或 Intel 的 Mac，macOS 14 及以上。Windows x64 在发布页有预览版安装包：还没有代码签名，在 Windows 11 上试过，不会自动更新。没有 Linux 发布版。
+Apple silicon 或 Intel 的 Mac，macOS 14 及以上。Windows x64 和 Ubuntu 24.04（x64、arm64）在发布页有预览版安装包：都不会自动更新，Windows 安装程序还没有代码签名。0.1.3 的预览版目前只在 CI 上试过（Linux 还在全新容器里装过），还没在真桌面上试。
 
 **数据放在哪，会不会传出去？**
 终端和会话索引在 `~/.local/share/fibo-workbench`，设置和插件在 `~/.config/fibo`。Fibo 只读 Agent 自己的对话记录，不上传。手机中继要你自己开启，内容端到端加密。

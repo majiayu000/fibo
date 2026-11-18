@@ -411,7 +411,7 @@ html[lang="zh-CN"] .spphone img[data-lang="en"],html:not([lang="zh-CN"]) .spphon
 <section class="hero">
   <div class="bg"></div>
   <div class="in">
-    <span class="phi">φ = 1.6180339… · v0.1.2</span>
+    <span class="phi">φ = 1.6180339… · v0.1.3</span>
     <h1>Run more agents.<br><em>Miss none of them.</em></h1>
     <p class="lede">A native Mac workbench for Claude Code, Codex and the agents you already use. Real terminals side by side, and one place that shows who needs you.</p>
     <div class="cta">
@@ -538,7 +538,7 @@ html[lang="zh-CN"] .spphone img[data-lang="en"],html:not([lang="zh-CN"]) .spphon
     <article class="feat" id="f-spaces">
       <p class="fnum"><b>5</b>F₅ · Spaces &amp; machines</p>
       <h2>Spaces for projects. <em>Machines for spaces.</em></h2>
-      <p>A space is a folder you work in; its sessions stay together, and you can quiet one while you're away from it. Add another Mac over SSH and its spaces appear under it, view only. With a phone app built from source and your own relay, questions from every machine can reach your phone with end-to-end encryption. Below: two Macs and a quieted space, then the same sessions on the phone.</p>
+      <p>A space is a folder you work in; its sessions stay together, and you can quiet one while you're away from it. Add another Mac over SSH and its spaces appear under it; click one of its spaces or sessions and the tabs and splits open in this window. With a phone app built from source and your own relay, questions from every machine can reach your phone with end-to-end encryption. Below: two Macs and a quieted space, then the same sessions on the phone.</p>
       <div class="panel sp-panel">
         <div class="sp-real">
           <figure class="sbshot spdesk"><img class="on" data-lang="en" src="shots/sp-desktop.webp" width="632" height="1350" alt="Fibo sidebar by machine: This Mac with four spaces and the docs space quieted, mac2 over SSH with two"><img class="on" data-lang="zh" src="shots/sp-desktop-zh.webp" width="632" height="1350" alt="" loading="lazy"><figcaption><span class="on">Mac · This Mac, and mac2 over SSH</span></figcaption></figure>
@@ -745,7 +745,7 @@ html[lang="zh-CN"] .spphone img[data-lang="en"],html:not([lang="zh-CN"]) .spphon
     <details><summary>Does Fibo upload my conversations?</summary><p>No. Fibo reads local transcripts and does not upload them. Your agent CLIs still talk to their own providers. The optional phone link is end-to-end encrypted.</p></details>
     <details><summary>Does it change my agent settings?</summary><p>Hooks change agent settings when you choose to install them. The packaged app also installs command links and a Codex skill on startup; set <code>MOORING_NO_CLI_SETUP=1</code> to disable that setup. <code>fibo hooks uninstall</code> removes the hooks.</p></details>
     <details><summary>Wasn't this called Mooring?</summary><p>Yes. It was renamed Fibo in November 2026. Existing installs keep working: the <code>mooring</code> command, settings and terminals carry over.</p></details>
-    <details><summary>Windows or Linux?</summary><p>Macs with Apple silicon or Intel, macOS 14 or later. Windows x64 has a preview installer on the release page: not code-signed yet, tried on Windows 11, and it does not update itself. There is no Linux release.</p></details>
+    <details><summary>Windows or Linux?</summary><p>Macs with Apple silicon or Intel, macOS 14 or later. Windows x64 and Ubuntu 24.04 (x64, arm64) have preview packages on the release page; neither updates itself, and the Windows installer is not code-signed yet. The 0.1.3 previews have been tried on CI runners (Linux also in a fresh container), not yet on a real desktop.</p></details>
   </div>
 </div></section>
 
@@ -985,7 +985,7 @@ document.querySelectorAll('.feat').forEach(f => io.observe(f));
       { n: 'fibo', c: '#e0574f', s: [['Fix flaky reconnect test', 'Codex', 'need', 'Two fixes: wait for the old host, or hand the socket over?', ['Wait', 'Hand over']], ['Add English UI to settings', 'Claude', 'run'], ['Speed up sidebar redraw', 'Codex', 'rev']] },
       { n: 'api-server', c: '#4a7bd8', s: [['Rate-limit the upload API', 'Claude', 'run'], ['Migrate sessions to UUIDs', 'Codex', 'need', 'Drop the old table now, or keep it a week?', ['Drop', 'Keep']]] },
       { n: 'web', c: '#3aa76d', s: [['Dark mode for pricing', 'Codex', 'rev'], ['Lazy-load screenshots', 'Cursor', 'need', 'Native loading="lazy", or an observer?', ['Native', 'Observer']]] }] },
-    { name: 'mac2', zh: 'mac2', tag: 'ssh · view only', tagZh: 'ssh · 只读', spaces: [
+    { name: 'mac2', zh: 'mac2', tag: 'ssh', tagZh: 'ssh', spaces: [
       { n: 'infra', c: '#7a5bd8', s: [['Rotate the relay certificate', 'Claude', 'need', 'Renew now, three days early?', ['Renew', 'Wait']], ['Pin the Zig toolchain', 'Codex', 'done']] },
       { n: 'docs', c: '#c4882a', s: [['Write the setup guide', 'Claude', 'run']] }] }];
   const quiet = new Set();

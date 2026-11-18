@@ -14,7 +14,7 @@
 [![Commit activity](https://img.shields.io/github/commit-activity/m/majiayu000/fibo?style=flat-square)](https://github.com/majiayu000/fibo/pulse)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-[![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon%20%26%20Intel-black?style=flat-square&logo=apple)](https://github.com/majiayu000/fibo/releases/latest) [![Windows preview](https://img.shields.io/badge/Windows-x64%20preview-black?style=flat-square)](https://github.com/majiayu000/fibo/releases/latest)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B%20·%20Apple%20silicon%20%26%20Intel-black?style=flat-square&logo=apple)](https://github.com/majiayu000/fibo/releases/latest) [![Windows preview](https://img.shields.io/badge/Windows-x64%20preview-black?style=flat-square)](https://github.com/majiayu000/fibo/releases/latest) [![Linux preview](https://img.shields.io/badge/Linux-Ubuntu%2024.04%20preview-black?style=flat-square)](https://github.com/majiayu000/fibo/releases/latest)
 [![Homebrew](https://img.shields.io/badge/brew-majiayu000%2Ftap%2Ffibo-orange?style=flat-square&logo=homebrew)](https://github.com/majiayu000/homebrew-tap)
 [![Rust](https://img.shields.io/badge/Rust-1.99-B7410E?style=flat-square&logo=rust&logoColor=white)](rust-toolchain.toml)
 [![GPUI](https://img.shields.io/badge/UI-GPUI-084CCF?style=flat-square&logo=zedindustries&logoColor=white)](https://github.com/zed-industries/zed/tree/main/crates/gpui)
@@ -40,7 +40,7 @@
 
 ---
 
-> **Status:** latest release, [v0.1.2](https://github.com/majiayu000/fibo/releases/latest): Macs with Apple silicon or Intel, macOS 14 or later, signed and notarized; Windows x64 as a preview (unsigned, tested on Windows 11). Fibo was called Mooring, and before that Keepline, and lived in the `next/` directory of [majiayu000/keepline](https://github.com/majiayu000/keepline), which keeps the previous generation (Bun CLI, web dashboard, Tauri menu bar).
+> **Status:** latest release, [v0.1.3](https://github.com/majiayu000/fibo/releases/latest): Macs with Apple silicon or Intel, macOS 14 or later, signed and notarized; Windows x64 and Ubuntu 24.04 (x64, arm64) as previews, so far tried on CI runners rather than desktops (the Windows installer is not code-signed). Fibo was called Mooring, and before that Keepline, and lived in the `next/` directory of [majiayu000/keepline](https://github.com/majiayu000/keepline), which keeps the previous generation (Bun CLI, web dashboard, Tauri menu bar).
 
 ## Install
 
@@ -52,7 +52,9 @@ brew install --cask majiayu000/tap/fibo
 
 Open Fibo, run `claude` or `codex` in its terminal, and the session shows up in the sidebar. A release downloaded from GitHub updates itself; one installed with Homebrew updates with `brew upgrade --cask fibo` (see [How do I update?](#faq)).
 
-**Windows (preview):** run `Fibo-Setup-<version>.exe`; it installs for your user only, no admin needed. The installer is not code-signed yet, so SmartScreen warns about an unknown publisher: choose *More info*, then *Run anyway*. The Windows build does not update itself; run the newer installer to update. It has been tried on Windows 11 x64 only.
+**Windows (preview):** run `Fibo-Setup-<version>.exe`; it installs for your user only, no admin needed. The installer is not code-signed yet, so SmartScreen warns about an unknown publisher: choose *More info*, then *Run anyway*. The Windows build does not update itself; run the newer installer to update. 0.1.2 was tried on Windows 11 x64; 0.1.3 so far only on a CI runner.
+
+**Linux (preview):** on Ubuntu 24.04, x64 or arm64, run `sudo apt install ./fibo_<version>_amd64.deb` (or `fibo_<version>_arm64.deb`). It does not update itself; install the newer package to update. It has been installed and run on CI runners and in a fresh container, not yet on a real desktop.
 
 ### Build from source
 
@@ -122,7 +124,7 @@ Nothing to redo. On first start Fibo moves `~/.config/mooring` to `~/.config/fib
 Quitting or updating the app leaves every terminal running. Restarting the machine ends them; each interrupted session then offers to resume its conversation in the same directory.
 
 **Windows or Linux?**
-Macs with Apple silicon or Intel, macOS 14 or later. Windows x64 has a preview installer on the release page: not code-signed yet, tried on Windows 11, and it does not update itself. There is no Linux release.
+Macs with Apple silicon or Intel, macOS 14 or later. Windows x64 and Ubuntu 24.04 (x64, arm64) have preview packages on the release page; neither updates itself, and the Windows installer is not code-signed yet. The 0.1.3 previews have been tried on CI runners (Linux also in a fresh container), not yet on a real desktop.
 
 **Where is my data, and does anything leave my machine?**
 Terminals and the session index live in `~/.local/share/fibo-workbench`, settings and plugins in `~/.config/fibo`. Fibo reads the agents' own transcripts and never uploads them. The phone relay is opt-in and end-to-end encrypted.
