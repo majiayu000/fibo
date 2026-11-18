@@ -16,7 +16,7 @@ pub const API: u32 = 1;
 /// is added: 1 the first seven kinds, 2 `setup`, `quota`, `files` and `options`, 3 `themes`,
 /// an action's `agent` and a secret setting, 4 an agent's `screen_rules` and `interrupt`, 5
 /// its `answers`, 6 transcript parent links and source metadata headers, 7 an agent's
-/// `input_hint`, 8 a quota window's `name`. A plugin needing a higher level says so in `fibo`, and is refused with
+/// `input_hint`, 8 a quota window's `name`, 9 a quota source's `error`. A plugin needing a higher level says so in `fibo`, and is refused with
 /// "update Fibo".
 pub const LEVEL: u32 = 9;
 

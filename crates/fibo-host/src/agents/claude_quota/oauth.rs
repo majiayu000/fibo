@@ -170,14 +170,13 @@ fn window(value: &Value) -> Result<Option<Value>, String> {
         .ok_or(t!("额度响应缺少有效百分比"))?;
     let resets_at = match value.get("resets_at").filter(|v| !v.is_null()) {
         None => 0,
-        Some(v) => {
-            v.as_str()
-                .ok_or(t!("额度重置时间格式错误"))?
-                .parse::<jiff::Timestamp>()
-                .map_err(|_| t!("额度重置时间格式错误"))?
-                .as_second()
-                .max(0) as u64
-        }
+        Some(v) => v
+            .as_str()
+            .ok_or(t!("额度重置时间格式错误"))?
+            .parse::<jiff::Timestamp>()
+            .map_err(|_| t!("额度重置时间格式错误"))?
+            .as_second()
+            .max(0) as u64,
     };
     Ok(Some(json!({"used": used, "resets_at": resets_at})))
 }

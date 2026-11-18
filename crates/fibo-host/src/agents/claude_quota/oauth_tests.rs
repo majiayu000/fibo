@@ -103,3 +103,18 @@ fn retry_after_handles_seconds_dates_and_missing_headers() {
     assert_eq!(retry_at(None, 1000), 1300);
     assert_eq!(retry_at(Some("0"), 1000), 1060);
 }
+
+#[test]
+fn reset_times_keep_offsets_and_fractional_seconds() {
+    let at = |s: &str| {
+        window(&json!({"utilization": 1, "resets_at": s}))
+            .unwrap()
+            .unwrap()
+    };
+    assert_eq!(
+        at("2026-11-16T12:00:00.396577+00:00")["resets_at"],
+        1794830400u64
+    );
+    assert_eq!(at("2026-11-16T20:00:00+08:00")["resets_at"], 1794830400u64);
+    assert!(window(&json!({"utilization": 1, "resets_at": "next week"})).is_err());
+}
