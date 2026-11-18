@@ -231,12 +231,8 @@ impl Workbench {
                         .child(space.name),
                 )
                 .when(need > 0, |d| d.child(need_badge(need)))
-                // That space in that machine's own workbench here; with peek on, as before.
                 .on_click(cx.listener(move |this, _, window, cx| {
-                    let go = super::hosts::Go::Space(pick.clone());
-                    if !this.open_on_host(index, go, window, cx) {
-                        this.toggle_machine_space(&pick, cx);
-                    }
+                    this.pick_machine_space(index, &pick, window, cx)
                 }))
         });
         div()

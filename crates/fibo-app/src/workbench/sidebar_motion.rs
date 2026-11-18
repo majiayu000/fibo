@@ -399,6 +399,22 @@ impl Workbench {
         self.sidebar.motion.arrive_plain();
         cx.notify();
     }
+    /// One of machine `index`'s space chips clicked: as a space of this machine, the list
+    /// narrows to it and its main area shows it; clicked again, every space is listed again.
+    pub(super) fn pick_machine_space(
+        &mut self,
+        index: usize,
+        id: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.toggle_machine_space(id, cx);
+        if self.sidebar.machine_space.as_deref() == Some(id) {
+            self.sidebar.space_filter = None;
+            // With peek on, or in another machine's own window, the list alone, as before.
+            self.open_on_host(index, super::hosts::Go::Space(id.to_owned()), window, cx);
+        }
+    }
     /// The machine the column shows. The list comes from the side you went: down the rail
     /// from below, along the chips from the right.
     pub(super) fn set_machine_scope(&mut self, host: Option<String>) {

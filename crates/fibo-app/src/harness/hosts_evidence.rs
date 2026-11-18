@@ -80,12 +80,19 @@ pub(super) fn start(
             !fake || terminals == 0,
             "{terminals} terminals were opened on {host} before it was picked"
         );
-        // Picking far's space: its own workbench, reached in the background, drawn here.
+        // Picking far's space chip: its own workbench, reached in the background, drawn here,
+        // and the list narrowed to that space, as a click on one of this machine's does.
         handle
             .update(cx, |v, window, cx| {
-                v.visual_show_host(&host, Some(&picked), window, cx)
+                v.visual_pick_machine_space(&host, &picked, window, cx)
             })
             .unwrap();
+        let narrowed = handle.update(cx, |v, _, _| v.visual_machine_space_filter()).unwrap();
+        assert_eq!(
+            narrowed.as_ref(),
+            Some(&picked),
+            "picking {host}'s space left the sidebar listing every space"
+        );
         // Already reached: drawn at the click, nothing to wait for.
         let shown = handle.update(cx, |v, _, _| v.visual_hosts()).unwrap();
         assert_eq!(
