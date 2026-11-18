@@ -38,4 +38,19 @@ mod tests {
         assert!(any_input_ready("› 写一个测试\n? for shortcuts"));
         assert!(!any_input_ready("Do you trust this folder?"));
     }
+
+    /// Codex marks its box `»` instead of `›` while its level is Ultra: a real screen of
+    /// 0.169 at its prompt. Without it a task is never handed to such a Codex.
+    #[test]
+    fn codex_on_ultra_is_ready_for_its_task() {
+        let ultra =
+            include_str!("../../fibo-host/tests/fixtures/mode-screens/codex-ultra-idle.txt");
+        let codex = Agent::from_key("Codex");
+        assert!(codex.input_ready(ultra));
+        assert!(any_input_ready(ultra));
+        // The old mark still counts.
+        assert!(codex.input_ready(&ultra.replace('»', "›")));
+        // A `»` that only starts a word is not the box.
+        assert!(!codex.input_ready("»quoted\n"));
+    }
 }

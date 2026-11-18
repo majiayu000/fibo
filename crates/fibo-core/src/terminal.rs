@@ -457,6 +457,7 @@ impl Vt {
 /// Both supported CLIs mark their input with an arrow. Bracketed paste alone
 /// is not readiness: Claude also enables it on theme and security notice pages.
 /// Use the last marker so an old menu above a new input does not block placement.
+/// Codex draws `»` instead of `›` while its level is Ultra.
 pub fn agent_input_ready(tail: &str) -> bool {
     let mut menu_footer = false;
     let selected = tail.lines().rev().find_map(|l| {
@@ -465,7 +466,7 @@ pub fn agent_input_ready(tail: &str) -> bool {
             || lower.contains("enter to select")
             || lower.contains("enter to continue");
         let l = l.trim_start_matches(['│', ' ']);
-        ["❯", "›", ">"].iter().find_map(|m| {
+        ["❯", "›", "»", ">"].iter().find_map(|m| {
             l.strip_prefix(m)
                 .filter(|s| s.is_empty() || s.starts_with(char::is_whitespace))
                 .map(str::trim_start)
