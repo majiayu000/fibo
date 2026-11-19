@@ -12,6 +12,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Delta {
@@ -29,7 +30,7 @@ pub struct Delta {
     pub sessions: Vec<AgentSession>,
     /// The session ids in order, when they differ from the base's.
     pub order: Option<Vec<String>>,
-    pub content: FxHashMap<String, Content>,
+    pub content: FxHashMap<String, Arc<Content>>,
     /// Content the base has and this workspace does not.
     pub gone: Vec<String>,
 }
@@ -60,19 +61,20 @@ pub struct Kept {
 /// instructions a second with one agent writing).
 #[derive(Debug, Default)]
 pub struct Hashes {
-    content: FxHashMap<String, (Content, u64)>,
+    content: FxHashMap<String, (Arc<Content>, u64)>,
     sessions: FxHashMap<String, (AgentSession, u64)>,
 }
 
 impl Hashes {
-    fn content(&mut self, id: &str, c: &Content) -> u64 {
+    fn content(&mut self, id: &str, c: &Arc<Content>) -> u64 {
+        // The same allocation is the same content: shared, it was not written since.
         if let Some((seen, h)) = self.content.get(id)
-            && seen == c
+            && (Arc::ptr_eq(seen, c) || seen == c)
         {
             return *h;
         }
         let h = hash(c);
-        self.content.insert(id.to_owned(), (c.clone(), h));
+        self.content.insert(id.to_owned(), (Arc::clone(c), h));
         h
     }
     fn session(&mut self, s: &AgentSession) -> u64 {
@@ -113,14 +115,15 @@ pub fn diff_with(
 /// sessions and hashes were remembered (11-19).
 pub fn diff_lent(
     mut w: Workspace,
-    lent: &[(&String, &Content)],
+    lent: &[(&String, &Arc<Content>)],
     base: Option<&Index>,
     fields: bool,
     hashes: &mut Hashes,
 ) -> serde_json::Result<(Delta, Index)> {
     let sessions = std::mem::take(&mut w.agent_sessions);
     let owned = std::mem::take(&mut w.content);
-    let content: FxHashMap<&String, &Content> = owned.iter().chain(lent.iter().copied()).collect();
+    let content: FxHashMap<&String, &Arc<Content>> =
+        owned.iter().chain(lent.iter().copied()).collect();
     let Value::Object(rest) = serde_json::to_value(&w)? else {
         return Err(serde::ser::Error::custom("a workspace is not an object"));
     };
@@ -159,7 +162,7 @@ pub fn diff_lent(
             sessions,
             order: None,
             content: (content.into_iter())
-                .map(|(id, c)| (id.clone(), c.clone()))
+                .map(|(id, c)| (id.clone(), Arc::clone(c)))
                 .collect(),
             gone: vec![],
         };
@@ -185,7 +188,7 @@ pub fn diff_lent(
             .collect(),
         content: (content.into_iter())
             .filter(|(id, _)| base.content.get(*id) != index.content.get(*id))
-            .map(|(id, c)| (id.clone(), c.clone()))
+            .map(|(id, c)| (id.clone(), Arc::clone(c)))
             .collect(),
     };
     Ok((delta, index))

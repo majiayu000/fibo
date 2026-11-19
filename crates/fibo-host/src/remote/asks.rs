@@ -38,7 +38,7 @@ fn asked_over_api(c: &fibo_core::content::Content) -> Option<rp::Ask> {
 fn read_ask(socket: &Path, terminal: &str) -> io::Result<rp::Ask> {
     if let Reply::Workspace(w) = rpc(socket, &Request::Workspace)? {
         let c = w.current_agent(terminal).and_then(|s| w.content.get(&s.id));
-        if let Some(ask) = c.and_then(asked_over_api) {
+        if let Some(ask) = c.and_then(|c| asked_over_api(c)) {
             return Ok(ask);
         }
     }

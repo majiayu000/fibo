@@ -207,7 +207,9 @@ pub(super) fn serve_runtime(
     index.recent_days = recent_days;
     for s in &workspace.agent_sessions {
         if let Some(card) = index.card(&s.transcript)? {
-            workspace.content.insert(s.id.clone(), card);
+            workspace
+                .content
+                .insert(s.id.clone(), std::sync::Arc::new(card));
         }
     }
     let host = Arc::new(Mutex::new(Host {

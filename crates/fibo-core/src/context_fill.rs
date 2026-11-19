@@ -216,7 +216,8 @@ mod tests {
             ],
             ..Default::default()
         };
-        w.content.entry("logged".into()).or_default().context = Fill::new(90, 100);
+        std::sync::Arc::make_mut(w.content.entry("logged".into()).or_default()).context =
+            Fill::new(90, 100);
         let fills = of_in(&w, Some(&plugins));
         assert_eq!(fills["logged"].percent(), 90);
         assert_eq!(fills["saved"].percent(), 60);

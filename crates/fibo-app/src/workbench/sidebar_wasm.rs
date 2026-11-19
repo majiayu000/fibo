@@ -513,7 +513,7 @@ impl Workbench {
         self.workspace
             .content
             .get(&s.id)
-            .and_then(fibo_core::content::Content::running_since)
+            .and_then(|c| c.running_since())
     }
     fn wasm_end(&self, (s, _, _): Listed, trailing: &Trailing, cx: &Context<Self>) -> End {
         let ago = || crate::model::time::ago(self.session_updated(s), crate::model::time::now());

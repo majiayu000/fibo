@@ -35,7 +35,12 @@ impl Workbench {
             return;
         };
         // Only these sessions in the column: the fixture's own step aside.
-        for c in self.workspace.content.values_mut() {
+        for c in self
+            .workspace
+            .content
+            .values_mut()
+            .map(std::sync::Arc::make_mut)
+        {
             c.hidden_reason = "visual".into();
         }
         let home = std::env::var("HOME").unwrap_or_default();
@@ -203,7 +208,7 @@ impl Workbench {
             };
             self.workspace.content.insert(
                 sid,
-                Content {
+                std::sync::Arc::new(Content {
                     interactive: true,
                     first_ask_known: true,
                     title: title.into(),
@@ -239,7 +244,7 @@ impl Workbench {
                         _ => vec![],
                     },
                     ..Default::default()
-                },
+                }),
             );
             let leaf = fibo_core::layout::Layout::Leaf(tid);
             layout = Some(match layout {
@@ -276,13 +281,13 @@ impl Workbench {
             });
             self.workspace.content.insert(
                 sid,
-                Content {
+                std::sync::Arc::new(Content {
                     interactive: true,
                     turn: Turn::Completed,
                     turn_started: now - 3600,
                     updated: now - 3600,
                     ..Default::default()
-                },
+                }),
             );
         }
         self.workspace.tabs.push(Tab {
@@ -360,7 +365,7 @@ impl Workbench {
             });
             self.workspace.content.insert(
                 sid,
-                Content {
+                std::sync::Arc::new(Content {
                     interactive: true,
                     first_ask_known: true,
                     title: "补齐遗漏并提交变更".into(),
@@ -376,7 +381,7 @@ impl Workbench {
                     turn_started: now - 120,
                     updated: now - 5,
                     ..Default::default()
-                },
+                }),
             );
         }
         self.workspace.revision = u64::MAX / 2;
@@ -444,7 +449,7 @@ impl Workbench {
             });
             self.workspace.content.insert(
                 sid,
-                Content {
+                std::sync::Arc::new(Content {
                     interactive: true,
                     first_ask_known: true,
                     title: title.into(),
@@ -467,7 +472,7 @@ impl Workbench {
                         String::new()
                     },
                     ..Default::default()
-                },
+                }),
             );
         }
         self.workspace.revision = u64::MAX / 2;

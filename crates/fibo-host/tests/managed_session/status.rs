@@ -268,7 +268,7 @@ fn quiet_agent_screen_with_an_approval_waits_on_the_user_until_they_answer() {
     let card = |w: &Workspace| {
         w.current_agent("approval")
             .and_then(|s| w.content.get(&s.id))
-            .cloned()
+            .map(|c| (**c).clone())
             .unwrap()
     };
     let detail = card(&h.workspace()).signal_detail;

@@ -52,10 +52,10 @@ fn outcome_edits_depend_on_what_their_sender_saw_not_the_revision() {
     w.observe_agent(observation("s")).unwrap();
     w.content.insert(
         "s".into(),
-        crate::content::Content {
+        std::sync::Arc::new(crate::content::Content {
             turn_key: "t1".into(),
             ..Default::default()
-        },
+        }),
     );
     let seen = w.clone();
     let done = |seen: &Workspace| {
@@ -76,7 +76,11 @@ fn outcome_edits_depend_on_what_their_sender_saw_not_the_revision() {
     // Reopened, then the Agent starts another turn: the old look is refused.
     w.change_outcome("s", Outcome::Open, 0, "test").unwrap();
     let seen = w.clone();
-    w.content.get_mut("s").unwrap().turn_key = "t2".into();
+    w.content
+        .get_mut("s")
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .turn_key = "t2".into();
     let err = w.edit(done(&seen)).unwrap_err();
     assert!(err.contains("新的一轮"), "{err}");
     // Changed by someone else since: refused too.
@@ -166,7 +170,8 @@ fn outcomes_expire_once_preserve_history_and_leave_processes_alone() {
         turn: Turn::Completed,
         ..Default::default()
     };
-    w.content.insert("one".into(), c.clone());
+    w.content
+        .insert("one".into(), std::sync::Arc::new(c.clone()));
     // Its terminal still runs: an agent open in front of you is never 很久没动.
     assert_eq!(of(&w, &w.agent_sessions[0], now), Status::Review);
     w.change_outcome(
@@ -334,10 +339,10 @@ fn tab_title_prefers_given_name_then_contents_then_program() {
     let session = w.agent_sessions[0].id.clone();
     w.content.insert(
         session,
-        crate::content::Content {
+        std::sync::Arc::new(crate::content::Content {
             title: "评估接入 Kling v4 ESR".into(),
             ..Default::default()
-        },
+        }),
     );
     assert_eq!(title(&w, &titles, 2), "评估接入 Kling v4 ESR");
     // A name pinned on a tab (saved before names had one owner) moves onto the
@@ -675,7 +680,7 @@ fn session_names_prefer_the_user_then_the_cli_then_the_first_ask_then_the_task()
     assert_eq!(w.session_title(&session(&w)), "codex · a");
     w.content.insert(
         id.clone(),
-        crate::content::Content {
+        std::sync::Arc::new(crate::content::Content {
             first_ask_known: true,
             title: "跳至主要内容 你帮我看看 这个页面讲了什么".into(),
             asks: vec![crate::content::Quote {
@@ -683,13 +688,17 @@ fn session_names_prefer_the_user_then_the_cli_then_the_first_ask_then_the_task()
                 ..Default::default()
             }],
             ..Default::default()
-        },
+        }),
     );
     assert_eq!(
         w.session_name(&session(&w)).as_deref(),
         Some("这个页面讲了什么")
     );
-    w.content.get_mut(&id).unwrap().name = "总结页面".into();
+    w.content
+        .get_mut(&id)
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .name = "总结页面".into();
     assert_eq!(
         w.session_naming(&session(&w)),
         Some(("总结页面".into(), NameSource::Agent))

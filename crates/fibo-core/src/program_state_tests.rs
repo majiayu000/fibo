@@ -37,7 +37,7 @@ fn bound(mut c: Content, state: &str) -> Status {
         exit_code: None,
         error: None,
     });
-    w.content.insert("s".into(), c);
+    w.content.insert("s".into(), std::sync::Arc::new(c));
     let s = AgentSession {
         id: "s".into(),
         runtime: Agent::Codex,

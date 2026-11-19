@@ -30,7 +30,12 @@ impl Workbench {
             return;
         };
         // Only these rows, so the counts on the headings are the sample's.
-        for c in self.workspace.content.values_mut() {
+        for c in self
+            .workspace
+            .content
+            .values_mut()
+            .map(std::sync::Arc::make_mut)
+        {
             c.hidden_reason = "visual".into();
         }
         let Some(tab) = self
@@ -72,7 +77,7 @@ impl Workbench {
             });
             self.workspace.content.insert(
                 sid,
-                fibo_core::content::Content {
+                std::sync::Arc::new(fibo_core::content::Content {
                     title,
                     turn: if need { Turn::Completed } else { Turn::Running },
                     completed_claim: need,
@@ -84,15 +89,20 @@ impl Workbench {
                     turn_started: at,
                     updated: at,
                     hidden_reason: String::new(),
-                    ..content.clone()
-                },
+                    ..(*content).clone()
+                }),
             );
         }
         self.facts.forget();
     }
     /// A session's turn ends, as its log would say.
     pub fn visual_finish_turn(&mut self, session: &str, cx: &mut Context<Self>) {
-        if let Some(c) = self.workspace.content.get_mut(session) {
+        if let Some(c) = self
+            .workspace
+            .content
+            .get_mut(session)
+            .map(std::sync::Arc::make_mut)
+        {
             c.turn = Turn::Completed;
             c.completed_claim = true;
         }

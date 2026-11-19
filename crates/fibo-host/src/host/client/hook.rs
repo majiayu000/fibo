@@ -97,7 +97,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 .find(|s| s.runtime == runtime && s.cli_session_id == cli_session_id)
             {
                 if let Some(card) = index.card(&observed.path)? {
-                    next.content.insert(s.id.clone(), card);
+                    next.content.insert(s.id.clone(), std::sync::Arc::new(card));
                 }
                 if written {
                     host.shell_watch.listed(&s.id, &facts);

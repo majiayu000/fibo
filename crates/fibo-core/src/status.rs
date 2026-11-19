@@ -357,7 +357,7 @@ pub fn left_behind(w: &Workspace, s: &AgentSession) -> Option<String> {
 
 /// The session's state now. The only place that decides it.
 pub fn of(w: &Workspace, s: &AgentSession, now: u64) -> Status {
-    let content = w.content.get(&s.id);
+    let content = w.content.get(&s.id).map(|c| &**c);
     if live_terminal(w, s).is_some() {
         live(w, s, content, now)
     } else {
@@ -510,7 +510,7 @@ mod tests {
             error: None,
         });
         if let Some(c) = c {
-            w.content.insert("s".into(), c);
+            w.content.insert("s".into(), std::sync::Arc::new(c));
         }
         w
     }
@@ -591,7 +591,11 @@ mod tests {
         };
         assert_eq!(of(&w, &s, NOW), Status::Deferred);
         assert_eq!(of(&w, &s, NOW + 1), Status::Review);
-        w.content.get_mut("s").unwrap().turn = Turn::Running;
+        w.content
+            .get_mut("s")
+            .map(std::sync::Arc::make_mut)
+            .unwrap()
+            .turn = Turn::Running;
         s.outcome = Outcome::Completed;
         assert_eq!(of(&w, &s, NOW), Status::Running);
     }

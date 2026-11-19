@@ -51,7 +51,7 @@ impl Host {
                 ),
                 (None, None) => continue,
             };
-            let Some(c) = w.content.get_mut(&s.id) else {
+            let Some(c) = w.content.get_mut(&s.id).map(std::sync::Arc::make_mut) else {
                 continue;
             };
             let working = matches!(
@@ -88,7 +88,7 @@ impl Host {
             let Some(seen) = s.terminal.as_ref().and_then(|t| self.screen_waits.get(t)) else {
                 continue;
             };
-            let Some(c) = w.content.get_mut(&s.id) else {
+            let Some(c) = w.content.get_mut(&s.id).map(std::sync::Arc::make_mut) else {
                 continue;
             };
             c.approval = seen.approval().unwrap_or_default().to_owned();
@@ -118,7 +118,7 @@ impl Host {
             else {
                 continue;
             };
-            let Some(c) = w.content.get_mut(&s.id) else {
+            let Some(c) = w.content.get_mut(&s.id).map(std::sync::Arc::make_mut) else {
                 continue;
             };
             fibo_core::program_state::apply(c, r);

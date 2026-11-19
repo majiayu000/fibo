@@ -198,7 +198,7 @@ impl Host {
     /// hook listed, or for a CLI only whose screen tells, the ones found.
     pub(super) fn overlay_shells(&self, w: &mut Workspace) {
         for s in w.agent_sessions.iter().filter(|s| s.current) {
-            let Some(c) = w.content.get_mut(&s.id) else {
+            let Some(c) = w.content.get_mut(&s.id).map(std::sync::Arc::make_mut) else {
                 continue;
             };
             let found = s.terminal.as_ref().and_then(|t| self.found_tasks(t, &s.id));
@@ -495,7 +495,7 @@ mod tests {
         host.workspace.agent_sessions = vec![session];
         host.workspace.content.insert(
             "s".into(),
-            Content {
+            std::sync::Arc::new(Content {
                 shells: vec![ShellTask {
                     id: "b1".into(),
                     description: "wait".into(),
@@ -506,7 +506,7 @@ mod tests {
                     ..Default::default()
                 }),
                 ..Default::default()
-            },
+            }),
         );
         host.agent_pids.insert(std::process::id(), "s".into());
         let jobs = |host: &Host| {
@@ -565,7 +565,7 @@ mod tests {
         host.workspace.agent_sessions = vec![session];
         host.workspace.content.insert(
             "s".into(),
-            Content {
+            std::sync::Arc::new(Content {
                 shells: vec![ShellTask {
                     id: "b1".into(),
                     ..Default::default()
@@ -575,7 +575,7 @@ mod tests {
                     ..Default::default()
                 }),
                 ..Default::default()
-            },
+            }),
         );
         host.agent_pids.insert(std::process::id(), "s".into());
         let lost = host.shells_lost();

@@ -86,7 +86,7 @@ impl Association {
                             s.outcome = fibo_core::model::Outcome::Open;
                         }
                         s.updated = s.updated.max(card.updated);
-                        next.content.insert(s.id.clone(), card);
+                        next.content.insert(s.id.clone(), std::sync::Arc::new(card));
                     }
                 }
             }

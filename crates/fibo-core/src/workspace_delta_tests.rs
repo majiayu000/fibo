@@ -27,7 +27,11 @@ fn only_what_changed_goes_and_the_window_ends_with_the_whole() {
     let mut next = first.clone();
     next.revision += 1;
     let session = next.agent_sessions[1].id.clone();
-    next.content.get_mut(&session).unwrap().title = "改了".into();
+    next.content
+        .get_mut(&session)
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .title = "改了".into();
     next.agent_sessions[2].updated += 5;
     let (delta, applied, _) = roundtrip(&held, &index, &next, false);
     assert_eq!(delta.base, Some(index.stamp));
@@ -129,7 +133,11 @@ fn remembered_hashes_give_the_same_delta_as_fresh_ones() {
     let (_, index) = diff_with(first.clone(), None, true, &mut hashes).unwrap();
     let mut next = first.clone();
     let session = next.agent_sessions[1].id.clone();
-    next.content.get_mut(&session).unwrap().title = "改了".into();
+    next.content
+        .get_mut(&session)
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .title = "改了".into();
     let gone = next.agent_sessions[0].id.clone();
     next.content.remove(&gone);
     let (kept, kept_index) = diff_with(next.clone(), Some(&index), true, &mut hashes).unwrap();
@@ -181,4 +189,35 @@ fn remembered_session_hashes_give_the_same_delta_as_fresh_ones() {
     let (again, _) = diff_with(next.clone(), Some(&kept_index), true, &mut hashes).unwrap();
     assert!(again.sessions.is_empty());
     assert_eq!(again.stamp, kept_index.stamp);
+}
+
+#[test]
+fn content_a_delta_did_not_touch_stays_shared_with_the_base() {
+    let first = every_state();
+    let (held, index) = whole(&first);
+    let mut next = first.clone();
+    let (changed, kept) = (
+        next.agent_sessions[1].id.clone(),
+        next.agent_sessions[2].id.clone(),
+    );
+    // A copy shares every content; changing one through the copy copies only that one.
+    std::sync::Arc::make_mut(next.content.get_mut(&changed).unwrap()).title = "改了".into();
+    assert_ne!(first.content[&changed].title, "改了");
+    assert!(std::sync::Arc::ptr_eq(
+        &first.content[&kept],
+        &next.content[&kept]
+    ));
+    next.revision += 1;
+    let (_, applied, _) = roundtrip(&held, &index, &next, false);
+    // The window's copy is pointers, not every content written out again.
+    let base = &held.workspace.content;
+    assert!(std::sync::Arc::ptr_eq(
+        &base[&kept],
+        &applied.workspace.content[&kept]
+    ));
+    assert!(!std::sync::Arc::ptr_eq(
+        &base[&changed],
+        &applied.workspace.content[&changed]
+    ));
+    assert_eq!(applied.workspace.content[&changed].title, "改了");
 }

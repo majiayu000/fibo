@@ -124,7 +124,7 @@ fn shown_as(w: &mut Workspace, id: &str, turn: Turn) {
         turn,
         ..Default::default()
     };
-    w.content.insert(id.into(), content);
+    w.content.insert(id.into(), std::sync::Arc::new(content));
 }
 
 #[test]
@@ -151,7 +151,11 @@ fn facts_answer_as_walking_every_session_does() {
     ]);
     shown_as(&mut w, "first", Turn::Running);
     shown_as(&mut w, "hidden", Turn::Running);
-    w.content.get_mut("hidden").unwrap().interactive = false;
+    w.content
+        .get_mut("hidden")
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .interactive = false;
     shown_as(&mut w, "second", Turn::Completed);
     shown_as(&mut w, "asking", Turn::Waiting);
     shown_as(&mut w, "resuming", Turn::Completed);
@@ -160,7 +164,8 @@ fn facts_answer_as_walking_every_session_does() {
         updated: 100,
         ..Default::default()
     };
-    w.content.insert("content-newer".into(), newer);
+    w.content
+        .insert("content-newer".into(), std::sync::Arc::new(newer));
     // Nothing is current on t2 in this workspace: a resume can take it.
     let resumed = HashMap::from([("resuming".to_owned(), "t2".to_owned())]);
     assert_same_as_walking(&w, &resumed, 1000);
