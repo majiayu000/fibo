@@ -36,7 +36,7 @@ mod scroll;
 mod turning;
 use std::time::{Duration, Instant};
 
-fn cpu_secs() -> f64 {
+pub(super) fn cpu_secs() -> f64 {
     let mut u: libc::rusage = unsafe { std::mem::zeroed() };
     unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut u) };
     let t = |v: libc::timeval| v.tv_sec as f64 + v.tv_usec as f64 / 1e6;
@@ -45,7 +45,7 @@ fn cpu_secs() -> f64 {
 
 /// Instructions this process retired: unlike CPU time, the same work counts the same
 /// on a busy machine, on an efficiency core or at a lower clock.
-fn instructions() -> u64 {
+pub(super) fn instructions() -> u64 {
     // The gate's way to take a virtual machine's path on real hardware, all the way down.
     if std::env::var_os("MOORING_PERF_NO_COUNTER").is_some() {
         return 0;
