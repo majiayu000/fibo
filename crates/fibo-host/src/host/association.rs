@@ -295,10 +295,13 @@ pub(super) fn follow_associated(
             .filter(|s| s.current)
             .map(|s| std::path::PathBuf::from(&s.transcript))
             .collect::<Vec<_>>();
-        (
-            associated,
-            host.unbound_pids.keys().copied().collect::<Vec<_>>(),
-        )
+        // As `screen_match::panes`: a pid whose terminal some evidence has bound since
+        // stays listed until it exits, and screen association no longer looks at it.
+        let unbound = (host.unbound_pids.iter())
+            .filter(|(_, (terminal, _))| host.workspace.current_agent(terminal).is_none())
+            .map(|(pid, _)| *pid)
+            .collect::<Vec<_>>();
+        (associated, unbound)
     };
     // A shared daemon (Codex's) keeps an unbound thread's log open, so FSEvents would hold
     // its prompt back until exit and screen association would never see it. While a managed
@@ -310,11 +313,10 @@ pub(super) fn follow_associated(
             .collect();
         let window = fibo_core::content::now().saturating_sub(600);
         let mut candidates: Vec<_> = index
-            .cached()?
+            .cached_since(window)?
             .into_iter()
             .filter(|t| {
                 crate::agents::adapter(t.runtime).outside_pty()
-                    && t.updated >= window
                     && !associated.iter().any(|p| p.as_os_str() == t.path.as_str())
                     && fibo_platform::fs::canonical(std::path::Path::new(&t.cwd))
                         .is_ok_and(|c| cwds.iter().any(|cwd| c.as_os_str() == cwd.as_str()))
