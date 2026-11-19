@@ -70,22 +70,34 @@ pub fn live_phase(w: &Workspace, s: &AgentSession) -> Option<Phase> {
     Some(status_of(w, s).phase())
 }
 /// "Done" versus "idle": a turn that ends out of view stays unseen until its
-/// pane is shown; one that ends in view, or any other phase, is seen.
+/// pane is shown; one that ends in view, or any other phase, is seen. Each item is
+/// (session, phase, shown, turn key): only a turn other than the last one looked at
+/// counts, so a few seconds of "working" a program reports between turns (Codex does,
+/// unprompted) or a screen read for a moment as running leave a seen turn seen.
 pub fn track_unseen(
     phases: &mut HashMap<String, Phase>,
+    seen: &mut HashMap<String, String>,
     unseen: &mut HashSet<String>,
-    live: impl IntoIterator<Item = (String, Phase, bool)>,
+    live: impl IntoIterator<Item = (String, Phase, bool, String)>,
 ) {
     let before = std::mem::take(phases);
-    for (id, phase, shown) in live {
+    for (id, phase, shown, key) in live {
+        let was = before.get(&id);
+        // Over when first met (a restart, a pane just opened) or idle in view: looked at.
+        if phase == Phase::Idle && (shown || was.is_none()) {
+            seen.insert(id.clone(), key.clone());
+        }
         if phase != Phase::Idle || shown {
             unseen.remove(&id);
-        } else if before.get(&id).is_some_and(|p| *p != Phase::Idle) {
+        } else if was.is_some_and(|p| *p != Phase::Idle)
+            && (key.is_empty() || seen.get(&id) != Some(&key))
+        {
             unseen.insert(id.clone());
         }
         phases.insert(id, phase);
     }
     unseen.retain(|id| phases.contains_key(id));
+    seen.retain(|id, _| phases.contains_key(id));
 }
 pub fn changed_since(w: &Workspace, s: &AgentSession, since: u64) -> bool {
     since > 0 && w.content.get(&s.id).map_or(s.updated, |c| c.updated) > since
@@ -373,5 +385,68 @@ mod needs_tests {
                 space.id
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod unseen_tests {
+    use super::*;
+
+    /// One snapshot of session "s": its phase, whether its pane is shown, its turn key.
+    fn step(
+        state: &mut (
+            HashMap<String, Phase>,
+            HashMap<String, String>,
+            HashSet<String>,
+        ),
+        phase: Phase,
+        shown: bool,
+        key: &str,
+    ) -> bool {
+        let (phases, seen, unseen) = state;
+        track_unseen(
+            phases,
+            seen,
+            unseen,
+            [("s".into(), phase, shown, key.into())],
+        );
+        unseen.contains("s")
+    }
+
+    #[test]
+    fn working_reported_without_a_new_turn_leaves_a_seen_turn_seen() {
+        let mut st = Default::default();
+        // Turn t1 ends out of view, then its pane is shown: seen.
+        step(&mut st, Phase::Working, false, "t1");
+        assert!(step(&mut st, Phase::Idle, false, "t1"));
+        assert!(!step(&mut st, Phase::Idle, true, "t1"));
+        // Out of view, Codex says "working" for a few seconds with no turn behind it.
+        step(&mut st, Phase::Working, false, "t1");
+        assert!(
+            !step(&mut st, Phase::Idle, false, "t1"),
+            "nothing new to look at"
+        );
+        // A real turn ends out of view: unseen again.
+        step(&mut st, Phase::Working, false, "t2");
+        assert!(step(&mut st, Phase::Idle, false, "t2"));
+        // Looked at while it ran, then it ended out of view: still a turn not seen over.
+        assert!(!step(&mut st, Phase::Idle, true, "t2"));
+        step(&mut st, Phase::Working, true, "t3");
+        step(&mut st, Phase::Working, false, "t3");
+        assert!(step(&mut st, Phase::Idle, false, "t3"));
+    }
+
+    #[test]
+    fn a_session_first_met_idle_counts_as_seen() {
+        let mut st = Default::default();
+        // After a restart the last turn is over: a flicker does not make it unseen.
+        assert!(!step(&mut st, Phase::Idle, false, "t1"));
+        step(&mut st, Phase::Working, false, "t1");
+        assert!(!step(&mut st, Phase::Idle, false, "t1"));
+        // Without a key (no content read yet) every end still counts, as before.
+        let mut st = Default::default();
+        step(&mut st, Phase::Idle, false, "");
+        step(&mut st, Phase::Working, false, "");
+        assert!(step(&mut st, Phase::Idle, false, ""));
     }
 }

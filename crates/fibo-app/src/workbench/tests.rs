@@ -320,10 +320,14 @@ fn live_phase_reads_only_running_mooring_terminals() {
 
 #[test]
 fn finished_turn_stays_unseen_until_its_pane_is_shown() {
-    let mut phases = HashMap::new();
-    let mut unseen = HashSet::new();
-    let step = |phases: &mut _, unseen: &mut _, phase, shown| {
-        track_unseen(phases, unseen, [("s".to_string(), phase, shown)]);
+    let (mut phases, mut seen, mut unseen) = (HashMap::new(), HashMap::new(), HashSet::new());
+    let mut step = |phases: &mut _, unseen: &mut _, phase, shown| {
+        track_unseen(
+            phases,
+            &mut seen,
+            unseen,
+            [("s".into(), phase, shown, String::new())],
+        );
     };
     // Already idle when first seen (e.g. after a restart): nothing new to look at.
     step(&mut phases, &mut unseen, Phase::Idle, false);
@@ -347,7 +351,7 @@ fn finished_turn_stays_unseen_until_its_pane_is_shown() {
     step(&mut phases, &mut unseen, Phase::Working, false);
     assert!(unseen.is_empty());
     step(&mut phases, &mut unseen, Phase::Idle, false);
-    track_unseen(&mut phases, &mut unseen, []);
+    track_unseen(&mut phases, &mut HashMap::new(), &mut unseen, []);
     assert!(unseen.is_empty() && phases.is_empty());
 }
 

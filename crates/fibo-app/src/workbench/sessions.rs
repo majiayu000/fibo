@@ -10,6 +10,8 @@ const ROUTE_PENDING: &str = tk!("会话还没载入，载入后自动打开");
 pub(super) struct Attention {
     /// Last live phase of each session whose agent runs in a Fibo terminal.
     pub(super) phases: HashMap<String, Phase>,
+    /// The turn key each session had when last idle in view (or when first met idle).
+    pub(super) seen: HashMap<String, String>,
     /// Sessions whose turn ended while their pane was out of view, until it is shown.
     pub(super) unseen: HashSet<String>,
 }
