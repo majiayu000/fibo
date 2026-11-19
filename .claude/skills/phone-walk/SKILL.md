@@ -27,6 +27,7 @@ w shot chat.send "回复后"     # 截图 + UI dump，记在这一项下面
 w mark chat.send 过 "walk-send-ok 回来，消息不重复"
 w report                     # 生成 index.html，打印过 / 不过 / 跳过 / 没验
 w teardown                   # 关测试终端（含手机开的新任务），删目录、计划文件和测试图
+                             # 中途停下没收尾的那次，下一次 start 会先替它收尾；也可以 w teardown <记录目录>
 ```
 
 用 `open <记录目录>/index.html` 给用户看报告。
