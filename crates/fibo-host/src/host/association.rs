@@ -123,29 +123,37 @@ impl Association {
         index: &crate::log_index::Index,
         batch: &[crate::recognition::Transcript],
     ) -> io::Result<()> {
-        let (panes, workspace, released) = {
+        let window = fibo_core::content::now().saturating_sub(600);
+        let unbound = |workspace: &Workspace,
+                       panes: &[super::screen_match::Pane],
+                       released: &std::collections::HashSet<String>,
+                       t: &crate::recognition::Transcript| {
+            crate::recognition::screen_candidate(
+                t.updated >= window,
+                released.contains(&t.path),
+                super::screen_match::holder(workspace, t),
+                panes
+                    .iter()
+                    .any(|(.., runtime, current)| current.is_none() && *runtime == t.runtime),
+            )
+        };
+        // Picked under the lock from the workspace itself: most batches stop at `fresh`
+        // below, and a copy of the whole workspace made for them was thrown away.
+        let (released, candidates) = {
             let mut host = lock(shared)?;
             let released = std::mem::take(&mut host.released_logs);
             let panes = super::screen_match::panes(&host);
             if panes.is_empty() {
                 return Ok(());
             }
-            (panes, host.workspace.clone(), released)
-        };
-        let window = fibo_core::content::now().saturating_sub(600);
-        let unbound = |t: &crate::recognition::Transcript| {
-            crate::recognition::screen_candidate(
-                t.updated >= window,
-                released.contains(&t.path),
-                super::screen_match::holder(&workspace, t),
-                panes
-                    .iter()
-                    .any(|(.., runtime, current)| current.is_none() && *runtime == t.runtime),
-            )
+            let candidates: Vec<_> = (batch.iter())
+                .filter(|t| unbound(&host.workspace, &panes, &released, t))
+                .collect();
+            (released, candidates)
         };
         // Only a prompt with comparisons left justifies reading screens.
         let mut fresh = !released.is_empty();
-        for t in batch.iter().filter(|t| unbound(t)) {
+        for t in candidates {
             if let Some((text, at)) = index.latest_user(&t.path)? {
                 let key = crate::recognition::screen_key(&text);
                 let tries = self
@@ -162,7 +170,17 @@ impl Association {
             return Ok(());
         }
         let cached = index.cached()?;
-        let submits = lock(shared)?.submits.clone();
+        // Panes and workspace taken together again, as one consistent view.
+        let (panes, workspace, submits) = {
+            let host = lock(shared)?;
+            let panes = super::screen_match::panes(&host);
+            if panes.is_empty() {
+                return Ok(());
+            }
+            (panes, host.workspace.clone(), host.submits.clone())
+        };
+        let unbound =
+            |t: &crate::recognition::Transcript| unbound(&workspace, &panes, &released, t);
         let terminals = super::screen_match::terminals(index, &workspace, &panes, &submits)?;
         // What a thread began with is read only when a pane's Agent was started with it.
         let first = terminals.iter().any(|t| t.launched.is_some());
