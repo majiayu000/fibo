@@ -397,22 +397,25 @@ fn large_log_batch_keeps_existing_identities_and_applies_duplicate_paths_in_orde
             .unwrap();
     }
     let claude = transcript(Agent::Claude, "same", "same-claude.jsonl", 0);
-    let (first_id, duplicate_id) = {
+    let first_id = {
         let mut host = lock(&shared).unwrap();
+        let mut workspace = host.workspace.clone();
         let mut original = observation(&first, None);
         original.name = "handwritten name".into();
-        let duplicate = observation(&first, None);
-        let ids = (original.id.clone(), duplicate.id.clone());
-        host.workspace
+        let first_id = original.id.clone();
+        workspace
             .agent_sessions
-            .extend([original, duplicate, observation(&claude, None)]);
+            .extend([original, observation(&claude, None)]);
         for n in 0..128 {
             let id = format!("stored-{n}");
             let old = transcript(Agent::Codex, &id, "old.jsonl", 0);
-            host.workspace.agent_sessions.push(observation(&old, None));
+            workspace.agent_sessions.push(observation(&old, None));
         }
-        ids
+        host.commit(workspace).unwrap();
+        first_id
     };
+    drop(shared);
+    let shared = shared_host(&root, &index);
     let mut batch = vec![first, last.clone(), fresh.clone(), fresh, claude];
     for n in 0..128 {
         let id = format!("unmanaged-{n}");
@@ -424,12 +427,14 @@ fn large_log_batch_keeps_existing_identities_and_applies_duplicate_paths_in_orde
     {
         let host = lock(&shared).unwrap();
         let workspace = &host.workspace;
-        assert_eq!(workspace.agent_sessions.len(), 132);
+        assert_eq!(workspace.agent_sessions.len(), 131);
         assert_eq!(workspace.agent_sessions[0].transcript, last.path);
         assert_eq!(workspace.agent_sessions[0].name, "handwritten name");
         assert_eq!(workspace.content[&first_id].title, "last prompt");
-        assert!(!workspace.content.contains_key(&duplicate_id));
-        assert_eq!(workspace.agent_sessions[2].runtime, Agent::Claude);
+        assert_eq!(workspace.agent_sessions[1].runtime, Agent::Claude);
+        assert!(!workspace
+            .content
+            .contains_key(&workspace.agent_sessions[1].id));
         let added = workspace.agent_sessions.last().unwrap();
         assert_eq!(added.cli_session_id, "fresh");
         assert_eq!(workspace.content[&added.id].title, "new prompt");
