@@ -575,6 +575,7 @@ pub(super) fn attach(
     }
     while let Some(batch) = inbox.take() {
         let (mut typed_ok, mut submitted_ok) = (false, false);
+        let mut replies = Vec::with_capacity(batch.len());
         for request in batch {
             let submitted = matches!(&request, Request::Input {bytes, ..} if bytes.contains(&b'\r') || bytes.contains(&b'\n'));
             let typed = matches!(&request, Request::Input { .. });
@@ -635,9 +636,25 @@ pub(super) fn attach(
             })();
             typed_ok |= typed && result.is_ok();
             submitted_ok |= submitted && result.is_ok();
-            let reply = result
-                .map(|_| Reply::Ok)
-                .unwrap_or_else(|e| Reply::Error(e.to_string()));
+            replies.push(
+                result
+                    .map(|_| Reply::Ok)
+                    .unwrap_or_else(|e| Reply::Error(e.to_string())),
+            );
+        }
+        // Once per batch, not per key: these take the host's lock. Before the acknowledgements:
+        // whoever answered a prompt reads the workspace on the ack and must find it answered.
+        let settled = (|| -> io::Result<()> {
+            if typed_ok {
+                // The user is answering here; the prompt is no longer waiting on them.
+                lock(&host)?.set_screen_wait(&terminal_id, None)?;
+            }
+            if submitted_ok {
+                record_submission(&host, &terminal_id)?;
+            }
+            Ok(())
+        })();
+        for reply in replies {
             // A lagging viewer misses this acknowledgement; its resync says where it stands.
             if let Err(std::sync::mpsc::TrySendError::Full(_)) = tx.try_send((
                 ACK,
@@ -646,14 +663,7 @@ pub(super) fn attach(
                 lagged.store(true, Ordering::Release);
             }
         }
-        // Once per batch, not per key: these take the host's lock.
-        if typed_ok {
-            // The user is answering here; the prompt is no longer waiting on them.
-            lock(&host)?.set_screen_wait(&terminal_id, None)?;
-        }
-        if submitted_ok {
-            record_submission(&host, &terminal_id)?;
-        }
+        settled?;
     }
     let _ = &guard;
     let reason = ended.lock().unwrap_or_else(|p| p.into_inner()).take();
