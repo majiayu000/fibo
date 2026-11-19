@@ -2,6 +2,7 @@
 //! row, a search field, the space chips, one list whose rows lead with their state and
 //! end with their space and time, a key hint and a one-line foot.
 use super::sidebar_list::{ASKS, End, Listed, bucket};
+use super::sidebar_machines::RemoteRow;
 use super::*;
 use crate::ui::theme::Flat as F;
 use fibo_core::sidebar::Bucket;
@@ -271,8 +272,14 @@ impl Workbench {
     }
     /// One session: its state, its title, its space and its time; what it asks you, when
     /// it asks, on a second line.
+    /// One session row, read from `from`: this window's own workbench, or another
+    /// machine's here with `there` saying which of its rows it is. Clicks go to the
+    /// machine the session is on.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn flat_row(
         &self,
+        from: &Workbench,
+        there: Option<&RemoteRow>,
         (session, g, attention): Listed,
         current: Option<&str>,
         detail: Option<String>,
@@ -280,11 +287,14 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         let open = session.clone();
-        let selected = current == Some(session.id.as_str());
-        let done = g == Status::Closed;
+        let key = there.map_or(session.id.as_str(), |r| r.key()).to_owned();
+        let selected = there.map_or(current == Some(session.id.as_str()), |r| r.shown);
+        let quiet = there.is_some_and(|r| r.quiet());
+        let dropped = there.is_some_and(|r| r.dropped());
+        let done = g == Status::Closed && there.is_none();
         let unfolded = done && self.layout.done_open.as_deref() == Some(session.id.as_str());
         // Subagents take the second line, except on a row that asks you something.
-        let subs = self
+        let subs = from
             .workspace
             .content
             .get(&session.id)
@@ -296,21 +306,22 @@ impl Workbench {
             });
         let detail = if subs.is_some() { None } else { detail };
         let subs_live = matches!(g, Status::Running | Status::Background);
-        let subs_open = self.subagents_open(&session.id, selected);
+        let subs_open = self.subagents_open(&key, selected);
         let two = detail.is_some() || unfolded || subs.is_some();
         let title_ink = match bucket(g) {
+            _ if quiet => F::third(),
             Bucket::Attention | Bucket::Running | Bucket::Done => F::title(),
             Bucket::Stopped | Bucket::Fresh => F::quiet(),
             Bucket::Stale => F::second(),
         };
-        let renaming = self
+        let renaming = from
             .layout
             .renaming_session
             .as_ref()
             .filter(|(id, ..)| id == &session.id);
         let title = match renaming {
             Some((_, field, _)) => div().flex_1().min_w_0().child(field.clone()),
-            None => self.session_title_cell(
+            None => from.session_title_cell(
                 session,
                 div()
                     .flex_1()
@@ -321,32 +332,42 @@ impl Workbench {
             ),
         };
         // Narrowed to one space, every row's space is the same and goes unsaid.
-        let space = self
-            .space_filter()
-            .is_none()
-            .then(|| self.workspace.session_space(session))
+        let narrowed = match there {
+            None => self.space_filter().is_some(),
+            Some(_) => self.machine_scope().is_some() && self.sidebar.machine_space.is_some(),
+        };
+        let space = (!narrowed)
+            .then(|| from.workspace.session_space(session))
             .flatten()
-            .and_then(|id| self.workspace.spaces.iter().find(|s| s.id == id))
-            .map(|s| self.space_tag(&s.id, &s.name));
+            .and_then(|id| from.workspace.spaces.iter().find(|s| s.id == id))
+            .map(|s| match there {
+                Some(r) => self.there_tag(r, &s.id, &s.name),
+                None => self.space_tag(&s.id, &s.name),
+            });
         let time = match end {
+            _ if dropped => t!("断开").to_owned(),
             End::Text(text) => text,
             End::Nothing => String::new(),
             // Only a running turn ticks; a stopped, waking or closed row shows its age.
-            End::State => match self.turn_started(session).filter(|_| g == Status::Running) {
+            End::State => match from.turn_started(session).filter(|_| g == Status::Running) {
                 Some(at) => {
                     self.tick_turn(cx);
                     super::layout::turn_clock(now().saturating_sub(at))
                 }
-                None => short_ago(self.session_updated(session), now()),
+                None => short_ago(from.session_updated(session), now()),
             },
         };
         let asks_ink = g.colors().1;
-        let row = gpui::SharedString::from(format!("session-{}", session.id));
+        let row = gpui::SharedString::from(match there {
+            Some(r) => format!("remote-{}", r.key()),
+            None => format!("session-{}", session.id),
+        });
         let line = div()
             .flex()
             .items_center()
             .gap(px(T::S8))
             .child(title)
+            .children(there.and_then(|r| self.there_mark(r)))
             .children(space)
             .child(
                 div()
@@ -363,7 +384,11 @@ impl Workbench {
         let mark = div()
             .flex_shrink_0()
             .when(two, |d| d.mt(px(T::S4)))
-            .child(self.flat_session_mark(g, attention, cx));
+            .child(if quiet {
+                super::sidebar_machines::quiet::quiet_ring().into_any_element()
+            } else {
+                self.flat_session_mark(g, attention, cx)
+            });
         // A one-line row is laid out flat and at its known height: every wrapper whose
         // size comes from its content has taffy measure the row again, and a redraw of
         // the column with 50 rows spent half its time there (docs/performance).
@@ -372,8 +397,13 @@ impl Workbench {
         } else {
             line.flex_1().min_w_0()
         };
-        flat_row_box(row, selected, two)
+        let place = there.map(|r| (r.index, r.key().to_owned()));
+        let tip = there
+            .and_then(|r| self.there_tip(r))
+            .unwrap_or_else(|| from.session_tip(session));
+        let row = flat_row_box(row, selected, two)
             .when(!two && renaming.is_none(), |d| d.h(px(ONE_LINE_ROW)))
+            .when(dropped, |d| d.opacity(0.55))
             .child(mark)
             .child(
                 content
@@ -390,23 +420,27 @@ impl Workbench {
                         )
                     })
                     .when_some(subs, |d, subs| {
-                        d.child(self.subagent_line(&session.id, subs, subs_live, subs_open, cx))
+                        d.child(self.subagent_line(&key, subs, subs_live, subs_open, cx))
                             .when(subs_open, |d| {
                                 let row = session.clone();
+                                let place = place.clone();
                                 let click: super::sidebar_subagents::Click =
-                                    std::rc::Rc::new(move |this, window, cx| {
-                                        this.click_row(&row, done, window, cx)
+                                    std::rc::Rc::new(move |this, window, cx| match &place {
+                                        Some((index, terminal)) => {
+                                            this.click_there(*index, terminal, false, window, cx)
+                                        }
+                                        None => this.click_row(&row, done, window, cx),
                                     });
-                                d.child(self.subagent_tree(&session.id, click, subs, subs_live, cx))
+                                d.child(self.subagent_tree(&key, click, subs, subs_live, cx))
                             })
                     })
                     .when(unfolded, |d| d.child(self.done_card(session, cx))),
             )
             .when(selected, |d| d.child(flat_selected_edge()))
-            .when(self.peek_home(&session.id), |d| {
+            .when(there.is_none() && self.peek_home(&session.id), |d| {
                 d.child(super::peek::peek_home_outline())
             })
-            .when(self.marking(&session.id), |d| {
+            .when(there.is_none() && self.marking(&session.id), |d| {
                 d.child(super::complete::spot(
                     &self.layout.spots,
                     session.id.clone(),
@@ -414,23 +448,39 @@ impl Workbench {
                     |s| &mut s.rows,
                 ))
             })
-            .when(self.layout.session_menu.is_none(), |d| {
-                d.tooltip(super::diagnostics::tip_lines(self.session_tip(session)))
-            })
-            .on_mouse_down(
+            // The hover card would cover the right-click menu.
+            .when(
+                self.layout.session_menu.is_none() && self.layout.remote_menu.is_none(),
+                |d| d.tooltip(super::diagnostics::tip_lines(tip)),
+            );
+        let row = match there {
+            None => row.on_mouse_down(
                 gpui::MouseButton::Right,
                 self.open_session_menu(session, cx),
-            )
-            .on_click(
+            ),
+            Some(r) if !quiet && r.online => {
+                row.on_mouse_down(gpui::MouseButton::Right, self.open_remote_menu(r, cx))
+            }
+            Some(_) => row,
+        };
+        let row = row.when(!dropped, |d| {
+            d.on_click(
                 cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
-                    if event.click_count() == 2 {
-                        this.rename_session(&open.id, window, cx);
-                        return;
+                    let rename = event.click_count() == 2;
+                    match &place {
+                        Some((index, terminal)) => {
+                            this.click_there(*index, terminal, rename, window, cx)
+                        }
+                        None if rename => this.rename_session(&open.id, window, cx),
+                        None => this.click_row(&open, done, window, cx),
                     }
-                    this.click_row(&open, done, window, cx);
                 }),
             )
-            .into_any_element()
+        });
+        match there.filter(|r| r.quiet()) {
+            Some(r) => self.machine_menu_on(row, r.index, cx).into_any_element(),
+            None => row.into_any_element(),
+        }
     }
     /// A row's click, or a click on a branch under it.
     pub(super) fn click_row(

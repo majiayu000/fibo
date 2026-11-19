@@ -1,6 +1,7 @@
 //! The client's link to the host: the socket, the in-flight user action, background
 //! syncs and the recognition status the host pushes. Views never call `rpc` themselves.
-use super::brief::{Held, Understood};
+use super::brief::Understood;
+use super::feed::Feed;
 use crate::connection::{RecognitionConnection, StatusLink};
 use fibo_core::delivery::Settled;
 use fibo_core::{model::*, protocol::*};
@@ -42,13 +43,15 @@ pub struct Store {
     recognition: RecognitionStatus,
     /// When the status link to the host dropped, and why; `None` while it is up.
     cut_off_at: Option<(Instant, String)>,
-    deltas: Held,
+    /// This host's refreshes, shared with the menu bar; edits go through its `Held`.
+    feed: Feed,
     _recognition_connection: RecognitionConnection,
 }
 
 impl Store {
     pub fn new(socket: PathBuf, status: UnboundedSender<StatusLink>) -> Self {
         let recognition_connection = RecognitionConnection::new(&socket, status);
+        let feed = Feed::of(&socket);
         Self {
             socket,
             busy: false,
@@ -62,7 +65,7 @@ impl Store {
             held_launch: None,
             recognition: RecognitionStatus::default(),
             cut_off_at: None,
-            deltas: Held::default(),
+            feed,
             _recognition_connection: recognition_connection,
         }
     }
@@ -113,6 +116,13 @@ impl Store {
     /// The host has published a newer workspace than the one at `revision`.
     pub fn behind(&self, revision: u64) -> bool {
         self.recognition.workspace_revision > revision
+    }
+    /// Whether a status at `revision`, while the window holds `have`, starts a refresh. One
+    /// in flight looks at the host's revision again once it lands (`behind`): the host sends
+    /// several statuses per change (titles, hints, commands), and each queued another fetch
+    /// of the same revision.
+    pub fn follow(&self, revision: u64, have: u64) -> bool {
+        revision > have && !self.syncing
     }
     /// Marks a user action in flight and returns its sequence number.
     pub fn begin_busy(&mut self, request: Option<&Request>) -> u64 {
@@ -204,8 +214,18 @@ impl Store {
     /// confirmed, refused, or `PATIENCE` says its outcome is unknown.
     pub fn deliver(&self, request: Request) -> impl Future<Output = Settled> + use<> {
         let socket = self.socket.clone();
-        let (held, brief) = (self.deltas.clone(), Understood::of(&self.recognition));
+        let (held, brief) = (self.feed.held().clone(), Understood::of(&self.recognition));
         async move { held.deliver(&socket, request, brief) }
+    }
+    /// A background refresh: the workspace at the revision the host last announced or newer,
+    /// fetched once for this window and the menu bar together (`Feed`).
+    pub fn refresh(&self) -> impl Future<Output = io::Result<Reply>> + use<> {
+        let feed = self.feed.clone();
+        let (brief, revision) = (
+            Understood::of(&self.recognition),
+            self.recognition.workspace_revision,
+        );
+        async move { feed.workspace(brief, Some(revision)) }
     }
     /// How long a refresh that took `took` keeps the next one waiting. Another machine's
     /// link is shared with typing there: refreshing at most half the time leaves it room.
@@ -231,7 +251,7 @@ impl Store {
         task: Option<String>,
     ) -> impl Future<Output = io::Result<Reply>> + use<> {
         let socket = self.socket.clone();
-        let (held, brief) = (self.deltas.clone(), Understood::of(&self.recognition));
+        let (held, brief) = (self.feed.held().clone(), Understood::of(&self.recognition));
         async move {
             // A shell that ended or moved somewhere unreadable keeps the recorded directory.
             if let Some(id) = cwd_source

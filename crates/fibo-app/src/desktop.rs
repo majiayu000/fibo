@@ -376,6 +376,18 @@ fn panel(w: &Workspace, link: &Link) -> String {
     })
     .to_string()
 }
+/// Whether a status makes the panel refresh, and from how new a workspace: `None` keeps
+/// what it shows. Older or equal revisions are statuses that queued behind a refresh.
+/// After a dropped link or a failed refresh (`unsure`) the host may be a new one that
+/// counts from lower, so only the host itself answers (`Some(None)`); otherwise one the
+/// window already fetched at that revision serves (`Some(Some(revision))`, `Feed`).
+fn wanted(status: u64, have: u64, ready: bool, unsure: bool) -> Option<Option<u64>> {
+    match (unsure, ready && status <= have) {
+        (true, _) => Some(None),
+        (false, true) => None,
+        (false, false) => Some(Some(status)),
+    }
+}
 pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiver<String> {
     let (tx, events) = unbounded();
     let _ = EVENTS.set(tx);
@@ -393,31 +405,38 @@ pub fn start(socket: &Path, initial: Workspace, cx: &mut App) -> UnboundedReceiv
         let mut link = Link::fresh(RecognitionPhase::Starting);
         let mut previous_panel = panel(&before, &link);
         let mut fresh = now();
-        // Only what changed since the last one, as the window asks: a whole workspace on
-        // every status was most of the host's serializing and this process's parsing.
-        let held = crate::host::brief::Held::default();
+        // The window's refreshes of the same host: one fetch serves both, and only what
+        // changed since the last one comes over.
+        let feed = crate::host::feed::Feed::of(&socket);
+        let mut relinked = false;
         while let Some(status) = status_rx.next().await {
+            let lost = matches!(status, crate::connection::StatusLink::Lost(_));
             let status: RecognitionStatus = crate::connection::StatusLink::into_status(status);
             link.phase = status.phase;
+            relinked |= lost;
+            let want = wanted(
+                status.workspace_revision,
+                before.revision,
+                ready,
+                link.error.is_some() || relinked,
+            );
             // Most statuses are recognition news on an unchanged workspace: nothing to
-            // fetch, as the window does. Unequal rather than newer, since a restarted host
-            // may count from lower.
-            if ready && link.error.is_none() && status.workspace_revision == before.revision {
+            // fetch, as the window does.
+            let Some(at_least) = want else {
                 let value = panel(&before, &link);
                 if previous_panel != value {
                     cx.update(|_| native::update(&value));
                     previous_panel = value;
                 }
                 continue;
-            }
+            };
             let brief = crate::host::brief::Understood::of(&status);
-            let (socket_read, held) = (socket.clone(), held.clone());
+            let feed_read = feed.clone();
             let result = cx
-                .background_spawn(async move {
-                    held.deliver(&socket_read, Request::Workspace, brief)
-                        .into_result()
-                })
+                .background_spawn(async move { feed_read.workspace(brief, at_least) })
                 .await;
+            // The first refresh after the link came back is the new host's.
+            relinked = lost || (relinked && result.is_err());
             if let Err(e) = &result {
                 // Keep the last numbers on screen, marked with the minute they date from.
                 if link.error.is_none() {

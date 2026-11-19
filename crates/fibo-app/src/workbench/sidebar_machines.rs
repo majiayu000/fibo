@@ -14,6 +14,7 @@ mod add_space;
 pub(super) mod quiet;
 mod quiet_space;
 mod remote_menu;
+mod shared_row;
 
 pub(in crate::workbench) use add_space::AddingSpace;
 
@@ -234,6 +235,9 @@ impl Workbench {
     /// One session of another machine, in the same shape as `flat_row`. A dropped machine's
     /// row is faded, says 断开 where its time goes, and opens nothing.
     pub(super) fn remote_row(&self, r: &RemoteRow, cx: &Context<Self>) -> gpui::AnyElement {
+        if let Some(row) = self.shared_remote_row(r, cx) {
+            return row;
+        }
         let card = &r.card;
         // Subagents take the second line, except on a row that asks you something.
         let subs = Some(card.subagents.as_slice())

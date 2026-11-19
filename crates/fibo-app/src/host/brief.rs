@@ -69,6 +69,19 @@ impl Held {
             },
         }
     }
+    /// The newest workspace held at `revision` or later, as the host sent it.
+    pub fn newest(&self, revision: u64) -> Option<Workspace> {
+        let kept = self
+            .0
+            .lock()
+            .ok()?
+            .iter()
+            .map(|(_, kept)| kept)
+            .filter(|kept| kept.workspace.revision >= revision)
+            .max_by_key(|kept| kept.workspace.revision)
+            .map(Arc::clone)?;
+        Some(kept.workspace.clone())
+    }
     fn latest(&self) -> Option<u64> {
         self.0.lock().ok()?.back().map(|(stamp, _)| *stamp)
     }

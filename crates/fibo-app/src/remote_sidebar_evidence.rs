@@ -185,6 +185,11 @@ pub(super) fn start(
             .update(cx, |v, _, cx| v.visual_narrow_to_space("s", cx))
             .unwrap();
 
+        // The other machine's row is drawn by this machine's row code, from its workbench.
+        let shared = handle
+            .update(cx, |v, _, cx| v.visual_row_shared(0, "far", cx))
+            .unwrap();
+        assert!(shared, "the other machine's row was drawn from its card, not its workbench");
         // The other machine's session row offers what this machine's rows do, done by its
         // host: 标记完成 there, then 撤销结局. With peek on, 关闭终端 could not ask first.
         let menu = handle

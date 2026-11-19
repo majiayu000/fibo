@@ -86,17 +86,7 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> (Vec<gpui::AnyElement>, usize, bool) {
         let preset = self.sidebar.preset();
-        let detail = |l: &Listed| match preset.detail {
-            Detail::Never => None,
-            Detail::Always => self.row_detail(l.0, l.1),
-            Detail::Attention => {
-                (matches!(self.row_bucket(l), Bucket::Attention | Bucket::Running)
-                    || l.1 == Status::Background
-                    || current == Some(l.0.id.as_str()))
-                .then(|| self.row_detail(l.0, l.1))
-                .flatten()
-            }
-        };
+        let detail = |l: &Listed| self.listed_detail(self, l, current == Some(l.0.id.as_str()));
         let mut out = vec![];
         // 置顶 comes first in every preset; its rows leave their usual group.
         let pinned_terminal = |l: &Listed| {
