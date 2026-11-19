@@ -388,7 +388,7 @@ pub(super) fn apply_official(
         let mut host = lock(shared)?;
         let mut next = host.workspace.clone();
         for (id, card) in cards {
-            next.content.insert(id, card);
+            next.content.insert(id, std::sync::Arc::new(card));
         }
         host.commit(next)?;
     }

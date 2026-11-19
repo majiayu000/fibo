@@ -3,12 +3,12 @@ use super::*;
 
 impl Host {
     pub(super) fn snapshot(&self) -> Workspace {
-        let mut w = self.retained(true);
+        let mut w = self.retained();
         self.overlay(&mut w);
         w
     }
-    /// What changed since `base`, as `snapshot` would give it, without copying the content
-    /// no overlay touches: overlays change only the content of a terminal's current session.
+    /// What changed since `base`, worked out under the host's lock. Content is shared with
+    /// the host's own, so what no one changed compares by pointer and nothing is copied.
     pub(super) fn brief(
         &self,
         base: Option<&fibo_core::workspace_delta::Index>,
@@ -18,14 +18,7 @@ impl Host {
         fibo_core::workspace_delta::Delta,
         fibo_core::workspace_delta::Index,
     )> {
-        let mut w = self.retained(false);
-        self.overlay(&mut w);
-        let ids: std::collections::HashSet<&str> =
-            w.agent_sessions.iter().map(|s| s.id.as_str()).collect();
-        let lent: Vec<_> = (self.workspace.content.iter())
-            .filter(|(id, _)| ids.contains(id.as_str()) && !w.content.contains_key(*id))
-            .collect();
-        fibo_core::workspace_delta::diff_lent(w, &lent, base, fields, hashes)
+        fibo_core::workspace_delta::diff_with(self.snapshot(), base, fields, hashes)
     }
     /// Runtime observations over the log's word: only ever on a current session's content.
     fn overlay(&self, w: &mut Workspace) {
@@ -58,13 +51,6 @@ impl Host {
                 c.turn,
                 fibo_core::content::Turn::Running | fibo_core::content::Turn::Waiting
             ) || c.background.is_some_and(|b| b.keeps_working());
-            if !working {
-                c.turn = fibo_core::content::Turn::Running;
-                c.turn_started = since;
-                c.signal = cue.into();
-                c.signal_at = since;
-                c.signal_detail = detail.into();
-            }
             // A dialog answered on the screen: the prompt is gone and the turn is ticking
             // again, started after the dialog was reported. No hook says so until the
             // approved tool finishes, which can be minutes.
@@ -73,7 +59,21 @@ impl Host {
                 .as_ref()
                 .and_then(|t| self.screen_waits.get(t))
                 .is_some_and(|e| e.question().is_some());
-            if c.turn == fibo_core::content::Turn::Waiting && !asking && since >= c.signal_at {
+            let answered =
+                c.turn == fibo_core::content::Turn::Waiting && !asking && since >= c.signal_at;
+            // A turn already running is left as the host holds it, not copied.
+            if working && !answered {
+                continue;
+            }
+            let c = std::sync::Arc::make_mut(c);
+            if !working {
+                c.turn = fibo_core::content::Turn::Running;
+                c.turn_started = since;
+                c.signal = cue.into();
+                c.signal_at = since;
+                c.signal_detail = detail.into();
+            }
+            if answered {
                 c.turn = fibo_core::content::Turn::Running;
                 c.waiting.clear();
                 c.choices.clear();
@@ -88,7 +88,7 @@ impl Host {
             let Some(seen) = s.terminal.as_ref().and_then(|t| self.screen_waits.get(t)) else {
                 continue;
             };
-            let Some(c) = w.content.get_mut(&s.id) else {
+            let Some(c) = w.content.get_mut(&s.id).map(std::sync::Arc::make_mut) else {
                 continue;
             };
             c.approval = seen.approval().unwrap_or_default().to_owned();
@@ -118,7 +118,7 @@ impl Host {
             else {
                 continue;
             };
-            let Some(c) = w.content.get_mut(&s.id) else {
+            let Some(c) = w.content.get_mut(&s.id).map(std::sync::Arc::make_mut) else {
                 continue;
             };
             fibo_core::program_state::apply(c, r);
@@ -126,12 +126,12 @@ impl Host {
         self.keep_ended_turns(w);
     }
     /// The workspace with only the sessions clients see (in a terminal, or recent) and
-    /// their content, or with `all` false only a current session's (what overlays change).
-    /// Sessions are filtered before they are copied: the store keeps every session it ever
-    /// bound, and a long-used install had 5068 of them for 1540 sent, all copied on each
-    /// reply to be thrown away. Every field is named, so one added to the workspace fails
-    /// to build here rather than going missing from the reply.
-    fn retained(&self, all: bool) -> Workspace {
+    /// their content. Sessions are filtered before they are copied: the store keeps every
+    /// session it ever bound, and a long-used install had 5068 of them for 1540 sent, all
+    /// copied on each reply to be thrown away. Content is shared, not copied. Every field
+    /// is named, so one added to the workspace fails to build here rather than going
+    /// missing from the reply.
+    fn retained(&self) -> Workspace {
         let Workspace {
             revision,
             last_left,
@@ -157,13 +157,11 @@ impl Host {
             .filter(|s| s.terminal.is_some() || self.index.recent(s.updated))
             .cloned()
             .collect();
-        let ids: std::collections::HashSet<&str> = (agent_sessions.iter())
-            .filter(|s| all || s.current)
-            .map(|s| s.id.as_str())
-            .collect();
+        let ids: std::collections::HashSet<&str> =
+            agent_sessions.iter().map(|s| s.id.as_str()).collect();
         let content = (content.iter())
             .filter(|(id, _)| ids.contains(id.as_str()))
-            .map(|(id, c)| (id.clone(), c.clone()))
+            .map(|(id, c)| (id.clone(), std::sync::Arc::clone(c)))
             .collect();
         Workspace {
             revision: *revision,

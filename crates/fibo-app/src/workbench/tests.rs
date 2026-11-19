@@ -88,10 +88,10 @@ fn navigation_uses_live_identity_and_path_boundaries() {
     assert!(!changed_since(&w, &s, 0));
     w.content.insert(
         s.id.clone(),
-        fibo_core::content::Content {
+        std::sync::Arc::new(fibo_core::content::Content {
             updated: 90,
             ..Default::default()
-        },
+        }),
     );
     assert!(
         !changed_since(&w, &s, 99),
@@ -159,7 +159,8 @@ fn an_empty_agent_reads_as_fresh_not_done() {
     let unseen = HashSet::new();
     // Just opened: no record yet, then a record with no ask and no turn.
     assert!(session_status(&w, &unseen, &s) == (Status::Fresh, false));
-    w.content.insert("live".into(), Content::default());
+    w.content
+        .insert("live".into(), std::sync::Arc::new(Content::default()));
     assert!(session_status(&w, &unseen, &s) == (Status::Fresh, false));
     assert_eq!(Status::Fresh.label(), "新开的");
     // Its own bucket in 状态 / 目录 and to plugins, not counted under 做完了.
@@ -170,18 +171,18 @@ fn an_empty_agent_reads_as_fresh_not_done() {
     // say whether the work is done.
     w.content.insert(
         "live".into(),
-        Content {
+        std::sync::Arc::new(Content {
             turn: Turn::Completed,
             ..Default::default()
-        },
+        }),
     );
     assert!(session_status(&w, &unseen, &s) == (Status::Review, false));
     w.content.insert(
         "live".into(),
-        Content {
+        std::sync::Arc::new(Content {
             asks: vec![Quote::default()],
             ..Default::default()
-        },
+        }),
     );
     assert!(session_status(&w, &unseen, &s) == (Status::Review, false));
     assert!(super::board::column_of(&w, &s, now()).is_some());
@@ -219,7 +220,8 @@ fn a_live_turn_is_done_only_when_you_say_so() {
 
     // Said done or not, a finished turn waits for you, and so does the inbox.
     for claim in [false, true] {
-        w.content.insert("live".into(), ended(claim, None));
+        w.content
+            .insert("live".into(), std::sync::Arc::new(ended(claim, None)));
         assert!(session_status(&w, &unseen, &s) == (Status::Review, false));
         assert!(status_of(&w, &s) == Status::Review);
     }
@@ -230,14 +232,16 @@ fn a_live_turn_is_done_only_when_you_say_so() {
     unseen.clear();
 
     // A server left running wakes nothing: the turn is over, and the row says what is left.
-    w.content.insert("live".into(), ended(true, shell));
+    w.content
+        .insert("live".into(), std::sync::Arc::new(ended(true, shell)));
     assert!(session_status(&w, &unseen, &s) == (Status::Review, false));
     assert_eq!(
         fibo_core::status::left_behind(&w, &s).as_deref(),
         Some("后台留着 1 个进程")
     );
     // A wakeup will bring it back: that one is really waited for.
-    w.content.insert("live".into(), ended(true, wakeup));
+    w.content
+        .insert("live".into(), std::sync::Arc::new(ended(true, wakeup)));
     assert!(session_status(&w, &unseen, &s) == (Status::Background, false));
     assert_eq!(Status::Background.label(), "等后台");
     // 要你处理 holds it with the finished ones (11-03: 处理 and 验收 are one group).
@@ -248,16 +252,17 @@ fn a_live_turn_is_done_only_when_you_say_so() {
     // A failed turn says so.
     w.content.insert(
         "live".into(),
-        Content {
+        std::sync::Arc::new(Content {
             turn: Turn::Error,
             ..Default::default()
-        },
+        }),
     );
     assert!(session_status(&w, &unseen, &s).0 == Status::Error);
 
     // 做完了 is what you marked complete, and nothing else.
     s.outcome = Outcome::Completed;
-    w.content.insert("live".into(), ended(false, shell));
+    w.content
+        .insert("live".into(), std::sync::Arc::new(ended(false, shell)));
     assert!(session_status(&w, &unseen, &s) == (Status::Closed, false));
     assert_eq!(Status::Closed.label(), "做完了");
 }
@@ -295,11 +300,11 @@ fn live_phase_reads_only_running_mooring_terminals() {
     ] {
         w.content.insert(
             "live".into(),
-            Content {
+            std::sync::Arc::new(Content {
                 turn,
                 background,
                 ..Default::default()
-            },
+            }),
         );
         assert_eq!(live_phase(&w, &s), Some(phase), "{turn:?}");
     }
@@ -606,7 +611,7 @@ fn the_pane_menu_says_which_signal_set_the_state() {
         waiting: "Do you want to proceed?（画面上的提示）".into(),
         ..Default::default()
     };
-    w.content.insert("history".into(), c);
+    w.content.insert("history".into(), std::sync::Arc::new(c));
     let lines = state_reasons(&w, "t0", None, 1000);
     assert_eq!(lines[0], "Codex 对话 cli");
     assert_eq!(lines[1], "现在：等你回答");
@@ -618,7 +623,11 @@ fn the_pane_menu_says_which_signal_set_the_state() {
 
     // The rule and the lines it saw, as the daemon wrote them.
     let detail = "规则：approval 审批（codex 内置 2026.10.31.1）\n看到：Do you want to proceed? / ❯ 1. Yes / 2. No";
-    w.content.get_mut("history").unwrap().signal_detail = detail.into();
+    w.content
+        .get_mut("history")
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .signal_detail = detail.into();
     let lines = state_reasons(&w, "t0", None, 1000);
     assert_eq!(lines[3], "规则：approval 审批（codex 内置 2026.10.31.1）");
     assert_eq!(lines[4], "看到：Do you want to proceed? / ❯ 1. Yes / 2. No");
@@ -635,7 +644,7 @@ fn the_pane_menu_says_which_signal_set_the_state() {
             .into(),
         ..Default::default()
     };
-    w.content.insert("history".into(), c);
+    w.content.insert("history".into(), std::sync::Arc::new(c));
     let lines = state_reasons(&w, "t0", None, 1000);
     assert_eq!(lines[1], "现在：做完了 / 你标记过完成");
     assert_eq!(lines[3], "记录：assistant「测试都过了，已经提交。」");
@@ -652,7 +661,11 @@ fn the_pane_menu_says_which_signal_set_the_state() {
     }
 
     // While it runs, a screen with no prompt is not news.
-    w.content.get_mut("history").unwrap().turn = fibo_core::content::Turn::Running;
+    w.content
+        .get_mut("history")
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .turn = fibo_core::content::Turn::Running;
     let lines = state_reasons(&w, "t0", None, 1000);
     assert!(!lines.iter().any(|l| l.starts_with("画面：")), "{lines:?}");
 }

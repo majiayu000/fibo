@@ -467,17 +467,20 @@ mod tests {
             }],
             ..Default::default()
         };
-        w.content.insert("a".into(), reading(10));
+        w.content
+            .insert("a".into(), std::sync::Arc::new(reading(10)));
         let used = |w: &Workspace, now| quotas(w, now, false)[0].1.windows[0].used;
         assert_eq!(used(&w, 2000), 10);
-        w.content.insert("a".into(), reading(90));
+        w.content
+            .insert("a".into(), std::sync::Arc::new(reading(90)));
         assert_eq!(
             used(&w, 2000),
             10,
             "same second and revision: the worked-out one"
         );
         assert_eq!(used(&w, 2001), 90);
-        w.content.insert("a".into(), reading(50));
+        w.content
+            .insert("a".into(), std::sync::Arc::new(reading(50)));
         w.revision += 1;
         assert_eq!(used(&w, 2001), 50);
     }

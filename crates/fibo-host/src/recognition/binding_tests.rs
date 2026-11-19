@@ -508,10 +508,10 @@ fn a_conversation_handed_to_the_claude_daemon_stays_with_its_terminal() {
     assert!(apply_hook(&mut w, Agent::Claude, 301, None, &b, &tb, &processes, false).is_err());
     w.content.insert(
         first.clone(),
-        fibo_core::content::Content {
+        std::sync::Arc::new(fibo_core::content::Content {
             continued_in: b.clone(),
             ..Default::default()
-        },
+        }),
     );
     assert_eq!(
         continued_terminal(&w, Agent::Claude, &b).as_deref(),
@@ -566,10 +566,10 @@ fn a_conversation_handed_to_the_claude_daemon_stays_with_its_terminal() {
     w.agent_sessions[0].task = Some("todo".into());
     w.content.insert(
         first,
-        fibo_core::content::Content {
+        std::sync::Arc::new(fibo_core::content::Content {
             continued_in: b.clone(),
             ..Default::default()
-        },
+        }),
     );
     reconcile(&mut w, std::slice::from_ref(&ta), &[], &HashMap::new()).unwrap();
     assert_eq!(current(&w), Some(a.clone()), "the new log is not known yet");

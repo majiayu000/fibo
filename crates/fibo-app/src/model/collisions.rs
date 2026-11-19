@@ -120,7 +120,7 @@ mod tests {
         for (path, at) in files {
             c.touch(path, *at, 0, 0);
         }
-        w.content.insert(id.into(), c);
+        w.content.insert(id.into(), std::sync::Arc::new(c));
     }
 
     #[test]

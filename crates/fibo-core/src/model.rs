@@ -48,7 +48,7 @@ pub struct Workspace {
     pub tabs: Vec<Tab>,
     pub terminals: Vec<Terminal>,
     pub agent_sessions: Vec<AgentSession>,
-    pub content: rustc_hash::FxHashMap<String, crate::content::Content>,
+    pub content: rustc_hash::FxHashMap<String, std::sync::Arc<crate::content::Content>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

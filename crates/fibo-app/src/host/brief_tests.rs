@@ -85,6 +85,7 @@ fn a_refresh_asks_for_what_changed_since_the_last_and_gets_the_whole() {
         .unwrap()
         .content
         .get_mut(&session)
+        .map(std::sync::Arc::make_mut)
         .unwrap()
         .title = "新标题".into();
     let second = workspace(held.deliver(&socket, Request::Workspace, ALL));

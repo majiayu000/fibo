@@ -253,14 +253,16 @@ fn phase_follows_the_current_conversation() {
         turn: Turn::Waiting,
         ..Default::default()
     };
-    w.content.insert("s1".into(), c.clone());
+    w.content
+        .insert("s1".into(), std::sync::Arc::new(c.clone()));
     assert_eq!(phase(&w, "aaaa1111"), Phase::Waiting);
     c.turn = Turn::Running;
-    w.content.insert("s1".into(), c.clone());
+    w.content
+        .insert("s1".into(), std::sync::Arc::new(c.clone()));
     assert_eq!(phase(&w, "aaaa1111"), Phase::Working);
     // A failed turn reads as the window reads it, not as a plain idle.
     c.turn = Turn::Error;
-    w.content.insert("s1".into(), c);
+    w.content.insert("s1".into(), std::sync::Arc::new(c));
     assert_eq!(phase(&w, "aaaa1111"), Phase::Idle);
     assert_eq!(status(&w, "aaaa1111"), Some(Status::Error));
 }

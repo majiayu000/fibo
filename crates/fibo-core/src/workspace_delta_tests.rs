@@ -27,7 +27,11 @@ fn only_what_changed_goes_and_the_window_ends_with_the_whole() {
     let mut next = first.clone();
     next.revision += 1;
     let session = next.agent_sessions[1].id.clone();
-    next.content.get_mut(&session).unwrap().title = "改了".into();
+    next.content
+        .get_mut(&session)
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .title = "改了".into();
     next.agent_sessions[2].updated += 5;
     let (delta, applied, _) = roundtrip(&held, &index, &next, false);
     assert_eq!(delta.base, Some(index.stamp));
@@ -129,7 +133,11 @@ fn remembered_hashes_give_the_same_delta_as_fresh_ones() {
     let (_, index) = diff_with(first.clone(), None, true, &mut hashes).unwrap();
     let mut next = first.clone();
     let session = next.agent_sessions[1].id.clone();
-    next.content.get_mut(&session).unwrap().title = "改了".into();
+    next.content
+        .get_mut(&session)
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .title = "改了".into();
     let gone = next.agent_sessions[0].id.clone();
     next.content.remove(&gone);
     let (kept, kept_index) = diff_with(next.clone(), Some(&index), true, &mut hashes).unwrap();
@@ -181,4 +189,29 @@ fn remembered_session_hashes_give_the_same_delta_as_fresh_ones() {
     let (again, _) = diff_with(next.clone(), Some(&kept_index), true, &mut hashes).unwrap();
     assert!(again.sessions.is_empty());
     assert_eq!(again.stamp, kept_index.stamp);
+}
+
+/// A refresh copied every session's content twice in the window and once in the host
+/// (11-19: 62 M instructions a refresh on a 1621-session install). Content no one changed
+/// stays one allocation from the host's snapshot through the window's applied workspace.
+#[test]
+fn content_no_one_changed_is_shared_not_copied() {
+    let first = every_state();
+    let mut hashes = Hashes::default();
+    let (delta, index) = diff_with(first.clone(), None, true, &mut hashes).unwrap();
+    let held = apply(delta, None).unwrap();
+    let mut next = held.workspace.clone();
+    let changed = next.agent_sessions[1].id.clone();
+    std::sync::Arc::make_mut(next.content.get_mut(&changed).unwrap()).title = "改了".into();
+    let (delta, _) = diff_with(next.clone(), Some(&index), true, &mut hashes).unwrap();
+    assert_eq!(delta.content.keys().collect::<Vec<_>>(), [&changed]);
+    let after = apply(delta, Some(&held)).unwrap();
+    for (id, c) in &after.workspace.content {
+        let before = &held.workspace.content[id];
+        assert_eq!(
+            std::sync::Arc::ptr_eq(c, before),
+            *id != changed,
+            "{id}: only the changed content is a new allocation"
+        );
+    }
 }

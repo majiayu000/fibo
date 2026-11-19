@@ -41,7 +41,12 @@ fn a_brief_request_gets_only_the_sessions_that_changed() {
     let session = whole.sessions[0].id.clone();
     {
         let mut host = shared.lock().unwrap();
-        let content = host.workspace.content.get_mut(&session).unwrap();
+        let content = host
+            .workspace
+            .content
+            .get_mut(&session)
+            .map(std::sync::Arc::make_mut)
+            .unwrap();
         content.title = "新标题".into();
     }
     let changed = ask(&mut window, Some(whole.stamp), Request::Workspace);
@@ -84,7 +89,12 @@ fn a_refresh_on_the_hosts_own_content_is_the_delta_of_its_snapshot() {
         .find(|s| s.current && s.terminal.is_some() && host.workspace.content.contains_key(&s.id))
         .expect("a sample session in a terminal")
         .clone();
-    let c = host.workspace.content.get_mut(&live.id).unwrap();
+    let c = host
+        .workspace
+        .content
+        .get_mut(&live.id)
+        .map(std::sync::Arc::make_mut)
+        .unwrap();
     c.turn = fibo_core::content::Turn::Completed;
     let content = c.clone();
     host.title_busy
@@ -94,8 +104,12 @@ fn a_refresh_on_the_hosts_own_content_is_the_delta_of_its_snapshot() {
     let mut past = old.clone();
     (past.id, past.updated) = ("past".into(), fibo_core::content::now());
     host.workspace.agent_sessions.extend([old, past]);
-    host.workspace.content.insert("old".into(), content.clone());
-    host.workspace.content.insert("past".into(), content);
+    host.workspace
+        .content
+        .insert("old".into(), std::sync::Arc::new(content.clone()));
+    host.workspace
+        .content
+        .insert("past".into(), std::sync::Arc::new(content));
     let same =
         |a: &Delta, b: &Delta| serde_json::to_value(a).unwrap() == serde_json::to_value(b).unwrap();
 
@@ -116,10 +130,31 @@ fn a_refresh_on_the_hosts_own_content_is_the_delta_of_its_snapshot() {
     );
 
     let other = String::from("past");
-    host.workspace.content.get_mut(&other).unwrap().title = "改了".into();
+    host.workspace
+        .content
+        .get_mut(&other)
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .title = "改了".into();
     let (fresh, fresh_next) = diff(host.snapshot(), Some(&fresh_index), true).unwrap();
     let (lent, next) = host.brief(Some(&index), true, &mut hashes).unwrap();
     assert!(same(&fresh, &lent));
     assert_eq!(fresh_next.stamp, next.stamp);
     assert_eq!(lent.content.keys().collect::<Vec<_>>(), [&other]);
+}
+
+/// The snapshot every reply starts from shares the host's content: what no overlay changed
+/// is the host's own allocation, compared by pointer and never copied.
+#[test]
+fn a_snapshot_shares_the_content_no_overlay_changed() {
+    let (mut host, _root) = super::tests::fixture();
+    host.workspace = fibo_core::sample::every_state();
+    let w = host.snapshot();
+    assert!(!w.content.is_empty());
+    for (id, c) in &w.content {
+        assert!(
+            std::sync::Arc::ptr_eq(c, &host.workspace.content[id]),
+            "{id} was copied"
+        );
+    }
 }
