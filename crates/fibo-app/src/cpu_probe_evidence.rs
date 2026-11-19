@@ -519,7 +519,30 @@ async fn redraw_check(
         end - start,
         chained - chained_start
     ));
-    workbench::Workbench::visual_hold_landing(None);
+    // Pixel comparisons hold the clock. Restart the same jump with a real clock,
+    // then force a draw after it expires so this also works without a display link.
+    use workbench::Workbench;
+    Workbench::visual_hold_landing(None);
+    let before = Workbench::visual_landing_frame_requests();
+    handle
+        .update(cx, |v, w, cx| v.visual_redraw_step("focus", w, cx))
+        .unwrap();
+    frame(cx);
+    let active = Workbench::visual_landing_frame_requests() > before;
+    wait(1_000).await;
+    let expired = handle
+        .update(cx, |v, _, _| v.visual_landing().is_none())
+        .unwrap();
+    let before = Workbench::visual_landing_frame_requests();
+    cx.update_window(handle.into(), |_, w, app| {
+        w.refresh();
+        w.draw(app).clear(app);
+    })
+    .unwrap();
+    let requested = Workbench::visual_landing_frame_requests() - before;
+    lines.push(format!(
+        "focus ring: active {active}, expired {expired}, extra frames {requested}"
+    ));
     let line = lines.join("; ");
     eprintln!("CPU-PROBE redraw-check {line}");
     format!("redraw-check: {line}")
