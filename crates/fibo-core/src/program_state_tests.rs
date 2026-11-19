@@ -82,3 +82,16 @@ fn idle_keeps_a_background_in_flight() {
 fn idle_before_any_turn_stays_fresh() {
     assert_eq!(bound(Content::default(), "idle"), Status::Fresh);
 }
+
+#[test]
+fn working_starts_no_turn_its_log_has_not() {
+    // Codex says working for a few seconds between turns: what the log says stands.
+    assert_eq!(bound(content(Turn::Completed), "working"), Status::Review);
+    assert_eq!(bound(content(Turn::Interrupted), "working"), Status::Paused);
+    assert_eq!(bound(Content::default(), "working"), Status::Fresh);
+    // A dialog answered: the turn runs again before its log says so.
+    assert_eq!(bound(content(Turn::Waiting), "working"), Status::Running);
+    assert_eq!(bound(content(Turn::Running), "working"), Status::Running);
+    // Asking and failing still come from the program first.
+    assert_eq!(bound(content(Turn::Completed), "blocked"), Status::Waiting);
+}
