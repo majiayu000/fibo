@@ -1,10 +1,6 @@
 //! Search matching and palette list movement.
 use std::ops::Range;
 
-pub fn contains(text: &str, query: &str) -> bool {
-    SearchQuery::new(query).matches(text)
-}
-
 /// A query shared across the titles and messages checked by one search.
 pub struct SearchQuery {
     needle: Vec<char>,
@@ -172,7 +168,11 @@ mod tests {
             ("abc", "bcd", false),
             ("abc", "", false),
         ] {
-            assert_eq!(contains(text, query), found, "{text:?} {query:?}");
+            assert_eq!(
+                SearchQuery::new(query).matches(text),
+                found,
+                "{text:?} {query:?}"
+            );
             assert_eq!(!match_ranges(text, query).is_empty(), found);
         }
     }
