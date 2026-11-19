@@ -94,6 +94,9 @@ struct Host {
     /// Terminal -> what its CLI's own API says it asks.
     http_asks: HashMap<String, crate::cli_http::Asked>,
     screen_waits: HashMap<String, crate::screen_rules::Explained>,
+    /// Terminal -> when the user last answered what its screen asked. A quiet-screen read
+    /// taken before then saw the question still drawn and must not bring it back.
+    screen_answered: HashMap<String, std::time::Instant>,
     /// Terminal -> the conversation whose title spins there and since when (seconds since
     /// the epoch). Live evidence only, like `screen_waits`: never stored.
     title_busy: HashMap<String, (String, u64)>,
@@ -148,6 +151,12 @@ impl Host {
         // Nothing to store; a new revision makes clients fetch the overlaid snapshot.
         let next = self.workspace.clone();
         self.commit(next)
+    }
+    /// The user answered the prompt on this terminal: it no longer waits on them.
+    fn answer_screen_wait(&mut self, terminal: &str) -> io::Result<()> {
+        self.screen_answered
+            .insert(terminal.into(), std::time::Instant::now());
+        self.set_screen_wait(terminal, None)
     }
     /// Asks the CLIs off the lock (`claude agents --json`, Codex `thread/read`) and applies the
     /// result. Returns when to look again for sessions held back by the rate limit.

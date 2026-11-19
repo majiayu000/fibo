@@ -91,7 +91,7 @@ fn send_message(
     }
     drop(host);
     // Same as typing in the app: the prompt on screen is no longer waiting on the user.
-    lock(shared)?.set_screen_wait(id, None)?;
+    lock(shared)?.answer_screen_wait(id)?;
     let Some(submit) = submit else {
         return Ok(());
     };
@@ -365,7 +365,7 @@ pub(in crate::host) fn interrupt(shared: &Shared, id: &str) -> io::Result<()> {
 /// Same as typing in the app: the prompt on screen is no longer waiting on the user, and
 /// Enter submits.
 fn typed(shared: &Shared, id: &str, entered: bool) -> io::Result<()> {
-    lock(shared)?.set_screen_wait(id, None)?;
+    lock(shared)?.answer_screen_wait(id)?;
     if entered {
         record_submission(shared, id)?;
     }
@@ -426,7 +426,7 @@ pub(in crate::host) fn answer_approval(
         live.master.write(key.as_bytes())?;
         live.input_at = Some(Instant::now());
     }
-    lock(shared)?.set_screen_wait(id, None)
+    lock(shared)?.answer_screen_wait(id)
 }
 
 #[cfg(test)]
