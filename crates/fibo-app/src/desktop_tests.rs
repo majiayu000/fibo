@@ -399,3 +399,18 @@ fn a_finished_turn_sends_one_silent_review_banner() {
     next.content.get_mut("r").unwrap().turn = Turn::Running;
     assert_eq!(left(&after, &next), ["r"]);
 }
+
+/// The menu bar refreshed on every status whose revision was not the one it showed, so a
+/// status that queued behind a refresh fetched again; now only a newer one asks, and one
+/// the window fetched at that revision serves. After a dropped link or a failed refresh
+/// the host itself answers: it may be a new one that counts from lower.
+#[test]
+fn the_panel_refreshes_for_a_newer_revision_and_asks_the_host_when_unsure() {
+    assert_eq!(wanted(8, 8, true, false), None);
+    assert_eq!(wanted(7, 8, true, false), None, "a queued status fetched");
+    assert_eq!(wanted(9, 8, true, false), Some(Some(9)));
+    // Before the host first says it is healthy, every status refreshes, as before.
+    assert_eq!(wanted(8, 8, false, false), Some(Some(8)));
+    assert_eq!(wanted(3, 8, true, true), Some(None));
+    assert_eq!(wanted(8, 8, true, true), Some(None));
+}

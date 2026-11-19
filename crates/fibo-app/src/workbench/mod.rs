@@ -393,7 +393,7 @@ impl Workbench {
                             });
                         }
                         this.store.set_recognition(*status);
-                        if revision > this.workspace.revision {
+                        if this.store.follow(revision, this.workspace.revision) {
                             this.sync(cx);
                         }
                         this.mark_pane_agents(cx);
@@ -661,11 +661,11 @@ impl Workbench {
             return;
         }
         // Resent while the host is away for a moment (a newer one taking over drops the
-        // replies in flight), as a read safely is.
+        // replies in flight), as a read safely is; fetched once with the menu bar.
         let started = std::time::Instant::now();
-        let task = cx.background_spawn(self.store.deliver(Request::Workspace));
+        let task = cx.background_spawn(self.store.refresh());
         cx.spawn(async move |this, cx| {
-            let reply = task.await.into_result();
+            let reply = task.await;
             let rest = this.update(cx, |this, cx| {
                 let failure = match reply {
                     Ok(Reply::Workspace(w)) => {

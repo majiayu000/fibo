@@ -54,3 +54,29 @@ fn a_refresh_that_works_again_clears_only_its_own_error() {
     store.settle_sync(&mut shown, None);
     assert_eq!(shown.as_deref(), Some("没发出去：后台没有响应"));
 }
+
+/// The host sends several statuses per change (titles, hints, commands); each one that
+/// came during a refresh queued another fetch of the same revision, twice per change
+/// (11-19). The refresh in flight looks at the revision once it lands instead.
+#[test]
+fn statuses_during_a_refresh_do_not_queue_another() {
+    let (tx, _rx) = futures::channel::mpsc::unbounded();
+    let mut store = Store::new("/nonexistent/mooring.sock".into(), tx);
+    let at = |revision| RecognitionStatus {
+        workspace_revision: revision,
+        ..RecognitionStatus::default()
+    };
+    store.set_recognition(at(8));
+    assert!(store.follow(8, 7));
+    assert!(store.begin_sync());
+    store.set_recognition(at(8));
+    assert!(
+        !store.follow(8, 7),
+        "a status during the refresh fetched again"
+    );
+    assert!(!store.end_sync());
+    // It landed at 8: nothing more. Had the host moved on, it is behind.
+    assert!(!store.behind(8));
+    store.set_recognition(at(9));
+    assert!(store.behind(8) && store.follow(9, 8));
+}
