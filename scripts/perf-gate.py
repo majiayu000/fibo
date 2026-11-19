@@ -31,7 +31,9 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
   settings, and a terminal's frame under themes with a picture or a see-through window must
   stay within BUDGET (or, without a counter, within SHARE_BUDGET of a full redraw or a plain
   terminal frame in the same process). Pointing at a card once drew 79 M a frame, the whole
-  page laid out again. A stopped page must ask for no frames, a reused page must match a
+  page laid out again. Opening 插件 the first time (its catalog read, its words shaped and
+  drawn for the first time) must stay within BUDGET too: one read is a few M of some 350,
+  so a cold file is not what moves it. A stopped page must ask for no frames, a reused page must match a
   fresh one pixel for pixel, and every animation and theme must really have played or
   applied: a gate over a static picture passes whatever the code does. What the compositor
   spends on a see-through window is not here: see scripts/theme-live.py;
@@ -155,9 +157,9 @@ def main():
         if off_rows or off_draws:
             fails.append(f'turned off, the marks kept drawing: {off_rows} rows, {off_draws} draws')
     plugin_text = probe(bindir, out / 'plugins', 'frames-plugins', catch_up=False)
-    costs = dict(re.findall(r'^(frames-\w+|settings-open): [^\n]*?([\d.]+) M instructions', plugin_text, re.M))
+    costs = dict(re.findall(r'^(frames-\w+|settings-open|settings-plugins-first-frame): [^\n]*?([\d.]+) M instructions', plugin_text, re.M))
     plugin_ms = {k: float(v) for k, v in re.findall(r'^(frames-\w+): ([\d.]+) ms CPU', plugin_text, re.M)}
-    wanted = {'frames-cardplay', 'frames-cardrest', 'settings-open', 'frames-themeimage', 'frames-themepaper', 'frames-themeglass'}
+    wanted = {'frames-cardplay', 'frames-cardrest', 'settings-open', 'settings-plugins-first-frame', 'frames-themeimage', 'frames-themepaper', 'frames-themeglass'}
     if not wanted <= set(costs) or not {'frames-probefull', 'frames-cardplay'} <= set(plugin_ms) or len(re.findall(r'of the plain look', plugin_text)) != 3:
         fails.append(f'no plugin page numbers in the probe output: {sorted(costs)}')
     measured.update({k: float(costs[k]) for k in wanted & set(costs)})
