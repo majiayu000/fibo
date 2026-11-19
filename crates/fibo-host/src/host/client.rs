@@ -164,7 +164,10 @@ pub(super) fn hand_over(stream: local::Stream, shared: &Shared) -> io::Result<()
             held.push((id.clone(), live));
         }
         let Some(pending) = pending else {
-            return hand_over_paused(stream, held);
+            let result = hand_over_paused(stream, &mut held);
+            // On failure, resume replies before the read pumps can take the terminal locks.
+            drop(paused);
+            return result;
         };
         // A write may be waiting for a program to finish printing. Leave the old host
         // and all its terminals free to read and reply while the input drains.
@@ -177,7 +180,7 @@ pub(super) fn hand_over(stream: local::Stream, shared: &Shared) -> io::Result<()
 
 fn hand_over_paused(
     mut stream: local::Stream,
-    mut held: Vec<(String, std::sync::MutexGuard<'_, Live>)>,
+    held: &mut [(String, std::sync::MutexGuard<'_, Live>)],
 ) -> io::Result<()> {
     let terminals: Vec<_> = held
         .iter()
@@ -192,7 +195,7 @@ fn hand_over_paused(
         .collect();
     stream.set_write_timeout(Some(Duration::from_secs(10)))?;
     send(&mut stream, CONTROL, &Reply::Handoff { terminals })?;
-    for (_, live) in &mut held {
+    for (_, live) in held.iter_mut() {
         for chunk in live.vt.snapshot()?.chunks(MAX_FRAME - 1) {
             write_frame(&mut stream, SNAPSHOT, chunk)?;
         }
