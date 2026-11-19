@@ -114,11 +114,15 @@ pub(super) fn matches(
     window: &mut Window,
 ) {
     let matched = hsla(T::SEARCH_HIT);
-    for (i, m) in found.iter().enumerate() {
-        if m.row < top || m.row >= top + len {
-            continue;
-        }
-        let is_current = current == Some(i);
+    // Search returns history order. Skip directly to the visible rows without
+    // changing the index used for the current result.
+    let first = found.partition_point(|m| m.row < top);
+    for (i, m) in found[first..]
+        .iter()
+        .enumerate()
+        .take_while(|(_, m)| m.row < top + len)
+    {
+        let is_current = current == Some(first + i);
         let at = Bounds::new(
             gpui::point(
                 bounds.left() + metrics.width * m.col as f32,

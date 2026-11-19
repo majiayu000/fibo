@@ -123,34 +123,39 @@ impl Vt {
         self.0.scroll_viewport(scroll);
     }
     /// Explicit user search only: reads the bounded VT history, never the transcript directory.
-    /// Every occurrence, as its history row, first column and width in cells, plus the row.
+    /// Every occurrence in history order, with its first column, cell width and row text.
     pub fn search(&self, query: &str) -> io::Result<Vec<SearchMatch>> {
         if query.is_empty() {
             return Ok(vec![]);
         }
         let mut matches = Vec::new();
+        let mut chars = Vec::new();
+        let mut line = String::new();
+        let mut cells = Vec::new();
         for y in 0..self.0.total_rows().map_err(io::Error::other)? {
-            let cells = self.row_cells(y)?;
-            let line: String = cells.iter().map(|(_, s)| s.as_str()).collect();
-            if !line.contains(query) {
+            line.clear();
+            cells.clear();
+            self.each_cell(y, u16::MAX, &mut chars, |col, text| {
+                // Map byte matches back to columns, including matches inside clusters.
+                cells.push((line.len(), col));
+                match text {
+                    [] => line.push(' '),
+                    text => line.extend(text),
+                }
+            })?;
+            let mut hits = line.match_indices(query).peekable();
+            if hits.peek().is_none() {
                 continue;
             }
             let text: Arc<str> = line.trim_end().into();
-            // Byte offset of each cell's text, to turn a byte match back into columns.
-            let mut starts = Vec::with_capacity(cells.len());
-            let mut at = 0;
-            for (_, s) in &cells {
-                starts.push(at);
-                at += s.len();
-            }
-            for (byte, _) in line.match_indices(query) {
-                let first = starts.partition_point(|&b| b <= byte).saturating_sub(1);
-                let last = starts
-                    .partition_point(|&b| b < byte + query.len())
+            for (byte, _) in hits {
+                let first = cells.partition_point(|&(b, _)| b <= byte).saturating_sub(1);
+                let last = cells
+                    .partition_point(|&(b, _)| b < byte + query.len())
                     .saturating_sub(1);
-                let col = cells[first].0;
+                let col = cells[first].1;
                 // Spacer cells are left out, so a wide character ends where the next begins.
-                let end = cells.get(last + 1).map_or(cells[last].0 + 1, |c| c.0);
+                let end = cells.get(last + 1).map_or(cells[last].1 + 1, |c| c.1);
                 matches.push(SearchMatch {
                     row: y,
                     col,
@@ -209,22 +214,7 @@ impl Vt {
         }
         Ok(text)
     }
-    /// Each cell's column and text; a wide character's spacer cell is left out.
-    fn row_cells(&self, y: usize) -> io::Result<Vec<(u16, String)>> {
-        let mut chars = Vec::new();
-        let mut line = Vec::new();
-        self.each_cell(y, u16::MAX, &mut chars, |x, text| {
-            let text = if text.is_empty() {
-                " ".to_owned()
-            } else {
-                text.iter().collect()
-            };
-            line.push((x, text));
-        })?;
-        Ok(line)
-    }
-    /// Row `y`'s text over the first `limit` columns, pushed onto `out` the way
-    /// `row_cells` joins up, without a string per cell. `chars` is scratch kept across rows.
+    /// Append row `y`'s text over the first `limit` columns. `chars` is reused across rows.
     fn row_text_into(
         &self,
         y: usize,

@@ -147,6 +147,36 @@ fn search_finds_scrollback_and_wide_graphemes_without_spacer_gaps() {
     assert!(vt.search("").unwrap().is_empty());
 }
 #[test]
+fn search_maps_bytes_to_cells_across_rows_with_different_text() {
+    let mut vt = Vt::new(12, 3).unwrap();
+    vt.feed("中e\u{301} 中\r\ngap\r\na\u{301} 中".as_bytes());
+    let cells = |query| {
+        vt.search(query)
+            .unwrap()
+            .into_iter()
+            .map(|m| (m.row, m.col, m.cols, m.line))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        cells("\u{301}"),
+        [
+            (0, 2, 1, "中e\u{301} 中".into()),
+            (2, 0, 1, "a\u{301} 中".into())
+        ]
+    );
+    assert_eq!(
+        cells(" 中"),
+        [
+            (0, 3, 3, "中e\u{301} 中".into()),
+            (2, 1, 3, "a\u{301} 中".into())
+        ]
+    );
+    assert_eq!(
+        cells("   ").last().map(|m| (m.0, m.1, m.2)),
+        Some((2, 7, 3))
+    );
+}
+#[test]
 fn search_shares_each_rows_text_and_keeps_every_occurrence() {
     let mut vt = Vt::new(40, 3).unwrap();
     vt.feed(b"aaaaa  \r\naaa  ");
@@ -392,10 +422,6 @@ fn row_text_keeps_wide_characters_clusters_and_blanks_as_the_cells_have_them() {
     // A wide character starting inside the limit is read whole.
     assert_eq!(text(0, 5), "a 中文");
     assert_eq!(text(0, 3), "a 中");
-    for y in 0..3 {
-        let cells: String = vt.row_cells(y).unwrap().into_iter().map(|c| c.1).collect();
-        assert_eq!(text(y, u16::MAX), cells);
-    }
     assert_eq!(
         vt.tail_text(3).unwrap(),
         "a 中文 e\u{301}👍🏽\n❯ 修一下登录\nx\n"
