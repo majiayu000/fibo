@@ -11,6 +11,8 @@ use std::{
 };
 use tied::SpawnTied;
 
+#[path = "managed_session/answer_clock.rs"]
+mod answer_clock;
 #[path = "managed_session/claude_logs.rs"]
 mod claude_logs;
 #[path = "managed_session/cli.rs"]

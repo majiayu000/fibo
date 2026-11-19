@@ -75,6 +75,7 @@ impl Host {
             }
             if answered {
                 c.turn = fibo_core::content::Turn::Running;
+                c.end_wait(fibo_core::content::Turn::Waiting, since);
                 c.waiting.clear();
                 c.choices.clear();
                 c.signal = cue.into();
