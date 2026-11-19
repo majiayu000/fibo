@@ -323,6 +323,29 @@ fn commands_reach_hooks(h: &Host, s: &mut Session) {
     );
 }
 
+/// A command that leaves mouse and focus reporting on, as a TUI killed mid-run does: back
+/// at the prompt both are off again, so mouse moves are not typed into the shell.
+fn reporting_is_off_at_the_prompt(h: &Host, s: &mut Session) {
+    use fibo_core::terminal::{libghostty_vt::terminal::Mode, Vt};
+    let from = s.output.len();
+    s.type_line(r"printf '\033[?1003h\033[?1006h\033[?1004h'");
+    let off = b"\x1b[?1003l";
+    let home = h.home();
+    assert!(
+        s.read_until(
+            Duration::from_secs(10),
+            |out, _| out[from..].windows(off.len()).any(|w| w == off),
+            &home
+        ),
+        "reporting left on: {}",
+        String::from_utf8_lossy(&s.output[from..])
+    );
+    let mut vt = Vt::new(100, 30).unwrap();
+    vt.feed(&s.output);
+    assert!(!vt.terminal().is_mouse_tracking().unwrap());
+    assert!(!vt.terminal().mode(Mode::FOCUS_EVENT).unwrap());
+}
+
 fn installed(candidates: &[&str]) -> Option<String> {
     candidates
         .iter()
@@ -420,6 +443,7 @@ fn zsh_reports_its_directory_and_loads_zshrc_once() {
     assert_eq!(st.trim(), "zdotdir=[]");
     assert_eq!(h.loads("zshrc"), 1);
     commands_reach_hooks(&h, &mut s);
+    reporting_is_off_at_the_prompt(&h, &mut s);
 }
 
 #[test]
@@ -463,6 +487,7 @@ fn bash_reports_its_directory_and_is_left_as_the_user_set_it_up() {
     );
     assert_eq!(st.trim(), "status=1");
     commands_reach_hooks(&h, &mut s);
+    reporting_is_off_at_the_prompt(&h, &mut s);
 }
 
 #[test]
@@ -521,6 +546,7 @@ fn fish_reports_its_directory_and_keeps_its_own_prompt_marks() {
     assert_eq!(st.trim(), "xdg=[]");
     assert_eq!(h.loads("config_fish"), 1);
     commands_reach_hooks(&h, &mut s);
+    reporting_is_off_at_the_prompt(&h, &mut s);
 }
 
 fn bash_is_3() -> bool {
