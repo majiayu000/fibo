@@ -31,10 +31,14 @@ pub fn of_program(state: &str) -> Status {
 /// A conversation's turn as its program reported it. `idle` ends no turn: it only stops
 /// one left running or asking (a new prompt clears working and blocked, the protocol
 /// says) and otherwise leaves what the log says, a background in flight included.
+/// `working` starts no turn either: it resumes one asking you, while a turn its log has
+/// not begun or has ended stays as the log says. Codex reports a few seconds of
+/// working between turns, unprompted; a real turn is in its log within moments.
 pub fn apply(c: &mut Content, r: &ProgramReport) {
     let turn = turn(&r.state);
     let idle = turn == Turn::Interrupted;
-    if idle && !matches!(c.turn, Turn::Running | Turn::Waiting) {
+    let in_turn = matches!(c.turn, Turn::Running | Turn::Waiting);
+    if (idle || turn == Turn::Running) && !in_turn {
         return;
     }
     let said = if r.msg.is_empty() { &r.title } else { &r.msg };
