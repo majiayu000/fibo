@@ -299,6 +299,37 @@ fn tied(mut thread: ScreenThread) -> ScreenThread {
     thread
 }
 
+/// RC4 phone walk (2026-11-18): the two-line task was copied from another Codex pane in the
+/// same folder, whose answer still shows it. The phone's new pane, started with that task,
+/// draws it too (real capture). The screen of the pane it was copied from says nothing about
+/// where it was sent: the start decides. Enter there for it still stands against the start.
+#[test]
+fn a_task_shown_in_another_panes_answer_binds_by_its_start() {
+    let quoted = include_str!("../../tests/fixtures/started/codex-quoted-task.txt");
+    let (task, own) = (log(Agent::Codex, 0), log(Agent::Codex, 1));
+    let asked = "给我两行英文，第一行说明是两个窗格同一个任务，第二行让对方回 rc4-codex-same-ok 的大写，我要复制到手机上";
+    let threads = [thread(&task, SAME_TASK, 1000)];
+    let source = |submits: Vec<u64>| ScreenTerminal {
+        current: Some((own.cli_id.clone(), 960, screen_key(asked))),
+        submits,
+        ..pane(0, Agent::Codex, quoted, None)
+    };
+    assert!(
+        prompt_evidence(&threads[0], &source(vec![]).screen, &[]),
+        "the answer shows the task verbatim after all"
+    );
+    let started = || pane(1, Agent::Codex, CODEX_SAME_TASK, Some(SAME_TASK));
+    assert_eq!(
+        bound(&threads, &[source(vec![]), started()]),
+        vec![("pty-1".to_owned(), "t0".to_owned())]
+    );
+    // Nothing started either pane with it: the screen is all there is, and it shows on both.
+    let plain = pane(1, Agent::Codex, CODEX_SAME_TASK, None);
+    assert!(bound(&threads, &[source(vec![]), plain]).is_empty());
+    // Enter in the quoting pane as the task was logged: it may have been sent from there.
+    assert!(bound(&threads, &[source(vec![1000]), started()]).is_empty());
+}
+
 /// B1 with a picture: the phone's 新任务 hands Codex `--image=<path> <task>`, the start keeps
 /// the task (the command line's message), and Codex 0.169 logs "[Image #1]\n<task>" as the
 /// first user message, as its rollout of such a task on 2026-11-13 did. Read through the
