@@ -161,12 +161,14 @@ fn find_paths(rows: &[Vec<(u16, u16, char)>], wrapped: &[bool], cols: u16) -> Ve
     let mut paths = Vec::new();
     // The rows whose first word was taken into the word above.
     let mut taken = vec![false; rows.len()];
+    let mut pieces = Vec::new();
     for y in 0..rows.len() {
         for (k, &word) in words[y].iter().enumerate() {
             if k == 0 && taken[y] {
                 continue;
             }
-            let mut pieces = vec![(y, word)];
+            pieces.clear();
+            pieces.push((y, word));
             let (mut ly, mut lk) = (y, k);
             loop {
                 let (_, end) = words[ly][lk];
@@ -191,6 +193,14 @@ fn find_paths(rows: &[Vec<(u16, u16, char)>], wrapped: &[bool], cols: u16) -> Ve
                 }
                 pieces.push((next, words[next][0]));
                 (ly, lk) = (next, 0);
+            }
+            // Every path has a `/` or a `.` (`looks_like_path`); most words have neither,
+            // and need no string to say so.
+            let dotted = |&(py, (i, end)): &(usize, (usize, usize))| {
+                rows[py][i..end].iter().any(|c| matches!(c.2, '/' | '.'))
+            };
+            if !pieces.iter().any(dotted) {
+                continue;
             }
             let whole: String = pieces.iter().map(|&(py, w)| text(py, w)).collect();
             let whole = trim_word(&whole);
@@ -233,12 +243,6 @@ fn trim_word(word: &str) -> String {
 }
 /// Where each word of one row starts and ends, as indexes into `cells`.
 fn row_words(cells: &[(u16, u16, char)]) -> Vec<(usize, usize)> {
-    let separator = |c: char| {
-        c.is_whitespace()
-            || "\"'`()[]{}<>|,;*".contains(c)
-            || not_ui!("。，、；：！？（）「」『』《》【】“”‘’…").contains(c)
-            || ('\u{2500}'..='\u{259f}').contains(&c)
-    };
     let mut words = Vec::new();
     let mut i = 0;
     while i < cells.len() {
@@ -254,6 +258,16 @@ fn row_words(cells: &[(u16, u16, char)]) -> Vec<(usize, usize)> {
         i = end;
     }
     words
+}
+/// What ends a path word: whitespace, quotes, brackets, box lines and CJK punctuation.
+/// Most cells are ASCII and are told by a byte, not a search through the CJK marks.
+fn separator(c: char) -> bool {
+    if c.is_ascii() {
+        return c.is_whitespace() || b"\"'`()[]{}<>|,;*".contains(&(c as u8));
+    }
+    c.is_whitespace()
+        || not_ui!("。，、；：！？（）「」『』《》【】“”‘’…").contains(c)
+        || ('\u{2500}'..='\u{259f}').contains(&c)
 }
 fn looks_like_path(word: &str) -> bool {
     let (file, _) = split_line(word);
