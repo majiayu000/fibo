@@ -14,6 +14,7 @@
 //! - `frames-turning`: the running mark turning, in `cpu_probe_evidence/turning.rs`.
 //! - `frames-plugins`: 设置 › 插件 and the themes with a picture or a see-through window, in
 //!   `cpu_probe_evidence/plugins.rs`.
+//! - `frames-settings-terminal`: scroll 设置 › 终端 in both directions.
 //! - `redraw-check`: not a cost but a check that caching hides nothing: after each of a
 //!   few clicks and a host change, a plain frame must match a refreshed one pixel for
 //!   pixel (run with `MOORING_NO_CATCH_UP=1`), and the sidebar's catch-up must not
@@ -32,6 +33,8 @@ use gpui::WindowHandle;
 mod plugins;
 #[path = "cpu_probe_evidence/scroll.rs"]
 mod scroll;
+#[path = "cpu_probe_evidence/settings_terminal.rs"]
+mod settings_terminal;
 #[path = "cpu_probe_evidence/turning.rs"]
 mod turning;
 use std::time::{Duration, Instant};
@@ -323,6 +326,8 @@ pub(super) fn start(
                 rail_frames(handle, cx).await
             } else if name == "frames-plugins" {
                 plugins::run(handle, &pane, &directory, cx).await
+            } else if name == "frames-settings-terminal" {
+                settings_terminal::run(handle, &directory, cx)
             } else if let Some(view) = name.strip_prefix("frames-") {
                 let overview = view == "overview";
                 handle

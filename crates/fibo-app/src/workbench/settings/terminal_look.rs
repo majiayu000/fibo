@@ -15,8 +15,13 @@ const NON_ASCII_FACES: [(&str, &str); 7] = [
 ];
 
 impl SettingsView {
+    fn installed_font_names(&self, cx: &Context<Self>) -> &[String] {
+        self.installed_font_names
+            .get_or_init(|| cx.text_system().all_font_names())
+    }
+
     pub(super) fn font_list(&self, text: &TerminalText, cx: &Context<Self>) -> gpui::Div {
-        let installed = cx.text_system().all_font_names();
+        let installed = self.installed_font_names(cx);
         let mut list = div().flex().flex_col();
         for (i, family) in MONO_FACES
             .into_iter()
@@ -95,7 +100,7 @@ impl SettingsView {
     ) -> Vec<gpui::AnyElement> {
         let mut rows = Vec::new();
         if self.shows(Page::Terminal, t!("中文和符号字体"), cx) {
-            let installed = cx.text_system().all_font_names();
+            let installed = self.installed_font_names(cx);
             let on = text.non_ascii_family.clone();
             let mut choices = segments();
             for (i, (family, name)) in NON_ASCII_FACES

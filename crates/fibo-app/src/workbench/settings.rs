@@ -355,6 +355,8 @@ pub(super) struct SettingsView {
     pub(super) busy: bool,
     pub(super) save_error: Option<String>,
     text_error: Option<String>,
+    /// Shared by the terminal font pickers until settings is closed and reopened.
+    installed_font_names: std::cell::OnceCell<Vec<String>>,
     pub(super) query: Entity<Field>,
     /// The workspace's runtime directory, shown on 关于.
     runtime: Option<PathBuf>,
@@ -465,6 +467,7 @@ impl SettingsView {
             busy,
             save_error: None,
             text_error: None,
+            installed_font_names: std::cell::OnceCell::new(),
             query,
             runtime,
             recording: None,
