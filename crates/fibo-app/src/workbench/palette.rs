@@ -79,10 +79,13 @@ impl Search {
                 last_query = query;
                 this.search.shown.clear();
                 // A status pick narrows the recent list; typing searches everything.
-                if !last_query.trim().is_empty() {
+                this.search.index = if last_query.trim().is_empty() {
+                    this.first_recent_session_row()
+                } else {
                     this.search.group = None;
-                }
-                this.search.index = this.first_session_row(last_query.trim());
+                    // Search results start with sessions or quotes when either matches.
+                    0
+                };
                 this.search.scroll.scroll_to_item(0);
             }
             cx.notify();
@@ -140,7 +143,6 @@ impl Workbench {
         let total: usize = sections.iter().map(|s| s.hits.len()).sum();
         let index = self.search.index.min(total.saturating_sub(1));
         let selected = sections.iter().flat_map(|s| &s.hits).nth(index).cloned();
-        let sessions = self.searchable().len();
         // Each row is one direct child of the list, so the scroll handle can reveal it.
         let mut list = div()
             .id("search-list")
@@ -259,6 +261,7 @@ impl Workbench {
             })
             .child(div().flex_1())
             .child(if query.is_empty() {
+                let sessions = self.searchable().len();
                 t!("只搜索本地已索引的内容 · {sessions} 个会话", sessions)
             } else {
                 t!("只搜索本地已索引的内容").into()
@@ -349,7 +352,7 @@ impl Workbench {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.search.group = (!picked).then_some(group);
                         this.search.shown.clear();
-                        this.search.index = this.first_session_row("");
+                        this.search.index = this.first_recent_session_row();
                         this.search.scroll.scroll_to_item(0);
                         cx.notify();
                     })),
@@ -457,7 +460,7 @@ impl Workbench {
         self.search.open = true;
         self.search.group = None;
         self.search.shown.clear();
-        self.search.index = self.first_session_row("");
+        self.search.index = self.first_recent_session_row();
         self.search.field.update(cx, |f, cx| {
             f.set_text("");
             cx.notify();
