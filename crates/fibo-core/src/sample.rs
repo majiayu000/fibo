@@ -164,7 +164,7 @@ pub fn every_state() -> Workspace {
             if case == "hidden" {
                 c.interactive = false;
             }
-            w.content.insert(case.into(), c);
+            w.content.insert(case.into(), std::sync::Arc::new(c));
         }
     }
     // `split-two` runs in the second pane of `split`'s tab.

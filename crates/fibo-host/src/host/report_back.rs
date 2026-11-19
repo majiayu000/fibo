@@ -204,8 +204,14 @@ mod tests {
             ],
             ..Default::default()
         };
-        w.content.insert("p".into(), content(Turn::Running, "", 1));
-        w.content.insert("c".into(), content(Turn::Running, "", 1));
+        w.content.insert(
+            "p".into(),
+            std::sync::Arc::new(content(Turn::Running, "", 1)),
+        );
+        w.content.insert(
+            "c".into(),
+            std::sync::Arc::new(content(Turn::Running, "", 1)),
+        );
         w
     }
 
@@ -218,12 +224,14 @@ mod tests {
         // The child finishes while its starter is still working: it waits.
         w.content.insert(
             "c".into(),
-            content(Turn::Completed, "改好了，测试 12 个全过", 2),
+            std::sync::Arc::new(content(Turn::Completed, "改好了，测试 12 个全过", 2)),
         );
         assert!(r.plan(&w).is_empty(), "the starter is busy");
         // The starter goes idle: the report goes in, wrapped, once.
-        w.content
-            .insert("p".into(), content(Turn::Completed, "", 1));
+        w.content.insert(
+            "p".into(),
+            std::sync::Arc::new(content(Turn::Completed, "", 1)),
+        );
         let sent = r.plan(&w);
         assert_eq!(sent.len(), 1);
         let (to, text) = &sent[0];
@@ -234,29 +242,35 @@ mod tests {
         // The same turn read again under another key says the same: not sent twice.
         let mut reread = content(Turn::Completed, "改好了，测试 12 个全过", 2);
         reread.turn_key = "settled".into();
-        w.content.insert("c".into(), reread);
+        w.content.insert("c".into(), std::sync::Arc::new(reread));
         assert!(r.plan(&w).is_empty(), "the same report again");
         // A turn that ended before its reply was read waits for the reply.
-        w.content
-            .insert("c".into(), content(Turn::Completed, "", 5));
+        w.content.insert(
+            "c".into(),
+            std::sync::Arc::new(content(Turn::Completed, "", 5)),
+        );
         assert!(r.plan(&w).is_empty(), "no reply read yet");
         // Its next turn reports again.
-        w.content
-            .insert("c".into(), content(Turn::Completed, "第二轮", 3));
+        w.content.insert(
+            "c".into(),
+            std::sync::Arc::new(content(Turn::Completed, "第二轮", 3)),
+        );
         assert!(r.plan(&w)[0].1.contains("第二轮"));
     }
 
     #[test]
     fn questions_are_reported_and_links_end_with_their_terminals() {
         let mut w = workspace();
-        w.content
-            .insert("p".into(), content(Turn::Completed, "", 1));
+        w.content.insert(
+            "p".into(),
+            std::sync::Arc::new(content(Turn::Completed, "", 1)),
+        );
         let mut r = ReportBack::default();
         r.link(&w, "child", "parent");
         let mut asking = content(Turn::Waiting, "", 2);
         asking.waiting = "要覆盖 config.toml 吗？".into();
         asking.waiting_episode = 1;
-        w.content.insert("c".into(), asking);
+        w.content.insert("c".into(), std::sync::Arc::new(asking));
         let sent = r.plan(&w);
         assert!(sent[0].1.contains("event=\"waiting\""));
         assert!(sent[0].1.contains("它在等回答：要覆盖 config.toml 吗？"));

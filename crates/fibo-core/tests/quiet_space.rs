@@ -161,7 +161,7 @@ fn old_snapshots_read_as_nothing_put_aside() {
 type Event = fn(&mut Workspace, &str);
 
 fn turn(w: &mut Workspace, id: &str, turn: fibo_core::content::Turn) {
-    if let Some(c) = w.content.get_mut(id) {
+    if let Some(c) = w.content.get_mut(id).map(std::sync::Arc::make_mut) {
         c.turn = turn;
         c.waiting = if turn == fibo_core::content::Turn::Waiting {
             "继续吗？".into()

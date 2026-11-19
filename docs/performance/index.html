@@ -79,6 +79,7 @@
   <tr><th>工具</th><th>用途</th></tr>
   <tr><td><code>scripts/perf-fixture.py prepare RUN_DIR BIN [N] [T] [SPIN]</code></td><td>在本轮独立的 RUN_DIR 造测试工作区（不调模型、不碰用户数据）。无论成功或失败，最后执行 <code>perf-fixture.py stop RUN_DIR</code>；后台先退出时也会清理已记录的测试进程组。<code>NORUN=1</code> 不留在跑的回合，时钟不会触发侧栏；<code>SUB=K</code> 加 K 个藏起来的子代理（挂在 40 个父会话下）；<code>OLD=K</code> 加 K 条一周前的会话，后台存着但不发给窗口（长期用的安装 5068 条里只发 1540 条）</td></tr>
   <tr><td><code>scripts/perf-refresh.py RUN_DIR BIN COUNT</code></td><td>后台每次刷新的指令数：用 BIN 里的版本接管测试工作区的后台，写一行日志、像窗口一样要一次增量，重复 COUNT 次。不经窗口，窗口忙时合并刷新也不影响数字。11-19 量过：1541 条会话 73 M → 42 M，再加 3500 条老会话 116 M → 63 M</td></tr>
+  <tr><td><code>cargo run --release -p fibo-core --example refresh_bench -- WORKSPACE.json [N]</code></td><td>一次刷新在后台（算增量）和窗口（套增量、给界面一份、丢最旧的）各花多少指令。WORKSPACE.json 用 <code>Request::Workspace</code> 的回复存下来；用真实安装的要只放本机、用完删。11-19 内容改共享后，1621 条会话的真实工作区：后台 53 → 39 M，窗口 62 → 41 M</td></tr>
   <tr><td><code>perf-fixture.py probe RUN_DIR BIN OUT 阶段</code></td><td>跑窗口 CPU 探针。需要 <code>cargo build --release -p fibo-host -p fibo-app --features fibo-app/visual-test</code></td></tr>
   <tr><td>探针阶段 <code>frames-pane</code></td><td>只通知窗格的帧 ×300（终端输出的真实情况）</td></tr>
   <tr><td>探针阶段 <code>frames-main</code> / <code>frames-overview</code></td><td>强制整窗重画 ×300</td></tr>

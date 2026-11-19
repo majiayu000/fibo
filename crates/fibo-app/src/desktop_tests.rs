@@ -44,14 +44,14 @@ fn notifications_only_follow_new_attention_facts_and_opt_in() {
     let before = w.clone();
     w.content.insert(
         "s".into(),
-        fibo_core::content::Content {
+        std::sync::Arc::new(fibo_core::content::Content {
             interactive: true,
             turn: fibo_core::content::Turn::Waiting,
             waiting: "选哪一个？ A / B".into(),
             updated: now(),
             turn_started: now(),
             ..Default::default()
-        },
+        }),
     );
     assert!(entered(&before, &w, None).is_empty());
     // The sound alone is reason enough to report it.
@@ -62,12 +62,20 @@ fn notifications_only_follow_new_attention_facts_and_opt_in() {
     assert_eq!(entered(&before, &w, None).len(), 1);
     assert!(entered(&w, &w, None).is_empty());
     let previous = w.clone();
-    w.content.get_mut("s").unwrap().waiting = "选哪一个？（Hook 补充的说明）".into();
+    w.content
+        .get_mut("s")
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .waiting = "选哪一个？（Hook 补充的说明）".into();
     assert!(
         entered(&previous, &w, None).is_empty(),
         "a second signal for the same dialog is not news"
     );
-    let c = w.content.get_mut("s").unwrap();
+    let c = w
+        .content
+        .get_mut("s")
+        .map(std::sync::Arc::make_mut)
+        .unwrap();
     c.waiting = "是否执行测试？".into();
     c.waiting_episode += 1;
     assert_eq!(entered(&previous, &w, None).len(), 1);
@@ -88,7 +96,11 @@ fn notifications_only_follow_new_attention_facts_and_opt_in() {
         serde_json::from_str(&panel(&renamed, &Link::fresh(RecognitionPhase::Healthy))).unwrap();
     assert_eq!(value["rows"][0]["title"], "发布前检查");
     let mut asked = renamed.clone();
-    let c = asked.content.get_mut("s").unwrap();
+    let c = asked
+        .content
+        .get_mut("s")
+        .map(std::sync::Arc::make_mut)
+        .unwrap();
     c.waiting = "要继续吗？".into();
     c.waiting_episode += 1;
     let banner = &entered(&renamed, &asked, None)[0];
@@ -150,7 +162,7 @@ fn session(w: &mut Workspace, id: &str, turn: fibo_core::content::Turn, ago: u64
     });
     w.content.insert(
         id.into(),
-        Content {
+        std::sync::Arc::new(Content {
             interactive: true,
             turn,
             waiting: if turn == Turn::Waiting {
@@ -166,7 +178,7 @@ fn session(w: &mut Workspace, id: &str, turn: fibo_core::content::Turn, ago: u64
             updated: now() - ago,
             turn_started: now() - ago,
             ..Default::default()
-        },
+        }),
     );
 }
 fn value(w: &Workspace, link: &Link) -> serde_json::Value {
@@ -313,7 +325,12 @@ fn a_banner_goes_once_its_session_no_longer_needs_you() {
     session(&mut before, "closed", Turn::Waiting, 60);
     session(&mut before, "busy", Turn::Running, 60);
     let mut after = before.clone();
-    after.content.get_mut("answered").unwrap().turn = Turn::Running;
+    after
+        .content
+        .get_mut("answered")
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .turn = Turn::Running;
     after.agent_sessions.retain(|s| s.id != "closed");
     let mut gone = left(&before, &after);
     gone.sort();
@@ -333,8 +350,17 @@ fn a_space_put_aside_stays_silent_and_taking_it_back_sends_no_burst() {
         cwd: "/other".into(),
     });
     let mut idle = w.clone();
-    idle.content.get_mut("asks").unwrap().turn = Turn::Running;
-    idle.content.get_mut("asks").unwrap().waiting.clear();
+    idle.content
+        .get_mut("asks")
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .turn = Turn::Running;
+    idle.content
+        .get_mut("asks")
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .waiting
+        .clear();
     assert_eq!(entered(&idle, &w, None).len(), 1, "it would call you");
 
     let mut quiet_idle = idle.clone();
@@ -364,7 +390,11 @@ fn a_space_put_aside_stays_silent_and_taking_it_back_sends_no_burst() {
     );
     // Its next new fact is a banner again.
     let mut next = w.clone();
-    next.content.get_mut("asks").unwrap().waiting_episode += 1;
+    next.content
+        .get_mut("asks")
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .waiting_episode += 1;
     assert_eq!(entered(&w, &next, None).len(), 1);
 }
 
@@ -377,7 +407,11 @@ fn a_finished_turn_sends_one_silent_review_banner() {
     session(&mut before, "r", Turn::Running, 60);
     before.settings.notifications = true;
     let mut after = before.clone();
-    let c = after.content.get_mut("r").unwrap();
+    let c = after
+        .content
+        .get_mut("r")
+        .map(std::sync::Arc::make_mut)
+        .unwrap();
     c.turn = Turn::Completed;
     c.last_reply = "Done. Ready for your review.".into();
     assert_eq!(
@@ -396,7 +430,11 @@ fn a_finished_turn_sends_one_silent_review_banner() {
     assert!(entered(&before, &sound_only, None).is_empty());
     // Typing the next ask takes the banner back.
     let mut next = after.clone();
-    next.content.get_mut("r").unwrap().turn = Turn::Running;
+    next.content
+        .get_mut("r")
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .turn = Turn::Running;
     assert_eq!(left(&after, &next), ["r"]);
 }
 

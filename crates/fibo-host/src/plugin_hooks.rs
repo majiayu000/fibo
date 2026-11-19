@@ -376,13 +376,17 @@ mod tests {
         quiet(&mut w, true);
         hooks.changes(&w);
         let id = "review";
-        let content = w.content.get_mut(id).unwrap();
+        let content = w.content.get_mut(id).map(std::sync::Arc::make_mut).unwrap();
         content.turn = Turn::Waiting;
         content.waiting = "继续吗？".into();
         assert!(hooks.changes(&w).is_empty(), "nothing while aside");
         quiet(&mut w, false);
         assert!(hooks.changes(&w).is_empty(), "no burst on the way back");
-        w.content.get_mut(id).unwrap().waiting_episode += 1;
+        w.content
+            .get_mut(id)
+            .map(std::sync::Arc::make_mut)
+            .unwrap()
+            .waiting_episode += 1;
         let fired = hooks.changes(&w);
         assert_eq!(fired.len(), 1, "{fired:?}");
         assert_eq!(fired[0].session, id);
@@ -569,29 +573,37 @@ mod tests {
             ..Default::default()
         };
         let mut hooks = Hooks::default();
-        w.content
-            .insert("s".into(), content(Turn::Waiting, "t1", "推送吗？", 1));
+        w.content.insert(
+            "s".into(),
+            std::sync::Arc::new(content(Turn::Waiting, "t1", "推送吗？", 1)),
+        );
         assert!(hooks.changes(&w).is_empty(), "the first look only records");
         assert!(hooks.changes(&w).is_empty());
         // A refined question in the same dialog is not a new event; a new dialog is.
         w.content.insert(
             "s".into(),
-            content(Turn::Waiting, "t1", "推送到 main 吗？", 1),
+            std::sync::Arc::new(content(Turn::Waiting, "t1", "推送到 main 吗？", 1)),
         );
         assert!(hooks.changes(&w).is_empty());
-        w.content
-            .insert("s".into(), content(Turn::Waiting, "t1", "再确认？", 2));
+        w.content.insert(
+            "s".into(),
+            std::sync::Arc::new(content(Turn::Waiting, "t1", "再确认？", 2)),
+        );
         let fired = hooks.changes(&w);
         assert_eq!(fired.len(), 1);
         assert_eq!(
             (fired[0].event, fired[0].detail.as_str()),
             (Event::Waiting, "再确认？")
         );
-        w.content
-            .insert("s".into(), content(Turn::Running, "t2", "", 2));
+        w.content.insert(
+            "s".into(),
+            std::sync::Arc::new(content(Turn::Running, "t2", "", 2)),
+        );
         assert_eq!(hooks.changes(&w)[0].event, Event::Started);
-        w.content
-            .insert("s".into(), content(Turn::Completed, "t2", "", 2));
+        w.content.insert(
+            "s".into(),
+            std::sync::Arc::new(content(Turn::Completed, "t2", "", 2)),
+        );
         let fired = hooks.changes(&w);
         assert_eq!(
             (fired[0].event, fired[0].detail.as_str()),

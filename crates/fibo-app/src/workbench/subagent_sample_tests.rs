@@ -32,7 +32,12 @@ impl Workbench {
             .collect::<Vec<_>>()
             .join(",");
         let mut other_row = None;
-        for (id, c) in self.workspace.content.iter_mut() {
+        for (id, c) in self
+            .workspace
+            .content
+            .iter_mut()
+            .map(|(k, v)| (k, std::sync::Arc::make_mut(v)))
+        {
             match c.title.as_str() {
                 HERE if v == "sub" => {
                     c.subagents = subs(

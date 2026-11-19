@@ -53,7 +53,12 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             // A card that says part of its log was skipped but not from where cannot read it
             // back: it goes on saying so.
             let skipped = |c: &fibo_core::content::Content| c.partial_history && c.from_offset == 0;
-            let partial = floor > 0 || host.workspace.content.get(&session).is_some_and(skipped);
+            let partial = floor > 0
+                || host
+                    .workspace
+                    .content
+                    .get(&session)
+                    .is_some_and(|c| skipped(c));
             Ok(Reply::Chat {
                 messages,
                 generation: host.index.chat_generation(&s.transcript)?,

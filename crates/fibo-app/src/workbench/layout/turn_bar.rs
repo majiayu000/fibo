@@ -42,7 +42,7 @@ impl Workbench {
         let content = self.workspace.content.get(&s.id);
         let started = content
             .filter(|_| live_terminal(&self.workspace, s).is_some())
-            .and_then(fibo_core::content::Content::running_since);
+            .and_then(|c| (fibo_core::content::Content::running_since)(c));
         let when = match started {
             Some(at) => {
                 self.tick_turn(cx);
@@ -137,7 +137,7 @@ impl Workbench {
         let content = self.workspace.content.get(&s.id);
         let started = content
             .filter(|_| live_terminal(&self.workspace, s).is_some())
-            .and_then(fibo_core::content::Content::running_since);
+            .and_then(|c| (fibo_core::content::Content::running_since)(c));
         Some(match started {
             Some(at) => {
                 self.tick_turn(cx);

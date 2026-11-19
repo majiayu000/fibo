@@ -117,7 +117,7 @@ fn a_name_the_user_gave_stays_and_frees_the_title() {
 fn said(w: &mut Workspace, id: &str, cli_name: &str, first: &str) {
     w.content.insert(
         id.into(),
-        crate::content::Content {
+        std::sync::Arc::new(crate::content::Content {
             name: cli_name.into(),
             first_ask_known: !first.is_empty(),
             asks: (!first.is_empty())
@@ -128,7 +128,7 @@ fn said(w: &mut Workspace, id: &str, cli_name: &str, first: &str) {
                 .into_iter()
                 .collect(),
             ..Default::default()
-        },
+        }),
     );
 }
 

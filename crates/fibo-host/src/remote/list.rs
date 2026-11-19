@@ -247,7 +247,11 @@ mod tests {
             .expect("the sample has a live finished turn")
             .id
             .clone();
-        let c = w.content.get_mut(&session).unwrap();
+        let c = w
+            .content
+            .get_mut(&session)
+            .map(std::sync::Arc::make_mut)
+            .unwrap();
         c.background = Some(fibo_core::content::Background {
             shells: 1,
             ..Default::default()
@@ -285,7 +289,11 @@ mod tests {
             started: 100,
             ..Default::default()
         };
-        w.content.get_mut(&session).unwrap().subagents = vec![sub.clone()];
+        w.content
+            .get_mut(&session)
+            .map(std::sync::Arc::make_mut)
+            .unwrap()
+            .subagents = vec![sub.clone()];
         let dir = std::env::temp_dir().join(format!("fibo-subs-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let mut json = list(&w, &Default::default(), &dir.join("sock")).unwrap();
@@ -359,7 +367,11 @@ mod tests {
             .unwrap()
             .clone();
         let terminal = session.terminal.clone().unwrap();
-        let c = w.content.get_mut(&session.id).unwrap();
+        let c = w
+            .content
+            .get_mut(&session.id)
+            .map(std::sync::Arc::make_mut)
+            .unwrap();
         c.permission = "Fully allowed".into();
         c.permission_full = Some(true);
         let dir = std::env::temp_dir().join(format!("fibo-permission-{}", std::process::id()));
@@ -387,9 +399,17 @@ mod tests {
         let overridden = card(&w, &seen);
         assert_eq!(overridden.permission.as_deref(), Some("逐个确认"));
         assert_eq!(overridden.permission_full, Some(false));
-        w.content.get_mut(&session.id).unwrap().permission = "New log mode".into();
+        w.content
+            .get_mut(&session.id)
+            .map(std::sync::Arc::make_mut)
+            .unwrap()
+            .permission = "New log mode".into();
         assert_eq!(card(&w, &seen).permission_full, Some(true));
-        w.content.get_mut(&session.id).unwrap().permission_full = None;
+        w.content
+            .get_mut(&session.id)
+            .map(std::sync::Arc::make_mut)
+            .unwrap()
+            .permission_full = None;
         assert_eq!(card(&w, &seen).permission_full, None);
         let _ = std::fs::remove_dir_all(dir);
     }

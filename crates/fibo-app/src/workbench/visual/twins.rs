@@ -24,7 +24,12 @@ impl Workbench {
                 s.task = Some(task.clone());
                 s.runtime = runtime;
             }
-            if let Some(c) = self.workspace.content.get_mut(id) {
+            if let Some(c) = self
+                .workspace
+                .content
+                .get_mut(id)
+                .map(std::sync::Arc::make_mut)
+            {
                 c.title = WORDS.into();
                 for q in &mut c.asks {
                     q.text = WORDS.into();

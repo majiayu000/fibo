@@ -12,6 +12,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Delta {
@@ -29,7 +30,7 @@ pub struct Delta {
     pub sessions: Vec<AgentSession>,
     /// The session ids in order, when they differ from the base's.
     pub order: Option<Vec<String>>,
-    pub content: FxHashMap<String, Content>,
+    pub content: FxHashMap<String, Arc<Content>>,
     /// Content the base has and this workspace does not.
     pub gone: Vec<String>,
 }
@@ -60,19 +61,19 @@ pub struct Kept {
 /// instructions a second with one agent writing).
 #[derive(Debug, Default)]
 pub struct Hashes {
-    content: FxHashMap<String, (Content, u64)>,
+    content: FxHashMap<String, (Arc<Content>, u64)>,
     sessions: FxHashMap<String, (AgentSession, u64)>,
 }
 
 impl Hashes {
-    fn content(&mut self, id: &str, c: &Content) -> u64 {
+    fn content(&mut self, id: &str, c: &Arc<Content>) -> u64 {
         if let Some((seen, h)) = self.content.get(id)
             && seen == c
         {
             return *h;
         }
         let h = hash(c);
-        self.content.insert(id.to_owned(), (c.clone(), h));
+        self.content.insert(id.to_owned(), (Arc::clone(c), h));
         h
     }
     fn session(&mut self, s: &AgentSession) -> u64 {
@@ -98,29 +99,16 @@ pub fn diff(
 }
 
 /// `diff`, reusing the hashes of content that has not changed since `hashes` last saw it.
+/// Content is shared with the workspace it came from, so content no one changed is the
+/// same allocation and compares by pointer.
 pub fn diff_with(
-    w: Workspace,
-    base: Option<&Index>,
-    fields: bool,
-    hashes: &mut Hashes,
-) -> serde_json::Result<(Delta, Index)> {
-    diff_lent(w, &[], base, fields, hashes)
-}
-
-/// `diff_with` for `w` with `lent` content besides its own, the host's own copy of what no
-/// overlay changes: only what changed is copied into the delta. Copying all content for
-/// each reply, to compare it and throw almost all of it away, was most of a reply once
-/// sessions and hashes were remembered (11-19).
-pub fn diff_lent(
     mut w: Workspace,
-    lent: &[(&String, &Content)],
     base: Option<&Index>,
     fields: bool,
     hashes: &mut Hashes,
 ) -> serde_json::Result<(Delta, Index)> {
     let sessions = std::mem::take(&mut w.agent_sessions);
-    let owned = std::mem::take(&mut w.content);
-    let content: FxHashMap<&String, &Content> = owned.iter().chain(lent.iter().copied()).collect();
+    let content = std::mem::take(&mut w.content);
     let Value::Object(rest) = serde_json::to_value(&w)? else {
         return Err(serde::ser::Error::custom("a workspace is not an object"));
     };
@@ -133,7 +121,7 @@ pub fn diff_lent(
     }
     let order = hash(&sessions.iter().map(|s| &s.id).collect::<Vec<_>>());
     let mut content_hashes: Vec<(&String, u64)> = (content.iter())
-        .map(|(id, c)| (*id, hashes.content(id, c)))
+        .map(|(id, c)| (id, hashes.content(id, c)))
         .collect();
     hashes.content.retain(|id, _| content.contains_key(id));
     content_hashes.sort_unstable();
@@ -158,9 +146,7 @@ pub fn diff_lent(
             fields: false,
             sessions,
             order: None,
-            content: (content.into_iter())
-                .map(|(id, c)| (id.clone(), c.clone()))
-                .collect(),
+            content,
             gone: vec![],
         };
         return Ok((delta, index));
@@ -184,8 +170,7 @@ pub fn diff_lent(
             .cloned()
             .collect(),
         content: (content.into_iter())
-            .filter(|(id, _)| base.content.get(*id) != index.content.get(*id))
-            .map(|(id, c)| (id.clone(), c.clone()))
+            .filter(|(id, _)| base.content.get(id) != index.content.get(id))
             .collect(),
     };
     Ok((delta, index))
