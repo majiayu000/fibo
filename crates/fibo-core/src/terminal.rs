@@ -177,13 +177,17 @@ impl Vt {
         use crate::prompt_pin::{MAX_ROWS, PREFIX_COLS};
         let total = self.0.total_rows().map_err(io::Error::other)?;
         let mut error = None;
+        let mut chars = Vec::new();
         let rows = (total.saturating_sub(MAX_ROWS)..total)
             .rev()
-            .map_while(|y| match self.row_cells_upto(y, PREFIX_COLS) {
-                Ok(cells) => Some((y, cells.into_iter().map(|(_, s)| s).collect::<String>())),
-                Err(e) => {
-                    error = Some(e);
-                    None
+            .map_while(|y| {
+                let mut text = String::new();
+                match self.row_text_into(y, PREFIX_COLS, &mut chars, &mut text) {
+                    Ok(()) => Some((y, text)),
+                    Err(e) => {
+                        error = Some(e);
+                        None
+                    }
                 }
             });
         let found = crate::prompt_pin::locate(keys, prompt, rows);
@@ -196,27 +200,60 @@ impl Vt {
     pub fn tail_text(&self, rows: usize) -> io::Result<String> {
         let total = self.0.total_rows().map_err(io::Error::other)?;
         let mut text = String::new();
+        let mut chars = Vec::new();
         for y in total.saturating_sub(rows)..total {
-            text.push_str(self.row(y)?.trim_end());
+            let start = text.len();
+            self.row_text_into(y, u16::MAX, &mut chars, &mut text)?;
+            text.truncate(start + text[start..].trim_end().len());
             text.push('\n');
         }
         Ok(text)
     }
-    fn row(&self, y: usize) -> io::Result<String> {
-        Ok(self.row_cells(y)?.into_iter().map(|(_, s)| s).collect())
-    }
     /// Each cell's column and text; a wide character's spacer cell is left out.
     fn row_cells(&self, y: usize) -> io::Result<Vec<(u16, String)>> {
-        self.row_cells_upto(y, u16::MAX)
+        let mut chars = Vec::new();
+        let mut line = Vec::new();
+        self.each_cell(y, u16::MAX, &mut chars, |x, text| {
+            let text = if text.is_empty() {
+                " ".to_owned()
+            } else {
+                text.iter().collect()
+            };
+            line.push((x, text));
+        })?;
+        Ok(line)
     }
-    /// The same for the first `limit` columns only.
-    fn row_cells_upto(&self, y: usize, limit: u16) -> io::Result<Vec<(u16, String)>> {
+    /// Row `y`'s text over the first `limit` columns, pushed onto `out` the way
+    /// `row_cells` joins up, without a string per cell. `chars` is scratch kept across rows.
+    fn row_text_into(
+        &self,
+        y: usize,
+        limit: u16,
+        chars: &mut Vec<char>,
+        out: &mut String,
+    ) -> io::Result<()> {
+        self.each_cell(y, limit, chars, |_, text| match text {
+            [] => out.push(' '),
+            text => out.extend(text),
+        })
+    }
+    /// Each cell's column and characters (none for a blank cell) over the first `limit`
+    /// columns; a wide character's spacer cell is left out.
+    fn each_cell(
+        &self,
+        y: usize,
+        limit: u16,
+        chars: &mut Vec<char>,
+        mut each: impl FnMut(u16, &[char]),
+    ) -> io::Result<()> {
         use libghostty_vt::{
             screen::CellWide,
             terminal::{Point, PointCoordinate},
         };
+        if chars.len() < 32 {
+            chars.resize(32, '\0');
+        }
         let cols = self.0.cols().map_err(io::Error::other)?.min(limit);
-        let mut line = Vec::with_capacity(cols as usize);
         for x in 0..cols {
             let cell = self
                 .0
@@ -230,25 +267,17 @@ impl Vt {
             ) {
                 continue;
             }
-            let mut chars = vec!['\0'; 32];
-            let len = match cell.graphemes(&mut chars) {
+            let len = match cell.graphemes(chars) {
                 Ok(n) => n,
                 Err(libghostty_vt::Error::OutOfSpace { required }) => {
                     chars.resize(required, '\0');
-                    cell.graphemes(&mut chars).map_err(io::Error::other)?
+                    cell.graphemes(chars).map_err(io::Error::other)?
                 }
                 Err(e) => return Err(io::Error::other(e)),
             };
-            line.push((
-                x,
-                if len == 0 {
-                    " ".to_owned()
-                } else {
-                    chars[..len].iter().collect()
-                },
-            ));
+            each(x, &chars[..len]);
         }
-        Ok(line)
+        Ok(())
     }
     pub fn on_reply(&mut self, mut callback: impl FnMut(&[u8]) + Send + 'static) -> io::Result<()> {
         self.0
