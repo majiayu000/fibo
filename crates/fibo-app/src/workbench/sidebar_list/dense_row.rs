@@ -73,7 +73,12 @@ impl Workbench {
                 .font_family(mono.clone())
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_size(px(T::SMALL))
-                .child(self.session_mark(g, attention, true, cx))
+                .child(self.session_mark(
+                    g,
+                    attention,
+                    crate::workbench::redraw::Layer::Sidebar,
+                    cx,
+                ))
         };
         div()
             .id(gpui::SharedString::from(format!("session-{}", session.id)))

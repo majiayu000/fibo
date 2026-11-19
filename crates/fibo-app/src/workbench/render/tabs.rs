@@ -40,7 +40,7 @@ impl Workbench {
         Some(if self.layout.hovered_tab.as_deref() == Some(id) {
             crate::ui::widgets::status_mark_seen(g, false)
         } else {
-            self.session_mark(g, false, false, cx)
+            self.session_mark(g, false, crate::workbench::redraw::Layer::Tabs, cx)
         })
     }
 

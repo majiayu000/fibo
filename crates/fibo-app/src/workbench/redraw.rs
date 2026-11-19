@@ -2,7 +2,7 @@
 //! re-laying out the sidebar's rows on each was nearly 90% of such a frame (2000
 //! sessions, 45 rows listed: 74 M instructions a frame, 9 M without the sidebar). So
 //! the sidebar is its own cached view: it draws again when the workbench notifies,
-//! never because only a pane did.
+//! never because only a pane did. The tab strip is one too (`tab_strip.rs`).
 use super::*;
 use crate::ui::theme::Flat as F;
 use fibo_core::{agent::Agent, quota::Quota};
@@ -10,11 +10,13 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Instant;
 
+mod tab_strip;
 mod turning;
+pub(in crate::workbench) use turning::Layer;
 
-/// How long the sidebar may show what it drew while the rest of the window keeps
-/// drawing: a change that reached the window without a workbench notify (a child view's
-/// own state, a clock) shows within this.
+/// How long the sidebar and the tab strip may show what they drew while the rest of the
+/// window keeps drawing: a change that reached the window without a workbench notify (a
+/// child view's own state, a clock) shows within this.
 const CATCH_UP: Duration = Duration::from_secs(1);
 
 /// The newest account limits per CLI, worked out at most once a second per workspace
@@ -119,6 +121,7 @@ pub(super) fn tab_name(
 
 pub(super) struct Redraw {
     pub(super) sidebar: Entity<SidebarView>,
+    strip: Entity<tab_strip::TabStripView>,
     /// An empty view inside the workbench: notifying it redraws the workbench (its
     /// parent) without asking the sidebar to draw again.
     tick: Entity<Tick>,
@@ -188,9 +191,11 @@ impl Workbench {
                     cx.notify();
                 }),
             });
+            let strip = tab_strip::TabStripView::new(&workbench, cx);
             let marks = Rc::new(turning::Marks::default());
             Redraw {
                 sidebar,
+                strip,
                 tick: cx.new(|_| Tick),
                 turning: cx.new(|_| turning::Turning {
                     marks: marks.clone(),
@@ -206,17 +211,22 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::AnyElement> {
-        let view = self.redraw.as_ref()?.sidebar.clone();
+        let r = self.redraw.as_ref()?;
+        let (view, strip) = (r.sidebar.clone(), r.strip.clone());
         // Drawn embedded, the window's own sidebar stands beside it instead.
-        if self.sidebar.collapsed || self.hosts.embedded {
-            return None;
-        }
+        let shown = !(self.sidebar.collapsed || self.hosts.embedded);
         let state = view.read(cx);
-        let catch_up = (catch_up_on()
-            && !self.turning_alone(cx)
-            && !state.asked.get()
-            && !state.due.replace(true))
-        .then(|| CATCH_UP.saturating_sub(state.drawn.get().elapsed()));
+        // One catch-up for both cached views, from the older of their draws that waits.
+        let waits = [
+            (shown && !state.asked.get()).then(|| state.drawn.get()),
+            strip.read(cx).waits(),
+        ];
+        let oldest = waits.into_iter().flatten().min();
+        let catch_up = (catch_up_on() && !self.turning_alone(cx))
+            .then_some(oldest)
+            .flatten()
+            .filter(|_| !state.due.replace(true))
+            .map(|drawn| CATCH_UP.saturating_sub(drawn.elapsed()));
         if let Some(wait) = catch_up {
             #[cfg(feature = "visual-test")]
             {
@@ -225,7 +235,10 @@ impl Workbench {
                 CHAINED.fetch_add(usize::from(FIRED.load(Relaxed)), Relaxed);
             }
             let later = view.clone();
-            let draw = move |cx: &mut gpui::App| ask(&later, cx);
+            let draw = move |cx: &mut gpui::App| {
+                ask(&later, cx);
+                tab_strip::ask(&strip, cx);
+            };
             if wait.is_zero() {
                 window.on_next_frame(move |_, cx| draw(cx));
             } else {
@@ -235,6 +248,9 @@ impl Workbench {
                 })
                 .detach();
             }
+        }
+        if !shown {
+            return None;
         }
         let style = gpui::StyleRefinement::default()
             .w(px(self.sidebar_width()))
@@ -299,8 +315,8 @@ impl Workbench {
         .detach();
     }
     /// The start of a render: the sidebar's view exists, and a route that waited for
-    /// its session opens. Inside a render a notify does not reach the sidebar, so the
-    /// sidebar draws the new place next frame.
+    /// its session opens. Inside a render a notify does not reach the sidebar or the tab
+    /// strip, so they draw the new place next frame.
     pub(super) fn before_render(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.redraw(cx);
         self.begin_turning_frame();
@@ -309,9 +325,13 @@ impl Workbench {
         }
         self.open_pending_route(window, cx);
         if self.pending_route.is_none()
-            && let Some(view) = self.redraw.as_ref().map(|r| r.sidebar.clone())
+            && let Some((view, strip)) =
+                (self.redraw.as_ref()).map(|r| (r.sidebar.clone(), r.strip.clone()))
         {
-            window.on_next_frame(move |_, cx| ask(&view, cx));
+            window.on_next_frame(move |_, cx| {
+                ask(&view, cx);
+                tab_strip::ask(&strip, cx);
+            });
         }
     }
 }
@@ -367,10 +387,11 @@ impl Workbench {
         let due = view.is_some_and(|v| v.due.get());
         (CATCH_UPS.load(Relaxed), asked, due, CHAINED.load(Relaxed))
     }
-    /// Asks the sidebar to draw next frame, as a catch-up does.
+    /// Asks the sidebar and the tab strip to draw next frame, as a catch-up does.
     pub fn visual_ask_sidebar(&self, cx: &mut gpui::App) {
         if let Some(r) = &self.redraw {
             ask(&r.sidebar, cx);
+            tab_strip::ask(&r.strip, cx);
         }
     }
     /// When the sidebar last drew, to check that terminal output leaves it alone.
@@ -393,15 +414,41 @@ impl Workbench {
                 space.name = not_ui!("改过名字的空间").into();
                 self.edit(Edit::UpdateSpace(space), cx);
             }
+            // The tab strip alone shows these: a tab beside the current one, so in view.
+            "tab-switch" | "tab-rename" => {
+                let tabs: Vec<_> = (self.workspace.tabs.iter())
+                    .filter(|t| t.space == self.nav.space)
+                    .map(|t| t.id.clone())
+                    .collect();
+                let at = (tabs.iter()).position(|t| Some(t) == self.nav.tab.as_ref());
+                let id = match at {
+                    None => tabs.first(),
+                    Some(0) => tabs.get(1),
+                    Some(n) => tabs.get(n - 1),
+                };
+                let id = id.expect("the probe's space has two tabs").clone();
+                match step {
+                    "tab-switch" => self.show_tab(&id, window, cx),
+                    _ => self.edit(
+                        Edit::RenameTab {
+                            id,
+                            title: not_ui!("改过名字的标签").into(),
+                        },
+                        cx,
+                    ),
+                }
+            }
             other => panic!("unknown redraw step {other}"),
         }
     }
-    /// Whether the rename step's new space name came back from the host.
-    pub fn visual_renamed(&self) -> bool {
-        self.workspace
-            .spaces
-            .iter()
-            .any(|s| s.name == not_ui!("改过名字的空间"))
+    /// Whether a rename step's new name came back from the host.
+    pub fn visual_renamed(&self, step: &str) -> bool {
+        match step {
+            "tab-rename" => {
+                (self.workspace.tabs.iter()).any(|t| t.title == not_ui!("改过名字的标签"))
+            }
+            _ => (self.workspace.spaces.iter()).any(|s| s.name == not_ui!("改过名字的空间")),
+        }
     }
 }
 

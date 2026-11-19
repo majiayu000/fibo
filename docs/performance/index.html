@@ -107,7 +107,7 @@
 </ul>
 
 <h2 id="rules">4. 规则（写代码时）</h2>
-<div class="card rule"><b>R1 窗格变化不要通知工作台。</b>新建窗格用 <code>Workbench::adopt_pane</code>，或在观察回调里调 <code>pane_changed</code>（它通知一个空的子视图 <code>Tick</code>，工作台照样重画标题栏和标签，但侧栏不重画）。<br>
+<div class="card rule"><b>R1 窗格变化不要通知工作台。</b>新建窗格用 <code>Workbench::adopt_pane</code>，或在观察回调里调 <code>pane_changed</code>（它通知一个空的子视图 <code>Tick</code>，工作台照样重画标题栏和窗格标题，但侧栏和标签栏这两个缓存视图不重画）。<br>
 <span class="bad">不要写</span> <code>cx.observe(&amp;pane, |_, _, cx| cx.notify())</code>：终端每输出一次，侧栏就整个重排一次（终端帧会涨到 7 倍）。</div>
 <div class="card rule"><b>R2 侧栏要显示的状态，改动时要让工作台 notify。</b>侧栏是缓存视图（<code>workbench/redraw.rs</code> 的 <code>SidebarView</code>），只在工作台 notify 时重画；其他途径的变化最多晚 1 秒由补画追上。在 render 里改的状态（如 <code>open_pending_route</code>）通知不到侧栏，要在下一帧调 <code>ask</code>。</div>
 <div class="card rule"><b>R3 补画触发的那一帧必须设 <code>asked</code>。</b>否则补画会自己排下一次补画，空闲时也会每秒整窗重画好几次（坏版本 5 秒 15 次）。</div>
@@ -135,10 +135,11 @@
   <tr><td>面板自己重画，5000 个文件（<code>frames-changesdraw</code>）</td><td>指令数超基线 15%</td><td>开销随文件数涨，比如每次重画都复制全部文件（第一版在 5000 个文件各 2000 行时是 390 ms）</td></tr>
 <tr><td>终端输出时开着看改动，5000 个文件（<code>frames-changes</code>）</td><td>指令数超基线 15%，或面板被重画</td><td>面板不是缓存视图。坏版本（去掉缓存）300 帧全部重画，6.4 M → 14.2 M；正常 6.8 M → 8.2 M</td></tr>
 <tr><td>终端输出时侧栏保留上次绘制</td><td>侧栏重画了</td><td>违反 R1</td></tr>
+<tr><td>终端输出时标签栏不重画（<code>frames-pane</code> 第一帧之后的 299 帧）</td><td>标签栏画了任何一次</td><td>违反 R1</td></tr>
   <tr><td>补画自己那一帧又排的补画</td><td>&gt;0</td><td>违反 R3。不数补画总数：CI 机器有屏幕会自己出帧，正常版本 5 秒也有 9–15 次补画</td></tr>
 </table>
 <p><b>门禁自己也测过：</b>三个故意做坏的版本都被拦下。通知整个工作台（指令数 +666%，侧栏每帧重画）；侧栏不跟着刷新（筛选、取消筛选、改名三步有像素差异）；补画循环（15 次自我触发）。改门禁时要重做这类坏版本测试，确认还能拦住。</p>
-<p class="muted">比对前探针会先画一帧、等 50 ms：标签栏的溢出提示是按上一帧排版算的，16 ms 后补一帧（<code>tab_overflow</code>），这是设计内的晚一帧，不能当差异。</p>
+<p class="muted">比对前探针会画一帧、等 50 ms，做三轮：标签栏的溢出提示是按上一帧排版算的，16 ms 后补一帧（<code>tab_overflow</code>），这是设计内的晚一帧，不能当差异。提示出现或消失又会挪动标签，标签栏是缓存视图，只跟着这个计时补画，所以要几轮才停。</p>
 <p class="muted">终端帧指令数是双峰的（约 6.3 M 和 7.0 M），基线取高的那个，避免误报。</p>
 <p><b>后台：</b><code>managed_session</code> 的 <code>four_agents…</code> 按每行日志的退休指令数断言（≤100 万）；读不到指令数（虚拟机）时退回「增量 CPU ≤ 2% 一核」。</p>
 
@@ -177,6 +178,7 @@
   <tr><td>2026-11-17 空间目录（#386）</td><td>真实窗口（16 个在跑、33 个空间）侧栏渲染每 10 秒 1.4 s，其中 <code>space_dir_missing</code> 的 <code>stat</code> 1.04 s：终端里 33 个目录一遍 28 µs，App 进程里慢得多，侧栏每秒重画就每秒问一遍</td><td><code>workbench/dir_seen.rs</code> 按路径记 2 秒</td><td>侧栏渲染 1395 → 126 ms/10 s，整窗绘制 2647 → 338 ms/10 s，窗口 24.3% → 8.1%（在跑 16 → 19）</td></tr>
   <tr><td>2026-11-17 增量哈希（#388）</td><td>后台 41%，<code>workspace_delta::diff</code> 每 10 秒 4.3 s：每个客户端每次刷新都把全部会话内容写成 JSON 过一遍 SipHash</td><td><code>Hashes</code> 按会话记住上次内容和哈希，相等就沿用，各客户端共用</td><td>内容哈希 2.3 s → 70 ms/10 s，增量下发 12.1 s → 1.4 s/10 s（含等锁）</td></tr>
   <tr><td>2026-11-17 终端排字按行号缓存</td><td>真实窗口（4419 个会话，开着转圈）12 秒采样里 <code>shape_cell</code> 占主线程 433/8980，多半在 CoreText 新建排版。缓存按「第几行第几段」存，内容一滚动全部对不上；GPUI 自己的排版缓存只留上一帧用过的，中间夹一帧不变的（转圈、光标）就清空。中文每个字是单独一段</td><td>按位置找不到时，按内容（文字、列宽、颜色、粗斜体、淡色）在上一帧的段里找（<code>terminal/screen_shape_cache.rs</code>）</td><td><code>frames-scroll</code>：每行 419 M → 52 M，约 45 ms → 7.5 ms；送 CoreText 774 段 → 18 段；<code>frames-pane</code> 不变（7.1–7.7 M，双峰）</td></tr>
+  <tr><td>2026-11-19 标签栏缓存视图</td><td>终端每输出一帧都重建整条标签栏：每个标签算两遍状态、起名、建提示，再排版，约 0.24 M 一个（标签栏不读窗格自己的状态）</td><td>标签栏做成缓存视图（<code>redraw/tab_strip.rs</code>），和侧栏一样只在工作台 notify 时重画，补画共用侧栏那一次；标签上的转圈标记单独一张表，标签栏重画时才清。Windows 上照旧每帧画（系统按帧里的拖动区找标题栏，复用的帧不带）</td><td>新旧交替各两次：<code>frames-pane</code> 7.88 / 7.84 → 5.22 / 5.21 M（−33%），<code>frames-turning</code> 6.7 → 4.1 M，<code>frames-main</code> 不变（55.5 M）；像素对照无差异</td></tr>
 </table>
 
 <h2 id="pitfalls">8. 踩过的坑</h2>
@@ -220,7 +222,7 @@
   <li><span class="tag">已否定</span> 窗口同步改增量：真实后台（842 个会话、快照 4.34 MB）一次快照后台约 19 ms CPU、窗口解析约 6 ms；900 秒里 198 秒有变化，合约 0.6% 个核。放弃线是 1%。没量到高峰，假设每秒都变也才 2.6%；窗口主线程应用快照的开销没单独量。</li>
   <li><span class="tag">已改</span> 后台每批写库都 fsync，约占后台剩余 CPU 的 10%：原先主库因存的是用户操作（待办、完成状态）保留 <code>synchronous=FULL</code>；11-05 按 <code>docs/plan.md</code> 第 3 阶段改成 WAL + NORMAL，进程崩溃不丢，只有掉电或系统崩溃可能丢最后几笔（见 <code>docs/decisions/2026-11-05-workbench-db-synchronous-normal.md</code>）。写库挪出锁还没做。日志索引本来就是 NORMAL。</li>
   <li><span class="tag">没测</span> 后台指令数预算没做坏版本测试。</li>
-  <li><span class="tag">下一步</span> 终端帧随当前空间的标签数线性涨，约 0.24 M 一个（夹具 15 个标签时约占终端帧一半）：每个标签是靠内容撑开的横向 flex，滚出去的也排版。可试 R9 的做法，或把标签栏做成缓存视图（要像侧栏一样处理补画）。</li>
+  <li><span class="tag">已改</span> 终端帧随当前空间的标签数线性涨，约 0.24 M 一个（夹具 15 个标签时约占终端帧一半）。11-19 标签栏改成缓存视图，终端帧不再碰它（见第 7 节）；整窗重画时每个标签的开销还在。</li>
   <li><span class="tag">下一步</span> 11-16 之后整窗重画里排版仍占约 41%，侧栏渲染 16%，绘制 12%。空间标签拆成两个子元素只省 3%、时间改成右对齐文字不到 2%，按放弃线没做。</li>
   <li><span class="tag">已否定</span> 侧栏每行的悬停提示（<code>session_tip</code>）改成悬停时才算：约 2.5%，但提示弹出时去读工作台，若那一刻工作台正被渲染占着会崩，不值。</li>
   <li><span class="tag">已查</span> 窗口进程约 759 MB（M3 Max，真实使用 4.5 小时）：Metal 驱动池 384 MB，Rust 堆约 177 MB，三个 drawable 约 92 MB，其他图形内存约 49 MB（含后台缓冲 31 MB），其余约 55 MB。驱动池里 blit 占的 160 MB 已省掉，渲染占的 224 MB 只要窗口在画就省不掉；Rust 堆没细查。GPU 空闲约 2 秒后驱动收回整个池，下次提交重新分配，最小程序里耗时 7–24 ms（平时 0.4 ms），真实窗口没量。</li>

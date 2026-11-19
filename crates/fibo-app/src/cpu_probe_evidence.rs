@@ -291,16 +291,24 @@ pub(super) fn start(
                 redraw_check(handle, &pane, &directory, cx).await
             } else if name == "frames-pane" {
                 wait(500).await;
+                let mut strip = 0;
                 let (cpu, at, ins) = (cpu_secs(), Instant::now(), instructions());
-                for _ in 0..300 {
+                for n in 0..300 {
                     pane.update(cx, |_, cx| cx.notify());
                     cx.update_window(handle.into(), |_, w, a| w.draw(a).clear(a))
                         .unwrap();
+                    // The first may carry a change from before the phase.
+                    if n == 0 {
+                        strip = workbench::Workbench::visual_strip_draws();
+                    }
                 }
                 let used = cpu_secs() - cpu;
                 let ins = (instructions() - ins) as f64 / 300. / 1e6;
+                // The strip is a cached view: terminal output must not draw it again.
+                // Counted over the 299 frames after the first.
+                let strip = workbench::Workbench::visual_strip_draws() - strip;
                 format!(
-                    "{name}: {:.2} ms CPU per pane frame, {ins:.2} M instructions ({:.2} ms wall); at 60 fps {:.0}% of a core",
+                    "{name}: {:.2} ms CPU per pane frame, {ins:.2} M instructions ({:.2} ms wall); at 60 fps {:.0}% of a core; tab strip drew {strip}",
                     used / 300. * 1000.,
                     at.elapsed().as_secs_f64() / 300. * 1000.,
                     used / 300. * 60. * 100.
@@ -403,7 +411,7 @@ async fn redraw_check(
             .zip(fresh.pixels())
             .filter(|(a, b)| a != b)
             .count();
-        if differ > 0 || label == "rename" {
+        if differ > 0 || label.ends_with("rename") {
             cached
                 .save(directory.join(format!("redraw-{label}-cached.png")))
                 .unwrap();
@@ -422,10 +430,13 @@ async fn redraw_check(
     };
     // The tab strip reads where its tabs fell in the last layout and draws once more
     // 16 ms later when that moved them (`tab_overflow`); a display link would draw that
-    // frame, so draw it here before comparing.
-    let settle = |cx: &mut gpui::AsyncApp| {
-        frame(cx);
-        wait(50)
+    // frame, so draw it here before comparing. A marker coming or going moves the tabs
+    // again, and the strip, a cached view, only follows by that timer: a few rounds.
+    let settle = async |cx: &mut gpui::AsyncApp| {
+        for _ in 0..3 {
+            frame(cx);
+            wait(50).await;
+        }
     };
     settle(cx).await;
     // A jump's ring fades by the clock; held, the plain and the refreshed frame of the
@@ -455,22 +466,24 @@ async fn redraw_check(
         "filter",
         "unfilter",
         "focus",
+        "tab-switch",
+        "tab-rename",
         "pick-space",
         "rename",
     ] {
         handle
             .update(cx, |v, w, cx| v.visual_redraw_step(step, w, cx))
             .unwrap();
-        if step == "rename" {
+        if step.ends_with("rename") {
             let mut back = false;
             for _ in 0..100 {
                 wait(100).await;
-                back = handle.update(cx, |v, _, _| v.visual_renamed()).unwrap();
+                back = handle.update(cx, |v, _, _| v.visual_renamed(step)).unwrap();
                 if back {
                     break;
                 }
             }
-            lines.push(format!("rename came back {back}"));
+            lines.push(format!("{step} came back {back}"));
         } else {
             wait(300).await;
         }

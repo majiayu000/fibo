@@ -14,7 +14,7 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
   within SHARE_BUDGET of `pane-share` (0.14 here; 1.0 with the
   sidebar drawn each frame);
 - terminal output must not draw the sidebar again (it drew the whole sidebar each
-  frame once: 7x the instructions);
+  frame once: 7x the instructions), nor the tab strip (about 0.24 M a tab);
 - a frame of the left column's motion (scripts' frames-motion: 今天 opening, held midway)
   must stay within BUDGET too: the column's motion draws the sidebar each display frame
   for a third of a second a click;
@@ -187,6 +187,9 @@ def main():
             fails.append(f'redraw-check {step}: {verdict} (pictures in {out / "frames"})')
     if 'sidebar kept its draw true' not in redraw:
         fails.append('terminal output drew the sidebar again: ' + (redraw or 'no redraw-check line'))
+    strip = re.search(r'frames-pane: [^\n]*tab strip drew (\d+)', text)
+    if not strip or int(strip.group(1)):
+        fails.append(f'terminal output drew the tab strip {strip.group(1) if strip else "?"} times in 300 frames: it is a cached view')
     if not redraw:
         fails.append('no redraw-check line in the probe output')
 

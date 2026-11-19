@@ -266,6 +266,7 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) -> gpui::Div {
         self.before_render(window, cx);
+        self.forget_tab_marks();
         let sidebar = self.cached_sidebar(window, cx);
         let beside = sidebar.is_some().then(|| self.sidebar_width());
         let wants = Some(self.wants());
