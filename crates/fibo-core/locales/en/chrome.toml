@@ -158,7 +158,7 @@
 "打开待办详情" = "Open to-do details"
 "你要它 {v1}" = "You asked: {v1}"
 "停在 {d}" = "Stopped at {d}"
-"另一个窗口在输入" = "Another window is typing"
+"输入权由另一个连接持有" = "Another connection holds input control"
 "点击接管输入" = "Click to take over"
 
 [pane_menu]

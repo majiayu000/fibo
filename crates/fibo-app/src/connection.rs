@@ -227,8 +227,22 @@ impl Connection {
     }
     pub fn send(&self, request: Request) -> Result<(), String> {
         let state = self.state.lock().map_err(|_| "terminal lock poisoned")?;
-        if state.vt.is_none() || !state.writable {
-            return Err(t!("终端尚未恢复或当前为只读").into());
+        if state.ended {
+            return Err(t!("进程已退出，这次的输入没发").into());
+        }
+        if state.dropped {
+            return Err(t!("连接已断开，正在重连；这次的输入没发").into());
+        }
+        if state.vt.is_none() {
+            return Err(t!("正在恢复终端，这次的输入没发").into());
+        }
+        // The host refused something (backlog, a request it cannot read) or a write broke:
+        // there is no takeover button then, so say what happened instead of read-only.
+        if let Some(error) = state.error.as_ref().filter(|_| !state.writable) {
+            return Err(t!("{error}；这次的输入没发", error));
+        }
+        if !state.writable {
+            return Err(t!("当前为只读，请先点击「接管输入」；这次的输入没发").into());
         }
         drop(state);
         self.outbox.push(request).map_err(|refused| match refused {
@@ -353,6 +367,72 @@ impl Drop for RecognitionConnection {
 mod tests {
     use super::*;
     use futures::StreamExt;
+
+    #[test]
+    fn input_refusals_describe_the_state_and_never_replay_after_promotion() {
+        let connection = Connection {
+            state: Arc::new(Mutex::new(State {
+                vt: None,
+                writable: false,
+                error: None,
+                cols: 80,
+                rows: 24,
+                socket: None,
+                ended: false,
+                dropped: false,
+                scheme: None,
+                cursor_shape: None,
+            })),
+            dirty: Arc::new(AtomicBool::new(false)),
+            bells: Arc::new(AtomicU64::new(0)),
+            clipboard: Arc::new(Mutex::new(None)),
+            outbox: Arc::new(Outbox::new(OUTBOX_LIMIT)),
+        };
+        let input = || Request::Input {
+            bytes: b"blocked".to_vec(),
+            lossy: false,
+        };
+        assert_eq!(
+            connection.send(input()).unwrap_err(),
+            t!("正在恢复终端，这次的输入没发")
+        );
+        connection.state.lock().unwrap().vt = Some(Vt::new(80, 24).unwrap());
+        assert_eq!(
+            connection.send(input()).unwrap_err(),
+            t!("当前为只读，请先点击「接管输入」；这次的输入没发")
+        );
+        connection.state.lock().unwrap().error = Some("backlog".into());
+        assert_eq!(
+            connection.send(input()).unwrap_err(),
+            t!("{error}；这次的输入没发", error = "backlog")
+        );
+        connection.state.lock().unwrap().error = None;
+        connection.state.lock().unwrap().dropped = true;
+        assert_eq!(
+            connection.send(input()).unwrap_err(),
+            t!("连接已断开，正在重连；这次的输入没发")
+        );
+        connection.state.lock().unwrap().ended = true;
+        assert_eq!(
+            connection.send(input()).unwrap_err(),
+            t!("进程已退出，这次的输入没发")
+        );
+        {
+            let mut state = connection.state.lock().unwrap();
+            state.ended = false;
+            state.dropped = false;
+            state.writable = true;
+        }
+        connection
+            .send(Request::Input {
+                bytes: b"after-promotion".to_vec(),
+                lossy: false,
+            })
+            .unwrap();
+        let sent = connection.outbox.take().unwrap();
+        assert_eq!(sent.len(), 1);
+        assert!(matches!(&sent[0], Request::Input { bytes, .. } if bytes == b"after-promotion"));
+    }
 
     #[test]
     fn a_first_connection_failure_wakes_the_pane_for_retry() {
