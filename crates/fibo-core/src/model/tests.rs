@@ -180,9 +180,10 @@ fn outcomes_expire_once_preserve_history_and_leave_processes_alone() {
     )
     .unwrap();
     assert_eq!(w.next_deadline(now), Some(now + 2));
-    assert!(!w.expire_outcomes(now + 1));
-    assert!(w.expire_outcomes(now + 2));
-    assert!(!w.expire_outcomes(now + 3));
+    // The host asks before copying the workspace to expire anything.
+    assert!(!w.outcomes_due(now + 1) && !w.expire_outcomes(now + 1));
+    assert!(w.outcomes_due(now + 2) && w.expire_outcomes(now + 2));
+    assert!(!w.outcomes_due(now + 3) && !w.expire_outcomes(now + 3));
     assert_eq!(w.agent_sessions[0].outcome, Outcome::Open);
     assert_eq!(of(&w, &w.agent_sessions[0], now + 2), Status::Review);
     assert_eq!(w.outcome_history.len(), 2);

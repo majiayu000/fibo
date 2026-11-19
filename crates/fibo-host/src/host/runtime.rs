@@ -16,8 +16,9 @@ fn start_deadlines(shared: &Shared) -> io::Result<()> {
                 let deadline = {
                     let mut host = lock(&shared)?;
                     let now = fibo_core::content::now();
-                    let mut next = host.workspace.clone();
-                    if next.expire_outcomes(now) {
+                    if host.workspace.outcomes_due(now) {
+                        let mut next = host.workspace.clone();
+                        next.expire_outcomes(now);
                         host.commit(next)?;
                     }
                     let outcome = host.workspace.next_deadline(now);

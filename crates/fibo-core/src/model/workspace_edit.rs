@@ -55,6 +55,13 @@ impl Workspace {
         }
         Ok(())
     }
+    /// Whether `expire_outcomes` would change anything, without a copy to change: the
+    /// host asks after every commit, and copying a long-used workspace to find nothing
+    /// due was a sixth of its work while an agent wrote (11-19).
+    pub fn outcomes_due(&self, now: u64) -> bool {
+        let due = |o: &Outcome| matches!(o, Outcome::Deferred { until, .. } if *until <= now);
+        self.agent_sessions.iter().any(|s| due(&s.outcome)) || self.task_outcomes.values().any(due)
+    }
     pub fn expire_outcomes(&mut self, now: u64) -> bool {
         let due: Vec<_> = self
             .agent_sessions

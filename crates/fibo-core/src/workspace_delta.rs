@@ -55,9 +55,13 @@ pub struct Kept {
 /// writes every content out; with a dozen sessions running, the host did that for each
 /// refresh of each client, the most of its CPU (11-17). Comparing to the last one is far
 /// cheaper, and between two refreshes almost all content is the same.
+/// Sessions the same: writing each one out was the largest part of a reply once Workflow
+/// subagents doubled the sessions sent (11-19, 1541 sessions: host 281 → 487 M
+/// instructions a second with one agent writing).
 #[derive(Debug, Default)]
 pub struct Hashes {
     content: FxHashMap<String, (Content, u64)>,
+    sessions: FxHashMap<String, (AgentSession, u64)>,
 }
 
 impl Hashes {
@@ -69,6 +73,16 @@ impl Hashes {
         }
         let h = hash(c);
         self.content.insert(id.to_owned(), (c.clone(), h));
+        h
+    }
+    fn session(&mut self, s: &AgentSession) -> u64 {
+        if let Some((seen, h)) = self.sessions.get(&s.id)
+            && seen == s
+        {
+            return *h;
+        }
+        let h = hash(s);
+        self.sessions.insert(s.id.clone(), (s.clone(), h));
         h
     }
 }
@@ -85,22 +99,41 @@ pub fn diff(
 
 /// `diff`, reusing the hashes of content that has not changed since `hashes` last saw it.
 pub fn diff_with(
+    w: Workspace,
+    base: Option<&Index>,
+    fields: bool,
+    hashes: &mut Hashes,
+) -> serde_json::Result<(Delta, Index)> {
+    diff_lent(w, &[], base, fields, hashes)
+}
+
+/// `diff_with` for `w` with `lent` content besides its own, the host's own copy of what no
+/// overlay changes: only what changed is copied into the delta. Copying all content for
+/// each reply, to compare it and throw almost all of it away, was most of a reply once
+/// sessions and hashes were remembered (11-19).
+pub fn diff_lent(
     mut w: Workspace,
+    lent: &[(&String, &Content)],
     base: Option<&Index>,
     fields: bool,
     hashes: &mut Hashes,
 ) -> serde_json::Result<(Delta, Index)> {
     let sessions = std::mem::take(&mut w.agent_sessions);
-    let content = std::mem::take(&mut w.content);
+    let owned = std::mem::take(&mut w.content);
+    let content: FxHashMap<&String, &Content> = owned.iter().chain(lent.iter().copied()).collect();
     let Value::Object(rest) = serde_json::to_value(&w)? else {
         return Err(serde::ser::Error::custom("a workspace is not an object"));
     };
     let mut rest_hashes: Vec<(&String, u64)> = rest.iter().map(|(k, v)| (k, hash(v))).collect();
     rest_hashes.sort_unstable();
-    let session_hashes: Vec<u64> = sessions.iter().map(hash).collect();
+    let session_hashes: Vec<u64> = sessions.iter().map(|s| hashes.session(s)).collect();
+    if hashes.sessions.len() > sessions.len() {
+        let ids: std::collections::HashSet<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
+        hashes.sessions.retain(|id, _| ids.contains(id.as_str()));
+    }
     let order = hash(&sessions.iter().map(|s| &s.id).collect::<Vec<_>>());
     let mut content_hashes: Vec<(&String, u64)> = (content.iter())
-        .map(|(id, c)| (id, hashes.content(id, c)))
+        .map(|(id, c)| (*id, hashes.content(id, c)))
         .collect();
     hashes.content.retain(|id, _| content.contains_key(id));
     content_hashes.sort_unstable();
@@ -125,7 +158,9 @@ pub fn diff_with(
             fields: false,
             sessions,
             order: None,
-            content,
+            content: (content.into_iter())
+                .map(|(id, c)| (id.clone(), c.clone()))
+                .collect(),
             gone: vec![],
         };
         return Ok((delta, index));
@@ -149,7 +184,8 @@ pub fn diff_with(
             .cloned()
             .collect(),
         content: (content.into_iter())
-            .filter(|(id, _)| base.content.get(id) != index.content.get(id))
+            .filter(|(id, _)| base.content.get(*id) != index.content.get(*id))
+            .map(|(id, c)| (id.clone(), c.clone()))
             .collect(),
     };
     Ok((delta, index))
