@@ -215,3 +215,38 @@ fn content_no_one_changed_is_shared_not_copied() {
         );
     }
 }
+
+/// The rest sent whole is what writing the workspace without its sessions and content
+/// gave before it was written field by field: same fields, same order, same values, so a
+/// client that reads it as a workspace still can.
+#[test]
+fn the_rest_sent_whole_is_the_workspace_written_without_sessions_and_content() {
+    let mut w = every_state();
+    let (delta, _) = diff(w.clone(), None, true).unwrap();
+    w.agent_sessions.clear();
+    w.content.clear();
+    let before = serde_json::to_value(&w).unwrap();
+    let sent = serde_json::Value::Object(delta.rest);
+    assert_eq!(
+        sent.as_object().unwrap().keys().collect::<Vec<_>>(),
+        before.as_object().unwrap().keys().collect::<Vec<_>>()
+    );
+    assert_eq!(sent, before);
+}
+
+/// Only the fields that changed are read in the window; one this build does not know, from
+/// a newer host, is ignored as reading the whole rest ignores it.
+#[test]
+fn the_window_reads_only_the_fields_that_changed() {
+    let first = every_state();
+    let (held, index) = whole(&first);
+    let mut next = first.clone();
+    next.tabs[0].title = "改了".into();
+    let (mut delta, _) = diff(next.clone(), Some(&index), true).unwrap();
+    assert_eq!(delta.rest.keys().collect::<Vec<_>>(), ["tabs"]);
+    delta
+        .rest
+        .insert("from_a_newer_host".into(), serde_json::json!(1));
+    let applied = apply(delta, Some(&held)).unwrap();
+    assert!(same(&applied.workspace, &next));
+}

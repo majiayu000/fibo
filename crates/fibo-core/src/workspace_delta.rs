@@ -49,7 +49,6 @@ pub struct Index {
 #[derive(Debug, Clone)]
 pub struct Kept {
     pub workspace: Workspace,
-    rest: Map<String, Value>,
 }
 
 /// Content hashes worked out before, by session, with the content each is of. Hashing
@@ -63,6 +62,7 @@ pub struct Kept {
 pub struct Hashes {
     content: FxHashMap<String, (Arc<Content>, u64)>,
     sessions: FxHashMap<String, (AgentSession, u64)>,
+    rest: rest::Seen,
 }
 
 impl Hashes {
@@ -109,10 +109,7 @@ pub fn diff_with(
 ) -> serde_json::Result<(Delta, Index)> {
     let sessions = std::mem::take(&mut w.agent_sessions);
     let content = std::mem::take(&mut w.content);
-    let Value::Object(rest) = serde_json::to_value(&w)? else {
-        return Err(serde::ser::Error::custom("a workspace is not an object"));
-    };
-    let mut rest_hashes: Vec<(&String, u64)> = rest.iter().map(|(k, v)| (k, hash(v))).collect();
+    let mut rest_hashes = hashes.rest.hashes(&w);
     rest_hashes.sort_unstable();
     let session_hashes: Vec<u64> = sessions.iter().map(|s| hashes.session(s)).collect();
     if hashes.sessions.len() > sessions.len() {
@@ -134,7 +131,7 @@ pub fn diff_with(
             .zip(session_hashes.iter().copied())
             .collect(),
         content: (content_hashes.iter().map(|(id, h)| ((*id).clone(), *h))).collect(),
-        rest: (rest_hashes.iter().map(|(k, h)| ((*k).clone(), *h))).collect(),
+        rest: (rest_hashes.iter().map(|(k, h)| ((*k).to_owned(), *h))).collect(),
     };
     // Sessions are matched by id: with one twice, only the whole list says which is which.
     let base = base.filter(|_| index.sessions.len() == sessions.len());
@@ -142,7 +139,7 @@ pub fn diff_with(
         let delta = Delta {
             stamp: index.stamp,
             base: None,
-            rest,
+            rest: rest::written(&w, true, |_| true)?,
             fields: false,
             sessions,
             order: None,
@@ -154,12 +151,7 @@ pub fn diff_with(
     let delta = Delta {
         stamp: index.stamp,
         base: Some(base.stamp),
-        rest: match fields {
-            true => (rest.into_iter())
-                .filter(|(k, _)| base.rest.get(k) != index.rest.get(k))
-                .collect(),
-            false => rest,
-        },
+        rest: rest::written(&w, !fields, |k| base.rest.get(k) != index.rest.get(k))?,
         fields,
         order: (base.order != order).then(|| sessions.iter().map(|s| s.id.clone()).collect()),
         sessions: (sessions.into_iter())
@@ -179,7 +171,7 @@ pub fn diff_with(
 /// The workspace `delta` describes, given the one it was taken against.
 pub fn apply(delta: Delta, base: Option<&Kept>) -> Result<Kept, String> {
     let Delta {
-        mut rest,
+        rest,
         fields,
         sessions,
         order,
@@ -194,19 +186,14 @@ pub fn apply(delta: Delta, base: Option<&Kept>) -> Result<Kept, String> {
         (None, _) => None,
     };
     // Every field of a workspace is written, empty or not: one left out is unchanged.
-    if let Some(base) = base.filter(|_| fields) {
-        let changed = std::mem::replace(&mut rest, base.rest.clone());
-        rest.extend(changed);
-    }
-    let mut w: Workspace =
-        serde_json::from_value(Value::Object(rest.clone())).map_err(|e| e.to_string())?;
-    let Some(Kept {
-        workspace: base, ..
-    }) = base
-    else {
+    let mut w = match base.filter(|_| fields) {
+        Some(base) => rest::over(&base.workspace, rest)?,
+        None => serde_json::from_value(Value::Object(rest)).map_err(|e| e.to_string())?,
+    };
+    let Some(Kept { workspace: base }) = base else {
         w.agent_sessions = sessions;
         w.content = content;
-        return Ok(Kept { workspace: w, rest });
+        return Ok(Kept { workspace: w });
     };
     let mut changed: FxHashMap<String, AgentSession> =
         sessions.into_iter().map(|s| (s.id.clone(), s)).collect();
@@ -228,7 +215,7 @@ pub fn apply(delta: Delta, base: Option<&Kept>) -> Result<Kept, String> {
         w.content.remove(id);
     }
     w.content.extend(content);
-    Ok(Kept { workspace: w, rest })
+    Ok(Kept { workspace: w })
 }
 
 fn hash(value: &impl Serialize) -> u64 {
@@ -248,6 +235,9 @@ fn hash(value: &impl Serialize) -> u64 {
     let _ = serde_json::to_writer(&mut feed, value);
     feed.0.finish()
 }
+
+#[path = "workspace_rest.rs"]
+mod rest;
 
 #[cfg(test)]
 #[path = "workspace_delta_tests.rs"]
