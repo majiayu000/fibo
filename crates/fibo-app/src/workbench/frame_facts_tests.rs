@@ -104,6 +104,59 @@ fn assert_same_as_walking(w: &Workspace, resumed: &HashMap<String, String>, now:
     };
     assert_eq!(facts.working, glyphs(&|g| g.working()), "working");
     assert_eq!(facts.review, glyphs(&|g| g == Status::Review), "review");
+
+    for space in &w.spaces {
+        let listed: Vec<_> = w
+            .agent_sessions
+            .iter()
+            .filter(|s| sessions::session_open_in(w, resumed, s))
+            .filter(|s| w.session_space(s) == Some(&space.id) && shown(s))
+            .collect();
+        let states = || {
+            listed
+                .iter()
+                .filter(|s| s.outcome.needs_review(now))
+                .map(|s| (s.managed(), fibo_core::status::of(w, s, now)))
+        };
+        let waiting = states().filter(|s| *s == (true, Status::Waiting)).count();
+        let errors = states().filter(|s| *s == (true, Status::Error)).count();
+        let group = if errors > 0 {
+            Status::Error
+        } else if waiting > 0 {
+            Status::Waiting
+        } else {
+            states()
+                .map(|(_, state)| state)
+                .find(|state| !matches!(state, Status::Waiting | Status::Error))
+                .unwrap_or(Status::Stale)
+        };
+        let counts = facts.space_counts(&space.id);
+        assert_eq!(
+            (counts.count, counts.waiting, counts.errors, counts.group()),
+            (listed.len(), waiting, errors, group),
+            "space {}",
+            space.id
+        );
+        if w.space_quiet(&space.id) {
+            let mut rows: Vec<_> = w
+                .agent_sessions
+                .iter()
+                .filter(|s| {
+                    (sessions::session_open_in(w, resumed, s)
+                        || w.lost_agents.values().flatten().any(|id| *id == s.id))
+                        && w.session_home(s) == Some(&space.id)
+                        && sessions::automation_hidden_in(w, s).is_none()
+                })
+                .collect();
+            rows.sort_by_key(|s| {
+                (
+                    !status::asks_for_you(w, s, now),
+                    std::cmp::Reverse(w.session_updated(s)),
+                )
+            });
+            assert_eq!(facts.quiet_space_sessions(w, &space.id), rows);
+        }
+    }
 }
 
 fn session(id: &str, terminal: Option<&str>, current: bool, updated: u64) -> AgentSession {
@@ -185,6 +238,36 @@ fn facts_answer_as_walking_every_session_does() {
     assert_eq!(facts.latest(&w, "t2").unwrap().id, "tie-b");
     assert_eq!(facts.latest(&w, "t1").unwrap().id, "content-newer");
     assert_eq!(facts.current_agent(&w, "t0").unwrap().id, "first");
+    assert_eq!(facts.space_counts("space").waiting, 1);
+    assert_eq!(facts.space_counts("space").group(), Status::Waiting);
+
+    w.spaces.push(Space {
+        id: "nested".into(),
+        name: "Nested".into(),
+        cwd: "/tmp/nested".into(),
+    });
+    w.agent_sessions
+        .push(session("failed", Some("t3"), true, 11));
+    w.agent_sessions.last_mut().unwrap().cwd = "/tmp/nested".into();
+    shown_as(&mut w, "failed", Turn::Error);
+    assert_same_as_walking(&w, &resumed, 1000);
+    let counts = FrameFacts::work_out(&w, inputs(&w, &resumed, 1000));
+    assert_eq!(counts.space_counts("nested").errors, 1);
+    assert_eq!(counts.space_counts("nested").group(), Status::Error);
+
+    w.lost_agents
+        .insert("t1".into(), Some("record-newer".into()));
+    shown_as(&mut w, "record-newer", Turn::Interrupted);
+    w.quiet_spaces.insert("space".into());
+    assert_same_as_walking(&w, &resumed, 1000);
+    let quiet = FrameFacts::work_out(&w, inputs(&w, &resumed, 1000));
+    let rows = quiet.quiet_space_sessions(&w, "space");
+    assert!(rows.iter().any(|s| s.id == "record-newer"));
+    assert!(
+        rows.iter().any(|s| s.id == "failed"),
+        "quiet follows the tab"
+    );
+    assert_eq!(quiet.space_counts("nested").count, 0);
 }
 
 #[test]

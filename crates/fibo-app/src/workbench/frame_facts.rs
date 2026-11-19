@@ -6,7 +6,8 @@
 //! terminals being resumed, so nothing here shows later than a fresh count would. The
 //! decisions stay in core; this only remembers their answers.
 use super::*;
-use rustc_hash::FxHashMap;
+use fibo_core::status;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::{cell::RefCell, rc::Rc};
 
 /// Everything a set of facts was worked out from. Debug builds work them out again on
@@ -19,6 +20,40 @@ struct Inputs {
     /// or is dropped by `FactsCache::forget`.
     sizes: [usize; 4],
     resumed: HashMap<String, String>,
+}
+
+/// Figures on an attended space's row. In the absence of a managed error or wait,
+/// the first eligible status in workspace order supplies the dot.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct SpaceCounts {
+    pub(super) count: usize,
+    pub(super) waiting: usize,
+    pub(super) errors: usize,
+    first: Option<Status>,
+}
+
+impl SpaceCounts {
+    fn add(&mut self, managed: bool, status: Option<Status>) {
+        self.count += 1;
+        match status {
+            Some(Status::Waiting) if managed => self.waiting += 1,
+            Some(Status::Error) if managed => self.errors += 1,
+            Some(status) if !matches!(status, Status::Waiting | Status::Error) => {
+                self.first.get_or_insert(status);
+            }
+            _ => (),
+        }
+    }
+
+    pub(super) fn group(self) -> Status {
+        if self.errors > 0 {
+            Status::Error
+        } else if self.waiting > 0 {
+            Status::Waiting
+        } else {
+            self.first.unwrap_or(Status::Stale)
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -36,6 +71,9 @@ pub(super) struct FrameFacts {
     /// How many sessions the window lists, open in a tab and not hidden, in every space:
     /// 「本机 · N 个会话」.
     pub(super) listed: usize,
+    spaces: FxHashMap<String, SpaceCounts>,
+    // Indexes into agent_sessions, in the order shown under 先不管.
+    quiet_sessions: FxHashMap<String, Vec<usize>>,
     /// Sessions in Fibo's terminals that work and that wait for your check.
     pub(super) working: usize,
     pub(super) review: usize,
@@ -65,6 +103,14 @@ impl FrameFacts {
         let mut newest: FxHashMap<&str, u64> = FxHashMap::default();
         let mut needs_you = Vec::new();
         let mut running = Vec::new();
+        let mut spaces: FxHashMap<String, SpaceCounts> = FxHashMap::default();
+        let mut quiet_sessions: FxHashMap<String, Vec<usize>> = FxHashMap::default();
+        let lost: FxHashSet<&str> = w
+            .lost_agents
+            .values()
+            .flatten()
+            .map(String::as_str)
+            .collect();
         for (index, s) in w.agent_sessions.iter().enumerate() {
             if let Some(terminal) = s.terminal.as_deref() {
                 if s.current {
@@ -83,17 +129,52 @@ impl FrameFacts {
             if w.needs_you(s, now) {
                 needs_you.push(index);
             }
-            let hidden = sessions::session_hidden_in(w, s).is_some();
-            if !hidden && sessions::session_open_in(w, &inputs.resumed, s) {
-                listed += 1;
+            if sessions::automation_hidden_in(w, s).is_some() {
+                continue;
             }
-            if !hidden && s.managed() && s.outcome.needs_review(now) {
-                match fibo_core::status::of(w, s, now) {
+            let open = || sessions::session_open_in(w, &inputs.resumed, s);
+            if !w.quiet_spaces.is_empty()
+                && let Some(home) = w.session_home(s).filter(|home| w.space_quiet(home))
+            {
+                if lost.contains(s.id.as_str()) || open() {
+                    quiet_sessions
+                        .entry(home.to_owned())
+                        .or_default()
+                        .push(index);
+                }
+                continue;
+            }
+            let space = if open() {
+                listed += 1;
+                w.session_space(s)
+            } else {
+                None
+            };
+            let managed = s.managed();
+            let status = ((managed || space.is_some()) && s.outcome.needs_review(now))
+                .then(|| fibo_core::status::of(w, s, now));
+            if let Some(space) = space {
+                spaces
+                    .entry(space.to_owned())
+                    .or_default()
+                    .add(managed, status);
+            }
+            if managed && let Some(status) = status {
+                match status {
                     status if status.working() => working += 1,
                     Status::Review => review += 1,
                     _ => {}
                 }
             }
+        }
+        for rows in quiet_sessions.values_mut() {
+            rows.sort_by_key(|&index| {
+                let s = &w.agent_sessions[index];
+                (
+                    !status::asks_for_you(w, s, now),
+                    std::cmp::Reverse(w.session_updated(s)),
+                )
+            });
         }
         let (mut needs_asking, mut needs_failed) = (false, false);
         for s in needs_you
@@ -114,10 +195,29 @@ impl FrameFacts {
             needs_asking,
             needs_failed,
             listed,
+            spaces,
+            quiet_sessions,
             working,
             review,
             running,
         }
+    }
+
+    pub(super) fn space_counts(&self, id: &str) -> SpaceCounts {
+        self.spaces.get(id).copied().unwrap_or_default()
+    }
+
+    pub(super) fn quiet_space_sessions<'a>(
+        &self,
+        w: &'a Workspace,
+        id: &str,
+    ) -> Vec<&'a AgentSession> {
+        self.quiet_sessions
+            .get(id)
+            .into_iter()
+            .flatten()
+            .map(|&index| &w.agent_sessions[index])
+            .collect()
     }
 
     fn current_agent<'a>(&self, w: &'a Workspace, terminal: &str) -> Option<&'a AgentSession> {

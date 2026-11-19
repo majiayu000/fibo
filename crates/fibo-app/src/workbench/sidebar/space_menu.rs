@@ -19,16 +19,14 @@ impl Workbench {
         // From the dense presets' space line: every space to switch to, and a new one.
         let mut picks = vec![];
         if self.layout.space_switch {
+            let facts = self.facts();
             let attended =
                 (self.workspace.spaces.iter()).filter(|s| !self.workspace.space_quiet(&s.id));
             for space in attended {
                 let pick = space.id.clone();
-                let SpaceCounts {
-                    count,
-                    waiting,
-                    errors,
-                    group,
-                } = self.space_counts(&space.id);
+                let counts = facts.space_counts(&space.id);
+                let (count, waiting, errors, group) =
+                    (counts.count, counts.waiting, counts.errors, counts.group());
                 picks.push(
                     button(
                         gpui::SharedString::from(format!("space-pick-{}", space.id)),

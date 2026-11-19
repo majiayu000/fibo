@@ -12,15 +12,6 @@ pub(super) fn closed_recently(w: &Workspace, s: &AgentSession) -> bool {
     s.outcome.needs_review(now()) && status_of(w, s) != Status::Stale
 }
 
-/// A space's row figures: its open sessions, those waiting on you and those failed, and
-/// the state its dot shows.
-pub(super) struct SpaceCounts {
-    count: usize,
-    pub(super) waiting: usize,
-    pub(super) errors: usize,
-    group: Status,
-}
-
 impl Workbench {
     /// 鸟瞰 narrowed to the closed sessions the column counted, ready to resume.
     pub(super) fn show_closed(&mut self, cx: &mut Context<Self>) {
@@ -92,50 +83,6 @@ impl Workbench {
             self.overview.filter_space.as_deref() == Some(id)
         } else {
             self.nav.space == id
-        }
-    }
-    /// A space's open sessions, how many wait on you or failed, and the state its dot shows.
-    pub(super) fn space_counts(&self, id: &str) -> SpaceCounts {
-        let sessions: Vec<_> = self
-            .workspace
-            .agent_sessions
-            .iter()
-            .filter(|s| {
-                // Cheapest first: asked per space on every draw, and most sessions are
-                // not open; whether one is hidden compares paths.
-                self.session_open(s)
-                    && self.workspace.session_space(s) == Some(id)
-                    && self.session_hidden(s).is_none()
-            })
-            .collect();
-        let needs = |g: Status| {
-            sessions
-                .iter()
-                .filter(|s| {
-                    s.managed()
-                        && s.outcome.needs_review(now())
-                        && status_of(&self.workspace, s) == g
-                })
-                .count()
-        };
-        let (waiting, errors) = (needs(Status::Waiting), needs(Status::Error));
-        let group = if errors > 0 {
-            Status::Error
-        } else if waiting > 0 {
-            Status::Waiting
-        } else {
-            sessions
-                .iter()
-                .filter(|s| s.outcome.needs_review(now()))
-                .map(|s| status_of(&self.workspace, s))
-                .find(|g| !matches!(g, Status::Waiting | Status::Error))
-                .unwrap_or(Status::Stale)
-        };
-        SpaceCounts {
-            count: sessions.len(),
-            waiting,
-            errors,
-            group,
         }
     }
     /// Shows a space: its first tab, or over the overview, its sessions only.
