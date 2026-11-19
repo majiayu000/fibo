@@ -272,6 +272,7 @@ pub(super) fn serve_runtime(
         }
     }
     wait_log::start(root);
+    super::exit_log::start(root);
     for t in taken {
         let pid = t.live.pid;
         let mut guard = lock(&host)?;

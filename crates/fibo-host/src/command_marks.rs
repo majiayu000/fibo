@@ -20,6 +20,10 @@ pub struct Finished {
     /// None when the shell did not say.
     pub exit: Option<i32>,
     pub took: Duration,
+    /// The command the terminal was opened to run, often an Agent, ended: `D;<exit>;fibo=launch`,
+    /// written by `shell::run_then_stay` with no start mark. `took` is zero; it is not one of
+    /// the shell's commands and leaves a command the shell marked started alone.
+    pub launch: bool,
 }
 
 impl Marks {
@@ -70,13 +74,21 @@ impl Marks {
         match fields.next() {
             Some(b"C") => self.started = Some(at),
             Some(b"D") => {
-                if let Some(started) = self.started.take() {
+                let exit = fields
+                    .next()
+                    .and_then(|f| std::str::from_utf8(f).ok())
+                    .and_then(|f| f.trim().parse().ok());
+                if fields.any(|f| f == b"fibo=launch") {
                     found.push(Finished {
-                        exit: fields
-                            .next()
-                            .and_then(|f| std::str::from_utf8(f).ok())
-                            .and_then(|f| f.trim().parse().ok()),
+                        exit,
+                        took: Duration::ZERO,
+                        launch: true,
+                    });
+                } else if let Some(started) = self.started.take() {
+                    found.push(Finished {
+                        exit,
                         took: at.saturating_duration_since(started),
+                        launch: false,
                     });
                 }
             }
@@ -101,7 +113,8 @@ mod tests {
             m.scan(b"out\r\n\x1b]133;D;2\x1b\\\x1b]133;A\x07$ ", t1),
             vec![Finished {
                 exit: Some(2),
-                took: Duration::from_millis(1500)
+                took: Duration::from_millis(1500),
+                launch: false,
             }]
         );
         assert!(
@@ -137,5 +150,27 @@ mod tests {
         // An end with no code is still an end.
         m.scan(b"\x1b]133;C\x07", t);
         assert_eq!(m.scan(b"\x1b]133;D\x07", t)[0].exit, None);
+    }
+
+    #[test]
+    fn the_launched_commands_end_is_its_own_and_leaves_a_started_command_alone() {
+        let mut m = Marks::default();
+        let t = Instant::now();
+        let ended = m.scan(b"bye\r\n\x1b]133;D;130;fibo=launch\x07\x1b[?1000l", t);
+        assert_eq!(
+            ended,
+            vec![Finished {
+                exit: Some(130),
+                took: Duration::ZERO,
+                launch: true
+            }]
+        );
+        m.scan(b"\x1b]133;C\x07", t);
+        assert!(m.scan(b"\x1b]133;D;9;fibo=launch\x07", t)[0].launch);
+        let later = t + Duration::from_secs(2);
+        let shells = m.scan(b"\x1b]133;D;0\x07", later);
+        assert_eq!(shells.len(), 1, "the shell's own command still ends");
+        assert!(!shells[0].launch);
+        assert_eq!(shells[0].took, Duration::from_secs(2));
     }
 }

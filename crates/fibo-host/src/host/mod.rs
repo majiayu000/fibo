@@ -21,6 +21,7 @@ mod association;
 mod brief;
 mod client;
 mod events;
+mod exit_log;
 mod found_shells;
 mod http_ask;
 mod launch_probe;
@@ -384,9 +385,18 @@ impl Host {
         &mut self,
         terminal: &str,
         pwd: Option<String>,
-        finished: Vec<crate::command_marks::Finished>,
+        mut finished: Vec<crate::command_marks::Finished>,
     ) {
         use fibo_core::hook::{Event, Payload};
+        // The command the terminal was opened for ended: kept on disk, not one of the
+        // shell's commands for the pane, the plugins or `fibo events`.
+        for f in finished.iter().filter(|f| f.launch) {
+            self.launch_exited(terminal, f.exit);
+        }
+        finished.retain(|f| !f.launch);
+        if finished.is_empty() {
+            return;
+        }
         let placed = self.workspace.terminals.iter().find(|t| t.id == terminal);
         let space = placed
             .and_then(|t| self.workspace.spaces.iter().find(|p| p.id == t.space))

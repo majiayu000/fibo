@@ -584,7 +584,12 @@ fn a_resume_is_the_new_shells_first_command_not_typed_later() {
         .output()
         .unwrap();
     assert!(out.status.success());
-    assert_eq!(String::from_utf8_lossy(&out.stdout), "--resume|it's-1|");
+    // Then how it ended, for the host.
+    let out = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.starts_with("--resume|it's-1|\x1b]133;D;0;fibo=launch"),
+        "{out:?}"
+    );
 }
 #[test]
 fn the_pane_menu_says_which_signal_set_the_state() {
