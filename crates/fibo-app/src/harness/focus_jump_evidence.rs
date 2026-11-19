@@ -3,7 +3,9 @@
 //! tab, another tab, another space and a zoomed pane: the window's focused pane, the pane
 //! holding the keyboard and the sidebar's selected row must all be the target, and stay so
 //! a few frames later, and the pane rings when it shares the view (none alone). Run against `scripts/visual-fixture.py prepare`.
+use super::cpu_probe_evidence::{cpu_secs, instructions};
 use super::*;
+use std::time::Instant;
 use workbench::Workbench;
 
 pub(super) fn start(
@@ -118,8 +120,35 @@ pub(super) fn start(
         // 1. In the split, the keyboard in p0: p2's row, then p1's.
         in_pane(&p0, cx);
         frames(cx);
+        fibo_core::effect::set_reduce_motion(false);
+        let requests = Workbench::visual_landing_frame_requests;
+        let before_jump = requests();
         row("visual-2", cx);
         expect("split-row", &p2, tab, cx).await;
+        assert!(requests() > before_jump, "the visible ring never requested a frame");
+
+        // Let the real clock expire. Even a forced redraw must not restart the ring's
+        // frame loop, including on a machine with no visible display link.
+        wait(1_000).await;
+        assert!(handle.update(cx, |v, _, _| v.visual_landing().is_none()).unwrap());
+        let visible = handle.update(cx, |_, w, _| w.is_visible()).unwrap();
+        let (before, cpu, ins, started) = (requests(), cpu_secs(), instructions(), Instant::now());
+        wait(3_000).await;
+        let elapsed = started.elapsed().as_secs_f64();
+        let (used, retired, idle_requests) = (
+            cpu_secs() - cpu,
+            instructions().saturating_sub(ins),
+            requests() - before,
+        );
+        frames(cx);
+        let forced_requests = requests() - before - idle_requests;
+        eprintln!(
+            "FOCUS-JUMP expired ring: {idle_requests} idle requests in {elapsed:.2}s; {forced_requests} from forced draws; {:.2}% CPU, {:.2} M instructions/s; window visible {visible}",
+            100. * used / elapsed,
+            retired as f64 / elapsed / 1e6
+        );
+        assert_eq!(idle_requests + forced_requests, 0, "the expired ring requested another frame");
+
         row("visual-1", cx);
         expect("split-row-again", &p1, tab, cx).await;
 

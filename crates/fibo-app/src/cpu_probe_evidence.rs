@@ -36,7 +36,7 @@ mod scroll;
 mod turning;
 use std::time::{Duration, Instant};
 
-fn cpu_secs() -> f64 {
+pub(super) fn cpu_secs() -> f64 {
     let mut u: libc::rusage = unsafe { std::mem::zeroed() };
     unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut u) };
     let t = |v: libc::timeval| v.tv_sec as f64 + v.tv_usec as f64 / 1e6;
@@ -45,7 +45,7 @@ fn cpu_secs() -> f64 {
 
 /// Instructions this process retired: unlike CPU time, the same work counts the same
 /// on a busy machine, on an efficiency core or at a lower clock.
-fn instructions() -> u64 {
+pub(super) fn instructions() -> u64 {
     // The gate's way to take a virtual machine's path on real hardware, all the way down.
     if std::env::var_os("MOORING_PERF_NO_COUNTER").is_some() {
         return 0;
@@ -519,7 +519,30 @@ async fn redraw_check(
         end - start,
         chained - chained_start
     ));
-    workbench::Workbench::visual_hold_landing(None);
+    // Pixel comparisons hold the clock. Restart the same jump with a real clock,
+    // then force a draw after it expires so this also works without a display link.
+    use workbench::Workbench;
+    Workbench::visual_hold_landing(None);
+    let before = Workbench::visual_landing_frame_requests();
+    handle
+        .update(cx, |v, w, cx| v.visual_redraw_step("focus", w, cx))
+        .unwrap();
+    frame(cx);
+    let active = Workbench::visual_landing_frame_requests() > before;
+    wait(1_000).await;
+    let expired = handle
+        .update(cx, |v, _, _| v.visual_landing().is_none())
+        .unwrap();
+    let before = Workbench::visual_landing_frame_requests();
+    cx.update_window(handle.into(), |_, w, app| {
+        w.refresh();
+        w.draw(app).clear(app);
+    })
+    .unwrap();
+    let requested = Workbench::visual_landing_frame_requests() - before;
+    lines.push(format!(
+        "focus ring: active {active}, expired {expired}, extra frames {requested}"
+    ));
     let line = lines.join("; ");
     eprintln!("CPU-PROBE redraw-check {line}");
     format!("redraw-check: {line}")
