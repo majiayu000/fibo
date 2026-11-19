@@ -1,8 +1,8 @@
 //! 会话优先's column drawn to docs/sidebar-redesign/flat.html size for size: the brand
 //! row, a search field, the space chips, one list whose rows lead with their state and
 //! end with their space and time, a key hint and a one-line foot.
-use super::sidebar_list::{ASKS, End, Listed, bucket};
-use super::sidebar_machines::RemoteRow;
+use super::sidebar_list::{ASKS, End, Listed, SessionAction, bucket};
+use super::sidebar_machines::MachineRow;
 use super::*;
 use crate::ui::theme::Flat as F;
 use fibo_core::sidebar::Bucket;
@@ -279,7 +279,7 @@ impl Workbench {
     pub(super) fn flat_row(
         &self,
         from: &Workbench,
-        there: Option<&RemoteRow>,
+        there: Option<&MachineRow>,
         (session, g, attention): Listed,
         current: Option<&str>,
         detail: Option<String>,
@@ -291,8 +291,8 @@ impl Workbench {
         let selected = there.map_or(current == Some(session.id.as_str()), |r| r.shown);
         let quiet = there.is_some_and(|r| r.quiet());
         let dropped = there.is_some_and(|r| r.dropped());
-        let done = g == Status::Closed && there.is_none();
-        let unfolded = done && self.layout.done_open.as_deref() == Some(session.id.as_str());
+        let done = g == Status::Closed;
+        let unfolded = done && self.layout.done_open.as_deref() == Some(key.as_str());
         // Subagents take the second line, except on a row that asks you something.
         let subs = from
             .workspace
@@ -397,7 +397,7 @@ impl Workbench {
         } else {
             line.flex_1().min_w_0()
         };
-        let place = there.map(|r| (r.index, r.terminal().to_owned()));
+        let place = there.map(|r| (r.index, r.target().to_owned()));
         let tip = there
             .and_then(|r| self.there_tip(r))
             .unwrap_or_else(|| from.session_tip(session));
@@ -434,7 +434,9 @@ impl Workbench {
                                 d.child(self.subagent_tree(&key, click, subs, subs_live, cx))
                             })
                     })
-                    .when(unfolded, |d| d.child(self.done_card(session, cx))),
+                    .when(unfolded, |d| {
+                        d.child(self.done_card(from, there, session, cx))
+                    }),
             )
             .when(selected, |d| d.child(flat_selected_edge()))
             .when(there.is_none() && self.peek_home(&session.id), |d| {
@@ -463,11 +465,13 @@ impl Workbench {
             }
             Some(_) => row,
         };
+        let key_click = key.clone();
         let row = row.when(!dropped, |d| {
             d.on_click(
                 cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {
                     let rename = event.click_count() == 2;
                     match &place {
+                        Some(_) if done && !rename => this.toggle_done(&key_click, cx),
                         Some((index, terminal)) => {
                             this.click_there(*index, terminal, rename, window, cx)
                         }
@@ -492,22 +496,33 @@ impl Workbench {
     ) {
         // Done with: a click unfolds what it ended with instead of resuming it.
         if done {
-            let id = Some(session.id.clone());
-            self.layout.done_open = if self.layout.done_open == id {
-                None
-            } else {
-                id
-            };
-            cx.notify();
+            self.toggle_done(&session.id, cx);
             return;
         }
         // Any other row folds the unfolded ✓ away.
         self.layout.done_open = None;
         self.peek_or_open(session, window, cx)
     }
+    /// Unfolds the ✓ row keyed `key`, or folds it when it is the one unfolded.
+    pub(super) fn toggle_done(&mut self, key: &str, cx: &mut Context<Self>) {
+        let id = Some(key.to_owned());
+        self.layout.done_open = if self.layout.done_open == id {
+            None
+        } else {
+            id
+        };
+        cx.notify();
+    }
     /// Under an unfolded ✓ row: the first line it ended with, and the two ways back in.
-    fn done_card(&self, session: &AgentSession, cx: &Context<Self>) -> gpui::Div {
-        let said = self
+    fn done_card(
+        &self,
+        from: &Workbench,
+        there: Option<&MachineRow>,
+        session: &AgentSession,
+        cx: &Context<Self>,
+    ) -> gpui::Div {
+        let place = there.map(|r| (r.index, r.target().to_owned()));
+        let said = from
             .workspace
             .content
             .get(&session.id)
@@ -555,19 +570,36 @@ impl Workbench {
                     .gap(px(T::S6))
                     .child(
                         action(format!("done-resume-{}", session.id), t!("继续对话")).on_click(
-                            cx.listener(move |this, _, window, cx| {
-                                cx.stop_propagation();
-                                this.layout.done_open = None;
-                                this.peek_or_open(&resume, window, cx)
+                            cx.listener({
+                                let place = place.clone();
+                                move |this, _, window, cx| {
+                                    cx.stop_propagation();
+                                    this.layout.done_open = None;
+                                    match &place {
+                                        Some((index, target)) => {
+                                            this.click_there(*index, target, false, window, cx)
+                                        }
+                                        None => this.peek_or_open(&resume, window, cx),
+                                    }
+                                }
                             }),
                         ),
                     )
                     .child(
                         action(format!("done-undo-{}", session.id), t!("撤销完成")).on_click(
-                            cx.listener(move |this, _, _, cx| {
+                            cx.listener(move |this, _, window, cx| {
                                 cx.stop_propagation();
                                 this.layout.done_open = None;
-                                this.settle_session(&undo, Outcome::Open, false, cx)
+                                match &place {
+                                    Some((index, target)) => this.remote_action(
+                                        *index,
+                                        target,
+                                        &SessionAction::Settle(Outcome::Open),
+                                        window,
+                                        cx,
+                                    ),
+                                    None => this.settle_session(&undo, Outcome::Open, false, cx),
+                                }
                             }),
                         ),
                     ),

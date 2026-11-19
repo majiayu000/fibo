@@ -261,9 +261,9 @@ impl Workbench {
             );
             out.push(self.machine_menu_on(line, index, cx).into_any_element());
             if open {
-                let mut rows = self.remote_rows_of(index);
+                let mut rows = self.session_rows_of(index, cx);
                 // What needs you first, then the latest, as the other lists read.
-                rows.sort_by_key(|r| (!r.card.needs_you, std::cmp::Reverse(r.when)));
+                rows.sort_by_key(|r| (!r.needs_you, std::cmp::Reverse(r.when)));
                 let height = row * rows.len().min(SHOWN) as f32;
                 out.push(
                     div()
@@ -272,7 +272,7 @@ impl Workbench {
                         .flex_shrink_0()
                         .opacity(state.shown)
                         .overflow_y_scroll()
-                        .children(rows.iter().map(|r| self.remote_row(r, cx)))
+                        .children(rows.iter().map(|r| self.machine_row(r, None, cx)))
                         .into_any_element(),
                 );
             }

@@ -49,7 +49,7 @@ pub(super) fn start(
             .unwrap()
         };
         let column = |cx: &mut gpui::AsyncApp| {
-            handle.update(cx, |v, _, _| v.visual_column()).unwrap()
+            handle.update(cx, |v, _, cx| v.visual_column(cx)).unwrap()
         };
         if std::env::var_os("MOORING_QUIET_RESTART").is_some() {
             // The other machine is stopped by now, so what this can tell is the state read
@@ -185,11 +185,11 @@ pub(super) fn start(
             .update(cx, |v, _, cx| v.visual_narrow_to_space("s", cx))
             .unwrap();
 
-        // The other machine's row is drawn by this machine's row code, from its workbench.
-        let shared = handle
-            .update(cx, |v, _, cx| v.visual_row_shared(0, "far", cx))
+        // The other machine's rows are its sessions, listed from its workbench.
+        let listed = handle
+            .update(cx, |v, _, cx| v.visual_machine_sessions(0, cx))
             .unwrap();
-        assert!(shared, "the other machine's row was drawn from its card, not its workbench");
+        assert!(!listed.is_empty(), "the other machine listed no session from its workbench");
         // A click on the other machine's row opens it here.
         handle.update(cx, |v, _, cx| v.visual_close_peek(cx)).unwrap();
         handle

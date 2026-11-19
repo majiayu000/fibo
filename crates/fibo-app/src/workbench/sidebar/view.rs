@@ -269,44 +269,17 @@ impl Workbench {
         // listed rather than missing, so a CLI Fibo cannot read is never silent.
         // A program that reports its own status (OSC 7501) is listed the same way, its dot
         // saying what it reported.
-        let recognition = self.store.recognition();
-        let mut unread: Vec<_> = recognition
-            .terminal_notes
-            .keys()
-            .chain(recognition.terminal_reports.keys())
-            .collect::<std::collections::BTreeSet<_>>()
-            .into_iter()
-            .filter(|terminal| {
-                !local_hidden
-                    && self.current_agent(terminal).is_none()
-                    && self.workspace.terminal_tab(terminal).is_some_and(|tab| {
-                        match (all_spaces, self.space_filter()) {
-                            (true, None) => true,
-                            (true, Some(only)) => tab.space == only,
-                            (false, _) => tab.space == self.nav.space,
-                        }
-                    })
-            })
-            .map(|terminal| {
-                let report = recognition
-                    .terminal_reports
-                    .get(terminal)
-                    .map(crate::model::session_state::report_view);
-                let group = report.as_ref().map(|(g, _)| *g);
-                let n = recognition
-                    .terminal_notes
-                    .get(terminal)
-                    .cloned()
-                    .or_else(|| report.map(|(_, n)| n))
-                    .expect("listed from notes or reports");
-                super::sidebar_list::Unlinked {
-                    terminal: terminal.clone(),
-                    note: n.note,
-                    why: n.why,
-                    group,
-                }
-            })
-            .collect();
+        let mut unread = self.unlinked_in(|terminal| {
+            !local_hidden
+                && self.workspace.terminal_tab(terminal).is_some_and(|tab| {
+                    match (all_spaces, self.space_filter()) {
+                        (true, None) => true,
+                        (true, Some(only)) => tab.space == only,
+                        (false, _) => tab.space == self.nav.space,
+                    }
+                })
+        });
+        unread.extend(self.listed_remote_unlinked(cx));
         unread.sort_by(|a, b| a.terminal.cmp(&b.terminal));
         if !local_hidden {
             sidebar = sidebar.child(

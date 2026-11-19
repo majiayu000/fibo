@@ -1,18 +1,46 @@
-//! Another machine's session row, drawn by `flat_row` from that machine's own workbench
-//! here, as this machine's rows are from this one: what is added for the other machine
-//! (its mark, 断开, 先不管) and where its clicks go.
+//! Another machine's sessions in this column: listed from that machine's own workbench
+//! here by the rules this machine's list uses, and drawn by `flat_row` as this machine's
+//! rows are. What is added for the other machine (its mark, 断开, 先不管) and where its
+//! clicks go is here.
 use super::*;
+use crate::model::session_state::resume_terminal;
 use crate::workbench::diagnostics::TipLine;
-use crate::workbench::sidebar_list::{End, SessionAction};
+use crate::workbench::sidebar_list::{End, Listed, SessionAction};
+use fibo_core::status::live_terminal;
 
-impl RemoteRow {
-    /// Its terminal on its machine, which keys its peek, menu and folds.
+/// One session of another machine, as its row is drawn and sorted.
+pub(in crate::workbench) struct MachineRow<'a> {
+    pub(in crate::workbench) index: usize,
+    /// That machine's workbench here: what the row reads.
+    pub(in crate::workbench) from: &'a Workbench,
+    pub(in crate::workbench) l: Listed<'a>,
+    /// The name you gave it in `machines.json`, for this column.
+    machine: String,
+    pub(in crate::workbench) online: bool,
+    why: Option<String>,
+    /// Keys its peek, folds and subagents' fold, unique across machines.
+    key: String,
+    /// Its running terminal there; None once it ended.
+    terminal: Option<String>,
+    pub(in crate::workbench) bucket: Bucket,
+    /// When it last moved; a running turn's start, so running rows hold still.
+    pub(in crate::workbench) when: u64,
+    pub(in crate::workbench) shown: bool,
+    /// Its machine is 先不管: gray, and links coming and going do not show.
+    quiet: bool,
+    /// Where it is in its machine's 置顶, when it is there.
+    pub(in crate::workbench) pin: Option<usize>,
+    pub(in crate::workbench) space: String,
+    pub(in crate::workbench) needs_you: bool,
+}
+
+impl MachineRow<'_> {
     pub(in crate::workbench) fn key(&self) -> &str {
         &self.key
     }
-    /// Its terminal's id on its machine, which that machine's workbench acts on.
-    pub(in crate::workbench) fn terminal(&self) -> &str {
-        &self.card.id
+    /// What its clicks and menu act on there: its terminal, or the session once it ended.
+    pub(in crate::workbench) fn target(&self) -> &str {
+        self.terminal.as_deref().unwrap_or(&self.l.0.id)
     }
     pub(in crate::workbench) fn quiet(&self) -> bool {
         self.quiet
@@ -24,29 +52,96 @@ impl RemoteRow {
 }
 
 impl Workbench {
-    /// `r` drawn by `flat_row` from its machine's workbench, by the same rules as this
-    /// machine's rows; None when that machine names no session for it.
-    pub(super) fn shared_remote_row(
+    /// Machine `index`'s sessions this column lists: open ones and the newest ended ones,
+    /// left out where this machine's list leaves them out (automation, 先不管).
+    pub(in crate::workbench) fn session_rows_of<'a>(
+        &'a self,
+        index: usize,
+        cx: &'a gpui::App,
+    ) -> Vec<MachineRow<'a>> {
+        let (Some(remote), Some(view)) = (self.machines.get(index), self.machine_view(index))
+        else {
+            return Vec::new();
+        };
+        let w: &'a Workbench = view.read(cx);
+        let v = remote.view.lock().unwrap();
+        let machine = machine_label(&v.spec.host).to_owned();
+        let online = v.link == Link::Online;
+        let why = match &v.link {
+            Link::Offline(why) => Some(why.clone()),
+            _ => None,
+        };
+        let now = crate::model::time::now();
+        let row = |s: &'a AgentSession, terminal: Option<String>| {
+            let (g, attention) =
+                crate::model::session_state::session_status(&w.workspace, &w.attention.unseen, s);
+            let l = (s, g, attention);
+            let bucket = w.row_bucket(&l);
+            let key = remote_key(&v, terminal.as_deref().unwrap_or(&s.id));
+            let when = match bucket {
+                Bucket::Running => w.turn_started(s),
+                _ => None,
+            }
+            .unwrap_or_else(|| w.session_updated(s));
+            MachineRow {
+                index,
+                from: w,
+                l,
+                machine: machine.clone(),
+                online,
+                why: why.clone(),
+                shown: self.peek.as_ref().is_some_and(|p| p.terminal == key),
+                key,
+                pin: (terminal.as_ref()).and_then(|t| v.pins.iter().flatten().position(|p| p == t)),
+                terminal,
+                bucket,
+                when,
+                quiet: v.spec.quiet,
+                space: w.workspace.session_space(s).unwrap_or_default().to_owned(),
+                needs_you: w.workspace.needs_you(s, now),
+            }
+        };
+        let listed = (w.workspace.agent_sessions.iter()).filter(|s| w.session_hidden(s).is_none());
+        let mut ended: Vec<_> = listed.clone().filter(|s| w.session_closed(s)).collect();
+        ended.sort_by_key(|s| std::cmp::Reverse(w.session_updated(s)));
+        ended.truncate(crate::workbench::sidebar_wasm::CLOSED_SHOWN);
+        let open: Vec<_> = listed
+            .filter(|s| w.session_open(s))
+            .map(|s| {
+                let terminal = live_terminal(&w.workspace, s)
+                    .or_else(|| resume_terminal(&w.workspace, &w.resuming.resumed, s));
+                row(s, terminal.map(|t| t.id.clone()))
+            })
+            .collect();
+        open.into_iter()
+            .chain(ended.into_iter().map(|s| row(s, None)))
+            .collect()
+    }
+    /// `r` drawn by `flat_row` from its machine's workbench, with `detail` its second line.
+    pub(in crate::workbench) fn machine_row(
         &self,
-        r: &RemoteRow,
+        r: &MachineRow,
+        detail: Option<String>,
         cx: &Context<Self>,
-    ) -> Option<gpui::AnyElement> {
-        let view = self.machine_view(r.index)?;
-        let w = view.read(cx);
-        let id = r.card.session.as_deref()?;
-        let s = w.workspace.agent_sessions.iter().find(|s| s.id == id)?;
-        let (g, attention) =
-            crate::model::session_state::session_status(&w.workspace, &w.attention.unseen, s);
-        let detail = self.listed_detail(w, &(s, g, attention), r.shown);
-        Some(self.flat_row(w, Some(r), (s, g, attention), None, detail, End::State, cx))
+    ) -> gpui::AnyElement {
+        self.flat_row(r.from, Some(r), r.l, None, detail, End::State, cx)
+    }
+    /// Its second line as the chosen preset shows it.
+    pub(in crate::workbench) fn machine_detail(&self, r: &MachineRow) -> Option<String> {
+        self.listed_detail(r.from, &r.l, r.shown)
     }
     /// Its machine's square, when this list holds more than one machine.
-    pub(in crate::workbench) fn there_mark(&self, r: &RemoteRow) -> Option<gpui::Div> {
+    pub(in crate::workbench) fn there_mark(&self, r: &MachineRow) -> Option<gpui::Div> {
         (!r.quiet && self.machine_layout() == Machines::Mixed && self.machine_scope().is_none())
             .then(|| machine_mark(machine_letter(&r.machine), !r.online))
     }
     /// Its space's tag, gray on a machine put aside.
-    pub(in crate::workbench) fn there_tag(&self, r: &RemoteRow, id: &str, name: &str) -> gpui::Div {
+    pub(in crate::workbench) fn there_tag(
+        &self,
+        r: &MachineRow,
+        id: &str,
+        name: &str,
+    ) -> gpui::Div {
         if r.quiet {
             quiet::quiet_tag(name)
         } else {
@@ -54,7 +149,7 @@ impl Workbench {
         }
     }
     /// The hover card while its machine is not connected.
-    pub(in crate::workbench) fn there_tip(&self, r: &RemoteRow) -> Option<Vec<TipLine>> {
+    pub(in crate::workbench) fn there_tip(&self, r: &MachineRow) -> Option<Vec<TipLine>> {
         let text = match (&r.why, r.online) {
             (_, true) => return None,
             _ if r.quiet => t!("{machine} 现在没连上", machine = r.machine),
@@ -68,7 +163,7 @@ impl Workbench {
     pub(in crate::workbench) fn click_there(
         &mut self,
         index: usize,
-        terminal: &str,
+        target: &str,
         rename: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -78,14 +173,12 @@ impl Workbench {
         } else {
             SessionAction::Open
         };
-        self.remote_action(index, terminal, &action, window, cx);
+        self.remote_action(index, target, &action, window, cx);
     }
 }
 
 #[cfg(feature = "visual-test")]
 impl Workbench {
-    /// Whether machine `index`'s row for `terminal` is drawn by `flat_row` from that
-    /// machine's workbench, not from its card alone.
     /// A plain click on machine `index`'s row for `terminal`, as its row's click does.
     pub fn visual_click_remote_row(
         &mut self,
@@ -94,14 +187,17 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let row = (self.remote_rows_of(index).into_iter()).find(|r| r.card.id == terminal);
-        if let Some(r) = row {
-            self.click_there(r.index, r.terminal(), false, window, cx);
+        let target = (self.session_rows_of(index, cx).into_iter())
+            .find(|r| r.terminal.as_deref() == Some(terminal))
+            .map(|r| r.target().to_owned());
+        if let Some(target) = target {
+            self.click_there(index, &target, false, window, cx);
         }
     }
-    pub fn visual_row_shared(&self, index: usize, terminal: &str, cx: &Context<Self>) -> bool {
-        (self.remote_rows_of(index).iter())
-            .filter(|r| r.card.id == terminal)
-            .any(|r| self.shared_remote_row(r, cx).is_some())
+    /// The sessions machine `index` lists in this column, by id.
+    pub fn visual_machine_sessions(&self, index: usize, cx: &gpui::App) -> Vec<String> {
+        (self.session_rows_of(index, cx).iter())
+            .map(|r| r.l.0.id.clone())
+            .collect()
     }
 }

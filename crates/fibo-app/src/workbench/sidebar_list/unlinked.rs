@@ -15,6 +15,8 @@ pub(in crate::workbench) struct Unlinked {
     pub why: String,
     /// What its program reported; none when nothing did.
     pub group: Option<Status>,
+    /// Another machine's: its index and the key its peek goes by.
+    pub there: Option<(usize, String)>,
 }
 
 /// The heading, or none: no such terminal, no empty group.
@@ -105,6 +107,75 @@ impl Workbench {
         }
     }
 
+    /// Agents running in a tab of this workbench's machine that no evidence has tied to a
+    /// conversation yet, where `keep` lists their terminal: listed rather than missing, so
+    /// a CLI Fibo cannot read is never silent. A program that reports its own status
+    /// (OSC 7501) is listed the same way, its dot saying what it reported.
+    pub(in crate::workbench) fn unlinked_in(&self, keep: impl Fn(&str) -> bool) -> Vec<Unlinked> {
+        let recognition = self.store.recognition();
+        let mut rows: Vec<_> = (recognition.terminal_notes.keys())
+            .chain(recognition.terminal_reports.keys())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .filter(|terminal| self.current_agent(terminal).is_none() && keep(terminal))
+            .map(|terminal| {
+                let report = (recognition.terminal_reports.get(terminal))
+                    .map(crate::model::session_state::report_view);
+                let group = report.as_ref().map(|(g, _)| *g);
+                let n = (recognition.terminal_notes.get(terminal).cloned())
+                    .or_else(|| report.map(|(_, n)| n))
+                    .expect("listed from notes or reports");
+                Unlinked {
+                    terminal: terminal.clone(),
+                    note: n.note,
+                    why: n.why,
+                    group,
+                    there: None,
+                }
+            })
+            .collect();
+        rows.sort_by(|a, b| a.terminal.cmp(&b.terminal));
+        rows
+    }
+    /// Machine `index`'s such terminals, from its workbench here, in `space` when given;
+    /// none in a space put aside.
+    pub(in crate::workbench) fn remote_unlinked(
+        &self,
+        index: usize,
+        space: Option<&str>,
+        cx: &gpui::App,
+    ) -> Vec<Unlinked> {
+        let (Some(remote), Some(view)) = (self.machines.get(index), self.machine_view(index))
+        else {
+            return Vec::new();
+        };
+        let v = remote.view.lock().unwrap();
+        let w = view.read(cx);
+        let mut rows = w.unlinked_in(|t| {
+            !w.workspace.terminal_quiet(t)
+                && (w.workspace.terminal_tab(t))
+                    .is_some_and(|tab| space.is_none_or(|s| tab.space == s))
+        });
+        for r in &mut rows {
+            r.there = Some((index, super::super::machines::remote_key(&v, &r.terminal)));
+        }
+        rows
+    }
+    /// Those of the other machines whose rows go in this column's own list.
+    pub(in crate::workbench) fn listed_remote_unlinked(&self, cx: &gpui::App) -> Vec<Unlinked> {
+        use fibo_core::sidebar::Machines;
+        match (self.machine_scope(), self.machine_layout()) {
+            (Some(index), _) => {
+                let space = self.machine_space_of(index).map(|s| s.id.clone());
+                self.remote_unlinked(index, space.as_deref(), cx)
+            }
+            (None, Machines::Mixed) if self.space_filter().is_none() => (0..self.machines.len())
+                .filter(|i| !self.machine_quiet(*i))
+                .flat_map(|i| self.remote_unlinked(i, None, cx))
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
     /// The group under the column's lists, in the chosen preset's look.
     pub(in crate::workbench) fn unlinked_rows(
         &self,
@@ -132,9 +203,14 @@ impl Workbench {
                     note,
                     why,
                     group,
+                    there,
                 } = row;
-                let focused =
-                    row_selected(self.nav.focused.as_deref(), &terminal, self.peek.is_some());
+                let focused = match &there {
+                    Some((_, key)) => self.peek.as_ref().is_some_and(|p| &p.terminal == key),
+                    None => {
+                        row_selected(self.nav.focused.as_deref(), &terminal, self.peek.is_some())
+                    }
+                };
                 let id = gpui::SharedString::from(format!("unread-row-{terminal}"));
                 row_box(id, look, focused)
                     .child(self.row_mark(look, group, cx))
@@ -144,19 +220,26 @@ impl Workbench {
                         cx.new(|_| super::super::render::TextTip(why.clone().into()))
                             .into()
                     })
-                    .on_mouse_down(gpui::MouseButton::Right, {
+                    .when(there.is_none(), |d| {
                         let terminal = terminal.clone();
-                        cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
-                            this.layout.menu = Some(PaneMenu {
-                                terminal: terminal.clone(),
-                                position: event.position,
-                                page: MenuPage::Main,
-                                path: None,
-                            });
-                            cx.notify();
-                        })
+                        d.on_mouse_down(
+                            gpui::MouseButton::Right,
+                            cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                                this.layout.menu = Some(PaneMenu {
+                                    terminal: terminal.clone(),
+                                    position: event.position,
+                                    page: MenuPage::Main,
+                                    path: None,
+                                });
+                                cx.notify();
+                            }),
+                        )
                     })
                     .on_click(cx.listener(move |this, _, window, cx| {
+                        if let Some((index, _)) = &there {
+                            this.click_there(*index, &terminal, false, window, cx);
+                            return;
+                        }
                         // As a session row's click does, or the peek stays over the terminal.
                         this.close_peek(cx);
                         this.focus_terminal(&terminal, window, cx);

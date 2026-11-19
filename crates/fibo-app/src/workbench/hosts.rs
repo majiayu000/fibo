@@ -653,3 +653,14 @@ impl Workbench {
         self.hosts.beside
     }
 }
+
+#[cfg(feature = "visual-test")]
+impl Workbench {
+    /// Puts `view` in as machine `host`'s workbench, or takes it out with None.
+    pub(super) fn visual_set_host_view(&mut self, host: &str, view: Option<Entity<Workbench>>) {
+        self.hosts.views.retain(|(h, _)| h != host);
+        if let Some(view) = view {
+            self.hosts.views.push((host.to_owned(), view));
+        }
+    }
+}
