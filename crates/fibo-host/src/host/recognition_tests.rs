@@ -340,6 +340,7 @@ fn shared_host(root: &std::path::Path, index: &crate::log_index::Index) -> Share
         myself: std::sync::Weak::new(),
         http_asks: HashMap::new(),
         screen_waits: HashMap::new(),
+        screen_answered: HashMap::new(),
         title_busy: HashMap::new(),
         screen_busy: HashMap::new(),
         hooks: Default::default(),

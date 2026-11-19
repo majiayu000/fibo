@@ -232,6 +232,7 @@ pub(super) fn serve_runtime(
         myself: std::sync::Weak::new(),
         http_asks: HashMap::new(),
         screen_waits: HashMap::new(),
+        screen_answered: HashMap::new(),
         title_busy: HashMap::new(),
         screen_busy: HashMap::new(),
         hooks: Default::default(),
