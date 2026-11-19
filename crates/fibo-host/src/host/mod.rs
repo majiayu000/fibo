@@ -156,7 +156,26 @@ impl Host {
     fn answer_screen_wait(&mut self, terminal: &str) -> io::Result<()> {
         self.screen_answered
             .insert(terminal.into(), std::time::Instant::now());
+        self.note_answer(terminal)?;
         self.set_screen_wait(terminal, None)
+    }
+    /// A conversation waiting on the user learns when they answered, so its turn clock
+    /// leaves out only the wait and not the work after it (`Waited::answered`).
+    fn note_answer(&mut self, terminal: &str) -> io::Result<()> {
+        let Some(s) = self.workspace.current_agent(terminal).cloned() else {
+            return Ok(());
+        };
+        let open = (self.workspace.content.get(&s.id)).is_some_and(|c| c.waits_for_answer());
+        if !open || s.transcript.is_empty() {
+            return Ok(());
+        }
+        self.index.answered(&s.transcript)?;
+        let Some(card) = self.index.card(&s.transcript)? else {
+            return Ok(());
+        };
+        let mut next = self.workspace.clone();
+        next.content.insert(s.id, card);
+        self.commit(next)
     }
     /// Asks the CLIs off the lock (`claude agents --json`, Codex `thread/read`) and applies the
     /// result. Returns when to look again for sessions held back by the rate limit.
