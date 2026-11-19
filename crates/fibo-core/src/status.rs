@@ -329,12 +329,23 @@ pub fn asks_for_you(w: &Workspace, s: &AgentSession, now: u64) -> bool {
 }
 
 /// The state of what runs in a terminal. An Agent asking to be trusted with its folder is
-/// waiting on you, with or without a conversation: it does nothing until you answer.
-pub fn of_terminal(w: &Workspace, terminal: &str, asks_trust: bool, now: u64) -> Option<Status> {
+/// waiting on you, with or without a conversation: it does nothing until you answer. With
+/// no conversation, a program that reports its own state (OSC 7501) has that one, as the
+/// window's row shows it.
+pub fn of_terminal(
+    w: &Workspace,
+    terminal: &str,
+    asks_trust: bool,
+    report: Option<&crate::protocol::ProgramReport>,
+    now: u64,
+) -> Option<Status> {
     if asks_trust {
         return Some(Status::Waiting);
     }
-    w.current_agent(terminal).map(|s| of(w, s, now))
+    match w.current_agent(terminal) {
+        Some(s) => Some(of(w, s, now)),
+        None => report.map(|r| of_program(&r.state)),
+    }
 }
 
 /// What this session's finished turn left running in its live terminal: a note on its

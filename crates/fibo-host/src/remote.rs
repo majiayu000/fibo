@@ -396,6 +396,17 @@ fn ok_reply(reply: Reply) -> io::Result<Value> {
         other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
     }
 }
+/// This bridge lives as long as the phone's link and read the plugins when it started: once
+/// the host says they changed since, it reads them again, so an Agent a plugin added can
+/// be opened from the phone (`writes::agent_named`) without restarting the link.
+fn follow_plugins(revision: u64) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEEN: AtomicU64 = AtomicU64::new(u64::MAX);
+    let before = SEEN.swap(revision, Ordering::SeqCst);
+    if before != u64::MAX && before != revision {
+        fibo_core::plugin::reload();
+    }
+}
 /// The whole of `list`, read from the host.
 fn full_list(socket: &Path) -> io::Result<Value> {
     match rpc(socket, &Request::Workspace)? {
@@ -403,7 +414,10 @@ fn full_list(socket: &Path) -> io::Result<Value> {
             // Which terminals run an Agent no conversation is tied to; without it they
             // still list, as shells.
             let seen = match rpc(socket, &Request::RecognitionStatus) {
-                Ok(Reply::Recognition(r)) => r,
+                Ok(Reply::Recognition(r)) => {
+                    follow_plugins(r.plugins_revision);
+                    r
+                }
                 _ => Default::default(),
             };
             list::list(&w, &seen, socket)

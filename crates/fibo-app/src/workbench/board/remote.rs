@@ -152,7 +152,7 @@ impl Workbench {
             .then(|| r.card.approval.clone().or_else(|| r.card.waiting.clone()))
             .flatten()
             .filter(|q| !q.trim().is_empty() && q.trim() != title.trim());
-        let when = r.card.updated.map(|at| short_ago(at, now()));
+        let when = self.card_time(&r.card, r.online, cx);
         let movable = r.online && self.machine_manages(r.index);
         let open = (r.index, r.card.clone(), r.machine.clone());
         let link = T::color(T::link());
