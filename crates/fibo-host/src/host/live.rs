@@ -390,6 +390,14 @@ pub(super) fn pump(
         }
         live.broadcast(OUTPUT, bytes[..n].to_vec());
         let finished = live.marks.scan(&bytes[..n], Instant::now());
+        // Back at the prompt: no mouse moves typed into it by a program that died mid-run.
+        if let Some(off) = (!finished.is_empty())
+            .then(|| crate::prompt_modes::left_on(&live.vt))
+            .flatten()
+        {
+            live.vt.feed(off);
+            live.broadcast(OUTPUT, off.to_vec());
+        }
         let scan = live.reports.scan(&bytes[..n]);
         // A program asking whether we speak the status protocol gets its answer.
         if !scan.reply.is_empty() {

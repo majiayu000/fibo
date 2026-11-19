@@ -16,6 +16,7 @@ pub mod log_index;
 mod official;
 pub mod plugin_hooks;
 mod program_status;
+mod prompt_modes;
 mod pty;
 pub mod recognition;
 pub mod redact;
