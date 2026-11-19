@@ -62,6 +62,20 @@ pub(super) fn note_parent(parser: &mut Parser, v: &Value) {
             {
                 parser.card.finished_subagents.retain(|old| old != id);
                 parser.card.stopped_subagents.retain(|old| old != id);
+                // Its snapshot, with task id and name, is written only when the run ends.
+                let launch = &v["toolUseResult"];
+                let run = launch["runId"].as_str().map(str::to_owned).or_else(|| {
+                    let dir = said
+                        .lines()
+                        .find_map(|l| l.strip_prefix("Transcript dir: "))?;
+                    Some(Path::new(dir.trim()).file_name()?.to_str()?.to_owned())
+                });
+                if let Some(run) = run.filter(|r| !r.is_empty()) {
+                    let name = string(&launch["workflowName"]);
+                    let runs = &mut parser.card.workflow_runs;
+                    runs.retain(|(old, ..)| *old != run);
+                    runs.push((run, id.to_owned(), name));
+                }
                 // A launch after a Stop is fresh evidence; the old registry cannot end it.
                 if let Some((_, tasks)) = &mut parser.card.workflow_tasks {
                     if !tasks.iter().any(|old| old == id) {
@@ -147,6 +161,7 @@ pub(super) fn read(transcript: &Path) -> Vec<Subagent> {
             .or_else(|| modified(&dir))
             .unwrap_or(0);
         let mut workflow = Workflow {
+            run: run.to_owned(),
             phases: snapshot["phases"]
                 .as_array()
                 .into_iter()

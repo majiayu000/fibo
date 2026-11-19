@@ -43,7 +43,10 @@ impl WorkflowRun for Subagent {
         if self.workflow.is_none() {
             return;
         }
+        // Known only by its run directory, the registry cannot name it either way.
+        let named = self.workflow.as_ref().is_some_and(|w| w.run != self.id);
         if let Some((at, tasks)) = registry
+            && named
             && self.running()
             && self.started <= *at
             && !tasks.contains(&self.id)
@@ -123,6 +126,16 @@ impl Content {
         let mut kept: Vec<Subagent> = all
             .into_iter()
             .map(|mut s| {
+                if let Some(w) = &s.workflow
+                    && w.run == s.id
+                    && let Some((_, task, name)) =
+                        self.workflow_runs.iter().find(|(run, ..)| *run == w.run)
+                {
+                    if s.name == s.id && !name.is_empty() {
+                        s.name = name.clone();
+                    }
+                    s.id = task.clone();
+                }
                 if self.stopped_subagents.contains(&s.id) {
                     s.stopped = true;
                     s.ended.get_or_insert(self.updated.max(s.started));

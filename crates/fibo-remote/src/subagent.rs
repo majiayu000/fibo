@@ -27,6 +27,10 @@ pub struct Subagent {
 /// its adapter. An unknown journal format keeps the summary but has no expansion.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Workflow {
+    /// The run's own id (its directory). The row's id is the task id once that is known,
+    /// and stays this run id until then.
+    #[serde(default)]
+    pub run: String,
     pub phase: String,
     pub phases: Vec<String>,
     pub steps: Vec<WorkflowStep>,

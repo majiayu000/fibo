@@ -303,3 +303,46 @@ fn replay_loom_workflow_read_only() {
             .collect::<Vec<_>>()
     );
 }
+
+/// Claude Code writes `workflows/<run>.json` only once a run ends: while it runs, the run
+/// is known by its directory, and its task id and name only from the parent's launch.
+#[test]
+fn a_running_workflow_without_its_snapshot_keeps_running_past_the_parent_stop() {
+    let f = Fixture::new();
+    f.prepare();
+    fs::remove_file(f.log().with_extension("").join("workflows/wf_test.json")).unwrap();
+    // Without a snapshot it started when its files were written: now.
+    let at = jiff::Timestamp::now().as_second() as u64 + 60;
+    let facts = fibo_host::content::hook_facts(
+        &json!({"background_tasks":[{"type":"local_workflow","id":"w1","status":"running"}]}),
+    );
+    // The launch receipt is in the part of the log that was read.
+    let mut p = Parser::default();
+    p.card = f.read();
+    let launch = json!({"type":"user","timestamp":12,"message":{"content":[{"type":"tool_result",
+        "content":"Workflow launched in background. Task ID: w1\nSummary: s\nTranscript dir: /p/parent/subagents/workflows/wf_test"}]},
+        "toolUseResult":{"status":"async_launched","taskId":"w1","taskType":"local_workflow","workflowName":"queue","runId":"wf_test"}});
+    p.add(
+        Agent::Claude,
+        &serde_json::to_vec(&launch).unwrap(),
+        Default::default(),
+    );
+    p.card.keep_subagents(f.read().subagents);
+    let run = &p.card.subagents[0];
+    assert_eq!((run.id.as_str(), run.name.as_str()), ("w1", "queue"));
+    p.hook("Stop", &facts, at, Default::default());
+    p.card.keep_subagents(f.read().subagents);
+    let run = &p.card.subagents[0];
+    assert!(
+        run.running() && !run.stopped,
+        "the registry names it: {run:?}"
+    );
+    // The launch sits in the unread middle of a long log: its task id is unknown, and a
+    // registry that cannot name it says nothing about it.
+    let mut p = Parser::default();
+    p.card = f.read();
+    p.hook("Stop", &facts, at, Default::default());
+    p.card.keep_subagents(f.read().subagents);
+    let run = &p.card.subagents[0];
+    assert!(run.running() && !run.stopped, "unknown task id: {run:?}");
+}

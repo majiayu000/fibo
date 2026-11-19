@@ -147,6 +147,9 @@ pub struct Content {
     pub finished_subagents: Vec<String>,
     #[serde(default)]
     pub workflow_tasks: Option<(u64, Vec<String>)>,
+    /// Workflow launches this log reported: run id, task id, name.
+    #[serde(default)]
+    pub workflow_runs: Vec<(String, String, String)>,
     /// The background shells the last Stop listed as running (Claude Code names each with
     /// its description and command). Which of them is a job the agent waits for is live
     /// evidence the host adds to its snapshot; stored, every one is `job: false`.
