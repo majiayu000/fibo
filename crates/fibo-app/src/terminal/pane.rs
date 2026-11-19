@@ -8,6 +8,8 @@ mod handoff;
 mod ime;
 #[path = "pane_input.rs"]
 mod input;
+#[path = "pane_last_screen.rs"]
+mod last_screen;
 #[path = "pane_links.rs"]
 mod links;
 #[path = "pane_mouse.rs"]
@@ -50,6 +52,11 @@ const ASK_FLOAT_MS: u64 = 1500;
 /// few seconds (history may have dropped its oldest rows, moving the rest up).
 const ASK_LOCATE_MS: u64 = 500;
 const ASK_RELOCATE_MS: u64 = 3000;
+/// The host's screen usually lands well within this: only a wait longer than it says so.
+const LOADING_QUIET_MS: u64 = 500;
+/// Drawing the screen the last pane left, a wait this long still says it is loading: the
+/// screen shown may be out of date.
+const LOADING_KEPT_MS: u64 = 3000;
 pub struct Pane {
     terminal: String,
     socket: std::path::PathBuf,
@@ -133,6 +140,10 @@ pub struct Pane {
     started_under: Option<fibo_core::terminal::TermColors>,
     tint_note_dismissed: bool,
     ask: AskPin,
+    /// Drawing the screen the last pane on this terminal left, until the host's arrives.
+    showing_kept: bool,
+    /// When this pane opened: a short wait for the first screen says nothing.
+    opened: Instant,
 }
 /// A hovered path word that exists on disk.
 #[derive(Clone, Debug, PartialEq)]
@@ -166,7 +177,9 @@ impl Pane {
     pub fn new(socket: &Path, id: &str, takeover: bool, cx: &mut Context<Self>) -> Self {
         let (tx, rx) = unbounded();
         let connection = Connection::new(socket, id, takeover, tx.clone());
-        Self::with(connection, socket.to_owned(), id, tx, rx, cx)
+        let mut pane = Self::with(connection, socket.to_owned(), id, tx, rx, cx);
+        pane.restore_last_screen();
+        pane
     }
     /// Another machine's terminal through its forward here, floated up for a look: looked
     /// at until it is used (`take_size`), as a peek of this machine's is.
@@ -210,6 +223,20 @@ impl Pane {
                     })
                     .is_err()
                 {
+                    break;
+                }
+            }
+        })
+        .detach();
+        // Repaints once each waiting note is due, in case nothing else does by then.
+        cx.spawn(async move |this, cx| {
+            let mut slept = 0;
+            for ms in [LOADING_QUIET_MS, LOADING_KEPT_MS] {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(ms + 20 - slept))
+                    .await;
+                slept = ms + 20;
+                if this.update(cx, |_, cx| cx.notify()).is_err() {
                     break;
                 }
             }
@@ -268,6 +295,8 @@ impl Pane {
             started_under: None,
             tint_note_dismissed: false,
             ask: AskPin::default(),
+            showing_kept: false,
+            opened: Instant::now(),
         }
     }
     /// Attaches again after the host dropped this pane's stream; the snapshot restores

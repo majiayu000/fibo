@@ -65,6 +65,41 @@ impl Stream {
     pub fn peer_is_this_account(&self) -> io::Result<bool> {
         Ok(peer_uid(&self.0)? == unsafe { libc::geteuid() })
     }
+    pub fn send_buffer(&self) -> io::Result<usize> {
+        let mut bytes: libc::c_int = 0;
+        let mut len = std::mem::size_of::<libc::c_int>() as libc::socklen_t;
+        // SAFETY: the output is an int and `len` says so.
+        let r = unsafe {
+            libc::getsockopt(
+                self.0.as_raw_fd(),
+                libc::SOL_SOCKET,
+                libc::SO_SNDBUF,
+                (&raw mut bytes).cast(),
+                &mut len,
+            )
+        };
+        if r < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(bytes.max(0) as usize)
+    }
+    pub fn set_send_buffer(&self, bytes: usize) -> io::Result<()> {
+        let bytes = bytes.min(libc::c_int::MAX as usize) as libc::c_int;
+        // SAFETY: the input is an int and the length says so.
+        let r = unsafe {
+            libc::setsockopt(
+                self.0.as_raw_fd(),
+                libc::SOL_SOCKET,
+                libc::SO_SNDBUF,
+                (&raw const bytes).cast(),
+                std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+            )
+        };
+        if r < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
     #[inline]
     pub fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
         (&self.0).read(buffer)

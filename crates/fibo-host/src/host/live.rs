@@ -101,6 +101,19 @@ impl Live {
     }
 }
 
+/// Largest send buffer asked for while a snapshot goes out.
+const SNAPSHOT_SEND_BUFFER: usize = 4 * 1024 * 1024;
+/// Widens the connection's send buffer so a snapshot crosses in a few turns rather than
+/// one per 8 KiB: with the machine busy (load 400 on 16 cores, 11-19) each turn waited for
+/// a CPU and a 1 MB screen took 2 seconds to reach the window, which showed nothing
+/// meanwhile. Returns the size to go back to once it is sent, so a viewer that stops
+/// reading is still found out by its queue, not hidden behind megabytes of kernel buffer.
+fn widen_for(writer: &local::Stream, snapshot: usize) -> Option<usize> {
+    let usual = writer.send_buffer().ok()?;
+    let wanted = (snapshot + 64 * 1024).min(SNAPSHOT_SEND_BUFFER);
+    (wanted > usual && writer.set_send_buffer(wanted).is_ok()).then_some(usual)
+}
+
 pub(super) fn writable_frame(writable: bool) -> Vec<u8> {
     if writable {
         b"true".to_vec()
@@ -526,10 +539,14 @@ pub(super) fn attach(
     let writer_lagged = Arc::clone(&lagged);
     thread::spawn(move || {
         let result = (|| -> io::Result<()> {
+            let usual = widen_for(&writer, snapshot.len());
             for chunk in snapshot.chunks(MAX_FRAME - 1) {
                 write_frame(&mut writer, SNAPSHOT, chunk)?;
             }
             write_frame(&mut writer, READY, &[])?;
+            if let Some(usual) = usual {
+                let _ = writer.set_send_buffer(usual);
+            }
             for (kind, data) in rx.iter() {
                 if writer_lagged.load(Ordering::Acquire) {
                     // A burst outran this viewer: skip the stale backlog and send the

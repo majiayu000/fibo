@@ -60,6 +60,7 @@ impl Render for Pane {
         let shared = self.connection.state.clone();
         let state = shared.lock().unwrap();
         if let Some(vt) = &state.vt {
+            self.showing_kept = false;
             let result = (|| {
                 if self.capture.is_none() {
                     self.capture = Some(screen::Capture::new()?);
@@ -86,7 +87,7 @@ impl Render for Pane {
                 }
                 Err(e) => self.local_error = Some(e.to_string()),
             }
-        } else if self.capture.is_none() {
+        } else if self.capture.is_none() && !self.showing_kept {
             // Nothing captured yet: the ground is the theme's, the same one the snapshot
             // brings, rather than the zero an empty screen holds, which paints black.
             self.screen.background = T::terminal_bg();
@@ -115,9 +116,18 @@ impl Render for Pane {
         } else if state.dropped || self.reconnect_delay > 0 {
             t!("连接断开 · 正在重连…").into()
         } else if state.vt.is_none() {
-            t!("正在恢复终端…").into()
+            let quiet = if self.showing_kept {
+                super::LOADING_KEPT_MS
+            } else {
+                super::LOADING_QUIET_MS
+            };
+            if self.opened.elapsed() < std::time::Duration::from_millis(quiet) {
+                String::new()
+            } else {
+                t!("正在载入画面…").into()
+            }
         } else if state.writable {
-            t!("终端已连接").into()
+            String::new()
         } else if let Some((cols, rows)) = grid {
             t!(
                 "只读 · 尺寸跟另一个窗口（{cols}×{rows}）· 可明确接管",
@@ -369,7 +379,7 @@ impl Render for Pane {
                 window.focus(&this.focus, cx);
                 this.drop_paths(paths, cx);
             }))
-            .when(status != t!("终端已连接"), |d| {
+            .when(!status.is_empty(), |d| {
                 d.child(
                     div()
                         .px(px(T::S12))
