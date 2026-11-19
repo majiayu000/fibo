@@ -7,18 +7,29 @@ use fibo_core::model::Workspace;
 use fibo_core::workspace_delta::{Hashes, apply, diff_with};
 use std::collections::VecDeque;
 
+#[cfg(target_os = "macos")]
 unsafe extern "C" {
     fn proc_pid_rusage(pid: i32, flavor: i32, buffer: *mut u64) -> i32;
 }
 /// `ri_instructions` of `rusage_info_v4`: after the 16-byte uuid, the 30th u64.
+#[cfg(target_os = "macos")]
 fn instructions() -> u64 {
     let mut info = [0u64; 48];
     // SAFETY: the kernel writes one rusage_info_v4 (under 48 u64s) into the buffer.
     unsafe { proc_pid_rusage(std::process::id() as i32, 4, info.as_mut_ptr()) };
     info[2 + 29]
 }
+/// Retired instructions are read from macOS only; elsewhere this builds and says so.
+#[cfg(not(target_os = "macos"))]
+fn instructions() -> u64 {
+    0
+}
 
 fn main() {
+    if cfg!(not(target_os = "macos")) {
+        eprintln!("refresh_bench reads retired instructions on macOS only");
+        return;
+    }
     let mut args = std::env::args().skip(1);
     let path = args.next().expect("workspace json");
     let n: usize = args.next().map_or(200, |s| s.parse().unwrap());
