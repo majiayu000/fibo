@@ -176,7 +176,7 @@ impl Host {
             return Ok(());
         };
         let mut next = self.workspace.clone();
-        next.content.insert(s.id, card);
+        next.content.insert(s.id, std::sync::Arc::new(card));
         self.commit(next)
     }
     /// Asks the CLIs off the lock (`claude agents --json`, Codex `thread/read`) and applies the
