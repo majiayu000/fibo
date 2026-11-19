@@ -217,6 +217,31 @@ fn mouse_reports_stop_before_a_stalled_program_fills_its_input() {
     assert!(matches!(ack(&mut stream), Reply::Ok));
 }
 
+#[test]
+fn attached_input_limit_applies_to_mouse_reports_as_well_as_keystrokes() {
+    let h = Host::start();
+    h.setup();
+    h.call(h.launch("input-limit", "cat")).unwrap();
+    let (mut stream, _, writable) = h.attach("input-limit", false);
+    assert!(writable);
+    for lossy in [false, true] {
+        send(
+            &mut stream,
+            CONTROL,
+            &Request::Input {
+                bytes: vec![b'x'; 64 * 1024 + 1],
+                lossy,
+            },
+        )
+        .unwrap();
+        let reply = ack(&mut stream);
+        assert!(
+            matches!(&reply, Reply::Error(reason) if reason.contains("64 KiB")),
+            "lossy={lossy}: {reply:?}"
+        );
+    }
+}
+
 /// Reports joined while the host was busy arrive as one input. Written whole into a stalled
 /// program's ~1 KiB queue, it was cut where the queue filled, maybe right after an ESC: Codex
 /// then took Esc and typed `[<35;9;21M` into its input box (11-19).
