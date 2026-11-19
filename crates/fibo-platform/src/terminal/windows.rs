@@ -311,10 +311,6 @@ impl Master {
         Ok(())
     }
 
-    pub fn backlog(&self) -> Option<usize> {
-        None
-    }
-
     pub fn foreground_group(&self) -> Option<i32> {
         None
     }
@@ -340,12 +336,16 @@ impl Writer {
     pub fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
         write_input(&self.0, bytes)
     }
+
+    pub fn backlog(&self) -> Option<usize> {
+        None
+    }
 }
 
 fn write_input(mut input: &File, bytes: &[u8]) -> io::Result<()> {
     let mut accepted = 0;
     while accepted < bytes.len() {
-        let end = bytes.len().min(accepted + 256);
+        let end = super::slice_end(bytes, accepted, super::SLICE);
         match input.write(&bytes[accepted..end]) {
             Ok(0) => {
                 return Err(io::Error::other(format!(

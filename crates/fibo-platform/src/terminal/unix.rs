@@ -130,6 +130,32 @@ impl Master {
         Ok(())
     }
 
+    pub fn foreground_group(&self) -> Option<i32> {
+        let group = unsafe { libc::tcgetpgrp(self.file.as_raw_fd()) };
+        (group > 0).then_some(group)
+    }
+
+    pub fn reader(&self) -> io::Result<Reader> {
+        Ok(Reader(self.file.try_clone()?))
+    }
+
+    /// Failed writes report the accepted prefix. Never replay a failed input.
+    pub fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        write_input(&self.file, bytes)
+    }
+
+    pub fn writer(&self) -> io::Result<Writer> {
+        Ok(Writer(self.file.try_clone()?))
+    }
+}
+
+pub struct Writer(File);
+
+impl Writer {
+    pub fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        write_input(&self.0, bytes)
+    }
+
     pub fn backlog(&self) -> Option<usize> {
         #[cfg(target_os = "macos")]
         {
@@ -138,7 +164,7 @@ impl Master {
             // SAFETY: TIOCPTYGNAME writes a NUL-terminated path of at most 128 bytes.
             if unsafe {
                 libc::ioctl(
-                    self.file.as_raw_fd(),
+                    self.0.as_raw_fd(),
                     libc::TIOCPTYGNAME as _,
                     name.as_mut_ptr(),
                 )
@@ -166,32 +192,6 @@ impl Master {
             None
         }
     }
-
-    pub fn foreground_group(&self) -> Option<i32> {
-        let group = unsafe { libc::tcgetpgrp(self.file.as_raw_fd()) };
-        (group > 0).then_some(group)
-    }
-
-    pub fn reader(&self) -> io::Result<Reader> {
-        Ok(Reader(self.file.try_clone()?))
-    }
-
-    /// Failed writes report the accepted prefix. Never replay a failed input.
-    pub fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
-        write_input(&self.file, bytes)
-    }
-
-    pub fn writer(&self) -> io::Result<Writer> {
-        Ok(Writer(self.file.try_clone()?))
-    }
-}
-
-pub struct Writer(File);
-
-impl Writer {
-    pub fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
-        write_input(&self.0, bytes)
-    }
 }
 
 /// The input queue holds about 1 KiB: a longer input goes in as the program reads.
@@ -212,7 +212,8 @@ fn write_input(mut file: &File, bytes: &[u8]) -> io::Result<()> {
                 "程序 5 秒没读输入，只送进去前 {accepted} 字节，其余没发；先看输入框再决定是否重发"
             )));
         }
-        match file.write(&bytes[accepted..bytes.len().min(accepted + 256)]) {
+        let end = super::slice_end(bytes, accepted, super::SLICE);
+        match file.write(&bytes[accepted..end]) {
             Ok(0) => {
                 return Err(io::Error::other(format!(
                     "PTY 已关闭，已接受 {accepted} 字节"

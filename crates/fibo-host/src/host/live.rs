@@ -4,8 +4,6 @@ use super::*;
 use fibo_platform::local;
 
 pub(super) type Frame = (u8, Arc<Vec<u8>>);
-/// Unread input above which mouse reports are dropped; the queue holds about 1 KiB.
-pub(super) const POINTER_BACKLOG: usize = 256;
 /// Input read off a viewer's socket but not yet written to the PTY; past this it is refused.
 const INBOX_LIMIT: usize = 4 << 20;
 pub(super) struct Subscriber {
@@ -565,27 +563,29 @@ pub(super) fn attach(
     {
         let (inbox, ended, tx) = (Arc::clone(&inbox), Arc::clone(&ended), tx.clone());
         let mut reader = stream.try_clone()?;
-        thread::spawn(move || loop {
-            match super::client::request_frame(&mut reader) {
-                // A complete frame this host cannot read gets an error and the rest still
-                // go through; only a broken stream ends the connection.
-                Ok(Err(unsupported)) => {
-                    if let Ok(bytes) = serde_json::to_vec(&Reply::Error(unsupported)) {
-                        let _ = tx.try_send((ACK, Arc::new(bytes)));
-                    }
-                }
-                Ok(Ok(request)) => {
-                    if inbox.push(request) == Err(fibo_core::outbox::Refused::Full) {
-                        let refused = Reply::Error("输入积压超过 4 MiB，这段没写进终端".into());
-                        if let Ok(bytes) = serde_json::to_vec(&refused) {
+        thread::spawn(move || {
+            loop {
+                match super::client::request_frame(&mut reader) {
+                    // A complete frame this host cannot read gets an error and the rest still
+                    // go through; only a broken stream ends the connection.
+                    Ok(Err(unsupported)) => {
+                        if let Ok(bytes) = serde_json::to_vec(&Reply::Error(unsupported)) {
                             let _ = tx.try_send((ACK, Arc::new(bytes)));
                         }
                     }
-                }
-                Err(e) => {
-                    *ended.lock().unwrap_or_else(|p| p.into_inner()) = Some(e);
-                    inbox.close();
-                    return;
+                    Ok(Ok(request)) => {
+                        if inbox.push(request) == Err(fibo_core::outbox::Refused::Full) {
+                            let refused = Reply::Error("输入积压超过 4 MiB，这段没写进终端".into());
+                            if let Ok(bytes) = serde_json::to_vec(&refused) {
+                                let _ = tx.try_send((ACK, Arc::new(bytes)));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        *ended.lock().unwrap_or_else(|p| p.into_inner()) = Some(e);
+                        inbox.close();
+                        return;
+                    }
                 }
             }
         });
@@ -602,11 +602,6 @@ pub(super) fn attach(
                     return Err(io::Error::other("只读或进程已退出；需明确接管"));
                 }
                 match request {
-                    // A mouse report is dropped once the program falls behind: written into
-                    // a nearly full input queue it can be cut after its ESC, and the program
-                    // then reads the rest as typed text ("[<65;20;10M" in Codex's input box).
-                    Request::Input { lossy: true, .. }
-                        if live.master.backlog().is_some_and(|n| n > POINTER_BACKLOG) => {}
                     Request::Input { bytes, lossy } => {
                         if bytes.len() > 64 * 1024 {
                             return Err(io::Error::other("单次输入超过 64 KiB"));
@@ -614,11 +609,14 @@ pub(super) fn attach(
                         if !lossy {
                             live.input_at = Some(Instant::now());
                         }
-                        // Out of the lock: a busy program reads this only once its output
-                        // has been taken, and taking it needs the lock.
+                        // The program may wait for us to read its output before reading this.
                         let input = live.input.clone();
                         drop(live);
-                        input.write(bytes)?;
+                        if lossy {
+                            input.write_pointer(bytes)?;
+                        } else {
+                            input.write(bytes)?;
+                        }
                     }
                     Request::Scheme(scheme) => live.vt.set_scheme(scheme)?,
                     Request::Colors(colors) => live.vt.set_colors(colors)?,

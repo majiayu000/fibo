@@ -217,6 +217,47 @@ fn mouse_reports_stop_before_a_stalled_program_fills_its_input() {
     assert!(matches!(ack(&mut stream), Reply::Ok));
 }
 
+/// Reports joined while the host was busy arrive as one input. Written whole into a stalled
+/// program's ~1 KiB queue, it was cut where the queue filled, maybe right after an ESC: Codex
+/// then took Esc and typed `[<35;9;21M` into its input box (11-19).
+#[cfg(target_os = "macos")]
+#[test]
+fn joined_mouse_reports_reach_a_stalled_program_as_whole_reports() {
+    let h = Host::start();
+    h.setup();
+    h.call(h.launch(
+        "joined",
+        "stty raw -echo; sleep 2; printf 'GOT=%s.' \"$(dd bs=65536 count=1 2>/dev/null | wc -c | tr -d ' ')\"; sleep 5",
+    ))
+    .unwrap();
+    let (mut stream, mut vt, writable) = h.attach("joined", false);
+    assert!(writable);
+    std::thread::sleep(Duration::from_millis(500));
+    let report = b"\x1b[<65;20;10M";
+    send(
+        &mut stream,
+        CONTROL,
+        &Request::Input {
+            bytes: report.repeat(300),
+            lossy: true,
+        },
+    )
+    .unwrap();
+    assert!(matches!(ack(&mut stream), Reply::Ok));
+    read_until(&mut stream, &mut vt, ".");
+    let screen = vt.tail_text(24).unwrap();
+    let got: usize = screen
+        .split("GOT=")
+        .nth(1)
+        .and_then(|rest| rest.split('.').next())
+        .and_then(|n| n.trim().parse().ok())
+        .unwrap_or_else(|| panic!("{screen:?}"));
+    assert!(
+        got > 0 && got.is_multiple_of(report.len()),
+        "read {got} bytes"
+    );
+}
+
 #[test]
 fn reconnect_input_resize_and_takeover_are_real_pty_operations() {
     let h = Host::start();
