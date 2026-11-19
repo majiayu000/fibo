@@ -240,23 +240,35 @@ impl Workbench {
             .nth(self.search.index)
     }
     /// ↑ ↓ move through every row; Tab and ⇧Tab jump between groups.
-    pub(super) fn search_key(&mut self, event: &gpui::KeyDownEvent, cx: &mut Context<Self>) {
+    pub(super) fn search_key(
+        &mut self,
+        event: &gpui::KeyDownEvent,
+        section_sizes: Option<&[usize]>,
+        cx: &mut Context<Self>,
+    ) {
         let k = &event.keystroke;
         if !matches!(k.key.as_str(), "up" | "down" | "tab")
             || self.search.field.read(cx).composing()
         {
             return;
         }
-        let sizes: Vec<usize> = self
-            .search_sections(&self.search_query(cx))
-            .iter()
-            .map(|s| s.hits.len())
-            .collect();
+        let refreshed;
+        let sizes = match section_sizes {
+            Some(sizes) => sizes,
+            None => {
+                refreshed = self
+                    .search_sections(&self.search_query(cx))
+                    .iter()
+                    .map(|s| s.hits.len())
+                    .collect::<Vec<_>>();
+                &refreshed
+            }
+        };
         let len = sizes.iter().sum();
         self.search.index = match k.key.as_str() {
             "up" => step(self.search.index, len, -1),
             "down" => step(self.search.index, len, 1),
-            "tab" => section_jump(&sizes, self.search.index, k.modifiers.shift),
+            "tab" => section_jump(sizes, self.search.index, k.modifiers.shift),
             _ => return,
         };
         self.search.scroll.scroll_to_item(self.search.index);
