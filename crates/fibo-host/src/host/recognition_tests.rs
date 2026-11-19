@@ -311,6 +311,57 @@ fn a_deleted_log_folder_ends_its_repair_healthy() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A log batch commits a new session and a card it changed, and nothing when every card
+/// it read is as the workspace has it: only the cards read are compared.
+#[test]
+fn a_batch_commits_only_when_a_card_it_read_changed() {
+    let root = std::env::temp_dir().join(format!("kl-cards-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(root.join("logs")).unwrap();
+    let root = root.canonicalize().unwrap();
+    let logs = root.join("logs");
+    let ask = |text: &str| {
+        format!("{{\"type\":\"event_msg\",\"payload\":{{\"type\":\"user_message\",\"message\":\"{text}\"}}}}\n")
+    };
+    let log = logs.join("a.jsonl");
+    let meta = "{\"type\":\"session_meta\",\"payload\":{\"id\":\"a\",\"cwd\":\"/tmp\"}}\n";
+    fs::write(&log, format!("{meta}{}", ask("第一句"))).unwrap();
+    let other = fibo_core::content::Content {
+        title: "别的会话".into(),
+        ..Default::default()
+    };
+    let mut index =
+        crate::log_index::Index::open(&root, vec![(Agent::Codex, logs.clone())]).unwrap();
+    index.initialize().unwrap();
+    index.bootstrap().unwrap();
+    let shared = shared_host(&root, &index);
+    lock(&shared)
+        .unwrap()
+        .workspace
+        .content
+        .insert("x".into(), other);
+    let revision = || lock(&shared).unwrap().workspace.revision;
+    let mut association = Association::default();
+    let batch = index.cached().unwrap();
+    association.apply(&shared, &index, &batch).unwrap();
+    let first = revision();
+    assert_eq!(lock(&shared).unwrap().workspace.agent_sessions.len(), 1);
+    association.apply(&shared, &index, &batch).unwrap();
+    assert_eq!(revision(), first, "the same card again commits nothing");
+
+    fs::write(&log, format!("{meta}{}{}", ask("第一句"), ask("第二句"))).unwrap();
+    let batch = vec![index.update(Agent::Codex, &log, false).unwrap().unwrap()];
+    association.apply(&shared, &index, &batch).unwrap();
+    assert!(revision() > first, "a changed card commits");
+    let host = lock(&shared).unwrap();
+    let id = &host.workspace.agent_sessions[0].id;
+    assert_eq!(host.workspace.content[id].asks.len(), 2);
+    assert_eq!(host.workspace.content["x"].title, "别的会话");
+    drop(host);
+    drop(shared);
+    drop(index);
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// A host over `root`'s store with nothing running, for driving recognition by hand.
 fn shared_host(root: &std::path::Path, index: &crate::log_index::Index) -> Shared {
     let (store, workspace) = Store::open(root).unwrap();

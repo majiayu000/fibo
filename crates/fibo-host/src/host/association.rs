@@ -65,6 +65,8 @@ impl Association {
                 }
             }
             crate::recognition::reconcile(&mut next, transcripts, &[], &HashMap::new())?;
+            // Only cards read here change content: compare those, not the whole table.
+            let mut touched = vec![];
             for t in transcripts {
                 if let Some(s) = next
                     .agent_sessions
@@ -86,6 +88,7 @@ impl Association {
                             s.outcome = fibo_core::model::Outcome::Open;
                         }
                         s.updated = s.updated.max(card.updated);
+                        touched.push(s.id.clone());
                         next.content.insert(s.id.clone(), card);
                     }
                 }
@@ -93,7 +96,7 @@ impl Association {
             // A `continued-in` line read just now moves its terminal to the new session.
             crate::recognition::follow_continued(&mut next, transcripts)?;
             if next.agent_sessions != host.workspace.agent_sessions
-                || next.content != host.workspace.content
+                || (touched.iter()).any(|id| next.content.get(id) != host.workspace.content.get(id))
             {
                 host.commit(next)?;
             }
