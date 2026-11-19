@@ -193,3 +193,29 @@ fn the_same_own_name_twice_on_one_task_says_the_agent() {
         ]
     );
 }
+
+/// A narrow row shortens the words and keeps what says which is which: the title comes
+/// in two parts that join to it, the tail empty when nothing needs telling apart.
+#[test]
+fn the_title_splits_before_what_tells_two_of_one_task_apart() {
+    let mut w = with_tasks(vec![
+        on_task("a", Agent::Codex, "t"),
+        on_task("b", Agent::Codex, "t"),
+        on_task("c", Agent::Claude, "u"),
+    ]);
+    w.agent_sessions[2].name = "我起的名字".into();
+    let parts: Vec<_> = (w.agent_sessions.iter())
+        .map(|s| w.session_title_parts(s))
+        .collect();
+    assert_eq!(
+        parts,
+        [
+            ("fibo纵览".to_owned(), " · Codex".to_owned()),
+            ("fibo纵览".to_owned(), " · Codex 2".to_owned()),
+            ("我起的名字".to_owned(), String::new()),
+        ]
+    );
+    for (s, (words, tail)) in w.agent_sessions.iter().zip(parts) {
+        assert_eq!(w.session_title(s), words + &tail);
+    }
+}

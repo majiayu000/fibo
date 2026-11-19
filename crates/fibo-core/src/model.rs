@@ -460,7 +460,20 @@ impl Workspace {
             return Some((named.to_owned(), NameSource::User));
         }
         let (name, source) = self.automatic_naming(s)?;
-        Some((self.distinct_name(s, name), source))
+        let tail = self.distinct_tail(s, &name);
+        Some((name + &tail, source))
+    }
+    /// `session_title` in two: its words, then what tells it from another conversation of
+    /// its task (` · Codex`, empty when nothing does). A row too narrow for both shortens
+    /// the words and keeps the tail whole. The two always join to `session_title`.
+    pub fn session_title_parts(&self, s: &AgentSession) -> (String, String) {
+        if s.name.trim().is_empty()
+            && let Some((name, _)) = self.automatic_naming(s)
+        {
+            let tail = self.distinct_tail(s, &name);
+            return (name, tail);
+        }
+        (self.session_title(s), String::new())
     }
     /// The tab a running conversation has to itself: a name given to that tab names
     /// the conversation too, so the tab and the sidebar never disagree.

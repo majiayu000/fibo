@@ -36,18 +36,19 @@ impl Workbench {
             .filter(|(id, ..)| id == &session.id)
         {
             Some((_, field, _)) => div().flex_1().min_w_0().child(field.clone()),
-            None => div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
-                .font_family(T::UI_FONT)
-                .text_size(px(T::SMALL))
-                .text_color(if attention || selected {
-                    T::color(T::primary())
-                } else {
-                    T::color(seen::seen_title())
-                })
-                .child(self.session_title(session)),
+            None => self.session_title_cell(
+                session,
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .font_family(T::UI_FONT)
+                    .text_size(px(T::SMALL))
+                    .text_color(if attention || selected {
+                        T::color(T::primary())
+                    } else {
+                        T::color(seen::seen_title())
+                    }),
+            ),
         };
         let time = match end {
             End::Text(text) => text,

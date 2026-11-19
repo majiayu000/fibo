@@ -61,13 +61,14 @@ impl Workbench {
                 .min_w_0()
                 .text_size(px(T::MONO_SIZE))
                 .child(field.clone()),
-            None => div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
-                .text_size(px(T::MONO_SIZE))
-                .when(!attention, |d| d.text_color(T::color(seen::seen_title())))
-                .child(self.session_title(session)),
+            None => self.session_title_cell(
+                session,
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_size(px(T::MONO_SIZE))
+                    .when(!attention, |d| d.text_color(T::color(seen::seen_title()))),
+            ),
         };
         // Rows that all wait for your next step tell apart by how long they have.
         let trailing = label(match end {
