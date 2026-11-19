@@ -190,6 +190,15 @@ pub(super) fn start(
             .update(cx, |v, _, cx| v.visual_row_shared(0, "far", cx))
             .unwrap();
         assert!(shared, "the other machine's row was drawn from its card, not its workbench");
+        // A click on the other machine's row opens it here.
+        handle.update(cx, |v, _, cx| v.visual_close_peek(cx)).unwrap();
+        handle
+            .update(cx, |v, window, cx| v.visual_click_remote_row(0, "far", window, cx))
+            .unwrap();
+        wait(800).await;
+        let peek = handle.update(cx, |v, _, _| v.visual_peek_key()).unwrap();
+        assert!(peek.is_some_and(|k| k.ends_with(":far")), "a click on the other machine's row opened nothing");
+        handle.update(cx, |v, _, cx| v.visual_close_peek(cx)).unwrap();
         // The other machine's session row offers what this machine's rows do, done by its
         // host: 标记完成 there, then 撤销结局. With peek on, 关闭终端 could not ask first.
         let menu = handle
