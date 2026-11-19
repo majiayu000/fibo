@@ -123,11 +123,13 @@ fn take_over(root: &Path) -> io::Result<(local::Stream, Vec<Taken>)> {
             cell.set(handed.cell.0, handed.cell.1);
             vt.answer_queries(cell.clone())?;
             let reader = master.reader()?;
+            let input = Input::start(&master, &handed.id)?;
             Ok(Taken {
                 id: handed.id,
                 live: Live {
                     vt,
                     master,
+                    input,
                     cols: handed.cols,
                     rows: handed.rows,
                     pid: handed.pid,
