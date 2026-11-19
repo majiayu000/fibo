@@ -24,6 +24,8 @@ pub struct Finished {
     /// written by `shell::run_then_stay` with no start mark. `took` is zero; it is not one of
     /// the shell's commands and leaves a command the shell marked started alone.
     pub launch: bool,
+    /// Where in the read it was reported: just past the end mark.
+    pub end: usize,
 }
 
 impl Marks {
@@ -56,7 +58,14 @@ impl Marks {
             // BEL, or the ESC of ESC \, ends it.
             match body.iter().position(|&b| b == 0x07 || b == 0x1b) {
                 Some(end) => {
-                    self.mark(&body[..end], at, &mut found);
+                    let mut past = i + off + START.len() + end + 1;
+                    if body[end] == 0x1b && data.get(past) == Some(&b'\\') {
+                        past += 1;
+                    }
+                    // Offsets count in this read; a kept start came from the one before.
+                    let carried = data.len() - bytes.len();
+                    let in_read = past.saturating_sub(carried);
+                    self.mark(&body[..end], at, in_read, &mut found);
                     i += off + START.len() + end + 1;
                 }
                 None => {
@@ -69,7 +78,7 @@ impl Marks {
         }
         found
     }
-    fn mark(&mut self, body: &[u8], at: Instant, found: &mut Vec<Finished>) {
+    fn mark(&mut self, body: &[u8], at: Instant, end: usize, found: &mut Vec<Finished>) {
         let mut fields = body.split(|&b| b == b';');
         match fields.next() {
             Some(b"C") => self.started = Some(at),
@@ -83,12 +92,14 @@ impl Marks {
                         exit,
                         took: Duration::ZERO,
                         launch: true,
+                        end,
                     });
                 } else if let Some(started) = self.started.take() {
                     found.push(Finished {
                         exit,
                         took: at.saturating_duration_since(started),
                         launch: false,
+                        end,
                     });
                 }
             }
@@ -115,6 +126,7 @@ mod tests {
                 exit: Some(2),
                 took: Duration::from_millis(1500),
                 launch: false,
+                end: 16,
             }]
         );
         assert!(
@@ -133,6 +145,17 @@ mod tests {
             found.extend(m.scan(&all[split..], t));
             let exits: Vec<_> = found.iter().map(|f| f.exit).collect();
             assert_eq!(exits, [Some(0), Some(1)], "split at {split}");
+            // Each end, counted in the read that finished it, is just past its D mark.
+            let marks = [b"a\x1b]133;D;0\x07".len() + 8, all.len()];
+            let mut m2 = Marks::default();
+            let first = m2.scan(&all[..split], t);
+            let second = m2.scan(&all[split..], t);
+            let ends: Vec<_> = first
+                .iter()
+                .map(|f| f.end)
+                .chain(second.iter().map(|f| f.end + split))
+                .collect();
+            assert_eq!(ends, marks, "split at {split}");
         }
     }
 
@@ -162,7 +185,8 @@ mod tests {
             vec![Finished {
                 exit: Some(130),
                 took: Duration::ZERO,
-                launch: true
+                launch: true,
+                end: 29,
             }]
         );
         m.scan(b"\x1b]133;C\x07", t);
