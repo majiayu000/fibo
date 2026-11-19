@@ -124,13 +124,35 @@ pub(super) fn start(
         // Its title row counts what needs you as this window does, on every machine.
         let counted = far.read_with(cx, |w, _| w.visual_board_and_wants().1);
         assert!(counted.is_some(), "{host}'s title row counts only its own");
-        // Its space chip in this sidebar is lit while its main area shows that space.
+        // Its main area shows the space picked, and the chip in this sidebar is lit.
         let lit = handle.update(cx, |v, _, cx| v.visual_shown_space(cx)).unwrap();
         assert_eq!(
             lit,
             Some((host.clone(), picked.clone())),
-            "the sidebar did not mark the space shown"
+            "the main area does not show the space picked"
         );
+        assert!(
+            handle.update(cx, |v, _, _| v.visual_machine_chip_lit(&picked)).unwrap(),
+            "the space picked is not lit"
+        );
+        // Picked again: every space is listed again and its chip goes out, while far's main
+        // area stays on it; then picked once more for what follows.
+        for again in [false, true] {
+            handle
+                .update(cx, |v, window, cx| {
+                    v.visual_pick_machine_space(&host, &picked, window, cx)
+                })
+                .unwrap();
+            let (filter, lit) = handle
+                .update(cx, |v, _, _| {
+                    (v.visual_machine_space_filter(), v.visual_machine_chip_lit(&picked))
+                })
+                .unwrap();
+            assert_eq!(filter.is_some(), again, "picking it again did not toggle the list");
+            assert_eq!(lit, again, "picking {host}'s space again left its chip lit: {lit}");
+        }
+        let still = handle.update(cx, |v, _, cx| v.visual_shown_space(cx)).unwrap();
+        assert_eq!(still, lit, "picking it again moved {host}'s main area");
         // ⌘T there: a tab on far, in the space picked.
         handle
             .update(cx, |_, window, cx| {
