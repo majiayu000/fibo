@@ -10,6 +10,10 @@ impl RemoteRow {
     pub(in crate::workbench) fn key(&self) -> &str {
         &self.key
     }
+    /// Its terminal's id on its machine, which that machine's workbench acts on.
+    pub(in crate::workbench) fn terminal(&self) -> &str {
+        &self.card.id
+    }
     pub(in crate::workbench) fn quiet(&self) -> bool {
         self.quiet
     }
@@ -82,6 +86,19 @@ impl Workbench {
 impl Workbench {
     /// Whether machine `index`'s row for `terminal` is drawn by `flat_row` from that
     /// machine's workbench, not from its card alone.
+    /// A plain click on machine `index`'s row for `terminal`, as its row's click does.
+    pub fn visual_click_remote_row(
+        &mut self,
+        index: usize,
+        terminal: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let row = (self.remote_rows_of(index).into_iter()).find(|r| r.card.id == terminal);
+        if let Some(r) = row {
+            self.click_there(r.index, r.terminal(), false, window, cx);
+        }
+    }
     pub fn visual_row_shared(&self, index: usize, terminal: &str, cx: &Context<Self>) -> bool {
         (self.remote_rows_of(index).iter())
             .filter(|r| r.card.id == terminal)

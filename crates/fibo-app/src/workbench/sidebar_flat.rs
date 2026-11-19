@@ -397,7 +397,7 @@ impl Workbench {
         } else {
             line.flex_1().min_w_0()
         };
-        let place = there.map(|r| (r.index, r.key().to_owned()));
+        let place = there.map(|r| (r.index, r.terminal().to_owned()));
         let tip = there
             .and_then(|r| self.there_tip(r))
             .unwrap_or_else(|| from.session_tip(session));
