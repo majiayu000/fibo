@@ -323,12 +323,13 @@ fn commands_reach_hooks(h: &Host, s: &mut Session) {
     );
 }
 
-/// A command that leaves mouse and focus reporting on, as a TUI killed mid-run does: back
-/// at the prompt both are off again, so mouse moves are not typed into the shell.
+/// A command that leaves mouse and focus reporting and the keyboard protocol on, as Codex
+/// killed mid-run does: back at the prompt they are off again, so mouse moves are not typed
+/// into the shell and Ctrl-C reaches it as Ctrl-C.
 fn reporting_is_off_at_the_prompt(h: &Host, s: &mut Session) {
     use fibo_core::terminal::{libghostty_vt::terminal::Mode, Vt};
     let from = s.output.len();
-    s.type_line(r"printf '\033[?1003h\033[?1006h\033[?1004h'");
+    s.type_line(r"printf '\033[?1003h\033[?1006h\033[?1004h\033[>7u'");
     let off = b"\x1b[?1003l";
     let home = h.home();
     assert!(
@@ -344,6 +345,9 @@ fn reporting_is_off_at_the_prompt(h: &Host, s: &mut Session) {
     vt.feed(&s.output);
     assert!(!vt.terminal().is_mouse_tracking().unwrap());
     assert!(!vt.terminal().mode(Mode::FOCUS_EVENT).unwrap());
+    // fish may push its own level for its prompt; the command's 7 is gone either way.
+    let flags = vt.terminal().kitty_keyboard_flags().unwrap().bits();
+    assert_ne!(flags, 7, "the command's keyboard protocol was left on");
 }
 
 fn installed(candidates: &[&str]) -> Option<String> {
