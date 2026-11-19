@@ -149,3 +149,36 @@ fn remembered_hashes_give_the_same_delta_as_fresh_ones() {
         "forgets content that left"
     );
 }
+
+#[test]
+fn remembered_session_hashes_give_the_same_delta_as_fresh_ones() {
+    let first = every_state();
+    let mut hashes = Hashes::default();
+    let (_, index) = diff_with(first.clone(), None, true, &mut hashes).unwrap();
+    let mut next = first.clone();
+    next.agent_sessions[1].updated += 1;
+    let changed = next.agent_sessions[1].id.clone();
+    let gone = next.agent_sessions.remove(0).id;
+    let (kept, kept_index) = diff_with(next.clone(), Some(&index), true, &mut hashes).unwrap();
+    let (fresh, fresh_index) = diff(next.clone(), Some(&index), true).unwrap();
+    assert_eq!(kept_index.stamp, fresh_index.stamp);
+    assert_eq!(
+        serde_json::to_value(&kept).unwrap(),
+        serde_json::to_value(&fresh).unwrap()
+    );
+    let sent: Vec<_> = kept.sessions.iter().map(|s| &s.id).collect();
+    assert_eq!(sent, [&changed], "only the session that changed");
+    assert!(
+        !hashes.sessions.contains_key(&gone),
+        "forgets sessions that left"
+    );
+    assert_eq!(
+        hashes.sessions.len(),
+        next.agent_sessions.len(),
+        "remembers every session sent, so the next reply writes none out again"
+    );
+    // Unchanged again: the same stamp, nothing sent.
+    let (again, _) = diff_with(next.clone(), Some(&kept_index), true, &mut hashes).unwrap();
+    assert!(again.sessions.is_empty());
+    assert_eq!(again.stamp, kept_index.stamp);
+}

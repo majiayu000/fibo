@@ -71,3 +71,55 @@ fn a_brief_request_gets_only_the_sessions_that_changed() {
     );
     assert!(edited.content.is_empty());
 }
+
+/// A refresh is worked out on the host's own content, copying only what overlays change
+/// and what goes out. It must be the delta of the snapshot every other reply sends: with an
+/// overlay on a current session, an old session no one is sent, and content changed since.
+#[test]
+fn a_refresh_on_the_hosts_own_content_is_the_delta_of_its_snapshot() {
+    use fibo_core::workspace_delta::{diff, Hashes};
+    let (mut host, _root) = super::tests::fixture();
+    host.workspace = fibo_core::sample::every_state();
+    let live = (host.workspace.agent_sessions.iter())
+        .find(|s| s.current && s.terminal.is_some() && host.workspace.content.contains_key(&s.id))
+        .expect("a sample session in a terminal")
+        .clone();
+    let c = host.workspace.content.get_mut(&live.id).unwrap();
+    c.turn = fibo_core::content::Turn::Completed;
+    let content = c.clone();
+    host.title_busy
+        .insert(live.terminal.clone().unwrap(), (live.id.clone(), 7));
+    let mut old = live.clone();
+    (old.id, old.terminal, old.current, old.updated) = ("old".into(), None, false, 0);
+    let mut past = old.clone();
+    (past.id, past.updated) = ("past".into(), fibo_core::content::now());
+    host.workspace.agent_sessions.extend([old, past]);
+    host.workspace.content.insert("old".into(), content.clone());
+    host.workspace.content.insert("past".into(), content);
+    let same =
+        |a: &Delta, b: &Delta| serde_json::to_value(a).unwrap() == serde_json::to_value(b).unwrap();
+
+    let mut hashes = Hashes::default();
+    let (fresh, fresh_index) = diff(host.snapshot(), None, true).unwrap();
+    let (lent, index) = host.brief(None, true, &mut hashes).unwrap();
+    assert!(same(&fresh, &lent));
+    assert_eq!(fresh_index.stamp, index.stamp);
+    assert!(!lent.content.contains_key("old") && !lent.sessions.iter().any(|s| s.id == "old"));
+    assert_eq!(
+        lent.content[&live.id].signal, "标题",
+        "the overlay is in the reply"
+    );
+    assert_eq!(
+        host.workspace.content[&live.id].turn,
+        fibo_core::content::Turn::Completed,
+        "and not in the host's own content"
+    );
+
+    let other = String::from("past");
+    host.workspace.content.get_mut(&other).unwrap().title = "改了".into();
+    let (fresh, fresh_next) = diff(host.snapshot(), Some(&fresh_index), true).unwrap();
+    let (lent, next) = host.brief(Some(&index), true, &mut hashes).unwrap();
+    assert!(same(&fresh, &lent));
+    assert_eq!(fresh_next.stamp, next.stamp);
+    assert_eq!(lent.content.keys().collect::<Vec<_>>(), [&other]);
+}

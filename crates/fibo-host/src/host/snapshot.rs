@@ -3,14 +3,34 @@ use super::*;
 
 impl Host {
     pub(super) fn snapshot(&self) -> Workspace {
-        let mut w = self.workspace.clone();
-        w.agent_sessions
-            .retain(|s| s.terminal.is_some() || self.index.recent(s.updated));
-        let retained: std::collections::HashSet<_> =
+        let mut w = self.retained(true);
+        self.overlay(&mut w);
+        w
+    }
+    /// What changed since `base`, as `snapshot` would give it, without copying the content
+    /// no overlay touches: overlays change only the content of a terminal's current session.
+    pub(super) fn brief(
+        &self,
+        base: Option<&fibo_core::workspace_delta::Index>,
+        fields: bool,
+        hashes: &mut fibo_core::workspace_delta::Hashes,
+    ) -> serde_json::Result<(
+        fibo_core::workspace_delta::Delta,
+        fibo_core::workspace_delta::Index,
+    )> {
+        let mut w = self.retained(false);
+        self.overlay(&mut w);
+        let ids: std::collections::HashSet<&str> =
             w.agent_sessions.iter().map(|s| s.id.as_str()).collect();
-        w.content.retain(|id, _| retained.contains(id.as_str()));
+        let lent: Vec<_> = (self.workspace.content.iter())
+            .filter(|(id, _)| ids.contains(id.as_str()) && !w.content.contains_key(*id))
+            .collect();
+        fibo_core::workspace_delta::diff_lent(w, &lent, base, fields, hashes)
+    }
+    /// Runtime observations over the log's word: only ever on a current session's content.
+    fn overlay(&self, w: &mut Workspace) {
         // A job left in the background keeps a stopped turn working; a server does not.
-        self.overlay_shells(&mut w);
+        self.overlay_shells(w);
         // A spinning title is a turn running even where the log shows none, as when only
         // the tail of a long turn was read. Never the other way: a still title proves
         // nothing the log has not said.
@@ -103,7 +123,68 @@ impl Host {
             };
             fibo_core::program_state::apply(c, r);
         }
-        self.keep_ended_turns(&mut w);
-        w
+        self.keep_ended_turns(w);
+    }
+    /// The workspace with only the sessions clients see (in a terminal, or recent) and
+    /// their content, or with `all` false only a current session's (what overlays change).
+    /// Sessions are filtered before they are copied: the store keeps every session it ever
+    /// bound, and a long-used install had 5068 of them for 1540 sent, all copied on each
+    /// reply to be thrown away. Every field is named, so one added to the workspace fails
+    /// to build here rather than going missing from the reply.
+    fn retained(&self, all: bool) -> Workspace {
+        let Workspace {
+            revision,
+            last_left,
+            settings,
+            outcome_history,
+            task_outcomes,
+            task_logs,
+            pending_tasks,
+            lost_agents,
+            agent_launch,
+            agent_starts,
+            quiet_spaces,
+            space_last_cwd,
+            pinned_terminals,
+            spaces,
+            tasks,
+            tabs,
+            terminals,
+            agent_sessions,
+            content,
+        } = &self.workspace;
+        let agent_sessions: Vec<AgentSession> = (agent_sessions.iter())
+            .filter(|s| s.terminal.is_some() || self.index.recent(s.updated))
+            .cloned()
+            .collect();
+        let ids: std::collections::HashSet<&str> = (agent_sessions.iter())
+            .filter(|s| all || s.current)
+            .map(|s| s.id.as_str())
+            .collect();
+        let content = (content.iter())
+            .filter(|(id, _)| ids.contains(id.as_str()))
+            .map(|(id, c)| (id.clone(), c.clone()))
+            .collect();
+        Workspace {
+            revision: *revision,
+            last_left: *last_left,
+            settings: settings.clone(),
+            outcome_history: outcome_history.clone(),
+            task_outcomes: task_outcomes.clone(),
+            task_logs: task_logs.clone(),
+            pending_tasks: pending_tasks.clone(),
+            lost_agents: lost_agents.clone(),
+            agent_launch: agent_launch.clone(),
+            agent_starts: agent_starts.clone(),
+            quiet_spaces: quiet_spaces.clone(),
+            space_last_cwd: space_last_cwd.clone(),
+            pinned_terminals: pinned_terminals.clone(),
+            spaces: spaces.clone(),
+            tasks: tasks.clone(),
+            tabs: tabs.clone(),
+            terminals: terminals.clone(),
+            agent_sessions,
+            content,
+        }
     }
 }

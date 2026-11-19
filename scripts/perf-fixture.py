@@ -17,7 +17,7 @@ is passed through for redraw-check; NORUN=1 at prepare leaves no turn running, s
 clock ticks the sidebar. FEWNEED=1 leaves little to act on, so the running rows fit the
 list's limit. MACHINE=1 at prepare configures a machine that never connects.
 """
-import json, os, pathlib, signal, socket, struct, subprocess, sys, time
+import json, os, pathlib, signal, socket, sqlite3, struct, subprocess, sys, time
 def read(s, n):
     b = b''
     while len(b) < n:
@@ -121,6 +121,29 @@ def prepare(root, bindir, N=2000, T=60, SPIN=0):
             elif g != 9 or os.environ.get('NORUN'): rec.append((stamp, 'event_msg', {'type': 'turn_aborted'}))
             (logs / (cid + '.jsonl')).write_text(''.join(json.dumps({'timestamp': at, 'type': t, 'payload': p}, ensure_ascii=False) + '\n' for at, t, p in rec))
             os.utime(logs / (cid + '.jsonl'), (stamp, stamp))
+        # SUB=K: K finished subagents, hidden from the lists but in the snapshot, spread over
+        # 40 parents as a Workflow leaves them (a real install had 671 of 1540).
+        for k in range(int(os.environ.get('SUB') or 0)):
+            parent = (k % 40) * max(1, N // 40); sp = names[parent % 8]
+            project = root / 'projects' / sp / (f'sub{parent % 5}' if parent % 3 else '')
+            stamp = now - 60 * (parent + 1) * 3 - k; cid = f'perf-sub-{k}'
+            rec = [(stamp - 600, 'session_meta', {'id': cid, 'cwd': str(project), 'source': {'subagent': {'thread_spawn': {'parent_thread_id': f'perf-{parent}', 'agent_path': f'worker-{k}'}}}, 'originator': 'codex-tui', 'thread_source': 'subagent'}),
+                   (stamp - 600, 'event_msg', {'type': 'user_message', 'message': f'子任务 {k}'}),
+                   (stamp - 600, 'event_msg', {'type': 'task_started', 'turn_id': cid + '-turn'}),
+                   (stamp, 'event_msg', {'type': 'task_complete', 'last_agent_message': '子任务完成。'})]
+            (logs / (cid + '.jsonl')).write_text(''.join(json.dumps({'timestamp': at, 'type': t, 'payload': p}, ensure_ascii=False) + '\n' for at, t, p in rec))
+            os.utime(logs / (cid + '.jsonl'), (stamp, stamp))
+        N += int(os.environ.get('SUB') or 0)
+        # OLD=K: K sessions from over a week ago, kept by the host but not sent (a real
+        # install held 5068 for 1540 sent).
+        for k in range(int(os.environ.get('OLD') or 0)):
+            sp = names[k % 8]; project = root / 'projects' / sp
+            stamp = now - 10 * 86400 - 60 * k; cid = f'perf-old-{k}'
+            rec = [(stamp - 600, 'session_meta', {'id': cid, 'cwd': str(project), 'source': 'cli', 'originator': 'codex-tui', 'thread_source': 'user'}),
+                   (stamp - 600, 'event_msg', {'type': 'user_message', 'message': f'老任务 {k}'}),
+                   (stamp, 'event_msg', {'type': 'task_complete', 'last_agent_message': '做完了。'})]
+            (logs / (cid + '.jsonl')).write_text(''.join(json.dumps({'timestamp': at, 'type': t, 'payload': p}, ensure_ascii=False) + '\n' for at, t, p in rec))
+            os.utime(logs / (cid + '.jsonl'), (stamp, stamp))
         env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
         with (root / 'host.log').open('w') as log:
             host = subprocess.Popen([str(bindir / 'fibo'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=log, start_new_session=True)
@@ -129,6 +152,22 @@ def prepare(root, bindir, N=2000, T=60, SPIN=0):
         deadline = time.monotonic() + 300
         while not (root / 'runtime/workbench.sock').exists():
             assert host.poll() is None and time.monotonic() < deadline; time.sleep(.05)
+        if int(os.environ.get('OLD') or 0):
+            # The index never binds a log already a week old; write the rows a host that
+            # bound them when they were new would have kept, then start it again.
+            old = int(os.environ['OLD']); db = root / 'runtime/workbench.sqlite'
+            while sqlite3.connect(db).execute("SELECT count(*) FROM log_files WHERE path LIKE '%perf-old-%'").fetchone()[0] < old:
+                assert host.poll() is None and time.monotonic() < deadline; time.sleep(.5)
+            stop_tree(host.pid); host.wait(timeout=10)
+            with sqlite3.connect(db) as c:
+                c.executemany("INSERT INTO agent_sessions(id,runtime,cli_session_id,terminal_id,is_current,task_id,outcome,deferred_reason,deferred_until,updated,cwd,transcript) VALUES(?,'Codex',?,NULL,0,NULL,'Open',NULL,NULL,?,?,?)",
+                              [(f'old-{k}', f'perf-old-{k}', now - 10 * 86400 - 60 * k, str(root / 'projects' / names[k % 8]), str(logs / f'perf-old-{k}.jsonl')) for k in range(old)])
+            (root / 'runtime/workbench.sock').unlink(missing_ok=True)
+            with (root / 'host.log').open('a') as log:
+                host = subprocess.Popen([str(bindir / 'fibo'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=log, start_new_session=True)
+            state['host'] = host.pid; state['processes'] = owned_processes(processes(), [host.pid]); (root / 'state.json').write_text(json.dumps(state))
+            while not (root / 'runtime/workbench.sock').exists():
+                assert host.poll() is None and time.monotonic() < deadline; time.sleep(.05)
         (root / 'codex').symlink_to('/bin/sh')
         for n, name in enumerate(names): edit(root, {'AddSpace': {'id': f's{n}', 'name': name, 'cwd': str(root / 'projects' / name)}})
         for n in range(T):
