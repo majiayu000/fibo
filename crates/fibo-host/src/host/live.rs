@@ -666,7 +666,7 @@ pub(super) fn attach(
         let settled = (|| -> io::Result<()> {
             if typed_ok {
                 // The user is answering here; the prompt is no longer waiting on them.
-                lock(&host)?.set_screen_wait(&terminal_id, None)?;
+                lock(&host)?.answer_screen_wait(&terminal_id)?;
             }
             if submitted_ok {
                 record_submission(&host, &terminal_id)?;

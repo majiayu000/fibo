@@ -100,6 +100,6 @@ pub(super) fn answer(
         cli_http::reply(api, &at, &asked.id, allow, always)?;
         let mut host = lock(shared)?;
         host.http_asks.remove(id);
-        host.set_screen_wait(id, None)
+        host.answer_screen_wait(id)
     })())
 }
