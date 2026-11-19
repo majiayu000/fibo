@@ -349,4 +349,16 @@ mod tests {
         assert_eq!(pinned(&rows, (10, 100, 40)).latest, None);
         assert_eq!(pinned(&[], (0, 0, 0)), Pinned::default());
     }
+
+    /// Codex on Ultra marks a sent ask `»`; its rows are found like `›` ones.
+    #[test]
+    fn a_codex_ask_sent_on_ultra_is_found() {
+        let codex = &crate::agent::Agent::from_key("Codex")
+            .spec()
+            .unwrap()
+            .prompt;
+        let k = key("看看日志再说").unwrap();
+        assert!(is_prompt_row("» 看看日志再说", &k, codex));
+        assert!(is_prompt_row("› 看看日志再说", &k, codex));
+    }
 }

@@ -109,5 +109,9 @@
     },
     "always": "p",
     "always_label": "允许，`touch phone-walk- codex.txt` 开头的命令以后不再询问"
+  },
+  "neg-ultra-composer-mentions.txt": {
+    "state": "idle",
+    "note": "Ultra 档的输入框用 `»`，里面的提示词含有审批问句；输入框下面两行取自真实 Codex 0.169 Ultra 画面（mode-screens/codex-ultra-idle.txt）"
   }
 }

@@ -27,10 +27,11 @@ pub(super) fn builtin() -> Vec<AgentSpec> {
     };
     vec![
         // Temporary until daemon-backed Codex can prove a TUI-to-session association.
-        // Codex keeps the turn's ask on its first row while the answer runs on.
+        // Codex keeps the turn's ask on its first row while the answer runs on, and marks
+        // it `»` instead of `›` while its level is Ultra.
         marked(
             spec("Codex", "Codex", "codex", "codex", "codex resume {id}"),
-            &["›"],
+            &["›", "»"],
             true,
         ),
         marked(
