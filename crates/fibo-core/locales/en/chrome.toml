@@ -35,8 +35,7 @@
 [pane_render]
 "进程已退出" = "Process exited"
 "连接断开 · 正在重连…" = "Disconnected · reconnecting…"
-"正在恢复终端…" = "Restoring terminal…"
-"终端已连接" = "Terminal connected"
+"正在载入画面…" = "Loading the screen…"
 "只读 · 可明确接管" = "Read-only · can take over"
 "只读 · 尺寸跟另一个窗口（{cols}×{rows}）· 可明确接管" = "Read-only · sized by another window ({cols}×{rows}) · can take over"
 "程序{v1}" = "{v1} (by the program)"

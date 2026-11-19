@@ -242,6 +242,14 @@ impl Stream {
         self.select(wait)
     }
 
+    /// Left to Windows, which grows a socket's buffer on its own.
+    pub fn send_buffer(&self) -> io::Result<usize> {
+        Ok(0)
+    }
+    pub fn set_send_buffer(&self, _bytes: usize) -> io::Result<()> {
+        Ok(())
+    }
+
     pub fn peer_is_this_account(&self) -> io::Result<bool> {
         let mut pid = 0u32;
         let mut written = 0u32;

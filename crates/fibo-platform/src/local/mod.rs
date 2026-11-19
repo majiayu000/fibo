@@ -53,6 +53,16 @@ impl Stream {
     pub fn peer_is_this_account(&self) -> io::Result<bool> {
         self.0.peer_is_this_account()
     }
+    /// How many bytes the kernel takes from one write before the reader has read any.
+    /// macOS starts a Unix socket at 8 KiB: a megabyte then crosses in over a hundred
+    /// turns between writer and reader, each a wait for a CPU on a busy machine.
+    pub fn send_buffer(&self) -> io::Result<usize> {
+        self.0.send_buffer()
+    }
+    /// Asks for a larger (or smaller) send buffer; the kernel may cap it.
+    pub fn set_send_buffer(&self, bytes: usize) -> io::Result<()> {
+        self.0.set_send_buffer(bytes)
+    }
 }
 
 impl Read for Stream {
