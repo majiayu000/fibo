@@ -276,14 +276,15 @@ impl Workbench {
             .hover(|d| d.bg(T::color(F::selected())))
             .child(quiet_ring())
             .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .text_size(px(F::TITLE))
-                    .line_height(px(F::TITLE_LINE))
-                    .text_color(T::color(F::third()))
-                    .child(self.workspace.session_title(s)),
+                self.session_title_cell(
+                    s,
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_size(px(F::TITLE))
+                        .line_height(px(F::TITLE_LINE))
+                        .text_color(T::color(F::third())),
+                ),
             )
             .child(
                 div()

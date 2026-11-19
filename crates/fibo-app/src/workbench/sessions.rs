@@ -51,6 +51,20 @@ impl Workbench {
     pub(super) fn session_title(&self, s: &AgentSession) -> String {
         self.workspace.session_title(s)
     }
+    /// A sidebar row's title in `cell` (its size and ink already set): the words shorten
+    /// before what tells two of one task apart (` · Codex`), which a narrow column keeps
+    /// whole. Only such a row gets the extra boxes (R9).
+    pub(super) fn session_title_cell(&self, s: &AgentSession, cell: gpui::Div) -> gpui::Div {
+        let (words, tail) = self.workspace.session_title_parts(s);
+        if tail.is_empty() {
+            return cell.truncate().child(words);
+        }
+        cell.flex()
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .child(div().min_w_0().truncate().child(words))
+            .child(div().flex_shrink_0().child(tail))
+    }
     /// Double-click names a conversation; an empty name hands it back to its CLI and
     /// first ask.
     pub(super) fn rename_session(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {

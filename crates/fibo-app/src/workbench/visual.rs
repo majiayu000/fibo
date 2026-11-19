@@ -11,6 +11,7 @@ mod spaces;
 #[path = "subagent_sample_tests.rs"]
 mod subagent_samples;
 mod todo;
+mod twins;
 
 /// The space menu's state, the rename field's text and focus, each space's name and cwd.
 pub type VisualSpaceState = (bool, Option<(String, bool)>, Vec<(String, String)>);

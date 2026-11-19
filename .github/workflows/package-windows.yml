@@ -29,7 +29,10 @@ permissions:
 jobs:
   package:
     name: Windows installer
-    runs-on: windows-latest
+    # Not windows-latest or windows-2025: both are the VS 2026 image, whose MSVC 14.52 (from
+    # 20261116) has an STL that refuses anything older than Clang 22, and Zig 0.16 compiles
+    # Ghostty's C++ with an older clang. windows-2022 has VS 2022.
+    runs-on: windows-2022
     timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: 0

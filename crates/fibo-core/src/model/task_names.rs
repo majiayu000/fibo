@@ -31,13 +31,14 @@ impl Workspace {
             .filter(|t| !t.is_empty())
             .map(|t| (t.to_owned(), NameSource::Task))
     }
-    /// `name` as the name of `s`: alone when no other conversation on its task would be
-    /// called it (one the user named is not), else `name · Agent`, and `name · Agent N`
-    /// for the Nth of one Agent in the order they were first seen (the order
-    /// `agent_sessions` keeps, stored rows included).
-    pub(super) fn distinct_name(&self, s: &AgentSession, name: String) -> String {
+    /// What follows `name` in the name of `s`: nothing when no other conversation on its
+    /// task would be called it (one the user named is not), else ` · Agent`, and
+    /// ` · Agent N` for the Nth of one Agent in the order they were first seen (the order
+    /// `agent_sessions` keeps, stored rows included). Apart from the name, so a narrow row
+    /// shortens the words and keeps this whole.
+    pub(super) fn distinct_tail(&self, s: &AgentSession, name: &str) -> String {
         let Some(task) = s.task.as_deref() else {
-            return name;
+            return String::new();
         };
         let mut shared = false;
         let mut before = 0;
@@ -56,9 +57,9 @@ impl Workspace {
         }
         let agent = s.runtime.name();
         match (shared, before) {
-            (false, _) => name,
-            (true, 0) => t!("{task} · {agent}", task = name, agent),
-            (true, n) => t!("{task} · {agent} {n}", task = name, agent, n = n + 1),
+            (false, _) => String::new(),
+            (true, 0) => t!("{task} · {agent}", task = "", agent),
+            (true, n) => t!("{task} · {agent} {n}", task = "", agent, n = n + 1),
         }
     }
 }

@@ -306,14 +306,15 @@ impl Workbench {
             .filter(|(id, ..)| id == &session.id);
         let title = match renaming {
             Some((_, field, _)) => div().flex_1().min_w_0().child(field.clone()),
-            None => div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
-                .text_size(px(F::TITLE))
-                .line_height(px(F::TITLE_LINE))
-                .text_color(ink(title_ink))
-                .child(self.session_title(session)),
+            None => self.session_title_cell(
+                session,
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_size(px(F::TITLE))
+                    .line_height(px(F::TITLE_LINE))
+                    .text_color(ink(title_ink)),
+            ),
         };
         // Narrowed to one space, every row's space is the same and goes unsaid.
         let space = self
