@@ -24,6 +24,7 @@ mod chat;
 mod diff;
 mod diff_summary;
 mod dirs;
+mod image_wait;
 mod images;
 mod list;
 mod modes;

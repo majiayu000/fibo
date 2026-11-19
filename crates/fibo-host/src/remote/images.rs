@@ -110,6 +110,10 @@ pub(super) fn paste(
     session: &Option<String>,
     images: &[String],
 ) -> io::Result<()> {
+    if images.is_empty() {
+        return Ok(());
+    }
+    let before = super::image_wait::on_screen(socket, terminal);
     for (i, path) in images.iter().enumerate() {
         let paste = Request::SendText {
             session: session.clone(),
@@ -122,6 +126,12 @@ pub(super) fn paste(
             each["request"] = json!(format!("{id}#image{i}"));
         }
         super::ok_reply(rpc(socket, &named(client, &each, paste))?)?;
+    }
+    // The words go in once the pictures are attachments, or Enter sends them without.
+    if let Some(before) = before {
+        if !super::image_wait::until_shown(socket, terminal, before, images.len())? {
+            eprintln!("terminal {terminal}: pictures not shown in time; sending the words anyway");
+        }
     }
     Ok(())
 }
