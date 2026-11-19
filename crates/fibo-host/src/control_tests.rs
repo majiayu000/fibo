@@ -182,10 +182,15 @@ fn standard_input_past_the_limit_is_an_error_not_a_cut() {
 fn a_split_runs_its_command_in_a_shell_that_stays_open() {
     assert_eq!(split_argv("/bin/zsh", &[]), ["/bin/zsh", "-l"]);
     let one = split_argv("/bin/zsh", &["npm test && echo ok".into()]);
-    assert_eq!(one[4], "npm test && echo ok; exec '/bin/zsh' -l");
+    // The command, then how it ended for the host, then the shell that stays.
+    let ran = |line: &str, command: &str| {
+        line.starts_with(&format!("{command}; printf '\\033]133;D;%d;fibo=launch"))
+            && line.ends_with("; exec '/bin/zsh' -l")
+    };
+    assert!(ran(&one[4], "npm test && echo ok"), "{}", one[4]);
     let words = split_argv("/bin/zsh", &["echo".into(), "a b".into()]);
     assert_eq!(&words[..4], ["/bin/zsh", "-l", "-i", "-c"]);
-    assert_eq!(words[4], "'echo' 'a b'; exec '/bin/zsh' -l");
+    assert!(ran(&words[4], "'echo' 'a b'"), "{}", words[4]);
 }
 #[test]
 fn everything_after_a_bare_double_dash_is_the_command() {
