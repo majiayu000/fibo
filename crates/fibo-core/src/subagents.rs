@@ -2,7 +2,75 @@
 //! session keeps, and which ones did not finish.
 use crate::content::{Content, Turn};
 
-pub use fibo_remote::subagent::Subagent;
+pub use fibo_remote::subagent::{Subagent, Workflow, WorkflowStep};
+
+/// What core says about a workflow run: its one-line summary and how a stop registry
+/// or the run's end closes its steps.
+pub trait WorkflowRun {
+    fn workflow_summary(&self, live: bool) -> Option<String>;
+    fn workflow_progress(&self, live: bool) -> Option<String>;
+    fn workflow_registry(&mut self, registry: &Option<(u64, Vec<String>)>);
+    fn end_workflow(&mut self);
+}
+impl WorkflowRun for Subagent {
+    fn workflow_summary(&self, live: bool) -> Option<String> {
+        Some(format!("{} · {}", self.name, self.workflow_progress(live)?))
+    }
+    fn workflow_progress(&self, live: bool) -> Option<String> {
+        let w = self.workflow.as_ref()?;
+        let live = live && self.running();
+        let done = w.completed(live);
+        let total = w.total;
+        let state = if self.stopped {
+            crate::t!("已停")
+        } else if live {
+            crate::status::Status::Running.label()
+        } else {
+            crate::t!("完成")
+        };
+        if !w.detailed {
+            return Some(crate::t!("{state} · {total} 步", state, total));
+        }
+        Some(crate::t!(
+            "{state} · {phase} 阶段 · {done}/{total} 完成",
+            state,
+            phase = w.phase,
+            done,
+            total
+        ))
+    }
+    fn workflow_registry(&mut self, registry: &Option<(u64, Vec<String>)>) {
+        if self.workflow.is_none() {
+            return;
+        }
+        // Known only by its run directory, the registry cannot name it either way.
+        let named = self.workflow.as_ref().is_some_and(|w| w.run != self.id);
+        if let Some((at, tasks)) = registry
+            && named
+            && self.running()
+            && self.started <= *at
+            && !tasks.contains(&self.id)
+        {
+            self.ended = Some((*at).max(self.started));
+            self.stopped = self
+                .workflow
+                .as_ref()
+                .is_some_and(|w| w.steps.iter().any(|s| s.agent.running()));
+        }
+        self.end_workflow();
+    }
+    /// Closing the run preserves results, and ends only the remaining attempts.
+    fn end_workflow(&mut self) {
+        if let (Some(w), Some(at)) = (&mut self.workflow, self.ended) {
+            for step in &mut w.steps {
+                if step.agent.running() && (self.stopped || !w.journal) {
+                    step.agent.ended = Some(at.max(step.agent.started));
+                    step.agent.stopped = self.stopped;
+                }
+            }
+        }
+    }
+}
 
 /// What a `<task-notification>` says: the tasks it names (one can name several, when a
 /// resumed session reports what the last one left behind) and whether they did not finish.
@@ -21,6 +89,14 @@ fn notification(text: &str) -> Option<(Vec<&str>, bool)> {
 }
 
 impl Content {
+    pub fn workflow_stop(&mut self, event: &str, facts: &crate::protocol::HookFacts, at: u64) {
+        if event == "Stop" && !facts.subagent {
+            self.workflow_tasks = facts.workflow_tasks.clone().map(|tasks| (at, tasks));
+            for s in &mut self.subagents {
+                s.workflow_registry(&self.workflow_tasks);
+            }
+        }
+    }
     /// Reads one line of the parent's log for a task notification. A later good report of
     /// the same task, one continued after it stopped, takes the mark back.
     pub fn note_task_notification(&mut self, text: &str) {
@@ -28,6 +104,9 @@ impl Content {
             return;
         };
         for id in ids {
+            if !self.finished_subagents.iter().any(|s| s == id) {
+                self.finished_subagents.push(id.to_owned());
+            }
             let at = self.stopped_subagents.iter().position(|s| s == id);
             match (at, stopped) {
                 (None, true) => self.stopped_subagents.push(id.to_owned()),
@@ -47,13 +126,29 @@ impl Content {
         let mut kept: Vec<Subagent> = all
             .into_iter()
             .map(|mut s| {
+                if let Some(w) = &s.workflow
+                    && w.run == s.id
+                    && let Some((_, task, name)) =
+                        self.workflow_runs.iter().find(|(run, ..)| *run == w.run)
+                {
+                    if s.name == s.id && !name.is_empty() {
+                        s.name = name.clone();
+                    }
+                    s.id = task.clone();
+                }
                 if self.stopped_subagents.contains(&s.id) {
                     s.stopped = true;
                     s.ended.get_or_insert(self.updated.max(s.started));
                 }
+                if s.workflow.is_some() {
+                    if self.finished_subagents.contains(&s.id) {
+                        s.ended.get_or_insert(self.updated.max(s.started));
+                    }
+                    s.workflow_registry(&self.workflow_tasks);
+                }
                 s
             })
-            .filter(|s| s.running() || s.started >= self.turn_started)
+            .filter(|s| s.running() || s.started >= self.turn_started || s.workflow.is_some())
             .collect();
         if self.turn != Turn::Running
             && let Some(b) = self.background
@@ -62,10 +157,15 @@ impl Content {
             let extra = running.saturating_sub(b.agents as usize);
             for s in kept.iter_mut().filter(|s| s.running()).take(extra) {
                 s.ended = Some(self.updated.max(s.started));
+                s.end_workflow();
             }
         }
         // Ended before this turn: gone with the turn that ran them.
-        kept.retain(|s| s.running() || s.started >= self.turn_started);
+        kept.retain(|s| {
+            s.running()
+                || s.started >= self.turn_started
+                || s.workflow.is_some() && s.ended.is_some_and(|at| at >= self.turn_started)
+        });
         self.subagents = kept;
     }
 }

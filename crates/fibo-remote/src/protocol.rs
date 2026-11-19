@@ -555,6 +555,9 @@ pub struct Card {
     /// While running, what the log says it does now (`运行 cargo test`, `改 chat.tsx`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub doing: Option<String>,
+    /// Host-rendered workflow summaries; one line per run, no phone-side parsing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workflows: Vec<String>,
     /// The model that last answered, as the log names it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,

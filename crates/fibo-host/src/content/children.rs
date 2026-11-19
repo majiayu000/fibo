@@ -106,6 +106,7 @@ pub fn children(
             ended: (!running).then_some(updated.max(started)),
             stopped: !running && turn != "Completed",
             foreground: false,
+            workflow: None,
         });
     }
     kids.subagents

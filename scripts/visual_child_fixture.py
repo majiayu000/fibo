@@ -60,7 +60,7 @@ def launch(root, sources, rpc):
     deadline = time.monotonic() + 30
     for pane, executable, runtime, transcript in sources:
         cli = root / executable
-        cli.symlink_to('/bin/sh')
+        if not cli.exists(): cli.symlink_to('/bin/sh')
         while not transcript.exists():
             assert time.monotonic() < deadline, f'missing mirror {transcript}'
             time.sleep(.1)
@@ -73,7 +73,7 @@ def launch(root, sources, rpc):
             if t.get('pid'): break
             assert time.monotonic() < deadline, 'terminal timeout'
             time.sleep(.1)
-        r = rpc(root, {'Hook': {'runtime': runtime, 'pid': t['pid'], 'cli_session_id': ('session_' + PARENT if runtime == 'Kimi' else PARENT), 'transcript': str(transcript), 'ended': False, 'event': None}})
+        r = rpc(root, {'Hook': {'runtime': runtime, 'pid': t['pid'], 'cli_session_id': ('session_' + PARENT if runtime == 'Kimi' else transcript.stem if runtime == 'Claude' else PARENT), 'transcript': str(transcript), 'ended': False, 'event': None}})
         # The comparison's old binary has no adapter for either new CLI. It still
         # launches the identical mock terminal, but cannot bind its transcript.
         assert 'Error' not in r or (runtime in ('Kimi', 'Gemini') and 'transcript has no CLI identity' in str(r)), r
@@ -173,4 +173,46 @@ def prepare_names(root, home, now):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(''.join(json.dumps(dict(timestamp=now, **r), ensure_ascii=False) + '\n' for r in records))
         sources.append((f'p{runtime.lower()}', executable, runtime, path))
+    return sources
+
+
+def prepare_workflows(root, home, now):
+    """Distilled from loom wf_413a0192-2fc: ten attempts, six keys, two results.
+    Only labels, phases and lifecycle survive; no private prompts, output or paths.
+    """
+    cwd = root / 'projects/工作空间'
+    sources = []
+    labels = [('review:rust', 'Review'), ('fix:jsdom-31', 'Fix'), ('review:panel', 'Review'),
+              ('review:actions+ceiling', 'Review'), ('refute:panel', 'Verify'), ('refute:actions+ceiling', 'Verify')]
+    events = [('started', 0, 'a0'), ('started', 1, 'a1'), ('started', 2, 'a2'), ('started', 3, 'a3'),
+              ('result', 2, 'a2'), ('started', 4, 'a4'), ('started', 4, 'a5'), ('started', 0, 'a6'),
+              ('started', 1, 'a7'), ('started', 3, 'a8'), ('result', 3, 'a8'), ('started', 5, 'a9')]
+    for n, state in enumerate(['running', 'killed']):
+        cid = f'c19a5748-897d-4836-a555-fce8a779722{n}'
+        session = home / '.claude/projects/fixture' / cid
+        run = session / 'subagents/workflows/wf_loom'
+        run.mkdir(parents=True)
+        start, end = now - 4460, now - 60
+        records = [{'type': 'user', 'sessionId': cid, 'cwd': str(cwd), 'entrypoint': 'cli',
+                    'userType': 'external', 'timestamp': start, 'message': {'content': 'loom workflow · ' + state}}]
+        if n == 1:
+            records.append({'type':'system','subtype':'stop','timestamp':end})
+        session.with_suffix('.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in records))
+        journal = [{'type': 'launched'}]
+        for typ, key, aid in events:
+            label, phase = labels[key]
+            v = {'type': typ, 'key': str(key), 'agentId': aid}
+            if typ == 'started':
+                v.update(label=label, phase=phase)
+                (run / f'agent-{aid}.meta.json').write_text(json.dumps({'agentType':'workflow-subagent',
+                    'description':label,'workflowPhase':phase,'requestShape':'foreground','inWorkflowRun':True}))
+                (run / f'agent-{aid}.jsonl').write_text('{}\n')
+            journal.append(v)
+        (run / 'journal.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in journal))
+        snapshot = session / 'workflows/wf_loom.json'
+        snapshot.parent.mkdir(parents=True)
+        snapshot.write_text(json.dumps({'runId':'wf_loom', 'taskId':'wloom', 'workflowName':'loom-pr-queue',
+            'startTime':start*1000, 'durationMs':(end-start)*1000, 'status':state,
+            'phases':[{'title':p} for p in ['Review','Fix','Verify']]}))
+        sources.append((f'pworkflow{n}', 'claude', 'Claude', session.with_suffix('.jsonl')))
     return sources

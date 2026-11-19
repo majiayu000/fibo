@@ -5,6 +5,7 @@
 use crate::model::*;
 use crate::modes::TerminalModes;
 use crate::protocol::RecognitionStatus;
+use crate::subagents::WorkflowRun;
 use crate::{status, status_group};
 use fibo_remote::protocol as rp;
 
@@ -133,6 +134,14 @@ fn card(w: &Workspace, seen: &RecognitionStatus, t: &Terminal, now: u64) -> rp::
                     .filter(|_| status == Some(status::Status::Review))
                     .and_then(|s| status::left_behind(w, s))
             }),
+        workflows: content
+            .map(|c| {
+                c.subagents
+                    .iter()
+                    .filter_map(|s| s.workflow_summary(status == Some(status::Status::Running)))
+                    .collect()
+            })
+            .unwrap_or_default(),
         model: (set.and_then(|m| TerminalModes::read(&m.model, log_model)))
             .or_else(|| content.and_then(|c| said(&c.model))),
         permission_full,

@@ -9,7 +9,7 @@ use super::layout::turn_clock;
 use super::*;
 use crate::ui::theme::Flat as F;
 use crate::ui::tone::Tone;
-use fibo_core::content::Subagent;
+use fibo_core::content::{Subagent, WorkflowRun};
 
 /// What a session row's click does, for its branches to do too.
 pub(super) type Click = std::rc::Rc<dyn Fn(&mut Workbench, &mut Window, &mut Context<Workbench>)>;
@@ -261,7 +261,12 @@ impl Workbench {
                     (false, None) => String::new(),
                 };
                 let open = open.clone();
-                leaf(i)
+                let workflow_key = format!("{session}:{}", s.id);
+                let workflow_open = self.layout.workflows_open.contains(&workflow_key);
+                let workflow = s.workflow.as_ref().filter(|w| w.detailed);
+                let expandable = workflow.is_some();
+                let branch = leaf(i)
+                    .when(s.workflow.is_some(), |d| d.h(px(LEAF * 2.)))
                     .id(gpui::SharedString::from(format!("subagent-{session}-{i}")))
                     .cursor_pointer()
                     .child(
@@ -283,7 +288,18 @@ impl Workbench {
                             .flex_1()
                             .truncate()
                             .text_color(ink(if on { F::second() } else { F::third() }))
-                            .child(s.name.clone()),
+                            .child(s.name.clone())
+                            .when_some(s.workflow_progress(live), |d, text| {
+                                d.flex().flex_col().child(
+                                    div()
+                                        .text_color(if s.stopped {
+                                            Tone::Danger.dot()
+                                        } else {
+                                            ink(F::third())
+                                        })
+                                        .child(text),
+                                )
+                            }),
                     )
                     .when(s.foreground && on, |d| {
                         d.child(
@@ -309,10 +325,30 @@ impl Workbench {
                             .text_color(ink(F::third()))
                             .child(clock),
                     )
+                    .when(workflow.is_some(), |d| {
+                        d.child(super::sidebar_flat::fold_mark(workflow_open))
+                    })
                     .on_click(cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();
-                        open(this, window, cx);
-                    }))
+                        if expandable {
+                            flip(&mut this.layout.workflows_open, &workflow_key);
+                            cx.notify();
+                        } else {
+                            open(this, window, cx);
+                        }
+                    }));
+                if s.workflow.is_some() {
+                    div()
+                        .flex()
+                        .flex_col()
+                        .child(branch)
+                        .when_some(workflow.filter(|_| workflow_open), |d, w| {
+                            d.child(self.workflow_steps(w, on, run))
+                        })
+                        .into_any_element()
+                } else {
+                    branch.into_any_element()
+                }
             })
             .collect::<Vec<_>>();
         if running {

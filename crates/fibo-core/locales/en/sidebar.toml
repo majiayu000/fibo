@@ -186,3 +186,8 @@
 "另有 {more} 个 · 鸟瞰全部" = "{more} more · all on Board"
 "已关闭 {closed} · {key} 找回" = "{closed} closed · {key} to find"
 "已关闭 {closed} 个 · 点开接着聊" = "{closed} closed · click to continue"
+
+[workflows]
+"已停" = "Stopped"
+"{state} · {total} 步" = "{state} · {total} steps"
+"{state} · {phase} 阶段 · {done}/{total} 完成" = "{state} · {phase} phase · {done}/{total} done"

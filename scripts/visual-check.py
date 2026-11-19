@@ -47,8 +47,8 @@ def capture(sha, out, pages):
     env = {**ENV, 'MOORING_VISUAL_BIN': str(WORK / 'target/debug'), 'MOORING_FIXTURE_BOARD': '1', 'MOORING_PAGE_LIST': pages}
     # The fixture is this checkout's, so an old commit gets the same data as the new one.
     fixture = BASE / 'scripts/visual-fixture.py'
-    run(sys.executable, fixture, 'prepare', cwd=BASE, env=env)
     try:
+        run(sys.executable, fixture, 'prepare', cwd=BASE, env=env)
         run(sys.executable, fixture, 'capture', out, cwd=BASE, env=env)
     finally:
         run(sys.executable, fixture, 'stop', cwd=BASE, env=env)

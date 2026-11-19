@@ -16,6 +16,7 @@ pub(crate) mod claude;
 pub mod claude_quota;
 mod claude_subagent_end;
 mod claude_suggestion;
+pub(crate) mod claude_workflows;
 pub(crate) mod codex;
 mod codex_background;
 mod codex_items;

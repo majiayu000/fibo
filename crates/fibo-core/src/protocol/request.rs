@@ -7,6 +7,9 @@ use crate::model::Edit;
 pub struct HookFacts {
     /// From a Stop or SubagentStop payload that carried the task registry.
     pub background: Option<crate::content::Background>,
+    /// Exact workflow task registry when a hook supplied it; absence is unknown.
+    #[serde(default)]
+    pub workflow_tasks: Option<Vec<String>>,
     pub notification: Option<String>,
     /// The event came from inside a subagent (`agent_id` present), not the parent turn.
     pub subagent: bool,

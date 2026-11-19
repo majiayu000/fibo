@@ -46,6 +46,16 @@ impl Workbench {
         // `MainSpace` narrows 会话优先 to the sample's 工作空间, as a click on its chip does.
         self.sidebar.space_filter = (name == "MainSpace").then(|| "s0".to_owned());
         self.sync_panes(cx);
+        if std::env::var("MOORING_FIXTURE_CHILD_ADAPTERS").as_deref() == Ok("workflows") {
+            for (id, c) in &self.workspace.content {
+                if c.subagents.iter().any(|s| s.workflow.is_some()) {
+                    self.layout.subagents_toggled.insert(id.clone(), true);
+                    for s in &c.subagents {
+                        self.layout.workflows_open.insert(format!("{id}:{}", s.id));
+                    }
+                }
+            }
+        }
         match name {
             // The status bar's 工作中 popover beside the sidebar: one session, one color.
             "StatusSessions" => self.statusbar = Some(super::statusbar::StatusPop::Sessions),

@@ -48,6 +48,7 @@ pub(super) fn read(transcript: &Path) -> Vec<Subagent> {
                 stopped: ended.is_some() && v["status"] != "completed",
                 // The persisted metadata doesn't identify foreground versus background.
                 foreground: false,
+                workflow: None,
             })
         })
         .collect();

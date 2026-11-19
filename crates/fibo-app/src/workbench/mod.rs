@@ -298,6 +298,7 @@ mod sidebar_recent;
 mod sidebar_spaces;
 mod sidebar_subagents;
 mod sidebar_wasm;
+mod sidebar_workflows;
 mod statusbar;
 mod statusbar_update;
 mod tabs;
@@ -566,6 +567,7 @@ impl Workbench {
                 done_open: None,
                 subagents_toggled: HashMap::new(),
                 subagents_all: HashSet::new(),
+                workflows_open: HashSet::new(),
                 space_menu: None,
                 space_removing: false,
                 choosing_dir: None,

@@ -147,10 +147,13 @@ impl Adapter for Claude {
         })
     }
     fn subagent_parent(&self, path: &Path) -> Option<PathBuf> {
-        subagent_parent(path)
+        super::claude_workflows::parent(path).or_else(|| subagent_parent(path))
     }
     fn subagents(&self, transcript: &Path) -> Option<Vec<fibo_core::content::Subagent>> {
-        Some(subagents(&transcript.with_extension("").join("subagents")))
+        let mut all = subagents(&transcript.with_extension("").join("subagents"));
+        all.extend(super::claude_workflows::read(transcript));
+        all.sort_by_key(|s| s.started);
+        Some(all)
     }
     fn identity(&self, _path: &Path, value: &Value) -> Option<(String, String)> {
         if value["isSidechain"] == true {
@@ -171,6 +174,7 @@ impl Adapter for Claude {
         ))
     }
     fn metadata(&self, parser: &mut Parser, m: &Value) {
+        super::claude_workflows::note_parent(parser, m);
         if temporary(m["cwd"].as_str().unwrap_or("")) {
             parser.hide(fibo_core::content::TEMPORARY_DIRECTORY);
         } else {
@@ -543,6 +547,7 @@ pub(crate) fn subagents(dir: &Path) -> Vec<fibo_core::content::Subagent> {
                 // Older Claude Code wrote no shape; its subagents ran in the foreground.
                 foreground: v["requestShape"].as_str() != Some("background"),
                 stopped,
+                workflow: None,
             })
         })
         .collect();
