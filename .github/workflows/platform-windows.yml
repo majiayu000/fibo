@@ -36,7 +36,8 @@ permissions:
 jobs:
   check:
     name: Shared crates on Windows
-    runs-on: windows-latest
+    # Not windows-latest or windows-2025: see package-windows.yml (MSVC 14.52's STL needs Clang 22, Zig 0.16 has older).
+    runs-on: windows-2022
     # Normally well under this. A test that hangs should fail, not hold a runner for six hours.
     timeout-minutes: 45
     env:
