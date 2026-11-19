@@ -9,6 +9,7 @@
 "连接已断开，正在重连；这次的输入没发" = "Disconnected, reconnecting; this input was not sent"
 "正在恢复终端，这次的输入没发" = "Restoring terminal; this input was not sent"
 "当前为只读，请先点击「接管输入」；这次的输入没发" = "Read-only; take over input first. This input was not sent"
+"{error}；这次的输入没发" = "{error}; this input was not sent"
 "还有 1 MiB 输入没送到终端，这次的没发；未自动重试" = "1 MiB of input is still waiting for the terminal; this input was not sent or retried"
 "连接已断开，这次的输入没发；未自动重试" = "Disconnected; this input was not sent or retried"
 "识别状态协议不匹配" = "Recognition state protocol mismatch"

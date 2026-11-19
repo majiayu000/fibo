@@ -236,6 +236,11 @@ impl Connection {
         if state.vt.is_none() {
             return Err(t!("正在恢复终端，这次的输入没发").into());
         }
+        // The host refused something (backlog, a request it cannot read) or a write broke:
+        // there is no takeover button then, so say what happened instead of read-only.
+        if let Some(error) = state.error.as_ref().filter(|_| !state.writable) {
+            return Err(t!("{error}；这次的输入没发", error));
+        }
         if !state.writable {
             return Err(t!("当前为只读，请先点击「接管输入」；这次的输入没发").into());
         }
@@ -396,6 +401,12 @@ mod tests {
             connection.send(input()).unwrap_err(),
             t!("当前为只读，请先点击「接管输入」；这次的输入没发")
         );
+        connection.state.lock().unwrap().error = Some("backlog".into());
+        assert_eq!(
+            connection.send(input()).unwrap_err(),
+            t!("{error}；这次的输入没发", error = "backlog")
+        );
+        connection.state.lock().unwrap().error = None;
         connection.state.lock().unwrap().dropped = true;
         assert_eq!(
             connection.send(input()).unwrap_err(),
