@@ -14,6 +14,8 @@ mod hand_over;
 #[cfg_attr(unix, path = "unix.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
 mod imp;
+mod slicing;
+pub use slicing::{SLICE, slice_end};
 
 /// What to start.
 pub struct Spec<'a> {
@@ -60,11 +62,6 @@ impl Master {
     pub fn resize(&self, cols: u16, rows: u16, cell: (u32, u32)) -> io::Result<()> {
         self.0.resize(cols, rows, cell)
     }
-    /// Bytes typed that the program has not read yet. None when that cannot be told, which
-    /// outside macOS is always for now.
-    pub fn backlog(&self) -> Option<usize> {
-        self.0.backlog()
-    }
     /// The process group the terminal's foreground job runs in. None on Windows, which has
     /// no such thing.
     pub fn foreground_group(&self) -> Option<i32> {
@@ -88,6 +85,10 @@ impl Writer {
     /// Types `bytes`. A failure says how many were accepted, and nothing is sent twice.
     pub fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
         self.0.write(bytes)
+    }
+    /// Bytes typed that the program has not read yet, when the platform can tell.
+    pub fn backlog(&self) -> Option<usize> {
+        self.0.backlog()
     }
 }
 
