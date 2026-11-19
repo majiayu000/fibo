@@ -15,7 +15,6 @@ mod unlinked;
 
 pub(super) use list_scroll::ListScroll;
 pub(super) use prefs::SidebarPrefs;
-pub(super) use unlinked::Unlinked;
 
 /// How a row's second line opens when the session asks you something.
 pub(super) const ASKS: &str = tk!("问你：");

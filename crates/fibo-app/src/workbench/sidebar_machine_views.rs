@@ -2,7 +2,7 @@
 //! one mixed list, a rail that picks one machine, or a folding section per machine. The
 //! column keeps its width in all three, so nothing right of it moves.
 use super::sidebar_list::{recent_order, split_today};
-use super::sidebar_machines::{RemoteRow, machine_label, machine_letter, quiet};
+use super::sidebar_machines::{MachineRow, machine_label, machine_letter, quiet};
 use super::*;
 use crate::machines::Link;
 use crate::ui::theme::Flat as F;
@@ -58,7 +58,7 @@ impl Workbench {
     pub(super) fn column_top(&self, cx: &Context<Self>) -> Vec<gpui::AnyElement> {
         match (self.machine_layout(), self.machine_scope()) {
             (Machines::Rail, Some(index)) => {
-                let rows = self.listed_remote_rows().len();
+                let rows = self.listed_remote_rows(cx).len();
                 self.machine_spaces(index, false, rows, cx)
             }
             (Machines::Sections, _) => {
@@ -372,7 +372,7 @@ impl Workbench {
             return Vec::new();
         };
         let link = self.machines[index].view.lock().unwrap().link.clone();
-        let mut rows = self.remote_rows_of(index);
+        let mut rows = self.session_rows_of(index, cx);
         let key = Self::machine_section_key(&host);
         let online = link == Link::Online;
         let open = self.sidebar.open(&key, online);
@@ -409,15 +409,16 @@ impl Workbench {
         if !self.sidebar.showing(&key, online) {
             return out;
         }
-        if let Some(space) = self.machine_space_of(index) {
-            rows.retain(|r| r.card.space == space.id);
+        let only = self.machine_space_of(index).map(|s| s.id);
+        if let Some(space) = &only {
+            rows.retain(|r| &r.space == space);
         }
         out.extend(self.machine_spaces(index, true, rows.len(), cx));
         // 置顶 first, as that machine's host keeps it; those rows leave their section.
-        let (mut pinned, rows): (Vec<&RemoteRow>, Vec<&RemoteRow>) =
+        let (mut pinned, rows): (Vec<&MachineRow>, Vec<&MachineRow>) =
             rows.iter().partition(|r| r.pin.is_some());
         pinned.sort_by_key(|r| r.pin);
-        let keyed: Vec<(&RemoteRow, Bucket, u64)> =
+        let keyed: Vec<(&MachineRow, Bucket, u64)> =
             rows.into_iter().map(|r| (r, r.bucket, r.when)).collect();
         let order = recent_order(&keyed);
         let history = order
@@ -443,11 +444,12 @@ impl Workbench {
                     if r.shown && !self.sidebar.open(&part, true) {
                         keep.push(out.len());
                     }
-                    out.push(self.remote_row(r, cx));
+                    out.push(self.machine_row(r, self.machine_detail(r), cx));
                 }
                 self.sidebar.reveal(&part, start, &keep, &mut out);
             }
         }
+        out.extend(self.unlinked_rows(self.remote_unlinked(index, only.as_deref(), cx), true, cx));
         self.sidebar.reveal_block(&key, 0, 1, &mut out);
         out
     }

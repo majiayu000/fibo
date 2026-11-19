@@ -9,10 +9,10 @@ impl Workbench {
     /// Right-click on another machine's row: its menu at the pointer.
     pub(in crate::workbench) fn open_remote_menu(
         &self,
-        r: &RemoteRow,
+        r: &MachineRow,
         cx: &Context<Self>,
     ) -> impl Fn(&gpui::MouseDownEvent, &mut Window, &mut gpui::App) + 'static {
-        let (index, terminal) = (r.index, r.card.id.clone());
+        let (index, terminal) = (r.index, r.target().to_owned());
         cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
             if this.remote_menu_entries(index, &terminal, cx).is_empty() {
                 return;
@@ -21,6 +21,18 @@ impl Workbench {
             cx.stop_propagation();
             cx.notify();
         })
+    }
+    /// The session `target` names on machine `index`: its terminal's, or itself once it
+    /// ended.
+    fn target_session(&self, index: usize, target: &str, cx: &gpui::App) -> Option<String> {
+        if let Some(r) = self.remote_card(index, target) {
+            return r.card.session;
+        }
+        let view = self.machine_view(index)?;
+        let w = view.read(cx);
+        (w.workspace.agent_sessions.iter())
+            .find(|s| s.id == target)
+            .map(|s| s.id.clone())
     }
     /// Machine `index`'s card for `terminal`, as its row has it.
     fn remote_card(&self, index: usize, terminal: &str) -> Option<RemoteRow> {
@@ -39,11 +51,11 @@ impl Workbench {
             return Vec::new();
         };
         let w = view.read(cx);
-        let session = self
-            .remote_card(index, terminal)
-            .and_then(|r| r.card.session);
+        let session = self.target_session(index, terminal, cx);
         let mut entries = session.map_or_else(Vec::new, |id| w.session_menu_entries(&id));
-        if entries.is_empty() && w.can_pin() {
+        // An ended session there has no terminal to pin.
+        let live = w.workspace.terminals.iter().any(|t| t.id == terminal);
+        if entries.is_empty() && live && w.can_pin() {
             let pinned = w.pins().iter().any(|p| p == terminal);
             let name = if pinned {
                 t!("取消置顶")
@@ -96,12 +108,33 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(r) = self.remote_card(index, terminal) else {
+        let card = self.remote_card(index, terminal);
+        let Some(session) = self.target_session(index, terminal, cx) else {
             return;
         };
-        if matches!(action, SessionAction::Open) {
-            self.open_remote_peek(index, r.card, &r.host_name, window, cx);
-            return;
+        match (action, card) {
+            (SessionAction::Open, Some(r)) => {
+                self.open_remote_peek(index, r.card, &r.host_name, window, cx);
+                return;
+            }
+            // Ended there: that machine resumes it in its own main area, shown here.
+            (SessionAction::Open, None) => {
+                let space = self.machine_view(index).and_then(|v| {
+                    let w = v.read(cx);
+                    let s = w
+                        .workspace
+                        .agent_sessions
+                        .iter()
+                        .find(|s| s.id == session)?;
+                    w.workspace.session_space(s).map(str::to_owned)
+                });
+                let go = super::super::hosts::Go::Space(space.unwrap_or_default());
+                if !self.open_on_host(index, go, window, cx) {
+                    return;
+                }
+            }
+            (SessionAction::Close(_), None) => return,
+            _ => {}
         }
         if matches!(action, SessionAction::Close(_)) {
             let go = super::super::hosts::Go::Terminal(terminal.to_owned());
@@ -112,7 +145,6 @@ impl Workbench {
         let Some(view) = self.machine_view(index) else {
             return;
         };
-        let session = r.card.session.unwrap_or_default();
         let drawn = self.hosted_view().is_some_and(|v| v == view);
         view.update(cx, |w, cx| match action {
             // 标记完成's animation plays on that machine's pane only while it is drawn.
@@ -124,20 +156,6 @@ impl Workbench {
             }
             _ => w.session_action(&session, action, window, cx),
         });
-    }
-    /// That machine's rename field for `session`, while one is open.
-    pub(in crate::workbench) fn remote_renaming(
-        &self,
-        index: usize,
-        session: Option<&str>,
-        cx: &gpui::App,
-    ) -> Option<Entity<crate::ui::field::Field>> {
-        let session = session?;
-        let view = self.machine_view(index)?;
-        let w = view.read(cx);
-        (w.layout.renaming_session.as_ref())
-            .filter(|(id, ..)| id == session)
-            .map(|(_, field, _)| field.clone())
     }
 }
 

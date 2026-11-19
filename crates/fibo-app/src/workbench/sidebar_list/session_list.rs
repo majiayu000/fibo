@@ -105,7 +105,7 @@ impl Workbench {
         // Where other machines' rows list with these, their pinned ones join 置顶, after
         // this machine's: each machine's host keeps its own pins.
         let mut there: Vec<_> = if recent {
-            (self.listed_remote_rows().into_iter())
+            (self.listed_remote_rows(cx).into_iter())
                 .filter(|r| r.pin.is_some())
                 .collect()
         } else {
@@ -134,7 +134,7 @@ impl Workbench {
                 }
             }
             for r in there.iter().filter(|r| open || r.shown) {
-                out.push(self.remote_row(r, cx));
+                out.push(self.machine_row(r, self.machine_detail(r), cx));
             }
         }
         let mut budget = preset.row_limit();
