@@ -286,21 +286,11 @@ impl Drop for Master {
 impl Master {
     /// A pipe that blocks, unlike the Unix side: nothing here gives up after five seconds.
     pub fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
-        let mut accepted = 0;
-        while accepted < bytes.len() {
-            let end = bytes.len().min(accepted + 256);
-            match self.input.write(&bytes[accepted..end]) {
-                Ok(0) => {
-                    return Err(io::Error::other(format!(
-                        "终端已关闭，已接受 {accepted} 字节"
-                    )));
-                }
-                Ok(n) => accepted += n,
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                Err(e) => return Err(io::Error::other(format!("{e}; 已接受 {accepted} 字节"))),
-            }
-        }
-        Ok(())
+        write_input(&self.input, bytes)
+    }
+
+    pub fn writer(&self) -> io::Result<Writer> {
+        Ok(Writer(self.input.try_clone()?))
     }
 
     /// A pseudo console has no pixel size.
@@ -342,6 +332,32 @@ impl Master {
             at: 0,
         })
     }
+}
+
+pub struct Writer(File);
+
+impl Writer {
+    pub fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        write_input(&self.0, bytes)
+    }
+}
+
+fn write_input(mut input: &File, bytes: &[u8]) -> io::Result<()> {
+    let mut accepted = 0;
+    while accepted < bytes.len() {
+        let end = bytes.len().min(accepted + 256);
+        match input.write(&bytes[accepted..end]) {
+            Ok(0) => {
+                return Err(io::Error::other(format!(
+                    "终端已关闭，已接受 {accepted} 字节"
+                )));
+            }
+            Ok(n) => accepted += n,
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(io::Error::other(format!("{e}; 已接受 {accepted} 字节"))),
+        }
+    }
+    Ok(())
 }
 
 pub struct Reader {

@@ -90,8 +90,11 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                         return Err(error);
                     }
                 };
-            let reader = match master.reader() {
-                Ok(reader) => reader,
+            let (reader, input) = match master
+                .reader()
+                .and_then(|r| Ok((r, Input::start(&master, &id)?)))
+            {
+                Ok(started) => started,
                 Err(e) => {
                     let _ = child.kill();
                     let _ = child.wait();
@@ -120,6 +123,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 Live {
                     vt,
                     master,
+                    input,
                     cols,
                     rows,
                     pid,

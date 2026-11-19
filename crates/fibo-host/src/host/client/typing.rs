@@ -66,7 +66,7 @@ fn send_message(
         .get(id)
         .cloned()
         .ok_or_else(|| io::Error::other("terminal not found"))?;
-    {
+    let typing = {
         let mut live = lock(&terminal)?;
         if live.exited {
             return Err(io::Error::other("terminal has exited"));
@@ -85,11 +85,17 @@ fn send_message(
             } else {
                 text.to_owned()
             };
-            live.master.write(bytes.as_bytes())?;
             live.input_at = Some(Instant::now());
+            Some((live.input.clone(), bytes))
+        } else {
+            None
         }
-    }
+    };
     drop(host);
+    // With no lock held: a program busy printing reads this only once its output is taken.
+    if let Some((input, bytes)) = typing {
+        input.write(bytes)?;
+    }
     // Same as typing in the app: the prompt on screen is no longer waiting on the user.
     lock(shared)?.answer_screen_wait(id)?;
     let Some(submit) = submit else {
@@ -97,16 +103,17 @@ fn send_message(
     };
     // Long enough for an Agent's paste handling to finish before Enter arrives.
     thread::sleep(Duration::from_millis(150));
-    {
+    let input = {
         let host = lock(shared)?;
         check_session(&host.workspace, id, session)?;
-        let mut live = lock(&terminal)?;
+        let live = lock(&terminal)?;
         if live.exited {
             return Err(io::Error::other("terminal has exited"));
         }
         message_allowed(&host, &live, id)?;
-        live.master.write(submit)?;
-    }
+        live.input.clone()
+    };
+    input.write(submit)?;
     typed(shared, id, submit.contains(&b'\r'))
 }
 
@@ -207,7 +214,7 @@ pub(in crate::host) fn send_keys(shared: &Shared, id: &str, keys: &[String]) -> 
         .get(id)
         .cloned()
         .ok_or_else(|| io::Error::other("terminal not found"))?;
-    {
+    let (input, bytes) = {
         let mut live = lock(&terminal)?;
         if live.exited {
             return Err(io::Error::other("terminal has exited"));
@@ -223,9 +230,10 @@ pub(in crate::host) fn send_keys(shared: &Shared, id: &str, keys: &[String]) -> 
             .map(|k| key_bytes(k, application_cursor))
             .collect::<io::Result<Vec<_>>>()?
             .concat();
-        live.master.write(&bytes)?;
         live.input_at = Some(Instant::now());
-    }
+        (live.input.clone(), bytes)
+    };
+    input.write(bytes)?;
     typed(shared, id, keys.iter().any(|k| k == "enter"))
 }
 /// Raw input from another desktop's pane, written as it came.
@@ -238,22 +246,23 @@ pub(in crate::host) fn type_input(shared: &Shared, id: &str, bytes: &[u8]) -> io
         .get(id)
         .cloned()
         .ok_or_else(|| io::Error::other("terminal not found"))?;
-    {
+    let input = {
         let mut live = lock(&terminal)?;
         if live.exited {
             return Err(io::Error::other("terminal has exited"));
         }
-        live.master.write(bytes)?;
         live.input_at = Some(Instant::now());
-    }
+        live.input.clone()
+    };
+    input.write(bytes)?;
     typed(shared, id, bytes.contains(&b'\r'))
 }
 /// How often the cursor is looked at again on the way to 「trust」, and how many times.
 const TRUST_STEP: Duration = Duration::from_millis(400);
 const TRUST_STEPS: usize = 6;
 
-/// Answers an Agent's 「trust this folder?」 from what the screen says right now, read under
-/// the lock each key goes out under: not trusting is Esc whatever the cursor is on; trusting
+/// Answers an Agent's 「trust this folder?」 from what the screen says right now, each key
+/// chosen from a fresh read: not trusting is Esc whatever the cursor is on; trusting
 /// is Enter only once the cursor is seen on that option. A CLI just up can swallow an arrow,
 /// so the arrow goes again if the cursor has not moved, and never a blind Enter.
 pub(in crate::host) fn answer_trust(
@@ -268,7 +277,7 @@ pub(in crate::host) fn answer_trust(
         .cloned()
         .ok_or_else(|| io::Error::other("terminal not found"))?;
     for _ in 0..TRUST_STEPS {
-        let done = {
+        let (input, bytes, done) = {
             let mut live = lock(&terminal)?;
             if live.exited {
                 return Err(io::Error::other("terminal has exited"));
@@ -291,10 +300,10 @@ pub(in crate::host) fn answer_trust(
                     key_bytes(seen.toward_yes, cursor)?
                 }
             };
-            live.master.write(&bytes)?;
             live.input_at = Some(Instant::now());
-            !trust || seen.on_yes
+            (live.input.clone(), bytes, !trust || seen.on_yes)
         };
+        input.write(bytes)?;
         // The card stops asking when the screen does, on its next quiet read: a key that
         // did nothing leaves the question there to answer again.
         if done {
@@ -331,7 +340,7 @@ pub(in crate::host) fn interrupt(shared: &Shared, id: &str) -> io::Result<()> {
         .get(id)
         .cloned()
         .ok_or_else(|| io::Error::other("terminal not found"))?;
-    {
+    let input = {
         let mut live = lock(&terminal)?;
         if live.exited {
             return Err(io::Error::other("terminal has exited"));
@@ -349,15 +358,17 @@ pub(in crate::host) fn interrupt(shared: &Shared, id: &str) -> io::Result<()> {
                 )));
             }
         };
-        live.master.write(bytes)?;
         live.input_at = Some(Instant::now());
-    }
+        let input = live.input.clone();
+        drop(live);
+        input.write(bytes)?;
+        input
+    };
     // Apart, or a CLI reads them as one Alt-Esc; the lock stays free for its output.
     for _ in 1..presses {
         thread::sleep(Duration::from_millis(PRESS_GAP_MS));
-        let mut live = lock(&terminal)?;
-        if !live.exited {
-            live.master.write(key)?;
+        if !lock(&terminal)?.exited {
+            input.write(key)?;
         }
     }
     typed(shared, id, false)
@@ -423,8 +434,10 @@ pub(in crate::host) fn answer_approval(
         } else {
             (if allow { "\r" } else { "\x1b" }).to_owned()
         };
-        live.master.write(key.as_bytes())?;
         live.input_at = Some(Instant::now());
+        let input = live.input.clone();
+        drop(live);
+        input.write(key)?;
     }
     lock(shared)?.answer_screen_wait(id)
 }

@@ -178,42 +178,56 @@ impl Master {
 
     /// Failed writes report the accepted prefix. Never replay a failed input.
     pub fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
-        let mut accepted = 0;
-        while accepted < bytes.len() {
-            let mut poll = libc::pollfd {
-                fd: self.file.as_raw_fd(),
-                events: libc::POLLOUT,
-                revents: 0,
-            };
-            let ready = unsafe { libc::poll(&mut poll, 1, 5_000) };
-            if ready < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
-                continue;
-            }
-            if ready <= 0 {
+        write_input(&self.file, bytes)
+    }
+
+    pub fn writer(&self) -> io::Result<Writer> {
+        Ok(Writer(self.file.try_clone()?))
+    }
+}
+
+pub struct Writer(File);
+
+impl Writer {
+    pub fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        write_input(&self.0, bytes)
+    }
+}
+
+/// The input queue holds about 1 KiB: a longer input goes in as the program reads.
+fn write_input(mut file: &File, bytes: &[u8]) -> io::Result<()> {
+    let mut accepted = 0;
+    while accepted < bytes.len() {
+        let mut poll = libc::pollfd {
+            fd: file.as_raw_fd(),
+            events: libc::POLLOUT,
+            revents: 0,
+        };
+        let ready = unsafe { libc::poll(&mut poll, 1, 5_000) };
+        if ready < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
+            continue;
+        }
+        if ready <= 0 {
+            return Err(io::Error::other(format!(
+                "程序 5 秒没读输入，只送进去前 {accepted} 字节，其余没发；先看输入框再决定是否重发"
+            )));
+        }
+        match file.write(&bytes[accepted..bytes.len().min(accepted + 256)]) {
+            Ok(0) => {
                 return Err(io::Error::other(format!(
-                    "输入中止，已接受 {accepted} 字节；禁止自动重发"
+                    "PTY 已关闭，已接受 {accepted} 字节"
                 )));
             }
-            match self
-                .file
-                .write(&bytes[accepted..bytes.len().min(accepted + 256)])
-            {
-                Ok(0) => {
-                    return Err(io::Error::other(format!(
-                        "PTY 已关闭，已接受 {accepted} 字节"
-                    )));
-                }
-                Ok(n) => accepted += n,
-                Err(e)
-                    if matches!(
-                        e.kind(),
-                        io::ErrorKind::Interrupted | io::ErrorKind::WouldBlock
-                    ) => {}
-                Err(e) => return Err(io::Error::other(format!("{e}; 已接受 {accepted} 字节"))),
-            }
+            Ok(n) => accepted += n,
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    io::ErrorKind::Interrupted | io::ErrorKind::WouldBlock
+                ) => {}
+            Err(e) => return Err(io::Error::other(format!("{e}; 已接受 {accepted} 字节"))),
         }
-        Ok(())
     }
+    Ok(())
 }
 
 pub struct Reader(File);

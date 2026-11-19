@@ -35,6 +35,8 @@ impl Subscriber {
 pub(super) struct Live {
     pub(super) vt: Vt,
     pub(super) master: term::Master,
+    /// Where typing goes; see `input`. Never `master.write` under this terminal's lock.
+    pub(super) input: Input,
     pub(super) cols: u16,
     pub(super) rows: u16,
     pub(super) pid: u32,
@@ -400,17 +402,13 @@ pub(super) fn pump(
         let out = crate::prompt_modes::feed(&mut live.vt, &bytes[..n], &ends).into_owned();
         let response = std::mem::take(&mut *lock(&replies)?);
         if !response.is_empty() {
-            if let Err(e) = live.master.write(&response) {
-                eprintln!("terminal {id}: query reply: {e}");
-            }
+            live.input.reply(response);
         }
         live.broadcast(OUTPUT, out);
         let scan = live.reports.scan(&bytes[..n]);
         // A program asking whether we speak the status protocol gets its answer.
         if !scan.reply.is_empty() {
-            if let Err(e) = live.master.write(&scan.reply) {
-                eprintln!("terminal {id}: program status probe: {e}");
-            }
+            live.input.reply(scan.reply);
         }
         if let Some(said) = scan.change {
             // Host before Live is the lock order; release this terminal first.
@@ -613,10 +611,14 @@ pub(super) fn attach(
                         if bytes.len() > 64 * 1024 {
                             return Err(io::Error::other("单次输入超过 64 KiB"));
                         }
-                        live.master.write(&bytes)?;
                         if !lossy {
                             live.input_at = Some(Instant::now());
                         }
+                        // Out of the lock: a busy program reads this only once its output
+                        // has been taken, and taking it needs the lock.
+                        let input = live.input.clone();
+                        drop(live);
+                        input.write(bytes)?;
                     }
                     Request::Scheme(scheme) => live.vt.set_scheme(scheme)?,
                     Request::Colors(colors) => live.vt.set_colors(colors)?,
