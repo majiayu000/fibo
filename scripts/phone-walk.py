@@ -19,7 +19,11 @@ content: they stay out of the repo.
   phone-walk.py pick-image              in the system picker, select that picture and nothing else
   phone-walk.py mark <编号> 过|不过|跳过 <说明>
   phone-walk.py report                  write index.html and print what is not walked yet
-  phone-walk.py teardown                close the test terminals, delete the test dirs
+  phone-walk.py teardown [记录目录]       close the test terminals, delete the test dirs; with a
+                                        dir, of that run (one stopped without its teardown)
+
+`start` first tears down a run that stopped without one (the lock still names it and nobody
+touched it for 10 minutes): its test terminals would otherwise wait in 要你处理 for good.
 """
 import datetime
 import html
@@ -125,11 +129,28 @@ def holder():
     return (who, run) if time.time() - touched < STALE_S else None
 
 
+def unfinished():
+    """The run the lock still names: teardown removes the lock, so that run stopped before
+    its teardown (or still walks; holder() tells which)."""
+    try:
+        run = LOCK.read_text().split("\n")[1]
+    except (OSError, IndexError):
+        return None
+    return run if run and Path(run).is_dir() else None
+
+
 def start():
     other = holder()
     if other and "--force" not in sys.argv:
         die(f"终端 {other[0]} 正在走查这台手机（{other[1]}，{STALE_S // 60} 分钟内有动静）。"
             "两个会话同时点同一台手机会互相打乱：等它走完，或确认它已停下再加 --force")
+    # 11-18 a walk stopped mid-way waiting for the user; its two test sessions sat in
+    # 要你处理 the next day, one of them at an approval. This run takes the phone over, so the
+    # stopped one cannot go on anyway.
+    left = unfinished()
+    if left:
+        print(f"上一次走查 {left} 没收尾，先替它收尾：")
+        teardown(left)
     day = datetime.date.today().isoformat()
     d, n = PAGES / f"{day}-phone-walk", 2
     while d.exists():
@@ -507,9 +528,19 @@ def walk_terminal(t):
     return MARKER in screen
 
 
-def teardown():
-    s = state()
-    dirs = [os.path.realpath(t["dir"]) for t in s.get("tests", [])]
+def teardown(run=None):
+    if run:
+        results = Path(run) / "results.json"
+        if not results.exists():
+            die(f"{run} 里没有 results.json，不是一次走查的记录")
+        s = json.loads(results.read_text())
+    else:
+        results, s = run_dir() / "results.json", state()
+    if s.get("torn_down"):
+        print(f"{results.parent} 已经收过尾（{s['torn_down']}）")
+        return
+    # setup-codex puts its session in the Claude one's dir: count that dir once.
+    dirs = list(dict.fromkeys(os.path.realpath(t["dir"]) for t in s.get("tests", [])))
     # Terminals the phone opened (new.task) are not in the state. A test dir also takes tasks
     # you start yourself from the phone (a space with no folder starts in its latest
     # conversation's dir): close only those that show the marker, keep the rest and their dir.
@@ -549,7 +580,10 @@ def teardown():
         # A scan of the missing file drops it from the gallery too.
         adb("shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
             "-d", f"file://{p}")
-    if LOCK.exists() and LOCK.read_text().startswith(f"{WHO}\n"):
+    s["torn_down"] = f"{time.strftime('%F %T')} by {WHO}"
+    results.write_text(json.dumps(s, ensure_ascii=False, indent=1))
+    lock = LOCK.read_text().split("\n")[:2] if LOCK.exists() else []
+    if lock and (lock[0] == WHO or (len(lock) > 1 and lock[1] == str(results.parent))):
         LOCK.unlink()
     print(f"关了 {len(closing)} 个测试终端，删了 {len(dirs) - len(keep_dirs)} 个测试目录和 {len(s.get('pushed', []))} 张测试图")
 
@@ -597,7 +631,9 @@ def main(argv):
     elif cmd == "report":
         report()
     elif cmd == "teardown":
-        teardown()
+        if rest and holder() and holder()[1] == rest[0]:
+            die(f"{rest[0]} 还有人在走（{STALE_S // 60} 分钟内有动静），等它自己收尾")
+        teardown(rest[0] if rest else None)
     else:
         sys.exit(__doc__)
 
