@@ -12,6 +12,8 @@
 //! - `frames-rail`: the same machine's rail layout, at rest and with the list arriving.
 //! - `frames-scroll`: Agent output scrolling a line a frame, in `cpu_probe_evidence/scroll.rs`.
 //! - `frames-turning`: the running mark turning, in `cpu_probe_evidence/turning.rs`.
+//! - `settings-pane`: settings reuses its layout when a pane draws or a snapshot leaves its
+//!   values alone; search, changed settings and preview failures still update visibly.
 //! - `frames-plugins`: 设置 › 插件 and the themes with a picture or a see-through window, in
 //!   `cpu_probe_evidence/plugins.rs`.
 //! - `frames-settings-terminal`: scroll 设置 › 终端 in both directions.
@@ -340,6 +342,8 @@ pub(super) fn start(
                 section_frames(handle, cx).await
             } else if name == "frames-rail" {
                 rail_frames(handle, cx).await
+            } else if name == "settings-pane" {
+                plugins::pane_behind(handle, &pane, cx).await
             } else if name == "frames-plugins" {
                 plugins::run(handle, &pane, &directory, cx).await
             } else if name == "frames-settings-terminal" {

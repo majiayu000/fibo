@@ -631,7 +631,9 @@ impl Workbench {
         self.facts.forget();
         self.close_reviewed(cx);
         self.first_run_follow(cx);
-        if let Some(view) = &self.settings {
+        if let Some(view) = &self.settings
+            && view.read(cx).values != self.workspace.settings
+        {
             view.update(cx, |v, cx| {
                 v.values = self.workspace.settings.clone();
                 cx.notify();

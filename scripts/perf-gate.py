@@ -189,6 +189,18 @@ def main():
     not_applied = re.findall(r'theme-applied (\S+): NO', plugin_text)
     if not_applied or plugin_text.count('theme-applied') != 3:
         fails.append(f'themes not in force while measured: {not_applied or plugin_text.count("theme-applied")}')
+    settings_text = probe(bindir, out / 'settings-pane', 'settings-pane', catch_up=False)
+    settings = re.findall(
+        r'^(frames-settings-pane-(\w+)): [^\n]*?([\d.]+) M instructions; settings drew (\d+)$',
+        settings_text, re.M)
+    if {r[1] for r in settings} != {'general', 'plugins', 'appearance'}:
+        fails.append('no settings pane frame numbers')
+    for key, page, cost, draws in settings:
+        measured[key] = float(cost)
+        if int(draws):
+            fails.append(f'terminal output drew the {page} settings page: {draws} times')
+    if 'settings-pane-check: search, changed settings and preview error painted; equal snapshot drew settings 0' not in settings_text:
+        fails.append('settings did not reuse an unchanged snapshot or missed a visible change')
     redraw = next((l for l in text.splitlines() if 'redraw-check:' in l), '')
     for step, verdict in re.findall(r'([\w-]+): (same|DIFF[^;]*)', redraw):
         if verdict != 'same':
