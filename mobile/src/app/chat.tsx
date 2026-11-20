@@ -499,7 +499,7 @@ export default function Chat() {
           permission={card?.permission}
           permissionFull={card?.permission_full}
           running={!!running}
-          busyPlaceholder={tr(whileBusy(card?.controls).placeholder)}
+          controls={card?.controls}
           canStop={supports(m, 'stop')}
           offline={!online}
           suggestion={suggestion}
