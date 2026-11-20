@@ -16,6 +16,12 @@ checkout() {
 }
 checkout zed https://github.com/zed-industries/zed.git 2a857f5f2ec368745c1af5209d49836968fe75b8
 checkout libghostty-rs https://github.com/Uzaaft/libghostty-rs.git 0ef80413de1326685743378efbfa06d849e041a7
+
+# Backport libghostty-rs e7edf5f: Cargo resolves watched paths from the crate root.
+libghostty_patch=$PWD/patches/libghostty-rerun-if-changed.patch
+if ! git -C .deps/libghostty-rs apply --reverse --check "$libghostty_patch" 2>/dev/null; then
+  git -C .deps/libghostty-rs apply "$libghostty_patch"
+fi
 # Later patches change lines earlier ones added, so an earlier patch can look unapplied
 # once a later one is in. Everything before the last patch that is in is in as well.
 pending=
