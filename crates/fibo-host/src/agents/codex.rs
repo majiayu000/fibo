@@ -52,10 +52,8 @@ impl Adapter for Codex {
     fn interrupt_key(&self) -> &'static [u8] {
         b"\x1b"
     }
-    /// After Esc a running command stays as 「1 background terminal running · /stop to
-    /// close」, and the log says the turn runs until it ends: `sleep 60` went on (real, 0.166).
-    fn closes_background(&self, tail: &str) -> Option<&'static str> {
-        super::codex_background::left_running(tail).then_some("/stop")
+    fn interrupt_background(&self) -> Option<fn(&str) -> bool> {
+        Some(super::codex_background::reports_running)
     }
     fn background_commands(&self) -> super::BackgroundCommands {
         super::BackgroundCommands::Screen(super::codex_background::left_running)

@@ -393,6 +393,8 @@
 "这一轮还没结束，等它停下再换" = "Wait for the current turn to finish before changing this"
 "只有打字、按键和回答审批能这样带请求 id；编辑用 Edit 自己的 request" = "Only typing, keys, and approval answers accept this request ID; edits use Edit.request"
 "Agent 退出了，这个终端里已经没有对话" = "The agent exited; this terminal no longer has a conversation"
+"回合已中断，Codex 仍有后台命令在运行。请打开终端查看" = "The turn was interrupted. Codex still has background commands. Open the terminal to check."
+"Codex 仍有后台命令在运行，请打开终端查看" = "Codex still has background commands. Open the terminal to check."
 "发了中断，但它没有停。可以打开终端看一眼，或者再试一次" = "The interrupt was sent but the agent did not stop. Open the terminal to check, or try again."
 "这条工具调用不在记录里" = "This tool call is not in the log"
 "读更早的消息时出错" = "Could not read earlier messages"

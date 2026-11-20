@@ -325,33 +325,34 @@ fn remote_stop_answers_the_cancel_menu_only_with_the_cursor_on_cancel() {
 
 const LEFT_RUNNING: &str = "1 background terminal running · /ps to view · /stop to close";
 
-/// Esc ends the turn on screen but its command runs on (real Codex 0.166): `sleep 60` is
-/// only over once `/stop` closes it, and the log says the turn runs until then.
+/// Codex 0.171 logs the interrupt before the background terminal closes.
 #[test]
-fn remote_stop_closes_the_command_an_interrupted_turn_left_running() {
+fn remote_stop_reports_a_command_still_running_after_codex_logs_the_interrupt() {
     let h = Host::start();
-    fake_codex_saying(&h, "left", &["0a", "0d"], 1, LEFT_RUNNING);
+    fake_codex_saying(&h, "left", &["1b"], 1, LEFT_RUNNING);
     let mut r = Remote::open(&h, None, &[]);
     wait_phase(&mut r, "left", "working");
-    let ok = r.ok(json!({ "op": "stop", "terminal": "left", "request": "s1" }));
-    assert_eq!(ok["closed_background"], true);
+    let error = r.error(json!({ "op": "stop", "terminal": "left", "request": "s1" }));
+    assert!(error.contains("回合已中断，Codex 仍有后台命令"), "{error}");
     let screen = h.screen("left");
-    assert!(screen.contains("keys: 1b 2f 73 74 6f 70"), "{screen}");
-}
-
-/// A server from an earlier turn: the turn ends by itself at Esc, so nothing is closed.
-#[test]
-fn remote_stop_leaves_a_server_alone_when_the_turn_ended_by_itself() {
-    let h = Host::start();
-    fake_codex_saying(&h, "server", &["1b"], 1, LEFT_RUNNING);
-    let mut r = Remote::open(&h, None, &[]);
-    wait_phase(&mut r, "server", "working");
-    let ok = r.ok(json!({ "op": "stop", "terminal": "server", "request": "s1" }));
-    assert_eq!(ok["closed_background"], false);
-    std::thread::sleep(Duration::from_millis(2000));
-    let screen = h.screen("server");
     assert!(
         screen.contains("keys: 1b") && !screen.contains("2f"),
+        "{screen}"
+    );
+}
+
+/// Even while the log still says Working, never type that session-wide /stop into Codex.
+#[test]
+fn remote_stop_never_uses_the_slash_command_to_close_every_background_job() {
+    let h = Host::start();
+    fake_codex_saying(&h, "server", &["0a", "0d"], 1, LEFT_RUNNING);
+    let mut r = Remote::open(&h, None, &[]);
+    wait_phase(&mut r, "server", "working");
+    let error = r.error(json!({ "op": "stop", "terminal": "server", "request": "s1" }));
+    assert!(error.contains("仍有后台命令"), "{error}");
+    let screen = h.screen("server");
+    assert!(
+        screen.contains("KEY=1b") && !screen.contains("2f"),
         "{screen}"
     );
 }
