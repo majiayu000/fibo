@@ -28,9 +28,9 @@ pub(super) async fn run(
         r#"stty -echo -icanon min 1 time 0 && perl -e '
             sub key {{ sysread(STDIN, my $b, 1) == 1 or exit 1; return $b; }}
             $| = 1;
-            printf "\nFIBO_ACK_%s\n", "READY";
+            printf "\033[?25h\nFIBO_ACK_%s\n", "READY";
             for (1..{QUIET_KEYS}) {{ key() eq "x" or exit 2; }}
-            key() eq "!" or exit 3;
+            key() eq "s" && key() eq "!" or exit 3;
             printf "\nFIBO_ACK_%s_%d\n", "DONE", {QUIET_KEYS};
             for my $i (1..{ECHO_KEYS}) {{
                 my $b = key();
@@ -83,6 +83,30 @@ pub(super) async fn run(
         "quiet input unexpectedly changed the terminal"
     );
 
+    pane.update(cx, |p, cx| p.select_all(cx));
+    executor.timer(Duration::from_millis(80)).await;
+    draw_if_notified(cx);
+    let ((_, copied), highlighted) = pane.read_with(cx, |p, _| p.visual_selection_drawn());
+    assert!(copied.is_some());
+    assert!(highlighted.iter().any(|line| line == "FIBO_ACK_READY"));
+    let before_selection = (wakes.get(), draws.get());
+    send("s", cx);
+    executor.timer(Duration::from_millis(80)).await;
+    draw_if_notified(cx);
+    let (drawn, copied) = pane.read_with(cx, |p, _| p.visual_selection());
+    assert!(
+        copied.is_none(),
+        "silent input did not clear the terminal selection"
+    );
+    assert!(
+        drawn.is_empty(),
+        "silent input left selection painted on rows {drawn:?}"
+    );
+    let selection_wakes = wakes.get() - before_selection.0;
+    let selection_draws = draws.get() - before_selection.1;
+    assert_eq!((selection_wakes, selection_draws), (1, 1));
+    assert_eq!(pane.read_with(cx, |p, _| p.visual_text()), initial);
+
     send("!", cx);
     wait_for_line(
         pane,
@@ -115,7 +139,7 @@ pub(super) async fn run(
     drop(observe);
     crate::ui::terminal_text::visual_cursor_blink(blink);
     format!(
-        "quiet-input: {QUIET_KEYS} input bytes; quiet pane wakes {quiet_wakes}; quiet draws {quiet_draws}; {million:.2} M instructions, {cpu_ms:.2} ms CPU; echo output {ECHO_KEYS}/{ECHO_KEYS}; echo pane wakes {echo_wakes}; echo p95 {echo_p95:.2} ms"
+        "quiet-input: {QUIET_KEYS} input bytes; quiet pane wakes {quiet_wakes}; quiet draws {quiet_draws}; {million:.2} M instructions, {cpu_ms:.2} ms CPU; echo output {ECHO_KEYS}/{ECHO_KEYS}; echo pane wakes {echo_wakes}; echo p95 {echo_p95:.2} ms; selection cleared on quiet input with {selection_wakes} pane wake and {selection_draws} draw"
     )
 }
 
