@@ -1,7 +1,56 @@
 //! Which transcript belongs to which terminal: log-event subscription, recovery of
 //! missed log writes and following an associated session's log.
 use super::*;
+use crate::recognition::Transcript;
 use fibo_platform::file_watch::flag;
+use std::collections::HashSet;
+
+// Building temporary lookups costs more than one or a few direct scans. The
+// full log cache at startup and large repairs are the batches that amortize it.
+const INDEX_MIN_ROWS: usize = 128;
+
+type SessionPositions<'a> = HashMap<Agent, HashMap<&'a str, Option<usize>>>;
+
+fn session_positions<'a>(
+    transcripts: &'a [Transcript],
+    sessions: &[AgentSession],
+) -> SessionPositions<'a> {
+    // Borrow the keys from the batch, so observing a transcript can update the
+    // workspace in place. Keep the first position, as the former .find() did.
+    let mut positions: SessionPositions<'a> = HashMap::new();
+    for t in transcripts {
+        positions
+            .entry(t.runtime)
+            .or_default()
+            .insert(&t.cli_id, None);
+    }
+    for (i, session) in sessions.iter().enumerate() {
+        if let Some(position) = positions
+            .get_mut(&session.runtime)
+            .and_then(|rows| rows.get_mut(session.cli_session_id.as_str()))
+        {
+            position.get_or_insert(i);
+        }
+    }
+    positions
+}
+
+fn session_position(
+    positions: Option<&SessionPositions<'_>>,
+    sessions: &[AgentSession],
+    transcript: &Transcript,
+) -> Option<usize> {
+    match positions {
+        Some(positions) => positions
+            .get(&transcript.runtime)
+            .and_then(|rows| rows.get(transcript.cli_id.as_str()))
+            .copied()
+            .flatten(),
+        None => sessions
+            .iter()
+            .position(|s| s.runtime == transcript.runtime && s.cli_session_id == transcript.cli_id),
+    }
+}
 
 #[derive(Default)]
 pub(super) struct Association {
@@ -16,7 +65,7 @@ impl Association {
         &mut self,
         shared: &Shared,
         index: &crate::log_index::Index,
-        transcripts: &[crate::recognition::Transcript],
+        transcripts: &[Transcript],
     ) -> io::Result<()> {
         if transcripts.is_empty() {
             return Ok(());
@@ -30,49 +79,77 @@ impl Association {
                 .filter(|t| t.state == ProcessState::Running)
                 .filter_map(|t| t.pid)
                 .collect();
-            let unbound: Vec<_> = transcripts
-                .iter()
-                .filter(|t| {
-                    !workspace.agent_sessions.iter().any(|s| {
+            let sessions = &workspace.agent_sessions;
+            let mut unbound = Vec::new();
+            if !running.is_empty() {
+                let bound = (transcripts.len() >= INDEX_MIN_ROWS
+                    && sessions.len() >= INDEX_MIN_ROWS)
+                    .then(|| {
+                        sessions
+                            .iter()
+                            .filter(|s| s.current)
+                            .map(|s| (s.runtime, s.cli_session_id.as_str(), s.transcript.as_str()))
+                            .collect::<HashSet<_>>()
+                    });
+                unbound.extend(transcripts.iter().filter(|t| match &bound {
+                    Some(bound) => {
+                        !bound.contains(&(t.runtime, t.cli_id.as_str(), t.path.as_str()))
+                    }
+                    None => !sessions.iter().any(|s| {
                         s.current
                             && s.runtime == t.runtime
                             && s.cli_session_id == t.cli_id
                             && s.transcript == t.path
-                    })
-                })
-                .collect();
+                    }),
+                }));
+            }
             (running, unbound)
         };
         // A new identity/file (or a changed managed tree) gets one probe. An
         // unresolved manual Claude appending the same file is not a polling clock.
-        let needs_probe = !running.is_empty()
-            && unbound.iter().any(|t| {
-                running != self.inventory
-                    || !self.attempted.contains(&(t.path.clone(), t.cli_id.clone()))
-            });
+        let needs_probe = unbound.iter().any(|t| {
+            running != self.inventory
+                || !self.attempted.contains(&(t.path.clone(), t.cli_id.clone()))
+        });
         // Known files only advance metadata. Never enumerate processes or query the whole index here.
         {
             let mut host = lock(shared)?;
             let mut next = host.workspace.clone();
+            let mut positions = (transcripts.len() >= INDEX_MIN_ROWS
+                && next.agent_sessions.len() >= INDEX_MIN_ROWS)
+                .then(|| session_positions(transcripts, &next.agent_sessions));
             for t in transcripts {
-                let known = next
-                    .agent_sessions
-                    .iter()
-                    .any(|s| s.runtime == t.runtime && s.cli_session_id == t.cli_id);
-                if !known && index.recent(t.updated) {
+                if session_position(positions.as_ref(), &next.agent_sessions, t).is_none()
+                    && index.recent(t.updated)
+                {
+                    let position = next.agent_sessions.len();
                     next.observe_agent(crate::recognition::observation(t, None))
                         .map_err(io::Error::other)?;
+                    if let Some(known) = &mut positions {
+                        known
+                            .entry(t.runtime)
+                            .or_default()
+                            .insert(&t.cli_id, Some(position));
+                    }
                 }
             }
+            let before_reconcile = next.agent_sessions.len();
             crate::recognition::reconcile(&mut next, transcripts, &[], &HashMap::new())?;
+            // Reconciliation keeps the rows in order and their identities intact.
+            // Following a continued conversation can append an older identity.
+            if let Some(positions) = positions
+                .as_mut()
+                .filter(|_| next.agent_sessions.len() != before_reconcile)
+            {
+                *positions = session_positions(transcripts, &next.agent_sessions);
+            }
             // Only cards read here change content: compare those, not the whole table.
             let mut touched = vec![];
             for t in transcripts {
-                if let Some(s) = next
-                    .agent_sessions
-                    .iter_mut()
-                    .find(|s| s.runtime == t.runtime && s.cli_session_id == t.cli_id)
+                if let Some(position) =
+                    session_position(positions.as_ref(), &next.agent_sessions, t)
                 {
+                    let s = &mut next.agent_sessions[position];
                     if let Some(card) = index.card(&t.path)? {
                         if next.content.get(&s.id).is_some_and(|old| {
                             !card.turn_key.is_empty() && card.turn_key != old.turn_key

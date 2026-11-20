@@ -362,6 +362,88 @@ fn a_batch_commits_only_when_a_card_it_read_changed() {
     fs::remove_dir_all(root).unwrap();
 }
 
+#[test]
+fn large_log_batch_keeps_existing_identities_and_applies_duplicate_paths_in_order() {
+    use crate::recognition::{observation, Transcript};
+
+    let root = std::env::temp_dir().join(format!("fibo-association-{}", uuid::Uuid::new_v4()));
+    let logs = root.join("logs");
+    fs::create_dir_all(&logs).unwrap();
+    let mut index =
+        crate::log_index::Index::open(&root, vec![(Agent::Codex, logs.clone())]).unwrap();
+    index.initialize().unwrap();
+    let shared = shared_host(&root, &index);
+    let now = fibo_core::content::now();
+    let transcript = |runtime, id: &str, file: &str, updated| Transcript {
+        runtime,
+        cli_id: id.into(),
+        path: logs.join(file).to_str().unwrap().into(),
+        cwd: "/repo".into(),
+        updated,
+    };
+    let first = transcript(Agent::Codex, "same", "first.jsonl", now);
+    let last = transcript(Agent::Codex, "same", "last.jsonl", now);
+    let fresh = transcript(Agent::Codex, "fresh", "fresh.jsonl", now);
+    for (t, prompt) in [
+        (&first, "first prompt"),
+        (&last, "last prompt"),
+        (&fresh, "new prompt"),
+    ] {
+        let meta = serde_json::json!({"type":"session_meta","payload":{"id":t.cli_id,"cwd":t.cwd}});
+        let ask = serde_json::json!({"timestamp":now,"type":"event_msg","payload":{"type":"user_message","message":prompt}});
+        fs::write(&t.path, format!("{meta}\n{ask}\n")).unwrap();
+        index
+            .update(Agent::Codex, Path::new(&t.path), true)
+            .unwrap();
+    }
+    let claude = transcript(Agent::Claude, "same", "same-claude.jsonl", 0);
+    let first_id = {
+        let mut host = lock(&shared).unwrap();
+        let mut workspace = host.workspace.clone();
+        let mut original = observation(&first, None);
+        original.name = "handwritten name".into();
+        let first_id = original.id.clone();
+        workspace
+            .agent_sessions
+            .extend([original, observation(&claude, None)]);
+        for n in 0..128 {
+            let id = format!("stored-{n}");
+            let old = transcript(Agent::Codex, &id, "old.jsonl", 0);
+            workspace.agent_sessions.push(observation(&old, None));
+        }
+        host.commit(workspace).unwrap();
+        first_id
+    };
+    drop(shared);
+    let shared = shared_host(&root, &index);
+    let mut batch = vec![first, last.clone(), fresh.clone(), fresh, claude];
+    for n in 0..128 {
+        let id = format!("unmanaged-{n}");
+        batch.push(transcript(Agent::Codex, &id, "unmanaged.jsonl", 0));
+    }
+    Association::default()
+        .apply(&shared, &index, &batch)
+        .unwrap();
+    {
+        let host = lock(&shared).unwrap();
+        let workspace = &host.workspace;
+        assert_eq!(workspace.agent_sessions.len(), 131);
+        assert_eq!(workspace.agent_sessions[0].transcript, last.path);
+        assert_eq!(workspace.agent_sessions[0].name, "handwritten name");
+        assert_eq!(workspace.content[&first_id].title, "last prompt");
+        assert_eq!(workspace.agent_sessions[1].runtime, Agent::Claude);
+        assert!(!workspace
+            .content
+            .contains_key(&workspace.agent_sessions[1].id));
+        let added = workspace.agent_sessions.last().unwrap();
+        assert_eq!(added.cli_session_id, "fresh");
+        assert_eq!(workspace.content[&added.id].title, "new prompt");
+    }
+    drop(shared);
+    drop(index);
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// A host over `root`'s store with nothing running, for driving recognition by hand.
 fn shared_host(root: &std::path::Path, index: &crate::log_index::Index) -> Shared {
     let (store, workspace) = Store::open(root).unwrap();
