@@ -19,8 +19,7 @@ pub struct State {
     pub rows: u16,
     pub socket: Option<local::Stream>,
     pub ended: bool,
-    /// A running terminal's stream broke after its screen arrived: the host drops a
-    /// viewer that falls behind a burst of output. Attaching again restores it.
+    /// The link failed and may come back, including before the first screen arrives.
     pub dropped: bool,
     /// The scheme `vt` was last repainted with; a fresh screen from the host has none.
     pub scheme: Option<fibo_core::terminal::TermColors>,
@@ -105,6 +104,15 @@ impl Connection {
                         state.writable = writable;
                         state.cols = cols;
                         state.rows = rows;
+                    }
+                    Reply::Error(reason) => {
+                        // The host answered the attach. Repeating it cannot restore this terminal.
+                        unsent.abandon();
+                        let mut state = state.lock().unwrap();
+                        state.error = Some(fibo_core::i18n::say(&reason).into());
+                        state.socket = None;
+                        let _ = wake.unbounded_send(());
+                        return Ok(());
                     }
                     r => return Err(io::Error::other(format!("attach: {r:?}"))),
                 }
@@ -233,13 +241,13 @@ impl Connection {
         if state.dropped {
             return Err(t!("连接已断开，正在重连；这次的输入没发").into());
         }
-        if state.vt.is_none() {
-            return Err(t!("正在恢复终端，这次的输入没发").into());
-        }
         // The host refused something (backlog, a request it cannot read) or a write broke:
         // there is no takeover button then, so say what happened instead of read-only.
         if let Some(error) = state.error.as_ref().filter(|_| !state.writable) {
             return Err(t!("{error}；这次的输入没发", error));
+        }
+        if state.vt.is_none() {
+            return Err(t!("正在恢复终端，这次的输入没发").into());
         }
         if !state.writable {
             return Err(t!("当前为只读，请先点击「接管输入」；这次的输入没发").into());
@@ -449,6 +457,45 @@ mod tests {
         );
         assert!(!state.writable);
     }
+    #[test]
+    fn an_attach_refusal_reports_the_reason_and_does_not_retry() {
+        let path = std::env::temp_dir().join(format!("fibo-attach-{}.sock", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let listener = local::Listener::bind(&path).unwrap();
+        let host = std::thread::spawn(move || {
+            let mut stream = listener.accept().unwrap();
+            assert!(matches!(
+                receive::<Request>(&mut stream).unwrap(),
+                Request::Hello { major: MAJOR }
+            ));
+            send(
+                &mut stream,
+                CONTROL,
+                &Reply::Hello {
+                    major: MAJOR,
+                    instance: "test".into(),
+                    build: Build::default(),
+                },
+            )
+            .unwrap();
+            assert!(matches!(
+                receive::<Request>(&mut stream).unwrap(),
+                Request::Attach { id, .. } if id == "exited"
+            ));
+            send(&mut stream, CONTROL, &Reply::Error("shell exited".into())).unwrap();
+        });
+        let (tx, mut wake) = futures::channel::mpsc::unbounded();
+        let connection = Connection::new(&path, "exited", false, tx);
+        futures::executor::block_on(wake.next()).unwrap();
+        host.join().unwrap();
+        std::fs::remove_file(&path).unwrap();
+        let state = connection.state.lock().unwrap();
+        assert!(!state.dropped, "the host answered, so retrying cannot help");
+        assert_eq!(state.error.as_deref(), Some("shell exited"));
+        assert!(state.vt.is_none());
+        assert!(!state.writable);
+    }
+
     /// Plays one host lifetime: greets a single subscriber, reports `phase`, then exits.
     fn host_once(path: &Path, phase: RecognitionPhase) -> std::thread::JoinHandle<()> {
         let _ = std::fs::remove_file(path);

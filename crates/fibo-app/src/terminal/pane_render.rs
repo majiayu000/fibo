@@ -93,7 +93,7 @@ impl Render for Pane {
             self.screen.background = T::terminal_bg();
         }
         // While reattaching, the status line says so; the broken stream's error is noise.
-        let error = self
+        let mut error = self
             .local_error
             .clone()
             .or(state.error.clone())
@@ -116,16 +116,18 @@ impl Render for Pane {
         } else if state.dropped || self.reconnect_delay > 0 {
             t!("连接断开 · 正在重连…").into()
         } else if state.vt.is_none() {
-            let quiet = if self.showing_kept {
-                super::LOADING_KEPT_MS
-            } else {
-                super::LOADING_QUIET_MS
-            };
-            if self.opened.elapsed() < std::time::Duration::from_millis(quiet) {
-                String::new()
-            } else {
-                t!("正在载入画面…").into()
-            }
+            error.take().unwrap_or_else(|| {
+                let quiet = if self.showing_kept {
+                    super::LOADING_KEPT_MS
+                } else {
+                    super::LOADING_QUIET_MS
+                };
+                if self.opened.elapsed() < std::time::Duration::from_millis(quiet) {
+                    String::new()
+                } else {
+                    t!("正在载入画面…").into()
+                }
+            })
         } else if state.writable {
             String::new()
         } else if let Some((cols, rows)) = grid {

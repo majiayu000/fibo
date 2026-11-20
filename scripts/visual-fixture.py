@@ -22,6 +22,8 @@ MOORING_FIXTURE_CONTEXT=1 at prepare states how full each session's context wind
 MOORING_LANG=en (or zh) at capture renders the window in that language; Settings-<Page> pages
 (Settings-General, Settings-Look, …) open the settings window.
 MOORING_FIXTURE_EMPTY=1 at prepare makes one space with no sessions, for Main or EmptyTab.
+MOORING_FIXTURE_EXITED_TERMINAL=1 at prepare keeps an exited shell's tab across a host
+handoff, for Main.
 MOORING_FIXTURE_UNLINKED=1 at prepare adds a tab of Agents no conversation is tied to, for the
 SidebarUnlinked-* pages.
 """
@@ -92,8 +94,8 @@ if sys.argv[1] == 'prepare':
     parent = STATE.parent; parent.mkdir(parents=True, exist_ok=True)
     root = pathlib.Path(tempfile.mkdtemp(prefix='todo-', dir=parent)); home = pathlib.Path(tempfile.mkdtemp(prefix='kltodo-home-', dir='/tmp'))
     logs = home / '.codex/sessions'; logs.mkdir(parents=True); (home / '.claude/projects').mkdir(parents=True)
-    # The empty sidebar, with the same private host in the old and new builds.
-    if os.environ.get('MOORING_FIXTURE_EMPTY'):
+    exited_terminal = os.environ.get('MOORING_FIXTURE_EXITED_TERMINAL')
+    if os.environ.get('MOORING_FIXTURE_EMPTY') or exited_terminal:
         project = root / 'projects/Resize regression'; project.mkdir(parents=True)
         env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
         host = subprocess.Popen([str(BIN / 'fibo'), 'serve', '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'w'), start_new_session=True)
@@ -102,6 +104,34 @@ if sys.argv[1] == 'prepare':
         while not (root / 'runtime/workbench.sock').exists():
             assert host.poll() is None and time.monotonic() < deadline; time.sleep(.05)
         edit(root, {'AddSpace': {'id': 's0', 'name': 'Resize regression', 'cwd': str(project)}})
+        if exited_terminal:
+            launch = {'id': 'exited', 'space': 's0', 'argv': ['/bin/sh', '-c', 'exit 0'],
+                      'cwd': str(project), 'cols': 80, 'rows': 24}
+            assert 'Error' not in rpc(root, {'Launch': launch})
+            edit(root, {'CreateTab': {'tab': {'id': 'feedback', 'space': 's0', 'title': 'zsh 2',
+                                             'default_task': None, 'layout': {'Leaf': 'exited'}}}})
+            while True:
+                terminals = rpc(root, 'Workspace')['Workspace']['terminals']
+                if any(t['id'] == 'exited' and t['state'] == 'Exited' for t in terminals):
+                    break
+                assert time.monotonic() < deadline, 'shell did not exit'
+                time.sleep(.05)
+            request = {'Attach': {'id': 'exited', 'takeover': False, 'watch': True}}
+            assert 'Attached' in rpc(root, request), 'first host lost the last screen'
+            newer = subprocess.Popen([str(BIN / 'fibo'), 'serve', '--runtime',
+                                      str(root / 'runtime'), '--takeover'], env=env,
+                                     stdout=subprocess.DEVNULL, stderr=open(root / 'host.log', 'a'),
+                                     start_new_session=True)
+            STATE.write_text(json.dumps({'root': str(root), 'home': str(home), 'host': newer.pid}))
+            assert host.wait(timeout=20) == 0, 'old host did not hand off'
+            host = newer
+            while True:
+                try:
+                    assert 'Error' in rpc(root, request), 'new host attached an exited terminal'
+                    break
+                except (ConnectionRefusedError, FileNotFoundError):
+                    assert host.poll() is None and time.monotonic() < deadline
+                    time.sleep(.05)
         state = {'root': str(root), 'home': str(home), 'host': host.pid}
         STATE.write_text(json.dumps(state)); print(state)
         sys.exit(0)
