@@ -2,7 +2,10 @@
 //! or a plugin's (`fibo_core::sidebar`). Every preset reads the same `session_status`,
 //! so what needs you is the same row in all of them.
 use super::*;
-use fibo_core::sidebar::{self as presets, Bucket, Detail, Grouping, Preset};
+use fibo_core::{
+    content::LeftBehind,
+    sidebar::{self as presets, Bucket, Detail, Grouping, Preset},
+};
 
 mod dense_row;
 mod list_scroll;
@@ -21,6 +24,80 @@ pub(super) const ASKS: &str = tk!("问你：");
 
 /// A session the column lists: its shown state and whether it still asks for a look.
 pub(super) type Listed<'a> = (&'a AgentSession, Status, bool);
+
+pub(super) enum RowDetail {
+    Text(String),
+    Background(LeftBehind),
+}
+
+impl RowDetail {
+    fn prefix(mut self, prefix: &str) -> Self {
+        let line = match &mut self {
+            Self::Text(text) => text,
+            Self::Background(background) => &mut background.line,
+        };
+        *line = format!("{prefix} · {line}");
+        self
+    }
+
+    pub(super) fn into_text(self) -> String {
+        match self {
+            Self::Text(text) => text,
+            Self::Background(background) => background.into_text(),
+        }
+    }
+
+    pub(super) fn render(self, line: gpui::Div, local: bool) -> gpui::Div {
+        let Self::Background(background) = self else {
+            return line.truncate().child(self.into_text());
+        };
+        if !local || background.ports.is_empty() {
+            return line.truncate().child(background.into_text());
+        }
+
+        line.flex()
+            .items_center()
+            .overflow_hidden()
+            .child(div().min_w_0().truncate().child(background.port_line("")))
+            .children(
+                background
+                    .ports
+                    .into_iter()
+                    .enumerate()
+                    .flat_map(|(i, port)| {
+                        let name = port.to_string();
+                        let url = format!("http://127.0.0.1:{port}/");
+                        let hint = t!("按住 Option（Alt）单击，在浏览器中打开");
+                        let separator = (i > 0)
+                            .then(|| div().flex_shrink_0().child(t!("、")).into_any_element());
+                        let link = div()
+                            .id(("local-port", usize::from(port)))
+                            .debug_selector(move || format!("local-port-{port}"))
+                            .role(gpui::accesskit::Role::Link)
+                            .aria_label(url.clone())
+                            .aria_description(hint)
+                            .tooltip(super::diagnostics::tip(vec![hint.to_owned()]))
+                            .flex_shrink_0()
+                            .cursor_pointer()
+                            .text_color(T::color(T::link()))
+                            .underline()
+                            .child(name)
+                            .on_click(move |event, _, cx| {
+                                if event.modifiers().alt {
+                                    cx.stop_propagation();
+                                    cx.open_url(&url);
+                                }
+                            })
+                            .into_any_element();
+                        separator.into_iter().chain(std::iter::once(link))
+                    }),
+            )
+    }
+}
+
+#[cfg(all(test, debug_assertions, feature = "visual-test"))]
+mod port_link_tests;
+
 /// What a session row ends with: its state (or age, once seen), a text, or nothing.
 pub(super) enum End {
     State,
@@ -85,7 +162,7 @@ impl Workbench {
         from: &Workbench,
         l: &Listed,
         current: bool,
-    ) -> Option<String> {
+    ) -> Option<RowDetail> {
         match self.sidebar.preset().detail {
             Detail::Never => None,
             Detail::Always => from.row_detail(l.0, l.1),

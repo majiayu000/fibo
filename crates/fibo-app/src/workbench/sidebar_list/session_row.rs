@@ -5,16 +5,20 @@ impl Workbench {
     /// the error), what it is doing in words (`正在改 tabs.rs`, never the raw command), or
     /// how its last turn ended. One line, cut to fit. The pane header's 停在 line reads
     /// the same.
-    pub(in crate::workbench) fn row_detail(&self, s: &AgentSession, g: Status) -> Option<String> {
+    pub(in crate::workbench) fn row_detail(
+        &self,
+        s: &AgentSession,
+        g: Status,
+    ) -> Option<RowDetail> {
         let first = |t: &str| {
             let line = fibo_core::content::plain_line(t);
             (!line.is_empty()).then(|| line.chars().take(T::TAB_TIP_REASON_CHARS).collect())
         };
         let content = self.workspace.content.get(&s.id);
         if matches!(g, Status::Review | Status::Paused)
-            && let Some(left) = fibo_core::status::left_behind(&self.workspace, s)
+            && let Some(left) = fibo_core::status::left_behind_detail(&self.workspace, s)
         {
-            return Some(left);
+            return Some(RowDetail::Background(left));
         }
         match bucket(g) {
             _ if g == Status::Background => content.and_then(|c| c.background?.describe()),
@@ -31,12 +35,13 @@ impl Workbench {
             Bucket::Running => content.and_then(|c| c.doing()).map(|d| t!("正在{d}", d)),
             _ => content.and_then(|c| first(c.last_reply.lines().find(|l| !l.trim().is_empty())?)),
         }
+        .map(RowDetail::Text)
     }
     pub(in crate::workbench) fn session_row(
         &self,
         (session, g, attention): Listed,
         current: Option<&str>,
-        detail: Option<String>,
+        detail: Option<RowDetail>,
         end: End,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
@@ -136,16 +141,17 @@ impl Workbench {
                     .child(if attention { dot(g) } else { seen_dot(g) })
                     .child(trailing),
             )
-            .when_some(detail, |d, text| {
+            .when_some(detail, |d, detail| {
                 d.child(
-                    div()
-                        .mt(-px(T::S4))
-                        .mb(px(T::S4))
-                        .when(marks, |d| d.pl(px(T::BOARD_MARK + T::S8)))
-                        .truncate()
-                        .text_size(px(T::CHIP_SIZE))
-                        .text_color(T::color(T::muted()))
-                        .child(text),
+                    detail.render(
+                        div()
+                            .mt(-px(T::S4))
+                            .mb(px(T::S4))
+                            .when(marks, |d| d.pl(px(T::BOARD_MARK + T::S8)))
+                            .text_size(px(T::CHIP_SIZE))
+                            .text_color(T::color(T::muted())),
+                        !self.host.attached(),
+                    ),
                 )
             })
             // The hover card would cover the right-click menu.

@@ -19,7 +19,7 @@ impl Workbench {
         &self,
         (session, g, attention): Listed,
         current: Option<&str>,
-        detail: Option<String>,
+        detail: Option<RowDetail>,
         end: End,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
@@ -124,13 +124,16 @@ impl Workbench {
                     )
                     .child(state()),
             )
-            .when_some(detail, |d, text| {
+            .when_some(detail, |d, detail| {
                 // A second line that opens with the state word shows that word in its ink;
                 // a question is in 等你回答's ink throughout, with how many it asks.
-                let asks = text.starts_with(fibo_core::i18n::say(ASKS));
-                let (state, rest) = match text.strip_prefix(g.label()) {
-                    Some(rest) => (Some(g.label()), rest.to_owned()),
-                    None => (None, text),
+                let asks = matches!(&detail, RowDetail::Text(text) if text.starts_with(fibo_core::i18n::say(ASKS)));
+                let (state, rest) = match detail {
+                    RowDetail::Text(text) if text.starts_with(g.label()) => (
+                        Some(g.label()),
+                        RowDetail::Text(text[g.label().len()..].to_owned()),
+                    ),
+                    _ => (None, detail),
                 };
                 // What the turn changed leads, as the v3 rows have it: +128 −14.
                 let lines = self
@@ -160,7 +163,7 @@ impl Workbench {
                         .when_some(state, |d, word| {
                             d.child(div().flex_shrink_0().text_color(g.colors().1).child(word))
                         })
-                        .child(div().flex_1().min_w_0().truncate().child(rest))
+                        .child(rest.render(div().flex_1().min_w_0(), !self.host.attached()))
                         .when(asks && attention, |d| {
                             d.child(
                                 div()
