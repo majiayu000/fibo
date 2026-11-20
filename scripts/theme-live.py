@@ -7,13 +7,12 @@ screen, so the system compositor's work on a picture or a see-through window is 
 Opens the real window on the 2000-session workspace of perf-fixture.py, four terminals
 printing, each theme in turn for some rounds, and reports the median of the rounds: the app's
 CPU and WindowServer's GPU time as a share of the time measured. WindowServer composites
-everything on screen, so only rounds with our window in front count for it: run this with no
-other session opening windows. The app's own GPU time reads 0 from this source and the whole
-machine's utilization read 43% for the plain theme and 26% for a picture in one round, which
-is why neither is used. Needs an unlocked screen, so this is
-a thing to run by hand, not in CI.
+everything on screen, so a round contributes to either median only if the exact fixture
+process is in front at every sample. Run with an unlocked screen and no other session
+opening windows. The driver counter used here measures WindowServer's GPU time.
+This probe runs by hand, outside CI.
 """
-import os, pathlib, re, shutil, signal, statistics, subprocess, sys, tempfile, threading, time
+import os, pathlib, re, runpy, shutil, signal, statistics, subprocess, sys, tempfile, time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FIXTURE = [sys.executable, str(ROOT / 'scripts/perf-fixture.py')]
@@ -46,19 +45,21 @@ def pid_of(pattern):
     return int(found[0]) if found else None
 
 
-def front_app():
-    # No permission needed, unlike asking System Events.
+def front_pid():
     who = subprocess.run(['lsappinfo', 'front'], capture_output=True, text=True).stdout.strip()
-    out = subprocess.run(['lsappinfo', 'info', '-only', 'name', who], capture_output=True, text=True).stdout
-    m = re.search(r'"LSDisplayName"="([^"]*)"', out)
-    return m.group(1) if m else '?'
+    if not who:
+        return None
+    info = subprocess.run(['lsappinfo', 'info', '-only', 'pid', who], capture_output=True, text=True).stdout
+    match = re.search(r'"pid"=(\d+)', info)
+    return int(match.group(1)) if match else None
 
 
 def main():
     bindir = pathlib.Path(sys.argv[1]).resolve()
-    secs = sys.argv[2] if len(sys.argv) > 2 else '20'
+    secs = int(sys.argv[2]) if len(sys.argv) > 2 else 20
     rounds = int(sys.argv[3]) if len(sys.argv) > 3 else 3
     pictures = pathlib.Path(sys.argv[4]) if len(sys.argv) > 4 else None
+    live = runpy.run_path(FIXTURE[1])['live']
     seen = {name: ([], []) for name, *_ in THEMES}
     for n in range(rounds):
         for name, plugin, theme, side in THEMES:
@@ -76,42 +77,47 @@ def main():
                     shutil.copytree(ROOT / 'plugins' / plugin, config / 'plugins' / plugin)
                     (config / 'appearance').write_text(side)
                     (config / f'theme-{side}').write_text(theme)
-                fronts, used, done = [], {}, threading.Event()
+                fronts = []
+                server_gpu = None
 
-                def watch():
-                    time.sleep(10)  # as the fixture's own measurement: past the start
-                    if pictures and n == 0:
+                def watch(app_pid, seconds):
+                    nonlocal server_gpu
+                    if pictures and n == 0 and front_pid() == app_pid:
                         pictures.mkdir(parents=True, exist_ok=True)
                         subprocess.run(['screencapture', '-x', str(pictures / f'{name}.png')], capture_output=True)
                     server = pid_of('/WindowServer')
                     start, began = gpu_seconds(), time.monotonic()
-                    while not done.is_set():
-                        fronts.append(front_app())
-                        done.wait(1)
-                    end, spent = gpu_seconds(), time.monotonic() - began
-                    used['server'] = (end.get(server, 0) - start.get(server, 0)) / spent * 100
+                    deadline = began + seconds
+                    while True:
+                        fronts.append(front_pid() == app_pid)
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            break
+                        time.sleep(min(1, remaining))
+                    end, elapsed = gpu_seconds(), time.monotonic() - began
+                    if server in start and server in end and end[server] >= start[server]:
+                        server_gpu = (end[server] - start[server]) / elapsed * 100
 
-                thread = threading.Thread(target=watch)
-                thread.start()
-                try:
-                    live = subprocess.run(FIXTURE + ['live', str(root), str(bindir), secs], env=env, check=True,
-                                          capture_output=True, text=True).stdout.strip()
-                finally:
-                    done.set()
-                    thread.join()
+                cpu = live(root, bindir, secs, watch)
             finally:
                 subprocess.run(FIXTURE + ['stop', str(root)], check=True)
-            cpu = float(re.search(r'([\d.]+)% of a core', live).group(1))
-            shown = fronts.count('fibo-app') / max(len(fronts), 1)
-            server_gpu = used.get('server', float('nan'))
+            front_count = sum(fronts)
+            label = f'round {n + 1} {name}'
+            if not fronts or front_count != len(fronts):
+                print(f'{label}: rejected, fixture in front {front_count}/{len(fronts)} samples', flush=True)
+                continue
             seen[name][0].append(cpu)
-            if shown >= 0.9:
+            if server_gpu is not None:
                 seen[name][1].append(server_gpu)
-            print(f'round {n + 1} {name}: CPU {cpu:.1f}%; WindowServer GPU {server_gpu:.1f}%; '
-                  f'in front {shown:.0%}; load {os.getloadavg()[0]:.0f}', flush=True)
+            gpu = 'unavailable' if server_gpu is None else f'{server_gpu:.1f}%'
+            print(f'{label}: CPU {cpu:.1f}%; WindowServer GPU {gpu}; '
+                  f'in front {front_count}/{len(fronts)} samples; load {os.getloadavg()[0]:.0f}', flush=True)
     for name, (cpu, server) in seen.items():
-        tail = f'{statistics.median(server):.1f}% ({len(server)} rounds in front)' if server else 'no round in front'
-        print(f'{name}: CPU {statistics.median(cpu):.1f}% of a core; WindowServer GPU {tail}', flush=True)
+        cpu_summary = f'{statistics.median(cpu):.1f}% of a core ({len(cpu)} rounds)' if cpu else 'no foreground rounds'
+        gpu_summary = f'{statistics.median(server):.1f}% ({len(server)} rounds)' if server else 'unavailable'
+        print(f'{name}: CPU {cpu_summary}; WindowServer GPU {gpu_summary}', flush=True)
+    if any(not cpu or not gpu for cpu, gpu in seen.values()):
+        raise SystemExit('Some themes have no valid CPU or GPU samples')
 
 
 if __name__ == '__main__':

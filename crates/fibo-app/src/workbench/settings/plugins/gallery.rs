@@ -19,6 +19,25 @@ const ANIMATIONS_IN_ALL: usize = 3;
 const COLUMNS_ANIMATION: u16 = 3;
 const COLUMNS_TEXT: u16 = 2;
 
+/// A card's height, from the parts it stacks: the grid sizing its rows by laying every
+/// card out to learn it was half of laying out the page (R9). The name row is as tall as
+/// its button, or as one line of the name without one.
+fn card_height(item: &Item, looks: &[ThemeLook], button: bool) -> f32 {
+    let stage = if item.complete.is_some() {
+        CARD_STAGE
+    } else {
+        0.
+    };
+    let strip = if looks.is_empty() { 0. } else { THEME_STRIP };
+    let name = if button {
+        SEGMENT_HEIGHT
+    } else {
+        T::BODY_SIZE * T::LINE_HEIGHT
+    };
+    let words = T::S10 * 2. + name + T::S4 + CARD_NOTE;
+    T::BORDER_WIDTH * 2. + stage + strip + words
+}
+
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub(in crate::workbench) enum Tab {
     Installed,
@@ -191,14 +210,20 @@ impl SettingsView {
         strong: bool,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
+        self.next_step(item, strong, cx).0
+    }
+    /// `item_control`, and whether it is a button (as tall as `SEGMENT_HEIGHT`) rather than
+    /// a line of text.
+    fn next_step(&self, item: &Item, strong: bool, cx: &Context<Self>) -> (gpui::AnyElement, bool) {
         let id = &item.id;
         let quiet = |text: String, on: bool| {
-            div()
+            let text = div()
                 .flex_shrink_0()
                 .text_size(px(T::SMALL))
                 .text_color(T::color(if on { T::primary() } else { T::secondary() }))
                 .child(text)
-                .into_any_element()
+                .into_any_element();
+            (text, false)
         };
         if self.market.working.as_deref() == Some(id) {
             return quiet(t!("正在处理…").into(), false);
@@ -218,21 +243,21 @@ impl SettingsView {
             } else {
                 secondary(key, text)
             };
-            return get
-                .when(busy, |b| b.opacity(0.5))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    if this.market.working.is_none() {
-                        this.install_offer(offer.clone(), cx);
-                    }
-                }))
-                .into_any_element();
+            let get =
+                get.when(busy, |b| b.opacity(0.5))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        if this.market.working.is_none() {
+                            this.install_offer(offer.clone(), cx);
+                        }
+                    }));
+            return (get.into_any_element(), true);
         }
         if let Some(pick) = item.pick.clone() {
             if pick == playing() {
                 return quiet(t!("● 正在用").into(), true);
             }
-            return secondary(
+            let use_it = secondary(
                 format!("complete-use-{}", pick.name().replace(':', "-")),
                 t!("用这个"),
             )
@@ -240,19 +265,20 @@ impl SettingsView {
                 cx.stop_propagation();
                 this.text_error = fibo_core::effect::pick(Some(pick.clone())).err();
                 cx.notify();
-            }))
-            .into_any_element();
+            }));
+            return (use_it.into_any_element(), true);
         }
         if item.complete.is_some() && !item.enabled() {
             let on = id.clone();
-            return secondary(format!("complete-enable-{id}"), t!("打开并用这个"))
-                .on_click(cx.listener(move |this, _, _, cx| {
+            let enable = secondary(format!("complete-enable-{id}"), t!("打开并用这个")).on_click(
+                cx.listener(move |this, _, _, cx| {
                     cx.stop_propagation();
                     if this.market.working.is_none() {
                         this.switch_plugin(on.clone(), true, false, cx);
                     }
-                }))
-                .into_any_element();
+                }),
+            );
+            return (enable.into_any_element(), true);
         }
         quiet(
             if item.enabled() {
@@ -270,11 +296,19 @@ impl SettingsView {
             (self.market.play_id() == Some(item.id.as_str())).then(|| self.market.spot.clone());
         stage(complete, spot)
     }
-    fn item_card(&self, item: &Item, looks: &[ThemeLook], cx: &Context<Self>) -> gpui::AnyElement {
+    /// A card without its height, and the height its parts add up to: a grid row is as tall
+    /// as its tallest card, and every card in it stretches to that.
+    fn item_card(
+        &self,
+        item: &Item,
+        looks: &[ThemeLook],
+        cx: &Context<Self>,
+    ) -> (gpui::Stateful<gpui::Div>, f32) {
         let id = item.id.clone();
         let hover_id = id.clone();
         let on = item.pick.as_ref().is_some_and(|p| *p == playing());
-        div()
+        let (control, button) = self.next_step(item, false, cx);
+        let card = div()
             .id(gpui::SharedString::from(format!("plugin-card-{id}")))
             .role(gpui::accesskit::Role::Button)
             .aria_label(gpui::SharedString::from(item.name.clone()))
@@ -345,7 +379,7 @@ impl SettingsView {
                                     .text_color(T::color(T::primary()))
                                     .child(item.name.clone()),
                             )
-                            .child(self.item_control(item, false, cx)),
+                            .child(control),
                     )
                     .child(
                         div()
@@ -353,8 +387,8 @@ impl SettingsView {
                             .overflow_hidden()
                             .child(label(item.description.clone().unwrap_or_default())),
                     ),
-            )
-            .into_any_element()
+            );
+        (card, card_height(item, looks, button))
     }
     pub(super) fn discover_tab(&self, items: &[Item], cx: &Context<Self>) -> gpui::Div {
         let listed = |c: Category| {
@@ -417,6 +451,11 @@ impl SettingsView {
                 &rows[..]
             };
             let animated = shown.iter().any(|i| i.complete.is_some());
+            let columns = if animated {
+                COLUMNS_ANIMATION
+            } else {
+                COLUMNS_TEXT
+            };
             let more = (capped && rows.len() > shown.len()).then(|| {
                 secondary(
                     "plugin-see-animations",
@@ -442,20 +481,19 @@ impl SettingsView {
                 .child(
                     div()
                         .grid()
-                        .grid_cols(if animated {
-                            COLUMNS_ANIMATION
-                        } else {
-                            COLUMNS_TEXT
-                        })
+                        .grid_cols(columns)
                         .gap(px(T::S12))
-                        .children(shown.iter().map(|i| {
-                            let looks = self
-                                .market
-                                .showcase
-                                .get(&i.id)
-                                .map_or(&empty, |s| &s.themes);
-                            self.item_card(i, looks, cx)
-                        }))
+                        .children(rows_of_cards(
+                            shown.iter().map(|i| {
+                                let looks = self
+                                    .market
+                                    .showcase
+                                    .get(&i.id)
+                                    .map_or(&empty, |s| &s.themes);
+                                self.item_card(i, looks, cx)
+                            }),
+                            columns,
+                        ))
                         .when(
                             c == Category::Effects
                                 && self.market.category == Some(c)
@@ -478,4 +516,20 @@ impl SettingsView {
         }
         page.child(self.remote_row(cx))
     }
+}
+
+/// Cards in a grid of `columns`, each as tall as the tallest in its row.
+fn rows_of_cards(
+    cards: impl Iterator<Item = (gpui::Stateful<gpui::Div>, f32)>,
+    columns: u16,
+) -> Vec<gpui::Stateful<gpui::Div>> {
+    let cards: Vec<_> = cards.collect();
+    let mut out = Vec::with_capacity(cards.len());
+    let mut cards = cards.into_iter().peekable();
+    while cards.peek().is_some() {
+        let row: Vec<_> = cards.by_ref().take(columns as usize).collect();
+        let tallest = row.iter().map(|(_, h)| *h).fold(0., f32::max);
+        out.extend(row.into_iter().map(|(card, _)| card.h(px(tallest))));
+    }
+    out
 }

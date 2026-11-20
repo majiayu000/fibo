@@ -93,10 +93,17 @@ pub(super) fn printable_cells(run: &Run) -> bool {
 #[derive(Default)]
 pub struct LayoutCache {
     key: Option<(Font, CellMetrics, u64)>,
+    viewport_top: Option<usize>,
     rows: super::shape_cache::Rows<(ShapedLine, Pixels)>,
     pub(super) ascii: [Option<Option<AsciiGlyphs>>; 4],
 }
 impl LayoutCache {
+    pub fn align_viewport(&mut self, top: usize) {
+        if let Some(old) = self.viewport_top.replace(top) {
+            self.rows.scroll(old, top);
+        }
+    }
+
     fn prepare(&mut self, font: &Font, metrics: CellMetrics, rows: usize) {
         let generation = crate::ui::terminal_text::generation();
         if self.key.as_ref() != Some(&(font.clone(), metrics, generation)) {

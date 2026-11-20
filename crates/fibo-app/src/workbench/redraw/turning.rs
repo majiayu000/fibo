@@ -3,8 +3,8 @@
 //! The sidebar is a cached view and costs about 105 M instructions a draw on a large
 //! workspace, so the turning part lives outside it: a row leaves an empty box where its
 //! mark goes and notes where that box landed, and a small view over the sidebar paints the
-//! marks there, turned to the shared clock. Tabs and pane headers register their marks
-//! afresh each frame, while cached sidebar marks stay until that view draws again.
+//! marks there, turned to the shared clock. Pane headers register their marks afresh each
+//! frame, while the cached sidebar's and tab strip's marks stay until that view draws again.
 //! A step draws the workbench (about 8 M) and reuses the sidebar. With the setting off none of this exists in a frame.
 use super::*;
 use gpui::{Bounds, ContentMask, Pixels, TransformationMatrix};
@@ -29,11 +29,21 @@ impl Mark {
     }
 }
 
+/// Which draw put a turning mark where it is: its place is forgotten when that draws again.
+#[derive(Clone, Copy)]
+pub(in crate::workbench) enum Layer {
+    Sidebar,
+    /// The cached tab strip (`redraw/tab_strip.rs`).
+    Tabs,
+    /// Laid out anew on every workbench frame: pane headers, the board.
+    Frame,
+}
+
 /// Where the sidebar's last draw put its turning marks.
 #[derive(Default)]
 pub(super) struct Marks {
     rows: RefCell<Vec<Mark>>,
-    /// Tabs and pane headers are laid out anew on every workbench frame.
+    tabs: RefCell<Vec<Mark>>,
     frame: RefCell<Vec<Mark>>,
     /// The last paint showed marks: the view keeps stepping only while this holds, so a
     /// running row scrolled away costs nothing. Noted at paint, because a frame that draws
@@ -43,6 +53,9 @@ pub(super) struct Marks {
 impl Marks {
     pub(super) fn clear(&self) {
         self.rows.borrow_mut().clear();
+    }
+    pub(super) fn clear_tabs(&self) {
+        self.tabs.borrow_mut().clear();
     }
 }
 
@@ -63,9 +76,9 @@ impl Render for Turning {
         gpui::canvas(
             |_, _, _| (),
             move |_, (), window, cx| {
-                let rows = marks.rows.borrow();
+                let (rows, tabs) = (marks.rows.borrow(), marks.tabs.borrow());
                 let frame = marks.frame.borrow();
-                let all = || rows.iter().chain(frame.iter());
+                let all = || rows.iter().chain(tabs.iter()).chain(frame.iter());
                 marks.live.set(all().any(Mark::shown));
                 let scale = window.scale_factor();
                 for mark in all().filter(|m| m.shown()) {
@@ -103,7 +116,7 @@ impl Workbench {
         g: Status,
         icon: &'static str,
         size: f32,
-        in_sidebar: bool,
+        layer: Layer,
         cx: &Context<Self>,
     ) -> Option<gpui::AnyElement> {
         if g != Status::Running || !turns(cx) {
@@ -114,10 +127,10 @@ impl Workbench {
         let hue = g.colors().0;
         let note = move |bounds, window: &mut Window, _: &mut gpui::App| {
             let mask = window.content_mask();
-            let rows = if in_sidebar {
-                &marks.rows
-            } else {
-                &marks.frame
+            let rows = match layer {
+                Layer::Sidebar => &marks.rows,
+                Layer::Tabs => &marks.tabs,
+                Layer::Frame => &marks.frame,
             };
             rows.borrow_mut().push(Mark {
                 bounds,
@@ -143,7 +156,7 @@ impl Workbench {
             g,
             "icons/state-run.svg",
             crate::ui::theme::Flat::STATE,
-            true,
+            Layer::Sidebar,
             cx,
         )
         .unwrap_or_else(|| super::super::sidebar_flat::flat_state(g, unseen))
@@ -154,11 +167,11 @@ impl Workbench {
         &self,
         g: Status,
         unseen: bool,
-        in_sidebar: bool,
+        layer: Layer,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         const SIZE: f32 = 10.;
-        let Some(arc) = self.turning_mark(g, "icons/arc.svg", SIZE, in_sidebar, cx) else {
+        let Some(arc) = self.turning_mark(g, "icons/arc.svg", SIZE, layer, cx) else {
             return crate::ui::widgets::status_mark_seen(g, unseen);
         };
         let ring = gpui::svg()
@@ -219,10 +232,9 @@ impl Workbench {
     }
     pub fn visual_turning_frame_bounds(&self) -> Vec<Bounds<Pixels>> {
         self.redraw.as_ref().map_or_else(Vec::new, |r| {
-            r.marks
-                .frame
-                .borrow()
-                .iter()
+            let (tabs, frame) = (r.marks.tabs.borrow(), r.marks.frame.borrow());
+            tabs.iter()
+                .chain(frame.iter())
                 .filter(|m| m.shown())
                 .map(|m| m.bounds)
                 .collect()

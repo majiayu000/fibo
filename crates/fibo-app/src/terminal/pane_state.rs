@@ -35,6 +35,7 @@ pub(super) struct AskPin {
     pub(super) pinned: fibo_core::prompt_pin::Pinned,
     /// When the viewport last moved through history, for the floating ask.
     pub(super) scrolled_at: Option<Instant>,
+    pub(super) hide_float: Option<gpui::Task<()>>,
 }
 /// The search box and its matches.
 #[derive(Default)]

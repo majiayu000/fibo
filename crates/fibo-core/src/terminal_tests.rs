@@ -377,3 +377,36 @@ fn truncated_snapshot_is_not_a_ready_terminal() {
     bytes.truncate(bytes.len() - 10);
     assert!(Vt::restore(&bytes).is_err());
 }
+#[test]
+fn row_text_keeps_wide_characters_clusters_and_blanks_as_the_cells_have_them() {
+    let mut vt = Vt::new(12, 3).unwrap();
+    vt.feed("a 中文 e\u{301}👍🏽\r\n❯ 修一下登录\r\nx".as_bytes());
+    let text = |y, limit| {
+        let mut out = String::new();
+        vt.row_text_into(y, limit, &mut Vec::new(), &mut out)
+            .unwrap();
+        out
+    };
+    // Spacer cells left out, blank cells a space each, a cluster whole.
+    assert_eq!(text(0, u16::MAX), "a 中文 e\u{301}👍🏽  ");
+    // A wide character starting inside the limit is read whole.
+    assert_eq!(text(0, 5), "a 中文");
+    assert_eq!(text(0, 3), "a 中");
+    for y in 0..3 {
+        let cells: String = vt.row_cells(y).unwrap().into_iter().map(|c| c.1).collect();
+        assert_eq!(text(y, u16::MAX), cells);
+    }
+    assert_eq!(
+        vt.tail_text(3).unwrap(),
+        "a 中文 e\u{301}👍🏽\n❯ 修一下登录\nx\n"
+    );
+    let prompt = crate::agent::PromptLine {
+        markers: vec!["❯".into()],
+        pins_own: false,
+    };
+    let keys = [
+        crate::prompt_pin::key("修一下登录"),
+        crate::prompt_pin::key("没发过"),
+    ];
+    assert_eq!(vt.find_prompts(&keys, &prompt).unwrap(), [Some(1), None]);
+}

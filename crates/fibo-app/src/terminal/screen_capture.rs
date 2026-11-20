@@ -1,4 +1,5 @@
 use super::*;
+use libghostty_vt::screen::CellContentTag;
 /// Retain Ghostty's dirty-row state and only rebuild changed viewport rows.
 /// One instance belongs to one Pane/VT connection, never shared between terminals.
 pub struct Capture {
@@ -53,6 +54,7 @@ impl Capture {
         let mut y = 0usize;
         let mut text = String::new();
         let mut line = Vec::new();
+        let mut plain_blank = None;
         while let Some(row) = rows.next() {
             if out.rows.len() <= y {
                 out.rows.push(Vec::new());
@@ -72,13 +74,22 @@ impl Capture {
             line.clear();
             while let Some(cell) = cells.next() {
                 let raw = cell.raw_cell()?;
+                if let Some((blank, fg)) = plain_blank
+                    && raw == blank
+                {
+                    line.push((x, 1, ' '));
+                    b.push(x, 1, " ", fg, None, Attrs::default());
+                    x += 1;
+                    continue;
+                }
                 let wide = raw.wide()?;
                 if matches!(wide, CellWide::SpacerTail | CellWide::SpacerHead) {
                     x += 1;
                     continue;
                 }
                 text.clear();
-                if cell.graphemes_len()? == 0 {
+                let empty = cell.graphemes_len()? == 0;
+                if empty {
                     text.push(' ');
                 } else {
                     cell.graphemes_utf8(&mut text)?;
@@ -87,7 +98,8 @@ impl Capture {
                 let mut fg = set_fg.map(|c| rgb(c.r, c.g, c.b)).unwrap_or(def_fg);
                 let mut bg = cell.bg_color()?.map(|c| rgb(c.r, c.g, c.b));
                 let mut attrs = Attrs::default();
-                if cell.has_styling()? {
+                let styled = cell.has_styling()?;
+                if styled {
                     let st = cell.style()?;
                     if st.bold && set_fg.is_none() {
                         fg = bold_fg.unwrap_or(fg);
@@ -124,7 +136,22 @@ impl Capture {
                 }
                 fg = readable.fg(fg, bg.unwrap_or(def_bg));
                 let width = if matches!(wide, CellWide::Wide) { 2 } else { 1 };
-                if raw.has_hyperlink()? {
+                let linked = raw.has_hyperlink()?;
+                // Ordinary padding repeats one raw cell across rows. A colored blank,
+                // grapheme, or hyperlink still needs its position-dependent rendering data.
+                if plain_blank.is_none()
+                    && width == 1
+                    && empty
+                    && set_fg.is_none()
+                    && bg.is_none()
+                    && !styled
+                    && !linked
+                    && raw.content_tag()? == CellContentTag::Codepoint
+                    && raw.codepoint()? == 0
+                {
+                    plain_blank = Some((raw, fg));
+                }
+                if linked {
                     let grid = vt
                         .terminal()
                         .grid_ref(libghostty_vt::terminal::Point::Viewport(

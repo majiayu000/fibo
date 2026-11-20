@@ -3,7 +3,7 @@ use super::{ASK_FLOAT_MS, ASK_LOCATE_MS, ASK_RELOCATE_MS, Pane, PaneEvent, SCROL
 use crate::ui::theme::Theme as T;
 use fibo_core::terminal::libghostty_vt::terminal::ScrollViewport;
 use gpui::{Context, div, prelude::*, px};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 impl Pane {
     /// What the conversation in this terminal was asked, oldest first. New asks are
@@ -101,7 +101,7 @@ impl Pane {
     }
     /// The pinned ask along the terminal's top, and the chip naming the ask whose answer
     /// is being read in history; each as the settings choose.
-    pub(super) fn ask_overlays(&self, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
+    pub(super) fn ask_overlays(&mut self, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
         let choice = crate::ui::pinned_ask::current(cx);
         let first_line = |i: usize| self.ask_first_line(i);
         let mut out = Vec::new();
@@ -162,11 +162,8 @@ impl Pane {
                     .into_any_element(),
             );
         }
-        let reading = self.scrolled_back
-            && self
-                .ask
-                .scrolled_at
-                .is_some_and(|at| at.elapsed().as_millis() < u128::from(ASK_FLOAT_MS));
+        let remaining = self.float_remaining();
+        let reading = self.scrolled_back && !remaining.is_zero();
         let float = self
             .ask
             .pinned
@@ -180,6 +177,27 @@ impl Pane {
             .filter(|_| choice.float && reading)
             .and_then(|(i, row)| Some((first_line(i)?, row)));
         if let Some((text, row)) = float {
+            if self.ask.hide_float.is_none() {
+                self.ask.hide_float = Some(cx.spawn(async move |this, cx| {
+                    let mut remaining = remaining;
+                    while !remaining.is_zero() {
+                        cx.background_executor().timer(remaining).await;
+                        let Ok(left) = this.update(cx, |pane, cx| {
+                            let left = pane.float_remaining();
+                            if left.is_zero() {
+                                if let Some(task) = pane.ask.hide_float.take() {
+                                    task.detach();
+                                }
+                                cx.notify();
+                            }
+                            left
+                        }) else {
+                            break;
+                        };
+                        remaining = left;
+                    }
+                }));
+            }
             out.push(
                 div()
                     .absolute()
@@ -215,7 +233,17 @@ impl Pane {
                     )
                     .into_any_element(),
             );
+        } else {
+            self.ask.hide_float = None;
         }
         out
+    }
+
+    /// A burst extends the floating ask's life. The outstanding timer reads the
+    /// latest scroll position when it wakes and only redraws once it expires.
+    fn float_remaining(&self) -> Duration {
+        self.ask.scrolled_at.map_or(Duration::ZERO, |at| {
+            Duration::from_millis(ASK_FLOAT_MS).saturating_sub(at.elapsed())
+        })
     }
 }

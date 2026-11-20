@@ -7,6 +7,7 @@
 //! row alone looks free there and costs a CoreText layout per run here.
 use super::*;
 use crate::workbench::Workbench;
+use std::{cell::Cell, rc::Rc};
 
 pub(super) async fn run(
     handle: WindowHandle<Workbench>,
@@ -15,6 +16,7 @@ pub(super) async fn run(
 ) -> String {
     const LINES: usize = 800;
     const FRAMES: usize = 300;
+    let blink = crate::ui::terminal_text::visual_cursor_blink(false);
     let executor = cx.background_executor().clone();
     let wait = move |ms: u64| executor.timer(Duration::from_millis(ms));
     pane.update(cx, |p, cx| {
@@ -40,6 +42,7 @@ pub(super) async fn run(
     }
     let rows = total(cx);
     assert!(rows >= LINES, "the shell printed {rows} of {LINES} lines");
+    wait(650).await;
     // Between two lines of output the window draws frames where the pane shows the same
     // screen (a spinner, the running mark turning): one such frame after each line.
     let frame = |row: usize, cx: &mut gpui::AsyncApp| {
@@ -61,10 +64,24 @@ pub(super) async fn run(
     // A number without the scroll measures a still screen.
     let shown = pane.read_with(cx, |p, _| p.visual_viewport().0);
     assert_eq!(shown, FRAMES, "the pane did not scroll");
+    // Nothing is floating over this shell. After input stops there should be no
+    // delayed notifications from the scroll burst's earlier frames.
+    wait(80).await; // Allow the last scroll's in-flight redraw to settle.
+    let wakes = Rc::new(Cell::new(0));
+    let seen = wakes.clone();
+    let observe = handle
+        .update(cx, |_, _, cx| {
+            cx.observe(pane, move |_, _, _| seen.set(seen.get() + 1))
+        })
+        .unwrap();
+    wait(1_850).await;
+    drop(observe);
+    let wakes = wakes.get();
     pane.update(cx, |p, cx| p.visual_type("clear\r", cx));
     wait(500).await;
+    crate::ui::terminal_text::visual_cursor_blink(blink);
     format!(
-        "frames-scroll: {:.2} ms CPU per line scrolled and a still frame, {ins:.2} M instructions ({:.2} ms wall), {shaped:.1} runs shaped",
+        "frames-scroll: {:.2} ms CPU per line scrolled and a still frame, {ins:.2} M instructions ({:.2} ms wall), {shaped:.1} runs shaped; idle pane wakes {wakes}",
         used / FRAMES as f64 * 1000.,
         at.elapsed().as_secs_f64() / FRAMES as f64 * 1000.,
     )
