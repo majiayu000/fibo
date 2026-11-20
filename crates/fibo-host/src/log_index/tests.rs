@@ -2,6 +2,8 @@ use super::elide::STRING_KEEP;
 use super::*;
 use fibo_platform::file_watch::flag;
 use std::io::Write;
+#[path = "cached_since_tests.rs"]
+mod cached_since;
 #[path = "codex_children_tests.rs"]
 mod codex_children;
 #[path = "generation_tests.rs"]

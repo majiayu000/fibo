@@ -710,6 +710,8 @@ fn hostname() -> String {
 #[cfg(test)]
 mod brief_tests;
 #[cfg(test)]
+mod clone_bench_tests;
+#[cfg(test)]
 mod recognition_tests;
 #[cfg(test)]
 mod slow_reader_tests;
