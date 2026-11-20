@@ -1,0 +1,189 @@
+--- a/crates/gpui_apple/src/metal_renderer.rs
++++ b/crates/gpui_apple/src/metal_renderer.rs
+@@ -689,7 +689,23 @@
+                 texture,
+                 viewport_size,
+                 None,
++                &[],
+             )?,
++            Some(rects)
++                if self.opaque && scene.paths.is_empty() && (3..=4).contains(&rects.len()) =>
++            {
++                // These rectangles are disjoint. Keep the retained texture in one pass.
++                self.draw_primitives_to_texture(
++                    &command_buffer,
++                    scene,
++                    &instance_bindings,
++                    &mut writer,
++                    texture,
++                    viewport_size,
++                    Some(rects[0]),
++                    &rects[1..],
++                )?;
++            }
+             Some(rects) => {
+                 for rect in rects {
+                     self.draw_primitives_to_texture(
+@@ -700,6 +716,7 @@
+                         texture,
+                         viewport_size,
+                         Some(*rect),
++                        &[],
+                     )?;
+                 }
+             }
+@@ -865,6 +882,7 @@
+         texture: &metal::TextureRef,
+         viewport_size: Size<DevicePixels>,
+         scissor: Option<crate::damage::Rect>,
++        additional_rects: &[crate::damage::Rect],
+     ) -> Result<()> {
+         let alpha = if self.opaque { 1. } else { 0. };
+
+@@ -876,74 +894,87 @@
+             scissor,
+         );
+-        if let Some(rect) = scissor {
+-            self.clear_rect(rect, alpha as f32, writer, viewport_size, command_encoder)?;
+-        }
+-
+-        for batch in scene.batches() {
+-            match batch {
+-                PrimitiveBatch::Shadows(range) => {
+-                    self.draw_shadows(range, instance_bindings, viewport_size, command_encoder)
+-                }
+-                PrimitiveBatch::Quads(range) => {
+-                    self.draw_quads(range, instance_bindings, viewport_size, command_encoder)
+-                }
+-                PrimitiveBatch::Paths(range) => {
+-                    let paths = &scene.paths[range];
+-                    command_encoder.end_encoding();
++        for (index, scissor) in std::iter::once(scissor)
++            .chain(additional_rects.iter().copied().map(Some))
++            .enumerate()
++        {
++            if let Some(rect) = scissor {
++                if index > 0 {
++                    command_encoder.set_scissor_rect(metal::MTLScissorRect {
++                        x: rect.x0 as u64,
++                        y: rect.y0 as u64,
++                        width: (rect.x1 - rect.x0) as u64,
++                        height: (rect.y1 - rect.y0) as u64,
++                    });
++                }
++                self.clear_rect(rect, alpha as f32, writer, viewport_size, command_encoder)?;
++            }
+
+-                    let did_draw = self.draw_paths_to_intermediate(
+-                        paths,
+-                        writer,
+-                        viewport_size,
+-                        command_buffer,
+-                    )?;
++            for batch in scene.batches() {
++                match batch {
++                    PrimitiveBatch::Shadows(range) => {
++                        self.draw_shadows(range, instance_bindings, viewport_size, command_encoder)
++                    }
++                    PrimitiveBatch::Quads(range) => {
++                        self.draw_quads(range, instance_bindings, viewport_size, command_encoder)
++                    }
++                    PrimitiveBatch::Paths(range) => {
++                        let paths = &scene.paths[range];
++                        command_encoder.end_encoding();
+
+-                    command_encoder = new_command_encoder_for_texture(
+-                        command_buffer,
+-                        texture,
+-                        viewport_size,
+-                        None,
+-                        scissor,
+-                    );
+-
+-                    if did_draw {
+-                        if let Err(error) = self.draw_paths_from_intermediate(
++                        let did_draw = self.draw_paths_to_intermediate(
+                             paths,
+                             writer,
+                             viewport_size,
+-                            command_encoder,
+-                        ) {
+-                            command_encoder.end_encoding();
+-                            return Err(error);
++                            command_buffer,
++                        )?;
++
++                        command_encoder = new_command_encoder_for_texture(
++                            command_buffer,
++                            texture,
++                            viewport_size,
++                            None,
++                            scissor,
++                        );
++
++                        if did_draw {
++                            if let Err(error) = self.draw_paths_from_intermediate(
++                                paths,
++                                writer,
++                                viewport_size,
++                                command_encoder,
++                            ) {
++                                command_encoder.end_encoding();
++                                return Err(error);
++                            }
+                         }
+                     }
+-                }
+-                PrimitiveBatch::Underlines(range) => {
+-                    self.draw_underlines(range, instance_bindings, viewport_size, command_encoder)
+-                }
+-                PrimitiveBatch::MonochromeSprites { texture_id, range } => self
+-                    .draw_monochrome_sprites(
+-                        texture_id,
+-                        range,
+-                        instance_bindings,
+-                        viewport_size,
+-                        command_encoder,
+-                    ),
+-                PrimitiveBatch::PolychromeSprites { texture_id, range } => self
+-                    .draw_polychrome_sprites(
+-                        texture_id,
+-                        range,
++                    PrimitiveBatch::Underlines(range) => {
++                        self.draw_underlines(range, instance_bindings, viewport_size, command_encoder)
++                    }
++                    PrimitiveBatch::MonochromeSprites { texture_id, range } => self
++                        .draw_monochrome_sprites(
++                            texture_id,
++                            range,
++                            instance_bindings,
++                            viewport_size,
++                            command_encoder,
++                        ),
++                    PrimitiveBatch::PolychromeSprites { texture_id, range } => self
++                        .draw_polychrome_sprites(
++                            texture_id,
++                            range,
++                            instance_bindings,
++                            viewport_size,
++                            command_encoder,
++                        ),
++                    PrimitiveBatch::Surfaces(range) => self.draw_surfaces(
++                        &scene.surfaces[range.clone()],
++                        range.start,
+                         instance_bindings,
+                         viewport_size,
+                         command_encoder,
+                     ),
+-                PrimitiveBatch::Surfaces(range) => self.draw_surfaces(
+-                    &scene.surfaces[range.clone()],
+-                    range.start,
+-                    instance_bindings,
+-                    viewport_size,
+-                    command_encoder,
+-                ),
+-                PrimitiveBatch::SubpixelSprites { .. } => unreachable!(),
++                    PrimitiveBatch::SubpixelSprites { .. } => unreachable!(),
++                }
+             }
+         }
