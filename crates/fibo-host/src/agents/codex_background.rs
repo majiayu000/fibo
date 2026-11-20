@@ -4,14 +4,17 @@
 /// The idle footer: 「1 background terminal running · /ps to view · /stop to close」, with no
 /// turn ticking. A running turn writes the same words after 「esc to interrupt」.
 pub(super) fn left_running(tail: &str) -> bool {
-    let filled = |l: &&str| !l.trim().is_empty();
-    let lines: Vec<&str> = tail.lines().filter(filled).collect();
-    let bottom = &lines[lines.len().saturating_sub(6)..];
-    let left = bottom
-        .iter()
-        .any(|l| l.contains("background terminal") && l.contains("/stop to close"));
-    let working = bottom.iter().any(|l| l.contains("esc to interrupt"));
-    left && !working
+    reports_running(tail) && !bottom(tail).any(|l| l.contains("esc to interrupt"))
+}
+
+/// The narrower UI can wrap the controls across multiple rows.
+pub(super) fn reports_running(tail: &str) -> bool {
+    bottom(tail).any(|l| l.contains("background terminal"))
+        && bottom(tail).any(|l| l.contains("/stop to close"))
+}
+
+fn bottom(tail: &str) -> impl Iterator<Item = &str> {
+    tail.lines().rev().filter(|l| !l.trim().is_empty()).take(6)
 }
 
 #[cfg(test)]

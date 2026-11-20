@@ -155,9 +155,8 @@ pub trait Adapter: Sync {
     fn trust_screen(&self, _lines: &[&str]) -> Option<crate::screen_ask::TrustScreen> {
         None
     }
-    /// What to type when an interrupted turn left its command running on screen, ending it.
-    /// None: nothing to do, or this CLI never leaves one.
-    fn closes_background(&self, _tail: &str) -> Option<&'static str> {
+    /// Reads the CLI's report of commands left alive after its interrupt key.
+    fn interrupt_background(&self) -> Option<fn(&str) -> bool> {
         None
     }
     /// Whether a phone can read this CLI's tool calls back from its log: the two below.
