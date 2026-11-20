@@ -136,7 +136,9 @@ impl Marks {
                         end,
                     });
                 } else if self.awaiting_handoff_prompt {
-                    self.handoff_prompt_end.get_or_insert(end);
+                    // The foreground is sampled after the read. A program can have
+                    // printed an earlier D before the shell took the foreground back.
+                    self.handoff_prompt_end = Some(end);
                 }
             }
             _ => {}
@@ -231,12 +233,15 @@ mod tests {
     fn a_new_start_revokes_the_inherited_prompt_and_keeps_normal_exit_tracking() {
         let now = Instant::now();
         let mut marks = Marks::after_handoff();
-        marks.scan(b"\x1b]133;D;0\x07\x1b]133;C\x07", now);
+        let through_exit = b"\x1b]133;D;0\x07\x1b]133;C\x07\x1b]133;D;7\x07";
+        let empty_prompt = b"\x1b]133;D;0\x07";
+        let read = [&through_exit[..], empty_prompt].concat();
+        let finished = marks.scan(&read, now);
         assert_eq!(marks.take_handoff_prompt(|| unreachable!()), None);
-        let finished = marks.scan(b"\x1b]133;D;7\x07", now);
         assert_eq!(finished.len(), 1);
         assert_eq!(finished[0].exit, Some(7));
-        assert!(marks.scan(b"\x1b]133;D;0\x07", now).is_empty());
+        assert_eq!(finished[0].end, through_exit.len());
+        assert!(marks.scan(empty_prompt, now).is_empty());
         assert_eq!(marks.take_handoff_prompt(|| unreachable!()), None);
     }
 
