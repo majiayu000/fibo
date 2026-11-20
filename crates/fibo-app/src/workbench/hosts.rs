@@ -407,18 +407,6 @@ impl Workbench {
             .find(|(h, _)| *h == host)
             .map(|(_, v)| v.clone())
     }
-    /// The machine drawn here and the space its main area shows, or is about to show.
-    pub(super) fn shown_space(&self, cx: &gpui::App) -> Option<(String, String)> {
-        let host = self.hosts.showing.clone()?;
-        let view = self.hosted_view()?;
-        let w = view.read(cx);
-        let space = match &w.hosts.go {
-            Some(Go::Space(id)) => Some(id.clone()),
-            Some(Go::Terminal(id)) => w.workspace.terminal_tab(id).map(|t| t.space.clone()),
-            None => None,
-        };
-        Some((host, space.unwrap_or_else(|| w.nav.space.clone())))
-    }
     /// The terminal focused in the machine drawn here, as 下一个要你的 names it.
     pub(super) fn hosted_focus(&self, cx: &gpui::App) -> Option<String> {
         let host = self.hosts.showing.as_ref()?;
@@ -643,12 +631,36 @@ impl Workbench {
     pub fn visual_go_home(&mut self, cx: &mut Context<Self>) {
         cx.emit(HostEvent::Home);
     }
+    /// The machine drawn here and the space its main area shows, or is about to show.
     pub fn visual_shown_space(&self, cx: &gpui::App) -> Option<(String, String)> {
-        self.shown_space(cx)
+        let host = self.hosts.showing.clone()?;
+        let view = self.hosted_view()?;
+        let w = view.read(cx);
+        let space = match &w.hosts.go {
+            Some(Go::Space(id)) => Some(id.clone()),
+            Some(Go::Terminal(id)) => w.workspace.terminal_tab(id).map(|t| t.space.clone()),
+            None => None,
+        };
+        Some((host, space.unwrap_or_else(|| w.nav.space.clone())))
+    }
+    /// Whether the shown machine's space chip `id` is lit in this sidebar.
+    pub fn visual_machine_chip_lit(&self, id: &str) -> bool {
+        self.machine_chip_lit(id)
     }
     /// Drawn embedded: how wide the window's own sidebar beside it was, None when it was
     /// not drawn beside one.
     pub fn visual_beside(&self) -> Option<f32> {
         self.hosts.beside
+    }
+}
+
+#[cfg(feature = "visual-test")]
+impl Workbench {
+    /// Puts `view` in as machine `host`'s workbench, or takes it out with None.
+    pub(super) fn visual_set_host_view(&mut self, host: &str, view: Option<Entity<Workbench>>) {
+        self.hosts.views.retain(|(h, _)| h != host);
+        if let Some(view) = view {
+            self.hosts.views.push((host.to_owned(), view));
+        }
     }
 }

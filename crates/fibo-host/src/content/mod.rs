@@ -683,6 +683,7 @@ impl Parser {
         if self.card.turn == before {
             return;
         }
+        self.card.end_wait(before, at);
         if self.card.turn == Turn::Waiting {
             self.card.waiting_episode += 1;
         } else {

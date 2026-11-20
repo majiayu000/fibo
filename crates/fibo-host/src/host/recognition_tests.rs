@@ -338,7 +338,7 @@ fn a_batch_commits_only_when_a_card_it_read_changed() {
         .unwrap()
         .workspace
         .content
-        .insert("x".into(), other);
+        .insert("x".into(), other.into());
     let revision = || lock(&shared).unwrap().workspace.revision;
     let mut association = Association::default();
     let batch = index.cached().unwrap();
@@ -391,6 +391,7 @@ fn shared_host(root: &std::path::Path, index: &crate::log_index::Index) -> Share
         myself: std::sync::Weak::new(),
         http_asks: HashMap::new(),
         screen_waits: HashMap::new(),
+        screen_answered: HashMap::new(),
         title_busy: HashMap::new(),
         screen_busy: HashMap::new(),
         hooks: Default::default(),

@@ -2,7 +2,7 @@
 //! configured their rows sort into the same sections by the same rule; each machine's own
 //! host said what state they are in.
 use super::sidebar_list::{End, Listed, RecentOrder, recent_order, split_today};
-use super::sidebar_machines::RemoteRow;
+use super::sidebar_machines::MachineRow;
 use super::sidebar_wasm::{AddRow, Closed};
 use super::*;
 use fibo_core::sidebar::Bucket;
@@ -10,7 +10,7 @@ use fibo_core::sidebar::Bucket;
 #[derive(Clone, Copy)]
 enum Item<'a> {
     Here(Listed<'a>),
-    There(&'a RemoteRow),
+    There(&'a MachineRow<'a>),
 }
 
 impl Workbench {
@@ -44,7 +44,7 @@ impl Workbench {
                     self.note_row(out.len(), &l);
                     self.session_row(l, current, None, End::State, cx)
                 }
-                Item::There(r) => self.remote_row(r, cx),
+                Item::There(r) => self.machine_row(r, None, cx),
             });
         }
         self.sidebar.reveal(key, start, &keep, out);
@@ -60,7 +60,7 @@ impl Workbench {
         cx: &Context<Self>,
     ) {
         // Pinned ones are in 置顶, above (`session_list`).
-        let mut remote = self.listed_remote_rows();
+        let mut remote = self.listed_remote_rows(cx);
         remote.retain(|r| r.pin.is_none());
         let when = |l: &Listed| match self.row_bucket(l) {
             Bucket::Running => self
@@ -80,9 +80,9 @@ impl Workbench {
             quiet,
         } = recent_order(&rows);
         // What it asks or why it failed; with neither to show, what it is at now.
-        let second = |l: &Listed| {
-            self.row_detail(l.0, l.1).or_else(|| {
-                self.workspace
+        let second = |from: &Workbench, l: &Listed| {
+            from.row_detail(l.0, l.1).or_else(|| {
+                from.workspace
                     .content
                     .get(&l.0.id)
                     .map(|c| fibo_core::content::short(&c.headline(), 100))
@@ -119,17 +119,26 @@ impl Workbench {
                 if !open && stays {
                     keep.push(out.len());
                 }
+                // 等后台 says what will wake it, and a finished turn what it left
+                // running: both are worth the second line.
+                let asks = |from: &Workbench, l: &Listed| {
+                    l.1.blocked()
+                        || l.1 == Status::Background
+                        || fibo_core::status::left_behind(&from.workspace, l.0).is_some()
+                };
                 match item {
                     Item::Here(l) => {
-                        // 等后台 says what will wake it, and a finished turn what it left
-                        // running: both are worth the second line.
-                        let asks = l.1.blocked()
-                            || l.1 == Status::Background
-                            || fibo_core::status::left_behind(&self.workspace, l.0).is_some();
-                        let d = if lines && asks { second(&l) } else { None };
+                        let d = if lines && asks(self, &l) {
+                            second(self, &l)
+                        } else {
+                            None
+                        };
                         push(out, l, d, End::State);
                     }
-                    Item::There(r) => out.push(self.remote_row(r, cx)),
+                    Item::There(r) => {
+                        let d = (lines && asks(r.from, &r.l)).then(|| second(r.from, &r.l));
+                        out.push(self.machine_row(r, d.flatten(), cx));
+                    }
                 }
             }
             self.sidebar.reveal(key, start, &keep, out);

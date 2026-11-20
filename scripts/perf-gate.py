@@ -37,6 +37,8 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
   spends on a see-through window is not here: see scripts/theme-live.py;
 - a frame drawn without refreshing must match one drawn with a full refresh, pixel for
   pixel, after each step of redraw-check;
+- a split-pane jump must request frames while its ring is visible and none after it ends,
+  even when the window is forced to redraw after the fade;
 - with nothing happening, one catch-up must not schedule the next (a loop drew the whole
   window several times a second).
 """
@@ -189,6 +191,13 @@ def main():
         fails.append('terminal output drew the sidebar again: ' + (redraw or 'no redraw-check line'))
     if not redraw:
         fails.append('no redraw-check line in the probe output')
+    ring = re.search(r'focus ring: active (true|false), expired (true|false), extra frames (\d+)', redraw)
+    if not ring:
+        fails.append('no split-pane focus ring result in redraw-check')
+    elif ring[1] != 'true' or ring[2] != 'true':
+        fails.append(f'{ring[0]}: the probe must reach both sides of the fade')
+    elif int(ring[3]):
+        fails.append(f'{ring[0]}: an expired focus ring requested another frame')
 
     quiet = probe(bindir, out / 'catch-up', 'redraw-check', catch_up=True)
     # Counting catch-ups is not enough: a runner with a display draws the window by itself,

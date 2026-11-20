@@ -591,6 +591,7 @@ impl Workbench {
             },
             attention: Attention {
                 phases: HashMap::new(),
+                seen: HashMap::new(),
                 unseen: HashSet::new(),
             },
             resuming: Resuming {

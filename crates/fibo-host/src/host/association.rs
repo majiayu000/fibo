@@ -89,7 +89,7 @@ impl Association {
                         }
                         s.updated = s.updated.max(card.updated);
                         touched.push(s.id.clone());
-                        next.content.insert(s.id.clone(), card);
+                        next.content.insert(s.id.clone(), std::sync::Arc::new(card));
                     }
                 }
             }

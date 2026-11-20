@@ -24,6 +24,7 @@ mod events;
 mod exit_log;
 mod found_shells;
 mod http_ask;
+mod input;
 mod launch_probe;
 mod live;
 mod lock;
@@ -38,6 +39,7 @@ mod status;
 mod wait_log;
 use association::*;
 use client::*;
+use input::Input;
 use live::*;
 use lock::lock;
 use runtime::serve_runtime;
@@ -94,6 +96,9 @@ struct Host {
     /// Terminal -> what its CLI's own API says it asks.
     http_asks: HashMap<String, crate::cli_http::Asked>,
     screen_waits: HashMap<String, crate::screen_rules::Explained>,
+    /// Terminal -> when the user last answered what its screen asked. A quiet-screen read
+    /// taken before then saw the question still drawn and must not bring it back.
+    screen_answered: HashMap<String, std::time::Instant>,
     /// Terminal -> the conversation whose title spins there and since when (seconds since
     /// the epoch). Live evidence only, like `screen_waits`: never stored.
     title_busy: HashMap<String, (String, u64)>,
@@ -147,6 +152,31 @@ impl Host {
         }
         // Nothing to store; a new revision makes clients fetch the overlaid snapshot.
         let next = self.workspace.clone();
+        self.commit(next)
+    }
+    /// The user answered the prompt on this terminal: it no longer waits on them.
+    fn answer_screen_wait(&mut self, terminal: &str) -> io::Result<()> {
+        self.screen_answered
+            .insert(terminal.into(), std::time::Instant::now());
+        self.note_answer(terminal)?;
+        self.set_screen_wait(terminal, None)
+    }
+    /// A conversation waiting on the user learns when they answered, so its turn clock
+    /// leaves out only the wait and not the work after it (`Waited::answered`).
+    fn note_answer(&mut self, terminal: &str) -> io::Result<()> {
+        let Some(s) = self.workspace.current_agent(terminal).cloned() else {
+            return Ok(());
+        };
+        let open = (self.workspace.content.get(&s.id)).is_some_and(|c| c.waits_for_answer());
+        if !open || s.transcript.is_empty() {
+            return Ok(());
+        }
+        self.index.answered(&s.transcript)?;
+        let Some(card) = self.index.card(&s.transcript)? else {
+            return Ok(());
+        };
+        let mut next = self.workspace.clone();
+        next.content.insert(s.id, std::sync::Arc::new(card));
         self.commit(next)
     }
     /// Asks the CLIs off the lock (`claude agents --json`, Codex `thread/read`) and applies the

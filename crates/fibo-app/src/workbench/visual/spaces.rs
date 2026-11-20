@@ -95,12 +95,12 @@ impl Workbench {
         // With no content of its own the row stays out of the list.
         self.workspace.content.insert(
             "rename-probe".into(),
-            fibo_core::content::Content {
+            std::sync::Arc::new(fibo_core::content::Content {
                 title: "探针会话".into(),
                 updated: now(),
                 interactive: true,
                 ..Default::default()
-            },
+            }),
         );
         self.facts.forget();
         self.rename_session("rename-probe", window, cx);

@@ -36,14 +36,14 @@ fn status_follows_outcome_sessions_and_evidence() {
     let sid = w.agent_sessions[0].id.clone();
     w.content.insert(
         sid.clone(),
-        Content {
+        std::sync::Arc::new(Content {
             evidence: vec![
                 record("command", Some(0), 1),
                 record("test", Some(101), 2),
                 record("file", Some(0), 3),
             ],
             ..Default::default()
-        },
+        }),
     );
     // Plain commands are never offered; the newest record comes first.
     let offered = attachable(&w, &task.id, None);

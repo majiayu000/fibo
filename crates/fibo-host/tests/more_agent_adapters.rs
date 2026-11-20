@@ -508,11 +508,13 @@ fn persisted_cli_names_win_over_the_first_prompt_in_the_shared_title() {
             binding: None,
         };
         let mut w = Workspace::default();
-        w.content.insert(session.id.clone(), card(&index, &path));
+        w.content
+            .insert(session.id.clone(), std::sync::Arc::new(card(&index, &path)));
         assert_eq!(w.session_title(&session), "Original prompt", "{agent:?}");
         append(&path, rename);
         index.update_many([path.clone()], 2).unwrap();
-        w.content.insert(session.id.clone(), card(&index, &path));
+        w.content
+            .insert(session.id.clone(), std::sync::Arc::new(card(&index, &path)));
         assert_eq!(w.session_title(&session), "Renamed work", "{agent:?}");
         index.flush().unwrap();
         drop(index);
@@ -524,7 +526,8 @@ fn persisted_cli_names_win_over_the_first_prompt_in_the_shared_title() {
         assert_eq!(card(&index, &path).name, "");
         index.initialize().unwrap();
         index.bootstrap().unwrap();
-        w.content.insert(session.id.clone(), card(&index, &path));
+        w.content
+            .insert(session.id.clone(), std::sync::Arc::new(card(&index, &path)));
         assert_eq!(
             w.session_title(&session),
             "Renamed work",

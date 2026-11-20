@@ -27,7 +27,11 @@ fn only_what_changed_goes_and_the_window_ends_with_the_whole() {
     let mut next = first.clone();
     next.revision += 1;
     let session = next.agent_sessions[1].id.clone();
-    next.content.get_mut(&session).unwrap().title = "改了".into();
+    next.content
+        .get_mut(&session)
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .title = "改了".into();
     next.agent_sessions[2].updated += 5;
     let (delta, applied, _) = roundtrip(&held, &index, &next, false);
     assert_eq!(delta.base, Some(index.stamp));
@@ -129,7 +133,11 @@ fn remembered_hashes_give_the_same_delta_as_fresh_ones() {
     let (_, index) = diff_with(first.clone(), None, true, &mut hashes).unwrap();
     let mut next = first.clone();
     let session = next.agent_sessions[1].id.clone();
-    next.content.get_mut(&session).unwrap().title = "改了".into();
+    next.content
+        .get_mut(&session)
+        .map(std::sync::Arc::make_mut)
+        .unwrap()
+        .title = "改了".into();
     let gone = next.agent_sessions[0].id.clone();
     next.content.remove(&gone);
     let (kept, kept_index) = diff_with(next.clone(), Some(&index), true, &mut hashes).unwrap();
@@ -181,4 +189,64 @@ fn remembered_session_hashes_give_the_same_delta_as_fresh_ones() {
     let (again, _) = diff_with(next.clone(), Some(&kept_index), true, &mut hashes).unwrap();
     assert!(again.sessions.is_empty());
     assert_eq!(again.stamp, kept_index.stamp);
+}
+
+/// A refresh copied every session's content twice in the window and once in the host
+/// (11-19: 62 M instructions a refresh on a 1621-session install). Content no one changed
+/// stays one allocation from the host's snapshot through the window's applied workspace.
+#[test]
+fn content_no_one_changed_is_shared_not_copied() {
+    let first = every_state();
+    let mut hashes = Hashes::default();
+    let (delta, index) = diff_with(first.clone(), None, true, &mut hashes).unwrap();
+    let held = apply(delta, None).unwrap();
+    let mut next = held.workspace.clone();
+    let changed = next.agent_sessions[1].id.clone();
+    std::sync::Arc::make_mut(next.content.get_mut(&changed).unwrap()).title = "改了".into();
+    let (delta, _) = diff_with(next.clone(), Some(&index), true, &mut hashes).unwrap();
+    assert_eq!(delta.content.keys().collect::<Vec<_>>(), [&changed]);
+    let after = apply(delta, Some(&held)).unwrap();
+    for (id, c) in &after.workspace.content {
+        let before = &held.workspace.content[id];
+        assert_eq!(
+            std::sync::Arc::ptr_eq(c, before),
+            *id != changed,
+            "{id}: only the changed content is a new allocation"
+        );
+    }
+}
+
+/// The rest sent whole is what writing the workspace without its sessions and content
+/// gave before it was written field by field: same fields, same order, same values, so a
+/// client that reads it as a workspace still can.
+#[test]
+fn the_rest_sent_whole_is_the_workspace_written_without_sessions_and_content() {
+    let mut w = every_state();
+    let (delta, _) = diff(w.clone(), None, true).unwrap();
+    w.agent_sessions.clear();
+    w.content.clear();
+    let before = serde_json::to_value(&w).unwrap();
+    let sent = serde_json::Value::Object(delta.rest);
+    assert_eq!(
+        sent.as_object().unwrap().keys().collect::<Vec<_>>(),
+        before.as_object().unwrap().keys().collect::<Vec<_>>()
+    );
+    assert_eq!(sent, before);
+}
+
+/// Only the fields that changed are read in the window; one this build does not know, from
+/// a newer host, is ignored as reading the whole rest ignores it.
+#[test]
+fn the_window_reads_only_the_fields_that_changed() {
+    let first = every_state();
+    let (held, index) = whole(&first);
+    let mut next = first.clone();
+    next.tabs[0].title = "改了".into();
+    let (mut delta, _) = diff(next.clone(), Some(&index), true).unwrap();
+    assert_eq!(delta.rest.keys().collect::<Vec<_>>(), ["tabs"]);
+    delta
+        .rest
+        .insert("from_a_newer_host".into(), serde_json::json!(1));
+    let applied = apply(delta, Some(&held)).unwrap();
+    assert!(same(&applied.workspace, &next));
 }

@@ -202,6 +202,11 @@ impl Host {
                 continue;
             };
             let found = s.terminal.as_ref().and_then(|t| self.found_tasks(t, &s.id));
+            // Most have no shells: their content stays the host's own, not a copy.
+            if found.is_none() && c.shells.is_empty() {
+                continue;
+            }
+            let c = std::sync::Arc::make_mut(c);
             if let Some(tasks) = found {
                 c.background = Some(Background {
                     shells: tasks.len() as u32,
@@ -209,9 +214,6 @@ impl Host {
                     ..c.background.unwrap_or_default()
                 });
                 c.shells = tasks;
-                continue;
-            }
-            if c.shells.is_empty() {
                 continue;
             }
             for t in &mut c.shells {
@@ -495,7 +497,7 @@ mod tests {
         host.workspace.agent_sessions = vec![session];
         host.workspace.content.insert(
             "s".into(),
-            Content {
+            std::sync::Arc::new(Content {
                 shells: vec![ShellTask {
                     id: "b1".into(),
                     description: "wait".into(),
@@ -506,7 +508,7 @@ mod tests {
                     ..Default::default()
                 }),
                 ..Default::default()
-            },
+            }),
         );
         host.agent_pids.insert(std::process::id(), "s".into());
         let jobs = |host: &Host| {
@@ -565,7 +567,7 @@ mod tests {
         host.workspace.agent_sessions = vec![session];
         host.workspace.content.insert(
             "s".into(),
-            Content {
+            std::sync::Arc::new(Content {
                 shells: vec![ShellTask {
                     id: "b1".into(),
                     ..Default::default()
@@ -575,7 +577,7 @@ mod tests {
                     ..Default::default()
                 }),
                 ..Default::default()
-            },
+            }),
         );
         host.agent_pids.insert(std::process::id(), "s".into());
         let lost = host.shells_lost();

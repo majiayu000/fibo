@@ -3,7 +3,8 @@ use crate::model::{Agent, Outcome};
 use crate::status::{Status, of};
 fn status(c: &Content, s: &AgentSession, now: u64) -> Status {
     let mut w = Workspace::default();
-    w.content.insert(s.id.clone(), c.clone());
+    w.content
+        .insert(s.id.clone(), std::sync::Arc::new(c.clone()));
     of(&w, s, now)
 }
 #[test]

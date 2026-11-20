@@ -136,7 +136,11 @@ impl Workbench {
             "CloseIdle" | "CloseWorking" => {
                 if name == "CloseWorking"
                     && let Some(s) = self.workspace.current_agent("p0").map(|s| s.id.clone())
-                    && let Some(c) = self.workspace.content.get_mut(&s)
+                    && let Some(c) = self
+                        .workspace
+                        .content
+                        .get_mut(&s)
+                        .map(std::sync::Arc::make_mut)
                 {
                     c.turn = fibo_core::content::Turn::Running;
                 }
@@ -144,7 +148,12 @@ impl Workbench {
             }
             // An Agent reply in Markdown, as the pane header shows it.
             "Markdown" => {
-                for c in self.workspace.content.values_mut() {
+                for c in self
+                    .workspace
+                    .content
+                    .values_mut()
+                    .map(std::sync::Arc::make_mut)
+                {
                     if c.turn == fibo_core::content::Turn::Completed {
                         c.last_reply =
                             "**建议都接收**，见 `a.rs`\n\n| 投稿 | 建议处理 |\n|---|---|\n| 3 | 接收 |"
@@ -438,7 +447,7 @@ impl Workbench {
                 self.sidebar.toggled.clear();
                 self.visual_spread_spaces(parts.get(4).copied());
                 self.visual_bare_space(parts.get(4).copied());
-                self.visual_unknown_state(parts.get(4).copied());
+                self.visual_unknown_state(parts.get(4).copied(), window, cx);
                 self.visual_crowded(parts.get(4).copied());
                 self.visual_twins(parts.get(4).copied());
                 if parts.get(4) == Some(&"open") {
@@ -476,6 +485,7 @@ impl Workbench {
                         .workspace
                         .content
                         .values_mut()
+                        .map(std::sync::Arc::make_mut)
                         .find(|c| c.title == "标签命名依旧有问题")
                 {
                     c.turn = fibo_core::content::Turn::Completed;

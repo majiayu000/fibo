@@ -234,6 +234,14 @@ pub(super) const CHILD_DIALOG_EVERY: u64 = 30;
 /// Menus the user opens appear right after a keystroke; an agent's question does not.
 pub(super) const INPUT_SETTLE: Duration = Duration::from_secs(3);
 
+/// The screen was read, then the user answered before this check took the host's lock: the
+/// question it shows is already answered, so it may not be set waiting again. Input clears
+/// the wait before its acknowledgement, and the screen still shows the prompt until the CLI
+/// redraws, so without this a busy machine put an answered approval back (CI, 11-19).
+pub(super) fn answered_since(waiting: bool, answered: Option<Instant>, read_at: Instant) -> bool {
+    waiting && answered.is_some_and(|at| at >= read_at)
+}
+
 /// Returns when to look again, if the user typed too recently to attribute the prompt.
 pub(super) fn check_screen_wait(
     terminal: &LiveTerminal,
@@ -267,12 +275,13 @@ pub(super) fn check_screen_wait(
         crate::screen_rules::default_rules,
         crate::screen_rules::rules,
     );
-    let (tail, input_at) = {
+    let (tail, input_at, read_at) = {
         let live = lock(terminal)?;
         if live.exited {
             return Ok(None);
         }
-        (live.vt.tail_text(usize::from(live.rows))?, live.input_at)
+        let tail = live.vt.tail_text(usize::from(live.rows))?;
+        (tail, live.input_at, Instant::now())
     };
     let seen = crate::screen_rules::explain(rules, &tail);
     let settle = input_at.map(|at| at + INPUT_SETTLE);
@@ -280,6 +289,13 @@ pub(super) fn check_screen_wait(
         return Ok(Some(settle));
     }
     let mut host = lock(shared)?;
+    if answered_since(
+        seen.waiting(),
+        host.screen_answered.get(id).copied(),
+        read_at,
+    ) {
+        return Ok(Some(Instant::now() + INPUT_SETTLE));
+    }
     // The last frame of a finished turn has no working line; it is read here, once still.
     host.screen_busy(id, &tail)?;
     host.screen_background(id, &tail)?;
@@ -388,7 +404,7 @@ pub(super) fn apply_official(
         let mut host = lock(shared)?;
         let mut next = host.workspace.clone();
         for (id, card) in cards {
-            next.content.insert(id, card);
+            next.content.insert(id, std::sync::Arc::new(card));
         }
         host.commit(next)?;
     }
@@ -441,3 +457,7 @@ pub(super) fn probe_after_submission(shared: &Shared, terminal: &str) -> io::Res
     });
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "status_answer_tests.rs"]
+mod answer_tests;

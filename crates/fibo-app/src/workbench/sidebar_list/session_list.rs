@@ -86,17 +86,7 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> (Vec<gpui::AnyElement>, usize, bool) {
         let preset = self.sidebar.preset();
-        let detail = |l: &Listed| match preset.detail {
-            Detail::Never => None,
-            Detail::Always => self.row_detail(l.0, l.1),
-            Detail::Attention => {
-                (matches!(self.row_bucket(l), Bucket::Attention | Bucket::Running)
-                    || l.1 == Status::Background
-                    || current == Some(l.0.id.as_str()))
-                .then(|| self.row_detail(l.0, l.1))
-                .flatten()
-            }
-        };
+        let detail = |l: &Listed| self.listed_detail(self, l, current == Some(l.0.id.as_str()));
         let mut out = vec![];
         // 置顶 comes first in every preset; its rows leave their usual group.
         let pinned_terminal = |l: &Listed| {
@@ -115,7 +105,7 @@ impl Workbench {
         // Where other machines' rows list with these, their pinned ones join 置顶, after
         // this machine's: each machine's host keeps its own pins.
         let mut there: Vec<_> = if recent {
-            (self.listed_remote_rows().into_iter())
+            (self.listed_remote_rows(cx).into_iter())
                 .filter(|r| r.pin.is_some())
                 .collect()
         } else {
@@ -144,7 +134,7 @@ impl Workbench {
                 }
             }
             for r in there.iter().filter(|r| open || r.shown) {
-                out.push(self.remote_row(r, cx));
+                out.push(self.machine_row(r, self.machine_detail(r), cx));
             }
         }
         let mut budget = preset.row_limit();

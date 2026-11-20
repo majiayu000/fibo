@@ -107,7 +107,11 @@ impl Host {
             if !self.turn_over(&id) {
                 continue;
             }
-            if let Some(c) = w.content.get_mut(&id).filter(|c| c.turn == Turn::Running) {
+            // Only a running one is changed: a copy of every other would be thrown away.
+            if let Some(c) = (w.content.get_mut(&id))
+                .filter(|c| c.turn == Turn::Running)
+                .map(std::sync::Arc::make_mut)
+            {
                 c.turn = Turn::Completed;
             }
         }

@@ -123,11 +123,13 @@ fn take_over(root: &Path) -> io::Result<(local::Stream, Vec<Taken>)> {
             cell.set(handed.cell.0, handed.cell.1);
             vt.answer_queries(cell.clone())?;
             let reader = master.reader()?;
+            let input = Input::start(&master, &handed.id)?;
             Ok(Taken {
                 id: handed.id,
                 live: Live {
                     vt,
                     master,
+                    input,
                     cols: handed.cols,
                     rows: handed.rows,
                     pid: handed.pid,
@@ -207,7 +209,9 @@ pub(super) fn serve_runtime(
     index.recent_days = recent_days;
     for s in &workspace.agent_sessions {
         if let Some(card) = index.card(&s.transcript)? {
-            workspace.content.insert(s.id.clone(), card);
+            workspace
+                .content
+                .insert(s.id.clone(), std::sync::Arc::new(card));
         }
     }
     let host = Arc::new(Mutex::new(Host {
@@ -232,6 +236,7 @@ pub(super) fn serve_runtime(
         myself: std::sync::Weak::new(),
         http_asks: HashMap::new(),
         screen_waits: HashMap::new(),
+        screen_answered: HashMap::new(),
         title_busy: HashMap::new(),
         screen_busy: HashMap::new(),
         hooks: Default::default(),

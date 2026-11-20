@@ -37,7 +37,7 @@ fn bound(mut c: Content, state: &str) -> Status {
         exit_code: None,
         error: None,
     });
-    w.content.insert("s".into(), c);
+    w.content.insert("s".into(), std::sync::Arc::new(c));
     let s = AgentSession {
         id: "s".into(),
         runtime: Agent::Codex,
@@ -81,4 +81,17 @@ fn idle_keeps_a_background_in_flight() {
 #[test]
 fn idle_before_any_turn_stays_fresh() {
     assert_eq!(bound(Content::default(), "idle"), Status::Fresh);
+}
+
+#[test]
+fn working_starts_no_turn_its_log_has_not() {
+    // Codex says working for a few seconds between turns: what the log says stands.
+    assert_eq!(bound(content(Turn::Completed), "working"), Status::Review);
+    assert_eq!(bound(content(Turn::Interrupted), "working"), Status::Paused);
+    assert_eq!(bound(Content::default(), "working"), Status::Fresh);
+    // A dialog answered: the turn runs again before its log says so.
+    assert_eq!(bound(content(Turn::Waiting), "working"), Status::Running);
+    assert_eq!(bound(content(Turn::Running), "working"), Status::Running);
+    // Asking and failing still come from the program first.
+    assert_eq!(bound(content(Turn::Completed), "blocked"), Status::Waiting);
 }

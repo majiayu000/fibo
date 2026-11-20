@@ -149,6 +149,7 @@ fn a_failed_hangup_still_force_stops_its_live_terminal() {
 fn terminal(pid: u32, master: term::Master) -> LiveTerminal {
     Arc::new(Mutex::new(Live {
         vt: Vt::new(80, 24).unwrap(),
+        input: Input::start(&master, "test").unwrap(),
         master,
         cols: 80,
         rows: 24,

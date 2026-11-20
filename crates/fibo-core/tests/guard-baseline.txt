@@ -48,12 +48,13 @@ field turn	crates/fibo-host/src/plugin_hooks.rs	1
 field turn	mobile/src/actions.ts	2
 field turn	mobile/src/app/chat.tsx	1
 field turn_started	crates/fibo-app/src/workbench/board/card.rs	1
-field turn_started	crates/fibo-app/src/workbench/sessions/here_card.rs	3
+field turn_started	crates/fibo-app/src/workbench/sessions/here_card.rs	1
 field turn_started	crates/fibo-app/src/workbench/sidebar/view.rs	1
 field turn_started	crates/fibo-app/src/workbench/sidebar_flat.rs	1
 field turn_started	crates/fibo-app/src/workbench/sidebar_list/dense_row.rs	1
+field turn_started	crates/fibo-app/src/workbench/sidebar_machines/shared_row.rs	1
 field turn_started	crates/fibo-app/src/workbench/sidebar_recent.rs	1
-field turn_started	crates/fibo-app/src/workbench/sidebar_wasm.rs	2
+field turn_started	crates/fibo-app/src/workbench/sidebar_wasm.rs	1
 field turn_started	crates/fibo-host/src/host/association.rs	1
 field turn_started	crates/fibo-host/src/host/snapshot.rs	1
 keycap	crates/fibo-app/src/terminal/open_path.rs	7

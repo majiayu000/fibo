@@ -252,7 +252,7 @@ impl Workbench {
                         updated: self.session_updated(s),
                         running_since: content
                             .filter(|_| b == Bucket::Running)
-                            .map(|c| c.turn_started)
+                            .map(|c| c.clock_from())
                             .filter(|t| *t > 0),
                         line: content
                             .map(|c| fibo_core::content::short(&c.headline(), 100))
@@ -513,7 +513,7 @@ impl Workbench {
         self.workspace
             .content
             .get(&s.id)
-            .and_then(fibo_core::content::Content::running_since)
+            .and_then(|c| (fibo_core::content::Content::running_since)(c))
     }
     fn wasm_end(&self, (s, _, _): Listed, trailing: &Trailing, cx: &Context<Self>) -> End {
         let ago = || crate::model::time::ago(self.session_updated(s), crate::model::time::now());

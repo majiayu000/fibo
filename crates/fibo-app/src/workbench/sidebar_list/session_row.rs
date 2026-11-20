@@ -41,7 +41,15 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         if self.sidebar.preset().group == Grouping::Recent {
-            return self.flat_row((session, g, attention), current, detail, end, cx);
+            return self.flat_row(
+                self,
+                None,
+                (session, g, attention),
+                current,
+                detail,
+                end,
+                cx,
+            );
         }
         if self.sidebar.dense() {
             return self.dense_row((session, g, attention), current, detail, end, cx);

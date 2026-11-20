@@ -14,6 +14,8 @@ mod hand_over;
 #[cfg_attr(unix, path = "unix.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
 mod imp;
+mod slicing;
+pub use slicing::{SLICE, slice_end};
 
 /// What to start.
 pub struct Spec<'a> {
@@ -60,19 +62,33 @@ impl Master {
     pub fn resize(&self, cols: u16, rows: u16, cell: (u32, u32)) -> io::Result<()> {
         self.0.resize(cols, rows, cell)
     }
-    /// Bytes typed that the program has not read yet. None when that cannot be told, which
-    /// outside macOS is always for now.
-    pub fn backlog(&self) -> Option<usize> {
-        self.0.backlog()
-    }
     /// The process group the terminal's foreground job runs in. None on Windows, which has
     /// no such thing.
     pub fn foreground_group(&self) -> Option<i32> {
         self.0.foreground_group()
     }
+    /// Another way in to type with, for a thread of its own: typing waits for the program to
+    /// read, so it must not wait under a lock that taking the program's output needs.
+    pub fn writer(&self) -> io::Result<Writer> {
+        self.0.writer().map(Writer)
+    }
     /// What the program prints comes from here. Only ask once.
     pub fn reader(&self) -> io::Result<Reader> {
         self.0.reader().map(Reader)
+    }
+}
+
+/// Types into the terminal, like `Master::write`.
+pub struct Writer(imp::Writer);
+
+impl Writer {
+    /// Types `bytes`. A failure says how many were accepted, and nothing is sent twice.
+    pub fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        self.0.write(bytes)
+    }
+    /// Bytes typed that the program has not read yet, when the platform can tell.
+    pub fn backlog(&self) -> Option<usize> {
+        self.0.backlog()
     }
 }
 

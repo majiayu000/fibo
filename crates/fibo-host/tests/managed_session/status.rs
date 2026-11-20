@@ -271,7 +271,7 @@ fn quiet_agent_screen_with_an_approval_waits_on_the_user_until_they_answer() {
             .cloned()
             .unwrap()
     };
-    let detail = card(&h.workspace()).signal_detail;
+    let detail = card(&h.workspace()).signal_detail.clone();
     assert!(
         detail.starts_with("规则：approval 审批（claude 内置 "),
         "{detail}"
@@ -312,7 +312,7 @@ fn quiet_agent_screen_with_an_approval_waits_on_the_user_until_they_answer() {
     // and says it found no prompt.
     std::thread::sleep(Duration::from_millis(4500));
     assert_eq!(waiting(&h.workspace()), None);
-    let check = card(&h.workspace()).screen_check;
+    let check = card(&h.workspace()).screen_check.clone();
     assert!(
         check.starts_with("没认出提问框（底部没有审批或选择题的提示"),
         "{check}"

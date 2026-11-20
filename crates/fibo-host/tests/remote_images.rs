@@ -79,3 +79,68 @@ fn a_send_names_only_kept_pictures_and_only_full_control_uploads() {
     std::thread::sleep(Duration::from_millis(300));
     assert_eq!(fs::read_to_string(&typed).unwrap_or_default(), "");
 }
+
+/// An Agent that reads a pasted picture off the disk before showing it, as Claude Code does:
+/// the words and Enter wait for its `[Image #1]`, or Enter submits the words alone and the
+/// picture lands in the next prompt (11-19, one send in two at load 90).
+const SLOW_CLI: &str = r#"
+import os, sys, threading, time
+log = open(sys.argv[1], "a", buffering=1)
+seen = b""
+started = False
+def show():
+    time.sleep(1.0)
+    os.write(1, b"\r\n> [Image #1] ")
+    log.write("picture\n")
+while True:
+    got = os.read(0, 4096)
+    if not got:
+        break
+    seen += got
+    if b".png" in seen and not started:
+        started = True
+        threading.Thread(target=show).start()
+    if b"\r" in got or b"\n" in got:
+        log.write("enter\n")
+        break
+"#;
+
+#[test]
+fn the_words_wait_until_the_cli_shows_the_picture() {
+    let h = Host::start();
+    let dir = scratch(&h, "proj");
+    let order = dir.join("order.txt");
+    let cli = dir.join("slow_cli.py");
+    fs::write(&cli, SLOW_CLI).unwrap();
+    h.launch(
+        "t",
+        &dir,
+        &format!(
+            "stty raw -echo; python3 '{}' '{}'",
+            cli.display(),
+            order.display()
+        ),
+    );
+    std::thread::sleep(Duration::from_millis(500));
+    let mut r = Remote::open(&h, None, &[]);
+    let picture = r.ok(json!({ "op": "image", "data": PNG }))["path"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    r.ok(json!({
+        "op": "send", "terminal": "t", "text": " what is it", "enter": true,
+        "images": [picture], "request": "slow1",
+    }));
+    let until = Instant::now() + Duration::from_secs(10);
+    let seen = loop {
+        let text = fs::read_to_string(&order).unwrap_or_default();
+        if text.contains("enter") || Instant::now() > until {
+            break text;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(
+        seen, "picture\nenter\n",
+        "Enter came before the picture showed"
+    );
+}

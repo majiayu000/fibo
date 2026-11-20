@@ -2,8 +2,7 @@
 //! spec.md): which rows there are and how one is drawn. State, words and titles come from
 //! each machine's own host; a machine that dropped off keeps its last rows, faded.
 //! `sidebar_machine_views` holds the three layouts around them.
-use super::machines::{remote_key, shown_title};
-use super::sidebar_list::{ASKS, bucket};
+use super::machines::remote_key;
 use super::*;
 use crate::machines::Link;
 use crate::ui::theme::Flat as F;
@@ -14,32 +13,22 @@ mod add_space;
 pub(super) mod quiet;
 mod quiet_space;
 mod remote_menu;
+mod shared_row;
+pub(in crate::workbench) use shared_row::MachineRow;
 
 pub(in crate::workbench) use add_space::AddingSpace;
 
-/// What another machine's row shows, worked out once per draw.
+/// A running terminal of another machine, as its host listed it: what the counts of
+/// what needs you, ⌘J and the right-click menu go by. The column's rows are its sessions
+/// (`MachineRow`).
 pub(super) struct RemoteRow {
-    pub(super) index: usize,
-    /// The name you gave it in `machines.json`, for this column.
-    pub(super) machine: String,
     /// The name its host reports, which its peek's title shows.
     host_name: String,
     pub(super) online: bool,
-    why: Option<String>,
     key: String,
     pub(super) card: Card,
-    status: Status,
-    /// Whether `status` is what the machine said; when not, it is 停着 for sorting only
-    /// and the row draws `flat_unknown`.
-    known: bool,
-    pub(super) bucket: Bucket,
-    /// When it last moved; a terminal that does not say counts as now, since it is live.
-    pub(super) when: u64,
-    pub(super) shown: bool,
     /// Its machine is 先不管: gray, and links coming and going do not show.
     quiet: bool,
-    /// Where it is in its machine's 置顶, when it is there.
-    pub(super) pin: Option<usize>,
 }
 
 /// `user@host` reads as `host`: the short name is what fits a row.
@@ -52,17 +41,6 @@ pub(in crate::workbench) fn machine_letter(name: &str) -> String {
         .next()
         .map_or_else(String::new, |c| c.to_uppercase().collect())
 }
-/// As `row_bucket` does at home: 要你处理 holds only what that machine's host counts.
-/// A state this build does not know goes by that count alone: listed where the chip and
-/// ⌘J count it, else with what is no longer moving.
-fn remote_bucket(said: Option<Status>, needs_you: bool) -> Bucket {
-    match said.map(bucket) {
-        None if needs_you => Bucket::Attention,
-        None => Bucket::Stale,
-        Some(Bucket::Attention) if !needs_you => Bucket::Stopped,
-        Some(b) => b,
-    }
-}
 /// The entry after `at`, or the first when none is current.
 fn next_index(len: usize, at: Option<usize>) -> usize {
     at.map_or(0, |i| (i + 1) % len)
@@ -73,17 +51,6 @@ fn next_index(len: usize, at: Option<usize>) -> usize {
 /// listed too, as at home.
 fn listed_card(c: &Card) -> bool {
     (c.phase != Phase::Shell || c.note.is_some()) && c.outcome.as_deref() != Some("abandoned")
-}
-
-impl RemoteRow {
-    /// What it asks you, the second line of its row.
-    fn asks(&self) -> Option<String> {
-        (self.online && !self.quiet && self.status.blocked())
-            .then(|| self.card.approval.as_ref().or(self.card.waiting.as_ref()))
-            .flatten()
-            .and_then(|t| t.lines().find(|l| !l.trim().is_empty()))
-            .map(|t| t.replacen(fibo_core::i18n::say(ASKS), t!("问："), 1))
-    }
 }
 
 /// How wide a machine's square mark is.
@@ -158,58 +125,38 @@ impl Workbench {
             return Vec::new();
         };
         let view = remote.view.lock().unwrap().clone();
-        let now = crate::model::time::now();
-        let machine = machine_label(&view.spec.host).to_owned();
         let host_name = view
             .machine
             .as_ref()
             .map_or_else(|| view.spec.host.clone(), |m| m.name.clone());
         let online = view.link == Link::Online;
-        let why = match &view.link {
-            Link::Offline(why) => Some(why.clone()),
-            _ => None,
-        };
         view.terminals
             .iter()
             .filter(|c| listed_card(c))
-            .map(|card| {
-                let said = card.status.as_deref().and_then(Status::from_key);
-                let status = said.unwrap_or(Status::Stale);
-                let key = remote_key(&view, &card.id);
-                RemoteRow {
-                    index,
-                    machine: machine.clone(),
-                    host_name: host_name.clone(),
-                    online,
-                    why: why.clone(),
-                    shown: self.peek.as_ref().is_some_and(|p| p.terminal == key),
-                    key,
-                    status,
-                    known: said.is_some(),
-                    bucket: remote_bucket(said, card.needs_you),
-                    quiet: view.spec.quiet,
-                    when: card.updated.unwrap_or(now),
-                    pin: (view.pins.iter().flatten()).position(|p| *p == card.id),
-                    card: card.clone(),
-                }
+            .map(|card| RemoteRow {
+                host_name: host_name.clone(),
+                online,
+                key: remote_key(&view, &card.id),
+                quiet: view.spec.quiet,
+                card: card.clone(),
             })
             .collect()
     }
     /// The other machines' rows that go in 会话优先's own list.
-    pub(super) fn listed_remote_rows(&self) -> Vec<RemoteRow> {
+    pub(super) fn listed_remote_rows<'a>(&'a self, cx: &'a gpui::App) -> Vec<MachineRow<'a>> {
         match (self.machine_scope(), self.machine_layout()) {
             (Some(index), _) => {
                 let spaces = self.machines[index].view.lock().unwrap().spaces.clone();
                 // A space that has since gone lists everything rather than nothing.
                 let only = (self.sidebar.machine_space.as_ref())
                     .filter(|id| spaces.iter().any(|s| &s.id == *id));
-                let mut rows = self.remote_rows_of(index);
-                rows.retain(|r| only.is_none_or(|id| &r.card.space == id));
+                let mut rows = self.session_rows_of(index, cx);
+                rows.retain(|r| only.is_none_or(|id| &r.space == id));
                 rows
             }
             (None, Machines::Mixed) if self.space_filter().is_none() => (0..self.machines.len())
                 .filter(|i| !self.machine_quiet(*i))
-                .flat_map(|i| self.remote_rows_of(i))
+                .flat_map(|i| self.session_rows_of(i, cx))
                 .collect(),
             _ => Vec::new(),
         }
@@ -229,183 +176,6 @@ impl Workbench {
             let waits = |c: &&Card| c.needs_you && listed_card(c);
             view.terminals.iter().filter(waits).count()
         })
-    }
-
-    /// One session of another machine, in the same shape as `flat_row`. A dropped machine's
-    /// row is faded, says 断开 where its time goes, and opens nothing.
-    pub(super) fn remote_row(&self, r: &RemoteRow, cx: &Context<Self>) -> gpui::AnyElement {
-        let card = &r.card;
-        // Subagents take the second line, except on a row that asks you something.
-        let subs = Some(card.subagents.as_slice())
-            .filter(|s| !s.is_empty() && r.bucket != Bucket::Attention);
-        let asks = r.asks().filter(|_| subs.is_none());
-        let subs_live = matches!(r.status, Status::Running | Status::Background);
-        let subs_open = self.subagents_open(&r.key, r.shown);
-        let renaming = self.remote_renaming(r.index, card.session.as_deref(), cx);
-        let two = asks.is_some() || subs.is_some();
-        let time = if !r.online && !r.quiet {
-            t!("断开").to_owned()
-        } else {
-            self.card_time(card, r.online, cx).unwrap_or_default()
-        };
-        // Named when this list holds more than one machine.
-        let mark = (!r.quiet
-            && self.machine_layout() == Machines::Mixed
-            && self.machine_scope().is_none())
-        .then(|| machine_mark(machine_letter(&r.machine), !r.online));
-        let space = self.machines.get(r.index).and_then(|m| {
-            let view = m.view.lock().unwrap();
-            view.spaces.iter().find(|s| s.id == card.space).map(|s| {
-                if r.quiet {
-                    quiet::quiet_tag(&s.name)
-                } else {
-                    self.space_tag(&s.id, &s.name)
-                }
-            })
-        });
-        let title_ink = match r.bucket {
-            _ if r.quiet => F::third(),
-            Bucket::Attention | Bucket::Running | Bucket::Done => F::title(),
-            Bucket::Stopped | Bucket::Fresh => F::quiet(),
-            Bucket::Stale => F::second(),
-        };
-        let open = r
-            .online
-            .then(|| (r.index, card.clone(), r.host_name.clone()));
-        let tip = match (&r.why, r.online) {
-            (Some(_), _) | (None, false) if r.quiet => {
-                t!("{machine} 现在没连上", machine = r.machine)
-            }
-            (Some(why), _) => t!("{machine} 没连上：{why}", machine = r.machine, why),
-            (None, false) => t!("正在连 {machine}", machine = r.machine),
-            (None, true) => format!("{} · {}", r.machine, card.cwd),
-        };
-        let row = div()
-            .id(gpui::SharedString::from(format!("remote-{}", r.key)))
-            .relative()
-            .mx(px(F::ROW_EDGE))
-            .px(px(F::ROW_PAD))
-            .py(px(if two { F::ROW_PAD_Y } else { F::ONE_PAD_Y }))
-            .flex()
-            .when(!two, |d| d.items_center())
-            .gap(px(F::ROW_GAP))
-            .rounded(px(F::ROW_RADIUS))
-            .font_family(T::UI_FONT)
-            .when(!r.online && !r.quiet, |d| d.opacity(0.55))
-            .when(r.online, |d| {
-                d.cursor_pointer().hover(|s| s.bg(T::color(F::selected())))
-            })
-            .when(r.shown, |d| d.bg(T::color(F::selected())))
-            .child(
-                div()
-                    .flex_shrink_0()
-                    .when(two, |d| d.mt(px(T::S4)))
-                    .child(if r.quiet {
-                        quiet::quiet_ring().into_any_element()
-                    } else {
-                        if r.known {
-                            self.flat_session_mark(r.status, false, cx)
-                        } else {
-                            super::sidebar_flat::flat_unknown()
-                        }
-                    }),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(T::S8))
-                            .child(match renaming {
-                                Some(field) => div().flex_1().min_w_0().child(field),
-                                None => div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .truncate()
-                                    .text_size(px(F::TITLE))
-                                    .line_height(px(F::TITLE_LINE))
-                                    .text_color(T::color(title_ink))
-                                    .child(shown_title(card)),
-                            })
-                            .children(mark)
-                            .children(space)
-                            .child(
-                                div()
-                                    .min_w(px(F::TIME_WIDTH))
-                                    .flex_shrink_0()
-                                    .flex()
-                                    .justify_end()
-                                    .font_family(T::mono(cx).family)
-                                    .text_size(px(F::TIME))
-                                    .line_height(px(F::LINE_SMALL))
-                                    .text_color(T::color(F::third()))
-                                    .child(time),
-                            ),
-                    )
-                    .when_some(asks, |d, text| {
-                        d.child(
-                            div()
-                                .mt(px(T::S2))
-                                .min_w_0()
-                                .truncate()
-                                .text_size(px(F::SUB))
-                                .line_height(px(F::SUB_LINE))
-                                .text_color(r.status.colors().1)
-                                .child(text),
-                        )
-                    })
-                    .when_some(subs, |d, subs| {
-                        d.child(self.subagent_line(&r.key, subs, subs_live, subs_open, cx))
-                            .when(subs_open, |d| {
-                                let open = open.clone();
-                                let click: super::sidebar_subagents::Click =
-                                    std::rc::Rc::new(move |this, window, cx| {
-                                        if let Some((index, card, name)) = &open {
-                                            this.open_remote_peek(
-                                                *index,
-                                                card.clone(),
-                                                name,
-                                                window,
-                                                cx,
-                                            );
-                                        }
-                                    });
-                                d.child(self.subagent_tree(&r.key, click, subs, subs_live, cx))
-                            })
-                    }),
-            )
-            .when(r.shown, |d| {
-                d.child(
-                    div()
-                        .absolute()
-                        .inset_0()
-                        .rounded(px(F::ROW_RADIUS))
-                        .border(px(T::BORDER_WIDTH))
-                        .border_color(T::color(F::selected_line())),
-                )
-            })
-            // The hover card would cover the right-click menu.
-            .when(self.layout.remote_menu.is_none(), |d| {
-                d.tooltip(super::diagnostics::tip(vec![tip]))
-            })
-            .when(r.online && !r.quiet, |d| {
-                d.on_mouse_down(gpui::MouseButton::Right, self.open_remote_menu(r, cx))
-            })
-            .when_some(open, |d, (index, card, name)| {
-                d.on_click(cx.listener(move |this, _, window, cx| {
-                    this.open_remote_peek(index, card.clone(), &name, window, cx);
-                }))
-            });
-        if r.quiet {
-            self.machine_menu_on(row, r.index, cx).into_any_element()
-        } else {
-            row.into_any_element()
-        }
     }
 
     /// ⌘J: the next session that needs you, on any machine; the column follows it there.
@@ -593,9 +363,9 @@ impl Workbench {
     }
     /// What the list shows now: other machines' rows on it, the machine shown alone, and
     /// whether this machine's rows are off the list.
-    pub fn visual_column(&self) -> (usize, Option<usize>, bool) {
+    pub fn visual_column(&self, cx: &gpui::App) -> (usize, Option<usize>, bool) {
         (
-            self.listed_remote_rows().len(),
+            self.listed_remote_rows(cx).len(),
             self.machine_scope(),
             self.local_hidden(),
         )
@@ -639,19 +409,6 @@ mod tests {
         assert_eq!(machine_letter(""), "");
     }
 
-    /// 要你处理 holds what that machine's host counts, as it does at home.
-    #[test]
-    fn a_remote_row_needs_you_only_when_its_host_says_so() {
-        assert_eq!(remote_bucket(Some(Status::Review), true), Bucket::Attention);
-        assert_eq!(remote_bucket(Some(Status::Waiting), false), Bucket::Stopped);
-        assert_eq!(remote_bucket(Some(Status::Running), false), Bucket::Running);
-        assert_eq!(remote_bucket(Some(Status::Stale), false), Bucket::Stale);
-        // A newer machine's state word: its 要你处理 count still decides (apple, 11-10:
-        // the chip said 2 while the list held 1).
-        assert_eq!(remote_bucket(None, true), Bucket::Attention);
-        assert_eq!(remote_bucket(None, false), Bucket::Stale);
-    }
-
     #[test]
     fn the_next_one_cycles_and_starts_at_the_first() {
         assert_eq!(next_index(3, None), 0);
@@ -660,13 +417,10 @@ mod tests {
     }
 
     /// 「为啥有个圆圈」(11-10): a state this build cannot tell draws `?`, not 停着's ring,
-    /// on another machine's rows (both layouts) and on a terminal here with no conversation.
-    /// Split needles: this file holds the test too, so a whole one would always be found.
+    /// on a terminal with no conversation. Another machine's rows are its sessions, whose
+    /// state this build works out itself.
     #[test]
     fn a_state_nobody_said_is_not_drawn_as_stopped() {
-        let rows = include_str!("sidebar_machines.rs");
-        assert!(rows.contains(concat!("known: said", ".is_some()")));
-        assert!(rows.contains(concat!("sidebar_flat::", "flat_unknown()")));
         let below = include_str!("machines.rs");
         assert!(!below.contains("then_some(Status::Stale)"));
         assert!(below.contains("widgets::unknown_mark("));

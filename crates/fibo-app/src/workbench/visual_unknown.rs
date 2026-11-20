@@ -1,15 +1,21 @@
 //! `-unknown`: rows whose state this build cannot tell, for screenshots. A terminal here
-//! that no conversation is tied to, and another machine listing one session in a state
-//! word this build does not know and one Agent no conversation is tied to. None of them
-//! may draw 停着's ring. A third session there runs with subagents under its row. Its host keeps the first in 置顶, so the column lists it there.
+//! that no conversation is tied to, and another machine, studio, whose workbench holds a
+//! few of this machine's sessions: one runs with subagents under its row, one Agent there
+//! has no conversation, and its host keeps the first in 置顶, so the column lists it there.
 use super::Workbench;
-use fibo_remote::protocol::{Card, Space};
+use gpui::{AppContext, Context, Window};
 
 impl Workbench {
-    pub(super) fn visual_unknown_state(&mut self, flag: Option<&str>) {
+    pub(super) fn visual_unknown_state(
+        &mut self,
+        flag: Option<&str>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         // Every page drops it first: one such machine, and none on the pages after.
         self.machines
             .retain(|m| m.view.lock().unwrap().spec.host != "studio");
+        self.visual_set_host_view("studio", None);
         if flag != Some("unknown") {
             return;
         }
@@ -35,51 +41,57 @@ impl Workbench {
             self.store.set_recognition(recognition);
         }
         let now = crate::model::time::now();
-        let card = |id: &str, extra: serde_json::Value| -> Card {
-            let mut base = serde_json::json!({
-                "id": id, "space": "s1", "tab": id, "cwd": "/work/app",
-                "phase": "idle", "agent": "codex", "needs_you": false,
-                "updated": now.saturating_sub(600),
-            });
-            base.as_object_mut()
-                .unwrap()
-                .extend(extra.as_object().unwrap().clone());
-            serde_json::from_value(base).unwrap()
+        // Studio's workspace: a running session of this machine's, with two subagents, and
+        // two more, the first of them in its 置顶; and a terminal of its own that no
+        // conversation is tied to.
+        let mut ws = self.workspace.clone();
+        let running = |s: &fibo_core::model::AgentSession| {
+            crate::model::session_state::session_status(&ws, &self.attention.unseen, s).0
+                == fibo_core::status::Status::Running
         };
-        let spaces = vec![Space {
-            id: "s1".into(),
-            name: "app".into(),
-            cwd: "/work/app".into(),
-        }];
-        let terminals = vec![
-            card(
-                "r-new",
-                serde_json::json!({
-                    "session": "x", "title": "新版本才有的状态",
-                    "status": "someday", "status_label": "新状态",
-                }),
-            ),
-            card(
-                "r-unbound",
-                serde_json::json!({ "note": "codex · 看不到对话" }),
-            ),
-            // Known and running, with subagents its row lists as this machine's do.
-            card(
-                "r-subs",
-                serde_json::json!({
-                    "session": "y", "title": "跑完整套测试", "agent": "claude",
-                    "phase": "working", "status": "running",
-                    "subagents": [
-                        { "id": "a1", "name": "找出慢的测试", "started": now - 300, "ended": now - 240 },
-                        { "id": "a2", "name": "修 flaky 用例", "started": now - 200, "foreground": true },
-                    ],
-                }),
-            ),
-        ];
+        let open: Vec<_> = (ws.agent_sessions.iter())
+            .filter(|s| self.session_open(s) && self.session_hidden(s).is_none())
+            .collect();
+        let busy = open.iter().find(|s| running(s)).map(|s| s.id.clone());
+        let others: Vec<_> = (open.iter())
+            .filter(|s| !running(s))
+            .take(2)
+            .map(|s| {
+                (
+                    s.id.clone(),
+                    fibo_core::status::live_terminal(&ws, s).map(|t| t.id.clone()),
+                )
+            })
+            .collect();
+        let keep: Vec<String> = (busy.iter().cloned())
+            .chain(others.iter().map(|(id, _)| id.clone()))
+            .collect();
+        let pin = others.iter().find_map(|(_, t)| t.clone());
+        ws.agent_sessions.retain(|s| keep.contains(&s.id));
+        ws.pinned_terminals = Some(pin.into_iter().collect());
+        if let Some(id) = &busy
+            && let Some(c) = ws.content.get_mut(id)
+        {
+            std::sync::Arc::make_mut(c).subagents = serde_json::from_value(serde_json::json!([
+                { "id": "a1", "name": "找出慢的测试", "started": now - 300, "ended": now - 240 },
+                { "id": "a2", "name": "修 flaky 用例", "started": now - 200, "foreground": true },
+            ]))
+            .unwrap();
+        }
+        let mut recognition = self.store.recognition().clone();
+        recognition
+            .terminal_notes
+            .retain(|t, _| t == "dense-unknown");
+        let socket = std::env::temp_dir().join("fibo-visual-studio.sock");
+        let view = cx.new(|cx| Workbench::embedded(socket, ws.clone(), window, cx));
+        view.update(cx, |w, _| w.store.set_recognition(recognition.clone()));
+        let spaces = fibo_core::remote_cards::spaces(&ws).0;
+        let terminals = fibo_core::remote_cards::cards(&ws, &recognition, now);
         let spec = crate::machines::Spec::new("studio".into());
         let studio = crate::machines::Remote::fixed(spec, spaces, terminals);
-        studio.view.lock().unwrap().pins = Some(vec!["r-new".into()]);
+        studio.view.lock().unwrap().pins = ws.pinned_terminals.clone();
         self.machines.push(studio);
+        self.visual_set_host_view("studio", Some(view));
         self.facts.forget();
     }
 }

@@ -51,9 +51,11 @@ fn held() -> Option<Duration> {
 #[cfg(feature = "visual-test")]
 pub(in crate::workbench) mod probe {
     use std::sync::Mutex;
+    use std::sync::atomic::AtomicUsize;
     use std::time::Duration;
     /// The ring's age every frame shows while held, so two frames drawn apart match.
     pub(in crate::workbench) static HELD: Mutex<Option<Duration>> = Mutex::new(None);
+    pub(super) static REQUESTS: AtomicUsize = AtomicUsize::new(0);
 }
 
 impl Workbench {
@@ -118,11 +120,12 @@ impl Workbench {
         }
         let still = fibo_core::effect::reduce_motion();
         let held = held();
-        let s = strength(held.unwrap_or_else(|| landing.at.elapsed()), still);
+        let s = strength(held.unwrap_or_else(|| landing.at.elapsed()), still)?;
         if held.is_none() && !still {
+            #[cfg(feature = "visual-test")]
+            probe::REQUESTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             self.next_pane_frame(window);
         }
-        let s = s?;
         // The one solid control's color: the focus token is a mid gray on dark, and beside
         // a pane ringing in its state's color it did not read as where you went.
         let ink = T::color(T::accent());
@@ -162,6 +165,10 @@ impl Workbench {
     pub fn visual_landing(&self) -> Option<String> {
         let l = self.layout.landing.as_ref()?;
         strength(held().unwrap_or_else(|| l.at.elapsed()), false).map(|_| l.terminal.clone())
+    }
+
+    pub fn visual_landing_frame_requests() -> usize {
+        probe::REQUESTS.load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 

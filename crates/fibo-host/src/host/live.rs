@@ -4,8 +4,6 @@ use super::*;
 use fibo_platform::local;
 
 pub(super) type Frame = (u8, Arc<Vec<u8>>);
-/// Unread input above which mouse reports are dropped; the queue holds about 1 KiB.
-pub(super) const POINTER_BACKLOG: usize = 256;
 /// Input read off a viewer's socket but not yet written to the PTY; past this it is refused.
 const INBOX_LIMIT: usize = 4 << 20;
 pub(super) struct Subscriber {
@@ -35,6 +33,8 @@ impl Subscriber {
 pub(super) struct Live {
     pub(super) vt: Vt,
     pub(super) master: term::Master,
+    /// Where typing goes; see `input`. Never `master.write` under this terminal's lock.
+    pub(super) input: Input,
     pub(super) cols: u16,
     pub(super) rows: u16,
     pub(super) pid: u32,
@@ -400,17 +400,13 @@ pub(super) fn pump(
         let out = crate::prompt_modes::feed(&mut live.vt, &bytes[..n], &ends).into_owned();
         let response = std::mem::take(&mut *lock(&replies)?);
         if !response.is_empty() {
-            if let Err(e) = live.master.write(&response) {
-                eprintln!("terminal {id}: query reply: {e}");
-            }
+            live.input.reply(response);
         }
         live.broadcast(OUTPUT, out);
         let scan = live.reports.scan(&bytes[..n]);
         // A program asking whether we speak the status protocol gets its answer.
         if !scan.reply.is_empty() {
-            if let Err(e) = live.master.write(&scan.reply) {
-                eprintln!("terminal {id}: program status probe: {e}");
-            }
+            live.input.reply(scan.reply);
         }
         if let Some(said) = scan.change {
             // Host before Live is the lock order; release this terminal first.
@@ -567,27 +563,29 @@ pub(super) fn attach(
     {
         let (inbox, ended, tx) = (Arc::clone(&inbox), Arc::clone(&ended), tx.clone());
         let mut reader = stream.try_clone()?;
-        thread::spawn(move || loop {
-            match super::client::request_frame(&mut reader) {
-                // A complete frame this host cannot read gets an error and the rest still
-                // go through; only a broken stream ends the connection.
-                Ok(Err(unsupported)) => {
-                    if let Ok(bytes) = serde_json::to_vec(&Reply::Error(unsupported)) {
-                        let _ = tx.try_send((ACK, Arc::new(bytes)));
-                    }
-                }
-                Ok(Ok(request)) => {
-                    if inbox.push(request) == Err(fibo_core::outbox::Refused::Full) {
-                        let refused = Reply::Error("输入积压超过 4 MiB，这段没写进终端".into());
-                        if let Ok(bytes) = serde_json::to_vec(&refused) {
+        thread::spawn(move || {
+            loop {
+                match super::client::request_frame(&mut reader) {
+                    // A complete frame this host cannot read gets an error and the rest still
+                    // go through; only a broken stream ends the connection.
+                    Ok(Err(unsupported)) => {
+                        if let Ok(bytes) = serde_json::to_vec(&Reply::Error(unsupported)) {
                             let _ = tx.try_send((ACK, Arc::new(bytes)));
                         }
                     }
-                }
-                Err(e) => {
-                    *ended.lock().unwrap_or_else(|p| p.into_inner()) = Some(e);
-                    inbox.close();
-                    return;
+                    Ok(Ok(request)) => {
+                        if inbox.push(request) == Err(fibo_core::outbox::Refused::Full) {
+                            let refused = Reply::Error("输入积压超过 4 MiB，这段没写进终端".into());
+                            if let Ok(bytes) = serde_json::to_vec(&refused) {
+                                let _ = tx.try_send((ACK, Arc::new(bytes)));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        *ended.lock().unwrap_or_else(|p| p.into_inner()) = Some(e);
+                        inbox.close();
+                        return;
+                    }
                 }
             }
         });
@@ -604,18 +602,20 @@ pub(super) fn attach(
                     return Err(io::Error::other("只读或进程已退出；需明确接管"));
                 }
                 match request {
-                    // A mouse report is dropped once the program falls behind: written into
-                    // a nearly full input queue it can be cut after its ESC, and the program
-                    // then reads the rest as typed text ("[<65;20;10M" in Codex's input box).
-                    Request::Input { lossy: true, .. }
-                        if live.master.backlog().is_some_and(|n| n > POINTER_BACKLOG) => {}
                     Request::Input { bytes, lossy } => {
                         if bytes.len() > 64 * 1024 {
                             return Err(io::Error::other("单次输入超过 64 KiB"));
                         }
-                        live.master.write(&bytes)?;
                         if !lossy {
                             live.input_at = Some(Instant::now());
+                        }
+                        // The program may wait for us to read its output before reading this.
+                        let input = live.input.clone();
+                        drop(live);
+                        if lossy {
+                            input.write_pointer(bytes)?;
+                        } else {
+                            input.write(bytes)?;
                         }
                     }
                     Request::Scheme(scheme) => live.vt.set_scheme(scheme)?,
@@ -666,7 +666,7 @@ pub(super) fn attach(
         let settled = (|| -> io::Result<()> {
             if typed_ok {
                 // The user is answering here; the prompt is no longer waiting on them.
-                lock(&host)?.set_screen_wait(&terminal_id, None)?;
+                lock(&host)?.answer_screen_wait(&terminal_id)?;
             }
             if submitted_ok {
                 record_submission(&host, &terminal_id)?;

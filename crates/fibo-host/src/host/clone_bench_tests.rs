@@ -64,7 +64,8 @@ pub(super) fn big_workspace(n: usize) -> Workspace {
                     .collect(),
                 model: "gpt-5-codex".into(),
                 ..Content::default()
-            },
+            }
+            .into(),
         );
     }
     w

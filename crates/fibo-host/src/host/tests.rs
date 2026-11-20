@@ -29,6 +29,7 @@ pub(super) fn fixture() -> (Host, std::path::PathBuf) {
         myself: std::sync::Weak::new(),
         http_asks: HashMap::new(),
         screen_waits: HashMap::new(),
+        screen_answered: HashMap::new(),
         title_busy: HashMap::new(),
         screen_busy: HashMap::new(),
         hooks: Default::default(),
@@ -71,7 +72,9 @@ fn snapshot_keeps_only_retained_content_and_applies_screen_wait_without_mutating
         session("historical", 0, Some("history"), false),
     ];
     for id in ["expired", "live", "historical", "orphan"] {
-        host.workspace.content.insert(id.into(), Content::default());
+        host.workspace
+            .content
+            .insert(id.into(), std::sync::Arc::new(Content::default()));
     }
     let seen = crate::screen_rules::explain(
         crate::screen_rules::bundled(Agent::Claude),
@@ -101,9 +104,15 @@ fn snapshot_keeps_only_retained_content_and_applies_screen_wait_without_mutating
     assert_eq!(live.waiting_episode, 1);
     assert_eq!(live.approval, "Do you want to continue?");
     assert_eq!(live.signal, "画面");
-    assert_eq!(snapshot.content["historical"], Content::default());
+    assert_eq!(
+        snapshot.content["historical"],
+        std::sync::Arc::new(Content::default())
+    );
     assert_eq!(host.workspace.agent_sessions.len(), 4);
-    assert_eq!(host.workspace.content["live"], Content::default());
+    assert_eq!(
+        host.workspace.content["live"],
+        std::sync::Arc::new(Content::default())
+    );
     host.workspace.agent_sessions.clear();
     assert!(host.snapshot().content.is_empty());
     drop(host);
@@ -121,7 +130,9 @@ fn an_approved_dialog_runs_again_once_the_screen_ticks() {
         signal_at: 100,
         ..Content::default()
     };
-    host.workspace.content.insert("live".into(), asked);
+    host.workspace
+        .content
+        .insert("live".into(), std::sync::Arc::new(asked));
     // Still on screen: waiting, even with a timer line under the dialog.
     let seen = crate::screen_rules::explain(
         crate::screen_rules::bundled(Agent::Claude),
@@ -149,7 +160,7 @@ fn a_program_report_outranks_screen_guesses_and_ends_with_its_program() {
     host.workspace.agent_sessions = vec![session("live", 0, Some("t"), true)];
     host.workspace
         .content
-        .insert("live".into(), Content::default());
+        .insert("live".into(), std::sync::Arc::new(Content::default()));
     // The title spins, but the program says it is waiting on the user.
     host.title_busy.insert("t".into(), ("live".into(), 1));
     let said = |state: &str, msg: &str| Said {

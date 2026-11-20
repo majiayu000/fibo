@@ -13,6 +13,13 @@ impl Index {
             Ok(())
         })
     }
+    /// The user's input answered what the session waits on (`Content::answer`).
+    pub fn answered(&self, path: &str) -> io::Result<()> {
+        self.amend(path, |parser, at, _| {
+            parser.card.answer(at);
+            Ok(())
+        })
+    }
     /// One poll of a waiting session. `status` is the CLI's answer, if it gave one; either
     /// way a subagent's dialog ends here once `children` no longer reports it. Returns
     /// whether the card may have changed.
@@ -136,6 +143,7 @@ impl Index {
             if probe.card.turn != fibo_core::content::Turn::Unknown {
                 parser.card.turn = probe.card.turn;
                 parser.card.turn_started = probe.card.turn_started;
+                parser.card.waited = probe.card.waited;
                 parser.card.turn_key = probe.card.turn_key;
                 return Ok(());
             }

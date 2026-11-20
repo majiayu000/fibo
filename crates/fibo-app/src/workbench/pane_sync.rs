@@ -76,10 +76,17 @@ impl Workbench {
                     .terminal
                     .as_ref()
                     .is_some_and(|t| self.layout.panes.contains_key(t));
-                live_phase(&self.workspace, s).map(|p| (s.id.clone(), p, shown))
+                let key = self
+                    .workspace
+                    .content
+                    .get(&s.id)
+                    .map(|c| c.turn_key.clone());
+                live_phase(&self.workspace, s)
+                    .map(|p| (s.id.clone(), p, shown, key.unwrap_or_default()))
             })
             .collect();
-        track_unseen(&mut self.attention.phases, &mut self.attention.unseen, live);
+        let a = &mut self.attention;
+        track_unseen(&mut a.phases, &mut a.seen, &mut a.unseen, live);
         self.mark_pane_agents(cx);
     }
 }

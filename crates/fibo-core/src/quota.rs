@@ -607,12 +607,18 @@ mod tests {
             ],
             ..Default::default()
         };
-        w.content.insert("a".into(), reading(now - 600, 40));
-        w.content.insert("b".into(), reading(now - 60, 42));
-        w.content.insert("c".into(), reading(now - 30, 7));
         w.content
-            .insert("old".into(), reading(now - SHOWN_FOR - 1, 99));
-        w.content.insert("none".into(), Content::default());
+            .insert("a".into(), std::sync::Arc::new(reading(now - 600, 40)));
+        w.content
+            .insert("b".into(), std::sync::Arc::new(reading(now - 60, 42)));
+        w.content
+            .insert("c".into(), std::sync::Arc::new(reading(now - 30, 7)));
+        w.content.insert(
+            "old".into(),
+            std::sync::Arc::new(reading(now - SHOWN_FOR - 1, 99)),
+        );
+        w.content
+            .insert("none".into(), std::sync::Arc::new(Content::default()));
         let got: Vec<_> = latest(&w, &[], now)
             .into_iter()
             .map(|(a, q)| (a.key(), q.windows[0].used))
@@ -644,7 +650,8 @@ mod tests {
             agent_sessions: vec![session("c", Agent::Claude)],
             ..Default::default()
         };
-        w.content.insert("c".into(), reading(now - 600, 7));
+        w.content
+            .insert("c".into(), std::sync::Arc::new(reading(now - 600, 7)));
         let plugin = |at, used| reading(at, used).quota.unwrap();
         let newer = [(Agent::Claude, plugin(now - 60, 30))];
         let older = [(Agent::Claude, plugin(now - 6000, 90))];

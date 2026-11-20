@@ -15,7 +15,6 @@ mod unlinked;
 
 pub(super) use list_scroll::ListScroll;
 pub(super) use prefs::SidebarPrefs;
-pub(super) use unlinked::Unlinked;
 
 /// How a row's second line opens when the session asks you something.
 pub(super) const ASKS: &str = tk!("问你：");
@@ -79,6 +78,26 @@ impl Workbench {
     /// what `status::needs_you` counts, so the sidebar, the chip and the board agree. A
     /// row whose state would ask but is not the terminal's conversation any more (a
     /// resume not taken yet) waits with the stopped ones, its dot still saying why.
+    /// A row's second line, as the chosen preset shows it, from the workbench `from` of
+    /// the machine the session is on.
+    pub(super) fn listed_detail(
+        &self,
+        from: &Workbench,
+        l: &Listed,
+        current: bool,
+    ) -> Option<String> {
+        match self.sidebar.preset().detail {
+            Detail::Never => None,
+            Detail::Always => from.row_detail(l.0, l.1),
+            Detail::Attention => {
+                (matches!(from.row_bucket(l), Bucket::Attention | Bucket::Running)
+                    || l.1 == Status::Background
+                    || current)
+                    .then(|| from.row_detail(l.0, l.1))
+                    .flatten()
+            }
+        }
+    }
     pub(super) fn row_bucket(&self, l: &Listed) -> Bucket {
         match bucket(l.1) {
             Bucket::Attention if !self.workspace.needs_you(l.0, crate::model::time::now()) => {
