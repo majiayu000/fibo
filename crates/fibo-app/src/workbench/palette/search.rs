@@ -102,12 +102,13 @@ impl Workbench {
             }
             return sections;
         }
+        let needle = SearchQuery::new(query);
         let latest_ask = |s: &AgentSession| {
             self.workspace.content.get(&s.id).and_then(|c| {
                 c.asks
                     .iter()
                     .rev()
-                    .find(|q| contains(&q.text, query))
+                    .find(|q| needle.matches(&q.text))
                     .map(|q| q.text.clone())
             })
         };
@@ -122,15 +123,12 @@ impl Workbench {
                     .get(&s.id)
                     .and_then(|c| c.asks.first().filter(|_| c.first_ask_known))
                     .map_or("", |q| q.text.as_str());
-                contains(
-                    &format!(
-                        "{} {first} {} {}",
-                        self.session_title(s),
-                        s.cli_session_id,
-                        s.cwd
-                    ),
-                    query,
-                )
+                needle.matches(&format!(
+                    "{} {first} {} {}",
+                    self.session_title(s),
+                    s.cli_session_id,
+                    s.cwd
+                ))
             })
             .map(|s| {
                 titled.insert(s.id.as_str());
@@ -152,7 +150,7 @@ impl Workbench {
             .workspace
             .tasks
             .iter()
-            .filter(|t| contains(&format!("{} {}", t.title, t.description), query))
+            .filter(|t| needle.matches(&format!("{} {}", t.title, t.description)))
             .map(|t| Hit::Task(t.id.clone()))
             .collect();
         let pane = self.nav.focused.clone();
@@ -160,7 +158,7 @@ impl Workbench {
             .map(|p| self.actions_for(&p))
             .unwrap_or_default()
             .into_iter()
-            .filter(|a| contains(&format!("{} {}", a.title, a.command), query))
+            .filter(|a| needle.matches(&format!("{} {}", a.title, a.command)))
             .filter_map(|a| {
                 fibo_core::action::all()
                     .iter()
@@ -174,37 +172,35 @@ impl Workbench {
             .filter(|p| {
                 // Chinese words always match; the current language's word too.
                 let words = format!("{} {}", not_ui!("左栏 侧栏 视图"), t!("左栏视图"));
-                contains(
-                    &format!("{words} {} {}", p.name, fibo_core::i18n::say(&p.name)),
-                    query,
-                )
+                needle.matches(&format!(
+                    "{words} {} {}",
+                    p.name,
+                    fibo_core::i18n::say(&p.name)
+                ))
             })
             .map(|p| Hit::View(p.id.clone()))
             .collect();
-        let tools: Vec<Hit> = contains(
-            &format!(
+        let tools: Vec<Hit> = needle
+            .matches(&format!(
                 "{} {}",
                 not_ui!("本机诊断 诊断 卡顿 占用 CPU GPU 内存 diagnostics"),
                 t!("本机诊断")
-            ),
-            query,
-        )
-        .then_some(Hit::Diagnostics)
-        .into_iter()
-        .chain(
-            contains(
-                &format!(
-                    "{} {}",
-                    not_ui!("Agent Hook hooks 钩子 安装 卸载 状态不准 审批 claude"),
-                    t!("安装或卸载 Agent 的 Hook")
-                ),
-                query,
+            ))
+            .then_some(Hit::Diagnostics)
+            .into_iter()
+            .chain(
+                needle
+                    .matches(&format!(
+                        "{} {}",
+                        not_ui!("Agent Hook hooks 钩子 安装 卸载 状态不准 审批 claude"),
+                        t!("安装或卸载 Agent 的 Hook")
+                    ))
+                    .then_some(Hit::Hooks),
             )
-            .then_some(Hit::Hooks),
-        )
-        .chain(self.machine_hits(query))
-        .chain(self.space_hits(query))
-        .collect();
+            .chain(self.machine_hits(query))
+            .chain(self.space_hits(query))
+            .collect();
+        // Typed queries select the first row without searching just to find its index.
         for (title, hits) in [
             (t!("会话"), sessions),
             (t!("原话"), quotes),
@@ -227,8 +223,8 @@ impl Workbench {
     }
     /// Where the selection starts: on the first session, so its preview shows at once;
     /// ↑ reaches 新建会话 above it.
-    pub(super) fn first_session_row(&self, query: &str) -> usize {
-        self.search_sections(query)
+    pub(super) fn first_recent_session_row(&self) -> usize {
+        self.search_sections("")
             .iter()
             .flat_map(|s| &s.hits)
             .position(|h| matches!(h, Hit::Session { .. } | Hit::Quote { .. }))
@@ -245,11 +241,14 @@ impl Workbench {
     }
     /// ↑ ↓ move through every row; Tab and ⇧Tab jump between groups.
     pub(super) fn search_key(&mut self, event: &gpui::KeyDownEvent, cx: &mut Context<Self>) {
-        if self.search.field.read(cx).composing() {
+        let k = &event.keystroke;
+        if !matches!(k.key.as_str(), "up" | "down" | "tab")
+            || self.search.field.read(cx).composing()
+        {
             return;
         }
-        let k = &event.keystroke;
-        let sizes: Vec<usize> = self
+        // Recency and the available actions can change between painting and this key.
+        let sizes: Vec<_> = self
             .search_sections(&self.search_query(cx))
             .iter()
             .map(|s| s.hits.len())

@@ -1,9 +1,46 @@
 //! Search matching and palette list movement.
 use std::ops::Range;
 
-pub fn contains(text: &str, query: &str) -> bool {
-    !match_ranges(text, query).is_empty()
+/// A query shared across the titles and messages checked by one search.
+pub struct SearchQuery {
+    needle: Vec<char>,
 }
+
+impl SearchQuery {
+    pub fn new(query: &str) -> Self {
+        Self {
+            needle: query.chars().flat_map(char::to_lowercase).collect(),
+        }
+    }
+
+    pub fn matches(&self, text: &str) -> bool {
+        let Some((&first, rest)) = self.needle.split_first() else {
+            return false;
+        };
+        let mut chars = text.chars();
+        while let Some(c) = chars.next() {
+            if lower_matches(c, first) {
+                let mut tail = chars.clone();
+                if rest
+                    .iter()
+                    .all(|&needle| tail.next().is_some_and(|c| lower_matches(c, needle)))
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+}
+
+fn lower_matches(c: char, needle: char) -> bool {
+    if c.is_ascii() {
+        c.to_ascii_lowercase() == needle
+    } else {
+        c.to_lowercase().eq(std::iter::once(needle))
+    }
+}
+
 /// Byte ranges of every case-insensitive, non-overlapping match of `query` in `text`.
 pub fn match_ranges(text: &str, query: &str) -> Vec<Range<usize>> {
     let needle: Vec<char> = query.chars().flat_map(char::to_lowercase).collect();
@@ -17,7 +54,7 @@ pub fn match_ranges(text: &str, query: &str) -> Vec<Range<usize>> {
         let hit = chars[i..i + needle.len()]
             .iter()
             .zip(&needle)
-            .all(|((_, c), n)| c.to_lowercase().eq(std::iter::once(*n)));
+            .all(|((_, c), n)| lower_matches(*c, *n));
         if hit {
             let end = chars
                 .get(i + needle.len())
@@ -115,6 +152,29 @@ mod tests {
         assert_eq!(match_ranges("Fix Tab bar", "tab"), vec![4..7]);
         assert!(match_ranges("abc", "").is_empty());
         assert!(match_ranges("ab", "abc").is_empty());
+    }
+
+    #[test]
+    fn boolean_search_agrees_with_highlights() {
+        for (text, query, found) in [
+            ("修复标签栏和标签", "标签", true),
+            ("Fix Tab bar", "tab", true),
+            ("ababc", "abc", true),
+            ("🔥Kelvin", "kelvin", true),
+            ("Été", "été", true),
+            ("i\u{307}", "İ", true),
+            ("İ", "i", false),
+            ("标签", "标签栏", false),
+            ("abc", "bcd", false),
+            ("abc", "", false),
+        ] {
+            assert_eq!(
+                SearchQuery::new(query).matches(text),
+                found,
+                "{text:?} {query:?}"
+            );
+            assert_eq!(!match_ranges(text, query).is_empty(), found);
+        }
     }
 
     #[test]

@@ -144,8 +144,9 @@ impl Workbench {
                                 && !query.is_empty()
                             {
                                 let said = c.asks.len();
+                                let needle = SearchQuery::new(query);
                                 let matched =
-                                    c.asks.iter().filter(|q| contains(&q.text, query)).count();
+                                    c.asks.iter().filter(|q| needle.matches(&q.text)).count();
                                 if matched > 0 {
                                     sub.push_str(&t!(
                                         " · 你说过 {said} 句，{matched} 句含「{query}」",
