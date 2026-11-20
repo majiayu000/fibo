@@ -326,6 +326,8 @@
 "不认识的按键 {key}" = "Unknown key {key}"
 "一次发 1 到 64 个按键" = "Send 1 to 64 keys at a time"
 "一次发 1 字节到 64 KiB" = "Send 1 byte to 64 KiB at a time"
+"后台正在交接，请稍后再发送" = "The host is handing over. Try sending again in a moment."
+"仍有终端输入待写，交接已取消" = "The host canceled handoff because terminal input is still pending."
 "画面上已经没有这个信任提示了，可能已经答过" = "This trust prompt is no longer on screen; it may already have been answered"
 "光标没有移到「信任」那一项，没有按回车，请打开终端处理" = "The cursor did not reach Trust. Enter was not sent; open the terminal to answer."
 "这个终端里没有 Agent 对话" = "There is no agent conversation in this terminal"

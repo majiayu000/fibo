@@ -136,23 +136,52 @@ pub(super) fn request_frame(stream: &mut local::Stream) -> io::Result<Result<Req
 
 /// A newer host takes over: every running terminal goes to it as a snapshot plus its PTY
 /// descriptor, and this host exits without signalling the programs. Global and terminal
-/// locks stay held to the end, so no output is fed, no state is committed and no
-/// terminal is started after the snapshots are taken.
-pub(super) fn hand_over(mut stream: local::Stream, shared: &Shared) -> io::Result<()> {
+/// locks stay held from the snapshots onward, so no output is fed, no state is committed
+/// and no terminal is started after the snapshots are taken.
+pub(super) fn hand_over(stream: local::Stream, shared: &Shared) -> io::Result<()> {
     if !term::CAN_HAND_OVER {
         return Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "this system cannot hand a running terminal over",
         ));
     }
-    let host = lock(shared)?;
-    let mut held = vec![];
-    for (id, terminal) in &host.terminals {
-        let live = lock(terminal)?;
-        if !live.exited {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let host = lock(shared)?;
+        let mut held = vec![];
+        let mut paused = vec![];
+        let mut pending = None;
+        for (id, terminal) in &host.terminals {
+            let live = lock(terminal)?;
+            if live.exited {
+                continue;
+            }
+            let Some(pause) = live.input.pause_if_idle()? else {
+                pending = Some(live.input.clone());
+                break;
+            };
+            paused.push(pause);
             held.push((id.clone(), live));
         }
+        let Some(pending) = pending else {
+            let result = hand_over_paused(stream, &mut held);
+            // On failure, resume replies before the read pumps can take the terminal locks.
+            drop(paused);
+            return result;
+        };
+        // A write may be waiting for a program to finish printing. Leave the old host
+        // and all its terminals free to read and reply while the input drains.
+        drop(paused);
+        drop(held);
+        drop(host);
+        pending.wait_until_idle(deadline)?;
     }
+}
+
+fn hand_over_paused(
+    mut stream: local::Stream,
+    held: &mut [(String, std::sync::MutexGuard<'_, Live>)],
+) -> io::Result<()> {
     let terminals: Vec<_> = held
         .iter()
         .map(|(id, live)| Handed {
@@ -166,7 +195,7 @@ pub(super) fn hand_over(mut stream: local::Stream, shared: &Shared) -> io::Resul
         .collect();
     stream.set_write_timeout(Some(Duration::from_secs(10)))?;
     send(&mut stream, CONTROL, &Reply::Handoff { terminals })?;
-    for (_, live) in &mut held {
+    for (_, live) in held.iter_mut() {
         for chunk in live.vt.snapshot()?.chunks(MAX_FRAME - 1) {
             write_frame(&mut stream, SNAPSHOT, chunk)?;
         }
