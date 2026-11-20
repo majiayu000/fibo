@@ -1,6 +1,8 @@
 //! `frames-plugins`: what 设置 › 插件 and the richer themes cost on the probe's large workspace.
 //! - `settings-open`: creating the settings view, which reads every plugin's own files. The
 //!   middle of several opens.
+//! - `settings-plugins-first-frame`: turning to 插件 the first time and drawing it, catalog
+//!   read and every word on it shaped and drawn for the first time; a whole-window refresh.
 //! - `frames-cardrest`: the page of animation cards drawn again with none playing. Nothing
 //!   asks for one by itself; this is what any other change on that page costs.
 //! - `frames-cardplay`: a frame with one card playing, the costliest animation of them all

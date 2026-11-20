@@ -161,6 +161,10 @@ fn state() -> &'static RwLock<TerminalText> {
 pub fn current() -> TerminalText {
     state().read().unwrap().clone()
 }
+#[cfg(feature = "visual-test")]
+pub fn visual_cursor_blink(enabled: bool) -> bool {
+    std::mem::replace(&mut state().write().unwrap().cursor_blink, enabled)
+}
 pub fn size() -> f32 {
     state().read().unwrap().size
 }

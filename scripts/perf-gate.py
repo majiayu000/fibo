@@ -14,7 +14,7 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
   within SHARE_BUDGET of `pane-share` (0.14 here; 1.0 with the
   sidebar drawn each frame);
 - terminal output must not draw the sidebar again (it drew the whole sidebar each
-  frame once: 7x the instructions);
+  frame once: 7x the instructions), nor the tab strip (about 0.24 M a tab);
 - a frame of the left column's motion (scripts' frames-motion: 今天 opening, held midway)
   must stay within BUDGET too: the column's motion draws the sidebar each display frame
   for a third of a second a click;
@@ -31,7 +31,9 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
   settings, and a terminal's frame under themes with a picture or a see-through window must
   stay within BUDGET (or, without a counter, within SHARE_BUDGET of a full redraw or a plain
   terminal frame in the same process). Pointing at a card once drew 79 M a frame, the whole
-  page laid out again. A stopped page must ask for no frames, a reused page must match a
+  page laid out again. Opening 插件 the first time (its catalog read, its words shaped and
+  drawn for the first time) must stay within BUDGET too: one read is a few M of some 350,
+  so a cold file is not what moves it. A stopped page must ask for no frames, a reused page must match a
   fresh one pixel for pixel, and every animation and theme must really have played or
   applied: a gate over a static picture passes whatever the code does. What the compositor
   spends on a see-through window is not here: see scripts/theme-live.py;
@@ -100,7 +102,7 @@ def main():
     bindir = pathlib.Path(sys.argv[1]).resolve()
     out = pathlib.Path(sys.argv[2] if len(sys.argv) > 2 else ROOT / 'target/perf-gate').resolve()
     fails = []
-    text = probe(bindir, out / 'frames', 'frames-pane,frames-changes,frames-main,frames-motion,frames-arrive,redraw-check', catch_up=False)
+    text = probe(bindir, out / 'frames', 'title-check,frames-pane,frames-changes,frames-main,frames-motion,frames-arrive,redraw-check,recognition-check', catch_up=False)
     measured = {k: float(v) for k, v in re.findall(r'(frames-\w+): [^\n]*?([\d.]+) M instructions', text)}
     ms = {k: float(v) for k, v in re.findall(r'(frames-\w+): ([\d.]+) ms CPU', text)}
     if set(measured) != {'frames-pane', 'frames-changes', 'frames-changesdraw', 'frames-main', 'frames-motion', 'frames-arrive'} or set(ms) != set(measured):
@@ -119,6 +121,10 @@ def main():
     elif not 1 <= float(scrolled.group(1)) <= 40:
         fails.append(f'a scrolled line shaped {scrolled.group(1)} runs, 18 are new: '
                      'runs that only moved must keep their shapes, and 0 means nothing scrolled')
+    scroll_wakes = re.search(r'idle pane wakes (\d+)', scroll_text)
+    if not scroll_wakes or int(scroll_wakes[1]):
+        fails.append('scrolling a shell with no floating ask must leave its pane quiet: ' +
+                     (scroll_wakes[0] if scroll_wakes else 'no idle wake count'))
     panel = re.search(r'frames-changes: [^\n]*drawn before (\d+); drew again (\d+)', text)
     if not panel:
         fails.append('no frames-changes line in the probe output')
@@ -157,9 +163,9 @@ def main():
         if off_rows or off_draws:
             fails.append(f'turned off, the marks kept drawing: {off_rows} rows, {off_draws} draws')
     plugin_text = probe(bindir, out / 'plugins', 'frames-plugins', catch_up=False)
-    costs = dict(re.findall(r'^(frames-\w+|settings-open): [^\n]*?([\d.]+) M instructions', plugin_text, re.M))
+    costs = dict(re.findall(r'^(frames-\w+|settings-open|settings-plugins-first-frame): [^\n]*?([\d.]+) M instructions', plugin_text, re.M))
     plugin_ms = {k: float(v) for k, v in re.findall(r'^(frames-\w+): ([\d.]+) ms CPU', plugin_text, re.M)}
-    wanted = {'frames-cardplay', 'frames-cardrest', 'settings-open', 'frames-themeimage', 'frames-themepaper', 'frames-themeglass'}
+    wanted = {'frames-cardplay', 'frames-cardrest', 'settings-open', 'settings-plugins-first-frame', 'frames-themeimage', 'frames-themepaper', 'frames-themeglass'}
     if not wanted <= set(costs) or not {'frames-probefull', 'frames-cardplay'} <= set(plugin_ms) or len(re.findall(r'of the plain look', plugin_text)) != 3:
         fails.append(f'no plugin page numbers in the probe output: {sorted(costs)}')
     measured.update({k: float(costs[k]) for k in wanted & set(costs)})
@@ -189,6 +195,9 @@ def main():
             fails.append(f'redraw-check {step}: {verdict} (pictures in {out / "frames"})')
     if 'sidebar kept its draw true' not in redraw:
         fails.append('terminal output drew the sidebar again: ' + (redraw or 'no redraw-check line'))
+    strip = re.search(r'frames-pane: [^\n]*tab strip drew (\d+)', text)
+    if not strip or int(strip.group(1)):
+        fails.append(f'terminal output drew the tab strip {strip.group(1) if strip else "?"} times in 300 frames: it is a cached view')
     if not redraw:
         fails.append('no redraw-check line in the probe output')
     ring = re.search(r'focus ring: active (true|false), expired (true|false), extra frames (\d+)', redraw)
@@ -198,6 +207,26 @@ def main():
         fails.append(f'{ring[0]}: the probe must reach both sides of the fade')
     elif int(ring[3]):
         fails.append(f'{ring[0]}: an expired focus ring requested another frame')
+    recognition = re.search(
+        r'^recognition-check: (\d+) sidebar draws for (\d+) diagnostics updates; .*; '
+        r'metrics arrived (true|false); revision alone painted (true|false); '
+        r'phase painted (true|false), (\d+) px changed$', text, re.M)
+    if not recognition:
+        fails.append('no recognition status redraw result')
+    elif not int(recognition[2]) or recognition[3] != 'true':
+        fails.append(f'{recognition[0]}: the probe must receive the diagnostics')
+    elif recognition[5] != 'true' or not int(recognition[6]):
+        fails.append(f'{recognition[0]}: a change in recognition phase must still draw')
+    elif int(recognition[1]) or recognition[4] == 'true':
+        fails.append(f'{recognition[0]}: host bookkeeping drew the sidebar again')
+    titles = re.search(r'^title-check: (\d+) sidebar draws, (\d+) strip draws for (\d+) title changes; '
+                       r'.*; title arrived (true|false), (\d+) px changed$', text, re.M)
+    if not titles:
+        fails.append('no terminal title redraw result')
+    elif not int(titles[3]) or titles[2] != titles[3] or titles[4] != 'true' or not int(titles[5]):
+        fails.append(f'{titles[0]}: every changed title must reach the strip')
+    elif int(titles[1]):
+        fails.append(f'{titles[0]}: terminal titles drew the sidebar again')
 
     quiet = probe(bindir, out / 'catch-up', 'redraw-check', catch_up=True)
     # Counting catch-ups is not enough: a runner with a display draws the window by itself,

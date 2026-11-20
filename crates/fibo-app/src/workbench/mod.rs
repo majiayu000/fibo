@@ -381,23 +381,7 @@ impl Workbench {
                             cx.notify();
                             return;
                         };
-                        let revision = status.workspace_revision;
-                        this.follow_plugins(status.plugins_revision, cx);
-                        if let Some(view) = &this.settings {
-                            let remote = status.remote.clone();
-                            view.update(cx, |v, cx| {
-                                if v.remote != remote {
-                                    v.remote = remote;
-                                    cx.notify();
-                                }
-                            });
-                        }
-                        this.store.set_recognition(*status);
-                        if this.store.follow(revision, this.workspace.revision) {
-                            this.sync(cx);
-                        }
-                        this.mark_pane_agents(cx);
-                        cx.notify();
+                        this.receive_recognition(*status, cx);
                     })
                     .is_err()
                 {
@@ -655,6 +639,51 @@ impl Workbench {
         }
         self.sync_panes(cx);
     }
+    pub(crate) fn receive_recognition(
+        &mut self,
+        status: RecognitionStatus,
+        cx: &mut Context<Self>,
+    ) {
+        let revision = status.workspace_revision;
+        let previous = self.store.recognition();
+        let agents_changed = previous.terminal_agents != status.terminal_agents;
+        let remote_changed = previous.remote != status.remote;
+        let titles_changed = previous.terminal_titles != status.terminal_titles;
+        // Workspace refresh and plugin reload notify when they apply. Diagnostic counts
+        // and protocol capabilities are kept in Store without invalidating any view.
+        let redraw = self.store.link_down()
+            || agents_changed
+            || remote_changed
+            || previous.phase != status.phase
+            || previous.detail != status.detail
+            || previous.terminal_hints != status.terminal_hints
+            || previous.terminal_notes != status.terminal_notes
+            || previous.terminal_trust != status.terminal_trust
+            || previous.terminal_commands != status.terminal_commands
+            || previous.terminal_reports != status.terminal_reports
+            || previous.terminal_modes != status.terminal_modes;
+        self.follow_plugins(status.plugins_revision, cx);
+        if remote_changed && let Some(view) = &self.settings {
+            let remote = status.remote.clone();
+            view.update(cx, |v, cx| {
+                v.remote = remote;
+                cx.notify();
+            });
+        }
+        self.store.set_recognition(status);
+        if self.store.follow(revision, self.workspace.revision) {
+            self.sync(cx);
+        }
+        if agents_changed {
+            self.mark_pane_agents(cx);
+        }
+        if redraw {
+            cx.notify();
+        } else if titles_changed {
+            self.terminal_titles_changed(cx);
+        }
+    }
+
     /// Background refresh after the host publishes a newer revision. Runs beside user
     /// actions and coalesces bursts into one follow-up fetch.
     pub(super) fn sync(&mut self, cx: &mut Context<Self>) {

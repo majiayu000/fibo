@@ -65,6 +65,15 @@ fn since_gives_what_cached_then_a_filter_gives() {
         got.sort();
         assert_eq!(got, filtered, "since {since}");
     }
+    let mut recent = i.db.prepare(CACHED_RECENT).unwrap();
+    {
+        let mut rows = recent.query([901]).unwrap();
+        while rows.next().unwrap().is_some() {}
+    }
+    assert_eq!(
+        recent.get_status(rusqlite::StatementStatus::FullscanStep),
+        0
+    );
 }
 
 /// What `follow_associated` paid per log batch while an Agent was unbound: every log ever

@@ -1,6 +1,6 @@
 //! Drawing a pane: the grid and everything over and around it. Runs every frame.
 use super::paste::{copied_note, line_count};
-use super::{ASK_FLOAT_MS, Pane, SCROLLBAR_WIDTH, overlays};
+use super::{Pane, SCROLLBAR_WIDTH, overlays};
 use crate::{
     terminal::screen,
     ui::{theme::Theme as T, tone::Tone},
@@ -72,13 +72,6 @@ impl Render for Pane {
             self.viewport = vt.viewport().unwrap_or(self.viewport);
             if self.scrolled_back && self.viewport.0 != top {
                 self.ask.scrolled_at = Some(Instant::now());
-                cx.spawn(async move |this, cx| {
-                    cx.background_executor()
-                        .timer(std::time::Duration::from_millis(ASK_FLOAT_MS + 50))
-                        .await;
-                    let _ = this.update(cx, |_, cx| cx.notify());
-                })
-                .detach();
             }
             self.refresh_pinned(cx);
             match result {
@@ -220,6 +213,7 @@ impl Render for Pane {
                         focused,
                         pane.blink_on,
                     );
+                    pane.layout_cache.align_viewport(pane.viewport.0);
                     screen::paint_cached(
                         &pane.screen,
                         &font,

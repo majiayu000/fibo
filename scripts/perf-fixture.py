@@ -203,6 +203,30 @@ def prepare(root, bindir, N=2000, T=60, SPIN=0):
         raise
 
 
+def live(root, bindir, secs, sample=None):
+    home = root / 'home'
+    env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
+    app = subprocess.Popen([str(bindir / 'fibo-app'), '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def cpu():
+        t = subprocess.run(['ps', '-o', 'cputime=', '-p', str(app.pid)], capture_output=True, text=True, check=True).stdout.strip()
+        m, sec = t.split(':')
+        return int(m) * 60 + float(sec)
+
+    try:
+        time.sleep(10)
+        start, began = cpu(), time.monotonic()
+        if sample is None:
+            time.sleep(secs)
+        else:
+            sample(app.pid, secs)
+        end, elapsed = cpu(), time.monotonic() - began
+        return (end - start) / elapsed * 100
+    finally:
+        app.terminate()
+        app.wait(timeout=10)
+
+
 def main():
     signal.signal(signal.SIGTERM, interrupted)
     cmd = sys.argv[1]
@@ -225,17 +249,9 @@ def main():
         ok = r.returncode == 0 and (out / 'cpu.txt').exists()
         print((out / 'cpu.txt').read_text() if ok else f'probe exited {r.returncode}:\n' + r.stdout.decode()[-3000:])
     elif cmd == 'live':
-        bindir = pathlib.Path(sys.argv[3]); secs = int(sys.argv[4]) if len(sys.argv) > 4 else 20
-        env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(home), 'CODEX_HOME': str(home / '.codex'), 'CLAUDE_CONFIG_DIR': str(home / '.claude'), 'LANG': 'en_US.UTF-8'}
-        app = subprocess.Popen([str(bindir / 'fibo-app'), '--runtime', str(root / 'runtime')], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        def cpu():
-            t = subprocess.run(['ps', '-o', 'cputime=', '-p', str(app.pid)], capture_output=True, text=True).stdout.strip()
-            m, sec = t.split(':'); return int(m) * 60 + float(sec)
-        try:
-            time.sleep(10); a = cpu(); t0 = time.monotonic(); time.sleep(secs); b = cpu(); dt = time.monotonic() - t0
-            print(f'live: {(b - a) / dt * 100:.1f}% of a core over {dt:.0f}s')
-        finally:
-            app.terminate(); app.wait(timeout=10)
+        secs = int(sys.argv[4]) if len(sys.argv) > 4 else 20
+        cpu = live(root, pathlib.Path(sys.argv[3]), secs)
+        print(f'live: {cpu:.1f}% of a core over {secs}s')
 
 
 if __name__ == '__main__':

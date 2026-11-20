@@ -52,6 +52,18 @@ impl<V: Clone> Rows<V> {
     pub fn clear(&mut self) {
         self.rows.clear();
     }
+    /// Align retained shapes with their likely new viewport row. A run still
+    /// has to match in `get` before any shape is reused.
+    pub fn scroll(&mut self, from: usize, to: usize) {
+        let moved = from.abs_diff(to);
+        if moved != 0 && moved < self.rows.len() {
+            if to > from {
+                self.rows.rotate_left(moved);
+            } else {
+                self.rows.rotate_right(moved);
+            }
+        }
+    }
     /// Before a paint of `rows` rows.
     pub fn begin(&mut self, rows: usize) {
         self.moved = None;
@@ -134,6 +146,30 @@ mod tests {
         let mut shifted = lines[4..28].to_vec();
         shifted[0][0].col = 6;
         assert_eq!(paint(&mut cache, &shifted), 0);
+    }
+
+    #[test]
+    fn aligning_viewport_reuses_shifted_rows_in_place() {
+        let rows: Vec<_> = ["第一行", "第二行", "第三行"]
+            .map(|text| vec![run(0, text)])
+            .into();
+        let mut cache = Rows::default();
+        assert_eq!(paint(&mut cache, &rows), 3);
+
+        cache.scroll(10, 11);
+        cache.begin(3);
+        for (y, row) in rows[1..].iter().enumerate() {
+            let got = cache.get(y, 0, &row[0], || {
+                panic!("a shifted run should still be cached")
+            });
+            assert_eq!(got, &row[0].text);
+        }
+        assert!(cache.moved.is_none());
+
+        cache.scroll(11, 10);
+        cache.begin(3);
+        assert_eq!(cache.get(0, 0, &rows[0][0], || unreachable!()), "第一行");
+        assert!(cache.moved.is_none());
     }
 
     #[test]

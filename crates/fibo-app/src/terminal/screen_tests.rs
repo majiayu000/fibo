@@ -43,6 +43,27 @@ fn retained_capture_keeps_the_selection_on_its_text_through_scrolling() {
     assert_eq!(screen.selection, [None, None, None]);
 }
 #[test]
+fn default_blank_reuse_preserves_colored_padding_and_plain_spaces() {
+    let mut vt = Vt::new(16, 4).unwrap();
+    vt.feed(b"A\x1b[2;3H\x1b[48;2;180;20;40m  \x1b[0mZ");
+    let screen = capture(&vt).unwrap();
+    let row = &screen.rows[1];
+    let colored = row
+        .iter()
+        .find(|run| run.bg == Some(rgb(180, 20, 40)))
+        .expect("colored blanks must be painted");
+    assert_eq!(
+        (colored.col, colored.cols, colored.text.as_str()),
+        (2, 2, "  ")
+    );
+    assert!(
+        row.iter()
+            .any(|run| run.bg.is_none() && run.text.contains('Z'))
+    );
+    assert_eq!(screen.cells[0][15], (15, 1, ' '));
+}
+
+#[test]
 fn retained_capture_rebuilds_only_dirty_rows_and_clears_old_links() {
     let mut vt = Vt::new(40, 10).unwrap();
     vt.feed(b"\x1b[3;1H");
@@ -466,4 +487,46 @@ fn a_placeholder_box_is_not_the_width_of_a_character() {
     assert_eq!(own_glyph_width(None, None), None);
     assert_eq!(own_glyph_width(Some(ideograph), None), Some(ideograph));
     assert_eq!(own_glyph_width(Some(px(0.)), None), None);
+}
+#[test]
+fn path_words_end_at_the_same_chars_as_the_string_lookup_did() {
+    let old = |c: char| {
+        c.is_whitespace()
+            || "\"'`()[]{}<>|,;*".contains(c)
+            || not_ui!("。，、；：！？（）「」『』《》【】“”‘’…").contains(c)
+            || ('\u{2500}'..='\u{259f}').contains(&c)
+    };
+    for c in (0..0x3_0000).filter_map(char::from_u32) {
+        assert_eq!(separator(c), old(c), "{c:?}");
+    }
+}
+/// `cargo test --release -p fibo-app --features visual-test --bin fibo-app find_paths_instructions -- --ignored --nocapture`
+#[test]
+#[cfg(target_os = "macos")]
+#[ignore = "measurement, run by hand"]
+fn find_paths_instructions_on_a_dense_screen() {
+    fn instructions() -> u64 {
+        fibo_platform::inspect::usage(std::process::id()).map_or(0, |u| u.instructions)
+    }
+    let mut vt = Vt::new(120, 50).unwrap();
+    let mut bytes = Vec::new();
+    for i in 0..50 {
+        bytes.extend(
+            format!("  ⏺ 第 {i} 行 Update(crates/fibo-app/src/terminal/screen.rs:{i}) the answer runs on with words, 和 中文 标点，还有 v0.1.{i} 版本 here\r\n")
+                .bytes(),
+        );
+    }
+    vt.feed(&bytes);
+    let s = capture(&vt).unwrap();
+    assert!(!s.paths.is_empty());
+    let n = 200;
+    let start = instructions();
+    for _ in 0..n {
+        std::hint::black_box(find_paths(&s.cells, &s.wrapped, 120));
+    }
+    eprintln!(
+        "find_paths {:.3} M per call, {} paths",
+        (instructions() - start) as f64 / n as f64 / 1e6,
+        s.paths.len()
+    );
 }

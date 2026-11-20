@@ -116,6 +116,7 @@ impl Index {
             CREATE TABLE IF NOT EXISTS log_generations(path TEXT PRIMARY KEY,generation TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS log_files(path TEXT PRIMARY KEY,runtime TEXT NOT NULL,dev INTEGER NOT NULL,inode INTEGER NOT NULL,offset INTEGER NOT NULL,pending BLOB NOT NULL,discard INTEGER NOT NULL,cli_id TEXT,cwd TEXT,updated INTEGER NOT NULL);
             CREATE INDEX IF NOT EXISTS log_identity ON log_files(runtime,cli_id);
+            CREATE INDEX IF NOT EXISTS log_recent ON log_files(updated) WHERE cli_id IS NOT NULL;
             CREATE TABLE IF NOT EXISTS log_scan_roots(runtime TEXT NOT NULL,path TEXT NOT NULL,PRIMARY KEY(runtime,path));").map_err(err)?;
         crate::content::schema(&db)?;
         let roots = roots
@@ -599,17 +600,21 @@ impl Index {
         updated >= fibo_core::content::now().saturating_sub(self.recent_days.saturating_mul(86400))
     }
 }
+// Preserve table order for equally recent candidates while seeking to the recent rows.
+const CACHED_RECENT: &str = "SELECT runtime,cli_id,path,cwd,updated FROM log_files
+    INDEXED BY log_recent WHERE cli_id IS NOT NULL AND updated>=?1 ORDER BY rowid";
+
 pub fn cached(db: &Connection, since: u64) -> io::Result<Vec<Transcript>> {
-    // Every row is read unfiltered as before: the comparison costs the whole read 1.6%.
     let (sql, since) = match since {
-        0 => ("", None),
-        since => (" AND updated>=?1", Some(since as i64)),
+        0 => (
+            // Startup needs every row. Reading the entire secondary index and
+            // jumping back to fetch each row is slower than a table scan.
+            "SELECT runtime,cli_id,path,cwd,updated FROM log_files NOT INDEXED WHERE cli_id IS NOT NULL",
+            None,
+        ),
+        since => (CACHED_RECENT, Some(since as i64)),
     };
-    let mut query = db
-        .prepare_cached(&format!(
-            "SELECT runtime,cli_id,path,cwd,updated FROM log_files WHERE cli_id IS NOT NULL{sql}"
-        ))
-        .map_err(err)?;
+    let mut query = db.prepare_cached(sql).map_err(err)?;
     let mut rows = query
         .query(rusqlite::params_from_iter(since))
         .map_err(err)?;

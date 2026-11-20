@@ -199,8 +199,13 @@ impl Workbench {
     ) -> gpui::AnyElement {
         if column == Column::Running
             && animate
-            && let Some(arc) =
-                self.turning_mark(Status::Running, "icons/arc.svg", HEAD_ICON, false, cx)
+            && let Some(arc) = self.turning_mark(
+                Status::Running,
+                "icons/arc.svg",
+                HEAD_ICON,
+                crate::workbench::redraw::Layer::Frame,
+                cx,
+            )
         {
             return div()
                 .relative()

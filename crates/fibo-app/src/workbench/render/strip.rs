@@ -2,7 +2,44 @@
 use super::*;
 
 impl Workbench {
-    pub(super) fn tab_strip(
+    /// What the strip's view draws (`redraw/tab_strip.rs`). Standard style: the space after
+    /// 「＋」 that moves the window, which grows with the strip's free width, comes with it.
+    pub(in crate::workbench) fn strip_row(&mut self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        // Whenever the current tab changes (a click, the sidebar, a shortcut, a new tab),
+        // scroll the strip so that tab is in view: the strip always shows where you are.
+        if self.layout.revealed_tab != self.nav.tab {
+            if let Some(ix) = self.nav.tab.as_ref().and_then(|id| {
+                self.workspace
+                    .tabs
+                    .iter()
+                    .filter(|t| t.space == self.nav.space)
+                    .position(|t| &t.id == id)
+            }) {
+                self.layout.tab_scroll.scroll_to_item(ix);
+            }
+            self.layout.revealed_tab = self.nav.tab.clone();
+        }
+        let terminal_style = crate::ui::style::current(cx) == crate::ui::style::Style::Terminal;
+        // Over the overview and 逐个清理 no tab is current, as the main area shows them.
+        let page_open =
+            self.tasks.form.is_none() && (!self.overview.cleanup.is_empty() || self.nav.overview);
+        let space_name = (self.workspace.spaces.iter())
+            .find(|s| s.id == self.nav.space)
+            .map_or(t!("工作空间"), |s| s.name.as_str());
+        let tabs = self.tab_strip(terminal_style, page_open, space_name, cx);
+        if terminal_style {
+            return tabs.size_full().into_any_element();
+        }
+        div()
+            .size_full()
+            .flex()
+            .items_center()
+            .gap(px(T::S10))
+            .child(tabs)
+            .child(self.title_drag_area(cx).min_w(px(T::S20 * 2.)))
+            .into_any_element()
+    }
+    fn tab_strip(
         &self,
         terminal_style: bool,
         page_open: bool,
@@ -282,8 +319,6 @@ impl Workbench {
         // the space, the tabs, then what needs you on the right.
         if terminal_style {
             div()
-                .h(px(T::FOOTER))
-                .flex_shrink_0()
                 .flex()
                 .items_center()
                 .gap(px(T::S8))

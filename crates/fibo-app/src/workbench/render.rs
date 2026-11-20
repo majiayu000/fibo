@@ -22,20 +22,6 @@ impl Render for Workbench {
         self.settle_hosts(window, cx);
         self.follow_space_theme(cx);
         self.settle_changes(window, cx);
-        // Whenever the current tab changes (a click, the sidebar, a shortcut, a new tab),
-        // scroll the strip so that tab is in view: the strip always shows where you are.
-        if self.layout.revealed_tab != self.nav.tab {
-            if let Some(ix) = self.nav.tab.as_ref().and_then(|id| {
-                self.workspace
-                    .tabs
-                    .iter()
-                    .filter(|t| t.space == self.nav.space)
-                    .position(|t| &t.id == id)
-            }) {
-                self.layout.tab_scroll.scroll_to_item(ix);
-            }
-            self.layout.revealed_tab = self.nav.tab.clone();
-        }
         self.before_render(window, cx);
         self.settle_board_transients(cx);
         self.return_to_queue(cx);
@@ -243,7 +229,7 @@ impl Render for Workbench {
             .tabs
             .iter()
             .find(|t| Some(&t.id) == self.nav.tab.as_ref());
-        let tabs = self.tab_strip(terminal_style, page.is_some(), space_name, cx);
+        let tabs = self.cached_strip(terminal_style);
         let (row_tabs, bottom_tabs) = if terminal_style {
             (None, Some(tabs))
         } else {
@@ -275,8 +261,7 @@ impl Render for Workbench {
                             .bg(T::color(T::border())),
                     )
                 })
-                .child(tabs)
-                .child(self.title_drag_area(cx).min_w(px(T::S20 * 2.)))
+                .children(tabs)
             })
             .when(terminal_style, |d| d.child(self.title_drag_area(cx)))
             .children(tail)
@@ -284,7 +269,7 @@ impl Render for Workbench {
                 d.pr_0().child(bars::window_buttons(window))
             });
         let mut main = self.main_area(terminal_style, header, page, current, window, cx);
-        main = main.children(bottom_tabs);
+        main = main.children(bottom_tabs.flatten());
         if let Some(peek) = &self.peek {
             main = main.relative().child(self.peek_view(peek, cx));
         }

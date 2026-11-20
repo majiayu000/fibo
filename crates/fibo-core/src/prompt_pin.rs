@@ -50,24 +50,32 @@ pub fn plain(text: &str) -> String {
 
 /// Whether `row` (the left of one terminal row) is the sent ask whose key is `key`.
 pub fn is_prompt_row(row: &str, key: &str, prompt: &PromptLine) -> bool {
+    after_mark(row, prompt).is_some_and(|rest| holds_ask(&plain(rest), key, is_whole(key)))
+}
+
+/// What follows the CLI's mark on `row`, past any indent; the row itself for a CLI without
+/// a mark. `None` when the row has no mark.
+fn after_mark<'a>(row: &'a str, prompt: &PromptLine) -> Option<&'a str> {
     let row = row.trim_start();
-    let rest = if prompt.markers.is_empty() {
-        row
-    } else {
-        match prompt
-            .markers
-            .iter()
-            .find_map(|m| row.strip_prefix(m.as_str()))
-        {
-            Some(rest) => rest,
-            None => return false,
-        }
-    };
-    let rest = plain(rest);
+    if prompt.markers.is_empty() {
+        return Some(row);
+    }
+    prompt
+        .markers
+        .iter()
+        .find_map(|m| row.strip_prefix(m.as_str()))
+}
+
+/// A key shorter than `KEY_CHARS` is the whole ask (see `key`).
+fn is_whole(key: &str) -> bool {
+    key.chars().count() < KEY_CHARS
+}
+
+/// Whether `rest`, the plain text after a row's mark, is the ask whose key is `key`.
+fn holds_ask(rest: &str, key: &str, whole: bool) -> bool {
     if rest.is_empty() {
         return false;
     }
-    let whole = key.chars().count() < KEY_CHARS;
     let full = if whole {
         rest == key
     } else {
@@ -75,21 +83,23 @@ pub fn is_prompt_row(row: &str, key: &str, prompt: &PromptLine) -> bool {
     };
     // A row holding only the start of the ask is a long ask wrapped on screen; a short
     // one (under KEY_CHARS) fits on its row and must match it whole.
-    full || (!whole && rest.chars().count() >= MIN_PARTIAL && key.starts_with(&rest))
+    full || (!whole && rest.chars().count() >= MIN_PARTIAL && key.starts_with(rest))
 }
 
 /// Whether `row`, unmarked and indented, is the line of the ask whose key is `key`: how an
 /// ask typed under a paste looks, since the mark goes on the paste's first row and the
 /// transcript's ask holds only the typed words.
+#[cfg(test)]
 fn is_typed_row(row: &str, key: &str) -> bool {
-    if !row.starts_with(char::is_whitespace) {
-        return false;
-    }
-    let rest = plain(row);
-    if key.chars().count() < KEY_CHARS {
-        rest == key
+    row.starts_with(char::is_whitespace) && types_ask(&plain(row), key, is_whole(key))
+}
+
+/// `is_typed_row` on the row's plain text.
+fn types_ask(row: &str, key: &str, whole: bool) -> bool {
+    if whole {
+        row == key
     } else {
-        rest.starts_with(key)
+        row.starts_with(key)
     }
 }
 
@@ -109,41 +119,40 @@ pub fn locate(
     let mut want = keys.len();
     // The ask whose typed words were seen, waiting for the marked row above them.
     let mut typed: Option<usize> = None;
+    // Each row is made plain once, not once per ask: a scan reads up to `MAX_ROWS` rows.
+    let keys: Vec<_> = keys
+        .iter()
+        .map(|k| k.as_deref().map(|k| (k, is_whole(k))))
+        .collect();
     for (y, text) in rows {
         if want == 0 {
             break;
         }
-        let hit = (0..want).rev().find(|&i| {
-            keys[i]
-                .as_deref()
-                .is_some_and(|k| is_prompt_row(&text, k, prompt))
-        });
+        let rest = after_mark(&text, prompt).map(plain).unwrap_or_default();
+        let hit = (0..want)
+            .rev()
+            .find(|&i| keys[i].is_some_and(|(k, whole)| holds_ask(&rest, k, whole)));
         if let Some(i) = hit {
             found[i] = Some(y);
             want = i;
             typed = None;
-        } else if is_marked(&text, prompt) {
+        } else if !prompt.markers.is_empty() && !rest.is_empty() {
+            // Marked, with something after the mark.
             if let Some(i) = typed.take() {
                 found[i] = Some(y);
                 want = i;
             }
-        } else if typed.is_none() && !prompt.markers.is_empty() {
+        } else if typed.is_none()
+            && !prompt.markers.is_empty()
+            && text.starts_with(char::is_whitespace)
+        {
+            let row = plain(&text);
             typed = (0..want)
                 .rev()
-                .find(|&i| keys[i].as_deref().is_some_and(|k| is_typed_row(&text, k)));
+                .find(|&i| keys[i].is_some_and(|(k, whole)| types_ask(&row, k, whole)));
         }
     }
     found
-}
-
-/// Whether `row` starts with one of the CLI's marks and holds something after it.
-fn is_marked(row: &str, prompt: &PromptLine) -> bool {
-    let row = row.trim_start();
-    prompt
-        .markers
-        .iter()
-        .find_map(|m| row.strip_prefix(m.as_str()))
-        .is_some_and(|rest| !plain(rest).is_empty())
 }
 
 /// What the pane draws for the asks it knows, given where they are.

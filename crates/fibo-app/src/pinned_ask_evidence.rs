@@ -31,6 +31,7 @@ pub(super) fn start(
     }
     cx.spawn(async move |cx| {
         use crate::ui::pinned_ask::PinnedAsk;
+        crate::ui::terminal_text::visual_cursor_blink(false);
         let executor = cx.background_executor().clone();
         let wait = move |ms| executor.timer(Duration::from_millis(ms));
         wait(1500).await;
@@ -232,6 +233,29 @@ assert_eq!(codex.1, None, "Codex pins its own ask: {codex:?}");
             "the older turn's ask floats: {reading:?}"
         );
         shot("b-float.png", cx);
+        // Another scroll before expiry extends the same chip. Only the end of
+        // the new interval should notify its pane.
+        wait(450).await;
+        handle
+            .update(cx, |v, _, a| v.visual_scroll_row("pc", older + 13, a))
+            .unwrap();
+        settle(cx);
+        wait(80).await;
+        let wakes = std::rc::Rc::new(std::cell::Cell::new(0));
+        let observed = wakes.clone();
+        let watch = handle
+            .update(cx, |v, _, cx| {
+                cx.observe(&v.visual_shown_pane(), move |_, _, _| {
+                    observed.set(observed.get() + 1);
+                })
+            })
+            .unwrap();
+        wait(1_100).await;
+        assert_eq!(wakes.get(), 0, "the first scroll's deadline went by");
+        wait(650).await;
+        assert_eq!(wakes.get(), 1, "the floating ask expires once");
+        drop(watch);
+        shot("b-float-expired.png", cx);
         // C: the header button instead, back at the live bottom.
         choose(
             PinnedAsk {

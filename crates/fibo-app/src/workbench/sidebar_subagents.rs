@@ -271,7 +271,13 @@ impl Workbench {
                     .cursor_pointer()
                     .child(
                         on.then(|| {
-                            self.turning_mark(Status::Running, path, F::STATE + 1., true, cx)
+                            self.turning_mark(
+                                Status::Running,
+                                path,
+                                F::STATE + 1.,
+                                crate::workbench::redraw::Layer::Sidebar,
+                                cx,
+                            )
                         })
                         .flatten()
                         .unwrap_or_else(|| {
