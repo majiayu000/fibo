@@ -93,11 +93,19 @@ pub fn takes_term(command: &mut std::process::Command) {
 }
 
 /// TERM as a program starts with: a window's process ignores it (AppKit quits the app its
-/// own way) and what it starts would keep that across exec.
+/// own way), and its worker threads block every signal; a child keeps both across exec, and
+/// std's spawn does not clear the mask here.
 fn default_term() -> io::Result<()> {
-    // SAFETY: resets one signal's disposition in the child before exec.
-    if unsafe { libc::signal(libc::SIGTERM, libc::SIG_DFL) } == libc::SIG_ERR {
-        return Err(io::Error::last_os_error());
+    // SAFETY: resets one signal's disposition and the signal mask in the child before exec.
+    unsafe {
+        if libc::signal(libc::SIGTERM, libc::SIG_DFL) == libc::SIG_ERR {
+            return Err(io::Error::last_os_error());
+        }
+        let mut mask: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&mut mask);
+        if libc::sigprocmask(libc::SIG_SETMASK, &mask, std::ptr::null_mut()) < 0 {
+            return Err(io::Error::last_os_error());
+        }
     }
     Ok(())
 }
