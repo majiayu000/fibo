@@ -303,23 +303,15 @@ impl Pane {
     /// the screen, and input works again once the pane owns the terminal.
     fn recover(&mut self, cx: &mut Context<Self>) {
         self.send_held();
-        let (dropped, failed, live) =
-            self.connection
-                .state
-                .lock()
-                .map_or((false, false, false), |s| {
-                    (
-                        s.dropped,
-                        s.error.is_some() && !s.ended,
-                        s.vt.is_some() && s.error.is_none(),
-                    )
-                });
-        if live {
+        let (dropped, settled) = self.connection.state.lock().map_or((false, false), |s| {
+            (
+                s.dropped,
+                !s.dropped && (s.vt.is_some() || s.error.is_some() || s.ended),
+            )
+        });
+        if settled {
             self.reconnect_delay = 0;
         }
-        // Once dropped, every failed attempt retries until one restores the screen: an
-        // attempt made during the same burst is dropped again before its snapshot lands.
-        let dropped = dropped || (self.reconnect_delay > 0 && failed);
         if !dropped || self.reconnecting {
             return;
         }

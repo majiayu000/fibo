@@ -90,25 +90,31 @@ pub(super) fn serve_client(
             watch,
         } = request
         {
-            let terminal = lock(&host)?.terminals.get(&id).cloned();
-            match terminal {
-                Some(terminal) => {
-                    return attach(
-                        stream,
-                        terminal,
-                        connection,
-                        takeover && !watch,
-                        watch,
-                        host,
-                        id,
-                    )
-                }
-                None => send(
-                    &mut stream,
-                    CONTROL,
-                    &Reply::Error("terminal is not available in this daemon instance".into()),
-                )?,
+            let host_state = lock(&host)?;
+            if let Some(terminal) = host_state.terminals.get(&id).cloned() {
+                drop(host_state);
+                return attach(
+                    stream,
+                    terminal,
+                    connection,
+                    takeover && !watch,
+                    watch,
+                    host,
+                    id,
+                );
             }
+            let reason = if host_state
+                .workspace
+                .terminals
+                .iter()
+                .any(|t| t.id == id && t.state == ProcessState::Exited)
+            {
+                tk!("进程已退出")
+            } else {
+                tk!("终端不存在")
+            };
+            drop(host_state);
+            send(&mut stream, CONTROL, &Reply::Error(reason.into()))?;
             continue;
         }
         let result = super::brief::dispatch(&host, request);
