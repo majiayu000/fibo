@@ -2,8 +2,8 @@ use super::*;
 use fibo_core::status::{self, Status};
 
 /// A Codex whose turn ended, its footer saying a command was left running, and that command
-/// as its child with stdin closed. Its log names the command, as a real rollout does.
-fn codex_left_running(h: &Host, pane: &str, command: &str) {
+/// as its child with stdin closed. A rollout may or may not name the resolved command.
+fn codex_left_running(h: &Host, pane: &str, command: &str, log_command: bool) {
     let logs = h.root.join("logs/codex");
     fs::create_dir_all(&logs).unwrap();
     let id = uuid::Uuid::new_v4().to_string();
@@ -15,7 +15,12 @@ fn codex_left_running(h: &Host, pane: &str, command: &str) {
         serde_json::json!({"type":"response_item","timestamp":"2026-11-06T10:00:02Z","payload":{"type":"custom_tool_call","call_id":"c1","name":"exec","input":format!("text(await tools.exec_command({{cmd:{}}}));",serde_json::json!(command))}}),
         serde_json::json!({"type":"event_msg","timestamp":"2026-11-06T10:00:03Z","payload":{"type":"task_complete","last_agent_message":"started"}}),
     ];
-    fs::write(&log, rows.map(|r| format!("{r}\n")).concat()).unwrap();
+    let transcript: String = rows
+        .into_iter()
+        .filter(|r| log_command || r["type"] != "response_item")
+        .map(|r| format!("{r}\n"))
+        .collect();
+    fs::write(&log, transcript).unwrap();
     let cli = h.root.join("codex");
     if !cli.exists() {
         std::os::unix::fs::symlink("/bin/sh", &cli).unwrap();
@@ -97,7 +102,7 @@ fn take_over(h: &mut Host) -> tied::Tied {
 fn a_codex_command_left_running_stays_running_across_a_new_host() {
     let mut h = Host::start();
     h.setup();
-    codex_left_running(&h, "job", "sleep 300; echo codex-job-7c1e");
+    codex_left_running(&h, "job", "sleep 300; echo codex-job-7c1e", true);
     wait_shows(&h, "job", Status::Running);
     let _next = take_over(&mut h);
     wait_shows(&h, "job", Status::Running);
@@ -117,8 +122,8 @@ fn a_codex_job_and_a_server_in_different_sessions_keep_their_own_status() {
     let port = 22000 + (std::process::id() % 900) as u16;
     // `exec`: a fake CLI is a shell, so a shell left waiting on the server would be one more.
     let server = format!("exec python3 -m http.server {port} --bind 127.0.0.1");
-    codex_left_running(&h, "srv", &server);
-    codex_left_running(&h, "job", "sleep 300; echo codex-batched-job-c042");
+    codex_left_running(&h, "srv", &server, true);
+    codex_left_running(&h, "job", "sleep 300; echo codex-batched-job-c042", true);
     // Before the screen is read the turn already reads as over, so wait for the note too.
     let want = format!("后台留着 1 个服务 · 端口 {port}");
     let until = Instant::now() + Duration::from_secs(40);
@@ -129,7 +134,7 @@ fn a_codex_job_and_a_server_in_different_sessions_keep_their_own_status() {
             .current_agent("job")
             .and_then(|s| w.content.get(&s.id))
             .map(|c| c.shells.as_slice());
-        // The footer alone can say Running before any process has been claimed.
+        // Wait for the host to classify both processes.
         if left.as_deref() == Some(want.as_str())
             && matches!(job, Some([task]) if task.job && task.port.is_none() && task.id.parse::<u32>().is_ok())
         {
@@ -140,4 +145,34 @@ fn a_codex_job_and_a_server_in_different_sessions_keep_their_own_status() {
     }
     wait_shows(&h, "srv", Status::Review);
     wait_shows(&h, "job", Status::Running);
+}
+
+/// A preview missing from Codex's transcript is still a live process, but its footer
+/// alone does not establish a job. A new host has only that same evidence.
+#[test]
+fn an_unmatched_codex_preview_does_not_keep_the_turn_running() {
+    let mut h = Host::start();
+    h.setup();
+    let port = 23000 + (std::process::id() % 900) as u16;
+    let server = format!("exec python3 -m http.server {port} --bind 127.0.0.1");
+    codex_left_running(&h, "preview", &server, false);
+    let check = |h: &Host| {
+        wait_for(h, "a live preview and its recognized footer", |w| {
+            std::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port)).is_ok()
+                && (w
+                    .current_agent("preview")
+                    .and_then(|s| w.content.get(&s.id)))
+                .is_some_and(|c| c.shells.iter().any(|task| task.id == "screen"))
+        });
+        let w = h.workspace();
+        let session = w.current_agent("preview").unwrap();
+        assert_eq!(
+            status::of(&w, session, fibo_core::content::now()),
+            Status::Review
+        );
+        assert!(status::left_behind(&w, session).is_some());
+    };
+    check(&h);
+    let _next = take_over(&mut h);
+    check(&h);
 }
