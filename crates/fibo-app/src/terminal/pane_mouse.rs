@@ -523,12 +523,13 @@ impl Pane {
         }
         cx.notify();
     }
-    pub(super) fn clear_selection(&mut self) {
-        if let Ok(state) = self.connection.state.lock()
-            && let Some(vt) = &state.vt
-        {
-            let _ = vt.terminal().set_selection(None);
-        }
+    pub(super) fn clear_selection(&mut self) -> bool {
+        self.connection.state.lock().is_ok_and(|state| {
+            state
+                .vt
+                .as_ref()
+                .is_some_and(|vt| vt.terminal().set_selection(None).is_ok())
+        })
     }
 }
 /// The pane's cell grid for the selection gesture, once its cells have been measured.

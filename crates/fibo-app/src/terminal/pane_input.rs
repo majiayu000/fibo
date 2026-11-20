@@ -14,7 +14,10 @@ impl Pane {
     }
     /// Like Ghostty, typing also drops the selection.
     pub(super) fn input(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) {
-        self.clear_selection();
+        // Clear a painted highlight even when the program sends no output.
+        if self.clear_selection() && self.screen.selection.iter().any(Option::is_some) {
+            cx.notify();
+        }
         self.follow_input(cx);
         self.send_input(bytes, false, cx);
         cx.emit(super::PaneEvent::Typed);

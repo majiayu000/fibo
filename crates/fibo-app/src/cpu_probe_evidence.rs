@@ -11,6 +11,7 @@
 //!   machines.json, so the gate does not run it: `perf-fixture.py` with MACHINE=1 at prepare.
 //! - `frames-rail`: the same machine's rail layout, at rest and with the list arriving.
 //! - `frames-scroll`: Agent output scrolling a line a frame, in `cpu_probe_evidence/scroll.rs`.
+//! - `quiet-input`: pane notifications after silent PTY input and keys with visible output.
 //! - `frames-turning`: the running mark turning, in `cpu_probe_evidence/turning.rs`.
 //! - `settings-pane`: settings reuses its layout when a pane draws or a snapshot leaves its
 //!   values alone; search, changed settings and preview failures still update visibly.
@@ -33,6 +34,8 @@
 //! real frames are not measured, only the cost of each.
 use super::*;
 use gpui::WindowHandle;
+#[path = "cpu_probe_evidence/ack.rs"]
+mod ack;
 #[path = "cpu_probe_evidence/history.rs"]
 mod history;
 #[path = "cpu_probe_evidence/plugins.rs"]
@@ -334,6 +337,8 @@ pub(super) fn start(
                 changes_frames(handle, &pane, cx).await
             } else if name == "frames-scroll" {
                 scroll::run(handle, &pane, cx).await
+            } else if name == "quiet-input" {
+                ack::run(handle, &pane, cx).await
             } else if name == "frames-turning" {
                 turning::run(handle, &directory, cx).await
             } else if name == "frames-board-motion" {

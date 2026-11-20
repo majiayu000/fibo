@@ -204,11 +204,17 @@ impl Connection {
                                 && !state.ended;
                         }
                         ACK => {
-                            if let Reply::Error(error) =
-                                serde_json::from_slice::<Reply>(&bytes).map_err(io::Error::other)?
+                            match serde_json::from_slice::<Reply>(&bytes)
+                                .map_err(io::Error::other)?
                             {
-                                state.error = Some(error);
-                                state.writable = false;
+                                // Accepting input changes no display state. Any reply
+                                // from the program will wake the pane through OUTPUT.
+                                Reply::Ok => continue,
+                                Reply::Error(error) => {
+                                    state.error = Some(error);
+                                    state.writable = false;
+                                }
+                                _ => (),
                             }
                         }
                         _ => return Err(io::Error::other("unknown terminal frame")),
@@ -494,6 +500,67 @@ mod tests {
         assert_eq!(state.error.as_deref(), Some("shell exited"));
         assert!(state.vt.is_none());
         assert!(!state.writable);
+    }
+
+    #[test]
+    fn a_rejected_terminal_request_still_wakes_the_pane() {
+        let path = std::env::temp_dir().join(format!("fibo-ack-{}.sock", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let listener = local::Listener::bind(&path).unwrap();
+        let peer = std::thread::spawn(move || {
+            let mut stream = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            assert!(matches!(
+                receive(&mut stream).unwrap(),
+                Request::Hello { .. }
+            ));
+            send(
+                &mut stream,
+                CONTROL,
+                &Reply::Hello {
+                    major: MAJOR,
+                    instance: "test".into(),
+                    build: Build::default(),
+                },
+            )
+            .unwrap();
+            assert!(matches!(
+                receive(&mut stream).unwrap(),
+                Request::Attach { .. }
+            ));
+            send(
+                &mut stream,
+                CONTROL,
+                &Reply::Attached {
+                    writable: true,
+                    cols: 80,
+                    rows: 24,
+                },
+            )
+            .unwrap();
+            let snapshot = Vt::new(80, 24).unwrap().snapshot().unwrap();
+            write_frame(&mut stream, SNAPSHOT, &snapshot).unwrap();
+            write_frame(&mut stream, READY, &[]).unwrap();
+            assert!(matches!(receive(&mut stream).unwrap(), Request::Workspace));
+            send(&mut stream, ACK, &Reply::Error("refused".into())).unwrap();
+            let _ = read_frame(&mut stream);
+        });
+        let (tx, mut wake) = futures::channel::mpsc::unbounded();
+        let connection = Connection::new(&path, "terminal", false, tx);
+        futures::executor::block_on(wake.next()).unwrap();
+        connection.dirty.store(false, Ordering::Release);
+        connection.send(Request::Workspace).unwrap();
+        futures::executor::block_on(wake.next()).unwrap();
+        {
+            let state = connection.state.lock().unwrap();
+            assert_eq!(state.error.as_deref(), Some("refused"));
+            assert!(!state.writable);
+        }
+        drop(connection);
+        peer.join().unwrap();
+        let _ = std::fs::remove_file(path);
     }
 
     /// Plays one host lifetime: greets a single subscriber, reports `phase`, then exits.
