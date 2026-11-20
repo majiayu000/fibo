@@ -63,7 +63,7 @@ fn controls(agent: Agent) -> fibo_remote::cards::AgentControls {
     let keys = adapter.turn_keys();
     fibo_remote::cards::AgentControls {
         steer: keys.is_some(),
-        send_now: keys.is_some(),
+        send_now: keys.as_ref().is_some_and(|keys| keys.send_now),
         effort: fibo_host::agent_modes_switch(agent),
         suggestion: adapter.input_suggestion().is_some(),
         busy_input: keys.and_then(|k| {
@@ -225,7 +225,10 @@ mod tests {
     #[test]
     fn controls_follow_the_adapters_and_old_cards_do_not_guess() {
         assert_eq!(controls(Agent::Claude).busy_input.as_deref(), Some("queue"));
+        assert!(controls(Agent::Claude).send_now);
         assert!(controls(Agent::Claude).suggestion);
+        assert!(controls(Agent::Codex).steer);
+        assert!(!controls(Agent::Codex).send_now);
         assert!(!controls(Agent::Codex).suggestion);
         let unknown = controls(Agent::from_key("Future"));
         assert!(!unknown.steer && !unknown.send_now && !unknown.effort && !unknown.suggestion);
@@ -348,7 +351,7 @@ mod tests {
             Some(Agent::Dsh.name())
         );
         let controls = card.controls.as_ref().unwrap();
-        assert!(controls.steer && controls.send_now && controls.effort);
+        assert!(controls.steer && !controls.send_now && controls.effort);
         assert_eq!(controls.busy_input.as_deref(), Some("steer"));
         assert!(list
             .terminals

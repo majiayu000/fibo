@@ -56,10 +56,17 @@ fn approval_blocks_text_images_queue_steer_and_sendnow() {
             );
         }
         let error = phone.error(json!({"op":"sendnow","terminal":agent}));
-        assert!(
-            error.contains("审批") || error.contains("approval"),
-            "{error}"
-        );
+        if agent == "claude" {
+            assert!(
+                error.contains("审批") || error.contains("approval"),
+                "{error}"
+            );
+        } else {
+            assert!(
+                error.contains("排队的消息") || error.contains("queued messages"),
+                "{error}"
+            );
+        }
         assert!(h
             .call(Request::SendText {
                 id: agent.into(),
@@ -87,6 +94,14 @@ fn approval_blocks_text_images_queue_steer_and_sendnow() {
             .to_owned();
         phone.ok(json!({"op":"answer","terminal":agent,"question":question,"allow":false}));
         h.wait_screen(agent, "READY");
+        if agent == "codex" {
+            phone.error(json!({"op":"sendnow","terminal":agent}));
+            assert_eq!(
+                fs::read(&captured).unwrap(),
+                b"\x1b",
+                "Codex received no extra Enter"
+            );
+        }
         phone.ok(json!({"op":"send","terminal":agent,"session":session,"text":"explanation","enter":true}));
         h.wait_screen(agent, "SENT");
         assert_eq!(

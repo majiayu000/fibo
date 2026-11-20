@@ -18,6 +18,7 @@ impl Adapter for Claude {
         Some(super::TurnKeys {
             queue: b"\r",
             steer: b"\x1b[13;5u",
+            send_now: true,
         })
     }
     fn trust_screen(&self, lines: &[&str]) -> Option<crate::screen_ask::TrustScreen> {

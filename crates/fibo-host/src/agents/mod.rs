@@ -115,6 +115,8 @@ pub type OfficialAnswer = (&'static str, io::Result<Vec<(usize, Official)>>);
 pub struct TurnKeys {
     pub queue: &'static [u8],
     pub steer: &'static [u8],
+    /// Whether the steer key also sends the existing queue with no new text.
+    pub send_now: bool,
 }
 
 /// A CLI's screen reader; its presence also advertises suggestion support.

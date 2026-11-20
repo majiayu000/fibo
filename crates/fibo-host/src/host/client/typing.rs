@@ -37,6 +37,11 @@ pub(in crate::host) fn send_turn(
             .and_then(|a| crate::agent_adapter(a).turn_keys())
             .ok_or_else(|| io::Error::other(t!("这个 Agent 分不出排队和马上发，直接发送就好")))?
     };
+    if steer && text.is_empty() && !keys.send_now {
+        return Err(io::Error::other(t!(
+            "这个 Agent 要等手头这一步做完才会读排队的消息"
+        )));
+    }
     send_message(
         shared,
         id,
