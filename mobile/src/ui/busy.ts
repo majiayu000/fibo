@@ -47,9 +47,10 @@ export function sendsNow(controls: AgentControls | null | undefined) {
 export const QUEUED_TAP = tk('排队中 · 点一下可以立刻发送');
 export const SENT_NOW = tk('已立刻发送 · 它马上会看到');
 
-/** The host derives Enter behavior from the adapter's actual keys. */
-export function whileBusy(controls: AgentControls | null | undefined): BusyWords {
-  if (controls?.busy_input === 'queue') return QUEUES;
-  if (controls?.busy_input === 'steer') return STEERS;
+// An explicit delivery mode takes precedence over the agent's default Enter key.
+export function whileBusy(controls: AgentControls | null | undefined, how?: How): BusyWords {
+  const mode = how ?? controls?.busy_input;
+  if (mode === 'queue') return QUEUES;
+  if (mode === 'steer') return STEERS;
   return UNKNOWN;
 }

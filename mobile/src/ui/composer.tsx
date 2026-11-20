@@ -6,13 +6,14 @@ import { type ComponentRef, useRef, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AttachSheet } from './attachsheet';
 import { Icon } from './icons';
-import type { How } from './busy';
+import { type How, whileBusy } from './busy';
 import { useBottomOverKeyboard } from './keyboard';
 import { noOutline } from './kit';
 import { modelName } from './parse';
 import { MAX_PICTURES, type Picture, pick } from './pictures';
 import { useTheme } from './theme';
 import { tr } from '../i18n';
+import type { AgentControls } from '../remote/hub';
 
 export function Composer({
   agent,
@@ -20,7 +21,7 @@ export function Composer({
   permission,
   permissionFull,
   running,
-  busyPlaceholder,
+  controls,
   canStop,
   offline,
   suggestion,
@@ -42,8 +43,7 @@ export function Composer({
   onModel?: () => void;
   onPermission?: () => void;
   running: boolean;
-  /** What a message sent while it works becomes, for this Agent (ui/busy.ts). */
-  busyPlaceholder: string;
+  controls?: AgentControls | null;
   canStop: boolean;
   offline: boolean;
   /** What the Agent offers as the next prompt: a tap puts it in the box, sending is still yours. */
@@ -66,6 +66,7 @@ export function Composer({
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   const empty = !draft.trim() && !pictures.length;
   const stop = running && canStop && empty;
+  const how = running && canSteer ? 'queue' : undefined;
   // A second tap before the box redraws empty would send the same words twice.
   const sending = useRef(false);
   async function go(text: string, with_: Picture[] = []) {
@@ -73,10 +74,8 @@ export function Composer({
     sending.current = true;
     setDraft('');
     setPictures([]);
-    // Sent while it works, a message queues; tapping it then sends it now (ui/queuedsheet).
-    const choose: How | undefined = running && canSteer ? 'queue' : undefined;
     try {
-      if (!(await onSend(text.trim(), with_, choose))) {
+      if (!(await onSend(text.trim(), with_, how))) {
         setDraft(text);
         setPictures(with_);
       }
@@ -139,7 +138,7 @@ export function Composer({
         ref={input}
         value={draft}
         onChangeText={setDraft}
-        placeholder={offline ? tr('电脑没连上，写的话会在重连后发送') : running ? busyPlaceholder : tr('回复，或者让它接着做…')}
+        placeholder={offline ? tr('电脑没连上，写的话会在重连后发送') : running ? tr(whileBusy(controls, how).placeholder) : tr('回复，或者让它接着做…')}
         placeholderTextColor={t.dim}
         multiline
         numberOfLines={Platform.OS === 'web' ? 1 : undefined}

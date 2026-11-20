@@ -16,6 +16,13 @@ test('the host describes what Enter does, without a phone-side brand list', () =
   }
 });
 
+test('an explicit queue uses queue wording even when plain Enter steers', () => {
+  const codex = { ...steers, send_now: false };
+  expect(whileBusy(codex, 'queue').placeholder).toContain('做完手头这一步');
+  expect(whileBusy(codex).placeholder).toContain('马上插进');
+  expect(whileBusy(codex, 'queue').note).toBe(HOW_NOTE.queue);
+});
+
 test('controls come from the host, including unknown future Agents and old hosts', () => {
   expect(steerable(queues) && steerable(steers)).toBe(true);
   expect(steerable(unknown) || steerable(null)).toBe(false);
