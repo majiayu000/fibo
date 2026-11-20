@@ -25,7 +25,7 @@ fi
 # Later patches change lines earlier ones added, so an earlier patch can look unapplied
 # once a later one is in. Everything before the last patch that is in is in as well.
 pending=
-for name in idle glyph-dilation retained-backbuffer present-render-pass fit-truncated-row; do
+for name in idle glyph-dilation retained-backbuffer present-render-pass fit-truncated-row retained-group-rects; do
   if git -C .deps/zed apply --reverse --check "$(pwd)/patches/gpui-$name.patch" 2>/dev/null; then
     pending=
   else
