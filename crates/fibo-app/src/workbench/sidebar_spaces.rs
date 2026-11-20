@@ -190,12 +190,13 @@ impl Workbench {
                     .child(field.clone()),
             );
         }
+        let facts = self.facts();
         let elsewhere = self
             .workspace
             .spaces
             .iter()
             .filter(|s| shown.as_deref() != Some(s.id.as_str()))
-            .map(|s| self.space_counts(&s.id))
+            .map(|s| facts.space_counts(&s.id))
             .map(|c| c.waiting + c.errors)
             .sum::<usize>();
         let name = space.map_or_else(|| t!("全部空间").to_owned(), |s| s.name.clone());

@@ -50,17 +50,15 @@ impl Workbench {
                     .child(label(self.workspace.spaces.len().to_string())),
             );
         }
+        let facts = self.facts();
         for space in
             (self.workspace.spaces.iter()).filter(|s| !dense && !self.workspace.space_quiet(&s.id))
         {
             let id = space.id.clone();
             let active = self.space_active(&id);
-            let SpaceCounts {
-                count,
-                waiting,
-                errors,
-                group,
-            } = self.space_counts(&id);
+            let counts = facts.space_counts(&id);
+            let (count, waiting, errors, group) =
+                (counts.count, counts.waiting, counts.errors, counts.group());
             if let Some((_, field, _)) = self
                 .layout
                 .renaming_space
