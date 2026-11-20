@@ -25,6 +25,8 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
   BUDGET and must not draw the panel again: it is a cached view, and laying it out for every
   pane's output would cost several times the frame. Its own draw (frames-changesdraw) must
   too: copying every file on each draw once took 14 ms at this size;
+- accepted input in a terminal with echo disabled must not wake its pane; real
+  output from the same PTY must still reach a frame;
 - the running mark turning (scripts' frames-turning): a step keeps the sidebar's last draw and
   the mark really moves; with no mark on screen, or the setting off, the view stops drawing
 - 设置 › 插件 (scripts' frames-plugins): a frame with one animation card playing, opening
@@ -127,6 +129,13 @@ def main():
     if not scroll_wakes or int(scroll_wakes[1]):
         fails.append('scrolling a shell with no floating ask must leave its pane quiet: ' +
                      (scroll_wakes[0] if scroll_wakes else 'no idle wake count'))
+    quiet_input = probe(bindir, out / 'quiet-input', 'quiet-input', catch_up=False)
+    quiet = re.search(r'^quiet-input: \d+ input bytes; quiet pane wakes (\d+); quiet draws (\d+);',
+                      quiet_input, re.M)
+    if not quiet:
+        fails.append('no quiet-input result from a real PTY')
+    elif int(quiet[1]) or int(quiet[2]):
+        fails.append(f'accepted input with no output woke its pane {quiet[1]} times and drew {quiet[2]} frames')
     panel = re.search(r'frames-changes: [^\n]*drawn before (\d+); drew again (\d+)', text)
     if not panel:
         fails.append('no frames-changes line in the probe output')
