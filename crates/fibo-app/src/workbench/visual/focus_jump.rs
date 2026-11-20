@@ -35,6 +35,9 @@ impl Workbench {
     pub fn visual_terminal_of(&self, cli_id: &str) -> Option<String> {
         live_terminal(&self.workspace, &self.visual_session_of(cli_id)).map(|t| t.id.clone())
     }
+    pub fn visual_split_pane(&self, terminal: &str) -> Entity<Pane> {
+        self.layout.panes[terminal].clone()
+    }
     /// Puts the keyboard in `terminal`'s pane, as a click inside it does.
     pub fn visual_click_pane(
         &mut self,

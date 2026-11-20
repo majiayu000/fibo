@@ -307,6 +307,16 @@ impl Workbench {
         cx.observe(pane, |this, _, cx| this.pane_changed(cx))
             .detach();
         cx.subscribe(pane, |this, pane, event, cx| match event {
+            crate::terminal::pane::PaneEvent::Focused => {
+                let terminal = pane.read(cx).terminal_id();
+                // A terminal can take focus and consume the click before it bubbles.
+                if this.nav.focused.as_deref() != Some(terminal)
+                    && this.layout.panes.get(terminal) == Some(&pane)
+                {
+                    this.nav.focused = Some(terminal.to_owned());
+                    cx.notify();
+                }
+            }
             crate::terminal::pane::PaneEvent::Typed => {
                 if !this.workspace.quiet_spaces.is_empty() {
                     let terminal = pane.read(cx).terminal_id().to_owned();

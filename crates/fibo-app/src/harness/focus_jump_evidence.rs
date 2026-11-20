@@ -195,6 +195,43 @@ pub(super) fn start(
             .unwrap();
         expect("zoomed-terminal", &p2, tab, cx).await;
 
+        // A full-screen program can consume the click after its pane takes the keyboard.
+        // Echo the mode sequence through the fixture's PTY, then click the terminal grid.
+        cx.update_window(handle.into(), |_, w, app| {
+            app.activate(true);
+            w.activate_window();
+        })
+        .unwrap();
+        let mouse_pane = handle.update(cx, |v, _, _| v.visual_split_pane(&p1)).unwrap();
+        mouse_pane.update(cx, |pane, cx| pane.visual_type("\x1b[?1000;1006h\r", cx));
+        for _ in 0..30 {
+            if mouse_pane.read_with(cx, |pane, _| pane.takes_mouse()) {
+                break;
+            }
+            wait(100).await;
+        }
+        assert!(mouse_pane.read_with(cx, |pane, _| pane.takes_mouse()));
+        assert!(handle.update(cx, |_, w, _| w.is_window_active()).unwrap(), "focus probe needs the active window");
+        row("visual-0", cx);
+        frames(cx);
+        assert_eq!(state(cx).row.as_deref(), Some(p0.as_str()));
+        for (case, pane_id) in [("split-mouse", &p1), ("split-ordinary-click", &p0)] {
+            let at = handle
+                .update(cx, |v, _, app| v.visual_split_pane(pane_id).read(app).visual_cell(5, 3))
+                .unwrap()
+                .expect("split terminal has a grid");
+            cx.update_window(handle.into(), |_, w, app| {
+                native_click(w, app, at, gpui::MouseButton::Left);
+            })
+            .unwrap();
+            wait(100).await;
+            shot(&format!("{case}.png"), cx);
+            let selected = state(cx);
+            eprintln!("FOCUS-JUMP {case}: want {pane_id} -> {selected:?}");
+            assert_eq!(selected.keyboard.as_deref(), Some(pane_id.as_str()), "{case} keyboard");
+            assert_eq!(selected.row.as_deref(), Some(pane_id.as_str()), "{case} sidebar");
+        }
+
         // 7. A pane alone in its tab is the whole main area: it lands without a ring.
         handle
             .update(cx, |v, _, cx| v.visual_show_tab("start", cx))

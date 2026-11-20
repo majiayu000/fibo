@@ -48,7 +48,11 @@ impl Render for Pane {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.focus_observers {
             self.focus_observers = true;
-            cx.on_focus(&self.focus, window, Self::sync_focus).detach();
+            cx.on_focus(&self.focus, window, |pane, window, cx| {
+                pane.sync_focus(window, cx);
+                cx.emit(super::PaneEvent::Focused);
+            })
+            .detach();
             cx.on_blur(&self.focus, window, Self::sync_focus).detach();
             cx.observe_window_activation(window, Self::sync_focus)
                 .detach();
