@@ -33,7 +33,8 @@ impl Render for Row {
         let detail = fibo_core::status::left_behind_detail(&workspace, session).unwrap();
         div()
             .id("session-row")
-            .w(px(400.))
+            .debug_selector(|| "session-row".into())
+            .w_full()
             .child(RowDetail::Background(detail).render(div(), self.local))
             .on_click(cx.listener(|this, _, _, _| this.opened += 1))
     }
@@ -65,9 +66,11 @@ fn local_port_links_require_alt_and_keep_plain_row_clicks(cx: &mut TestAppContex
         assert_eq!(row.read_with(cx, |row, _| row.opened), 1);
     }
 
+    let row_bounds = cx.debug_bounds("session-row").unwrap();
+    let port_bounds = cx.debug_bounds("local-port-8080").unwrap();
     let point = gpui::point(
-        px(4.),
-        cx.debug_bounds("local-port-8080").unwrap().center().y,
+        (row_bounds.left() + port_bounds.left()) / 2.,
+        port_bounds.center().y,
     );
     cx.simulate_click(point, alt);
     assert_eq!(row.read_with(cx, |row, _| row.opened), 2);
