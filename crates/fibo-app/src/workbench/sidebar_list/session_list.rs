@@ -140,15 +140,16 @@ impl Workbench {
         let mut budget = preset.row_limit();
         let mut more = 0;
         let mut owns_closed = false;
-        let mut push = |out: &mut Vec<gpui::AnyElement>, l: Listed, d: Option<String>, e: End| {
-            if budget == 0 && current != Some(l.0.id.as_str()) {
-                more += 1;
-                return;
-            }
-            budget = budget.saturating_sub(1);
-            self.note_row(out.len(), &l);
-            out.push(self.session_row(l, current, d, e, cx));
-        };
+        let mut push =
+            |out: &mut Vec<gpui::AnyElement>, l: Listed, d: Option<RowDetail>, e: End| {
+                if budget == 0 && current != Some(l.0.id.as_str()) {
+                    more += 1;
+                    return;
+                }
+                budget = budget.saturating_sub(1);
+                self.note_row(out.len(), &l);
+                out.push(self.session_row(l, current, d, e, cx));
+            };
         match preset.group {
             Grouping::Flat if all_pinned => (),
             Grouping::Flat => {
@@ -228,7 +229,7 @@ impl Workbench {
                             .into_any_element(),
                     );
                     for l in &pinned {
-                        let d = detail(l).map(|d| format!("{} · {d}", folder_name(&l.0.cwd)));
+                        let d = detail(l).map(|d| d.prefix(&folder_name(&l.0.cwd)));
                         push(&mut out, **l, d, End::State);
                     }
                 }

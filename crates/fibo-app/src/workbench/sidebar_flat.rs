@@ -1,7 +1,7 @@
 //! 会话优先's column drawn to docs/sidebar-redesign/flat.html size for size: the brand
 //! row, a search field, the space chips, one list whose rows lead with their state and
 //! end with their space and time, a key hint and a one-line foot.
-use super::sidebar_list::{ASKS, End, Listed, SessionAction, bucket};
+use super::sidebar_list::{ASKS, End, Listed, RowDetail, SessionAction, bucket};
 use super::sidebar_machines::MachineRow;
 use super::*;
 use crate::ui::theme::Flat as F;
@@ -282,7 +282,7 @@ impl Workbench {
         there: Option<&MachineRow>,
         (session, g, attention): Listed,
         current: Option<&str>,
-        detail: Option<String>,
+        detail: Option<RowDetail>,
         end: End,
         cx: &Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
@@ -407,16 +407,25 @@ impl Workbench {
             .child(mark)
             .child(
                 content
-                    .when_some(detail, |d, text| {
+                    .when_some(detail, |d, detail| {
+                        let detail = match detail {
+                            RowDetail::Text(text) => RowDetail::Text(text.replacen(
+                                fibo_core::i18n::say(ASKS),
+                                t!("问："),
+                                1,
+                            )),
+                            _ => detail,
+                        };
                         d.child(
-                            div()
-                                .mt(px(T::S2))
-                                .min_w_0()
-                                .truncate()
-                                .text_size(px(F::SUB))
-                                .line_height(px(F::SUB_LINE))
-                                .text_color(asks_ink)
-                                .child(text.replacen(fibo_core::i18n::say(ASKS), t!("问："), 1)),
+                            detail.render(
+                                div()
+                                    .mt(px(T::S2))
+                                    .min_w_0()
+                                    .text_size(px(F::SUB))
+                                    .line_height(px(F::SUB_LINE))
+                                    .text_color(asks_ink),
+                                there.is_none() && !from.host.attached(),
+                            ),
                         )
                     })
                     .when_some(subs, |d, subs| {

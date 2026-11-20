@@ -1,0 +1,76 @@
+use super::*;
+use fibo_core::content::{Background, Content, ShellTask};
+use gpui::{Modifiers, Render, TestAppContext};
+
+struct Row {
+    local: bool,
+    opened: usize,
+}
+
+impl Render for Row {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let mut workspace = crate::workbench::tests::fixture();
+        let session = &mut workspace.agent_sessions[0];
+        session.current = true;
+        session.terminal = Some("t0".into());
+        let session = &workspace.agent_sessions[0];
+        workspace.content.insert(
+            session.id.clone(),
+            std::sync::Arc::new(Content {
+                background: Some(Background {
+                    shells: 2,
+                    ..Default::default()
+                }),
+                shells: [18746, 8080]
+                    .map(|port| ShellTask {
+                        port: Some(port),
+                        ..Default::default()
+                    })
+                    .to_vec(),
+                ..Default::default()
+            }),
+        );
+        let detail = fibo_core::status::left_behind_detail(&workspace, session).unwrap();
+        div()
+            .id("session-row")
+            .w(px(400.))
+            .child(RowDetail::Background(detail).render(div(), self.local))
+            .on_click(cx.listener(|this, _, _, _| this.opened += 1))
+    }
+}
+
+#[gpui::test]
+fn local_port_links_open_individually_without_opening_the_row(cx: &mut TestAppContext) {
+    let (row, cx) = cx.add_window_view(|_, _| Row {
+        local: true,
+        opened: 0,
+    });
+    cx.refresh().unwrap();
+    for (selector, url) in [
+        ("local-port-8080", "http://127.0.0.1:8080/"),
+        ("local-port-18746", "http://127.0.0.1:18746/"),
+    ] {
+        let point = cx.debug_bounds(selector).unwrap().center();
+        cx.simulate_click(point, Modifiers::none());
+        assert_eq!(cx.opened_url().as_deref(), Some(url));
+        assert_eq!(row.read_with(cx, |row, _| row.opened), 0);
+    }
+
+    let point = gpui::point(
+        px(4.),
+        cx.debug_bounds("local-port-8080").unwrap().center().y,
+    );
+    cx.simulate_click(point, Modifiers::none());
+    assert_eq!(row.read_with(cx, |row, _| row.opened), 1);
+}
+
+#[gpui::test]
+fn another_machines_ports_do_not_open_a_local_page(cx: &mut TestAppContext) {
+    let (_, cx) = cx.add_window_view(|_, _| Row {
+        local: false,
+        opened: 0,
+    });
+    cx.refresh().unwrap();
+    assert!(cx.debug_bounds("local-port-8080").is_none());
+    assert!(cx.debug_bounds("local-port-18746").is_none());
+}

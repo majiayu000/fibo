@@ -6,7 +6,7 @@
 //! ones, and answers with sections of session, folder and note rows. Fibo draws the answer in its own style; a session the
 //! module names that the column does not list is ignored, and any failure falls back to
 //! the classic list with the reason shown.
-use super::sidebar_list::{End, Listed};
+use super::sidebar_list::{End, Listed, RowDetail};
 use super::*;
 use fibo_core::sidebar::{Bucket, Preset};
 use fibo_plugin_host as host;
@@ -16,7 +16,7 @@ use std::sync::OnceLock;
 
 /// Adds one session row to the column, within the preset's row limit.
 pub(super) type AddRow<'a> =
-    dyn FnMut(&mut Vec<gpui::AnyElement>, Listed, Option<String>, End) + 'a;
+    dyn FnMut(&mut Vec<gpui::AnyElement>, Listed, Option<RowDetail>, End) + 'a;
 /// How many closed sessions a module is handed, newest first.
 pub(super) const CLOSED_SHOWN: usize = 50;
 /// The longest trailing text a module may put at a row's end.
@@ -501,7 +501,12 @@ impl Workbench {
                             Some("selected") if selected => detail.clone(),
                             _ => None,
                         };
-                        push(out, l, shown, self.wasm_end(l, trailing, cx));
+                        push(
+                            out,
+                            l,
+                            shown.map(RowDetail::Text),
+                            self.wasm_end(l, trailing, cx),
+                        );
                     }
                 }
             }

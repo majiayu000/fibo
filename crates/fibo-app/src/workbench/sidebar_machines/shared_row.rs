@@ -5,7 +5,7 @@
 use super::*;
 use crate::model::session_state::resume_terminal;
 use crate::workbench::diagnostics::TipLine;
-use crate::workbench::sidebar_list::{End, Listed, SessionAction};
+use crate::workbench::sidebar_list::{End, Listed, RowDetail, SessionAction};
 use fibo_core::status::live_terminal;
 
 /// One session of another machine, as its row is drawn and sorted.
@@ -121,14 +121,14 @@ impl Workbench {
     pub(in crate::workbench) fn machine_row(
         &self,
         r: &MachineRow,
-        detail: Option<String>,
+        detail: Option<RowDetail>,
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         self.flat_row(r.from, Some(r), r.l, None, detail, End::State, cx)
             .into_any_element()
     }
     /// Its second line as the chosen preset shows it.
-    pub(in crate::workbench) fn machine_detail(&self, r: &MachineRow) -> Option<String> {
+    pub(in crate::workbench) fn machine_detail(&self, r: &MachineRow) -> Option<RowDetail> {
         self.listed_detail(r.from, &r.l, r.shown)
     }
     /// Its machine's square, when this list holds more than one machine.

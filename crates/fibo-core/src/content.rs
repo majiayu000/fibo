@@ -1,11 +1,13 @@
 //! Small, sourced projections. The transcript and mechanical receipts remain distinct.
 mod event;
+mod left_behind;
 mod plain;
 mod waited;
 use crate::model::AgentSession;
 #[cfg(test)]
 use crate::model::Workspace;
 pub use crate::subagents::{Subagent, Workflow, WorkflowRun, WorkflowStep};
+pub use left_behind::LeftBehind;
 pub use plain::plain_line;
 use serde::{Deserialize, Serialize};
 pub use waited::Waited;
@@ -523,34 +525,6 @@ impl Content {
                     .background
                     .is_some_and(|b| b.keeps_working() || b.wakes());
         (open && self.turn_started > 0).then_some(self.clock_from())
-    }
-    /// What a finished turn left running that nothing waits for: 「后台留着 1 个服务 · 端口
-    /// 5569」. A shell with no port or not looked at yet is only known to be a process.
-    pub fn left_behind(&self) -> Option<String> {
-        let b = self.background?;
-        let gone = self.shells.iter().filter(|t| t.ended).count() as u32;
-        let left = b.shells.saturating_sub(b.jobs).saturating_sub(gone);
-        if left == 0 {
-            return None;
-        }
-        let mut ports: Vec<u16> = (self.shells.iter())
-            .filter(|t| !t.job && !t.ended)
-            .filter_map(|t| t.port)
-            .collect();
-        ports.sort_unstable();
-        ports.dedup();
-        let line = if ports.len() as u32 == left {
-            t!("后台留着 {left} 个服务", left)
-        } else {
-            t!("后台留着 {left} 个进程", left)
-        };
-        Some(match ports.as_slice() {
-            [] => line,
-            _ => {
-                let list: Vec<String> = ports.iter().map(u16::to_string).collect();
-                t!("{line} · 端口 {ports}", line, ports = list.join(t!("、")))
-            }
-        })
     }
     /// The turn ended and only a monitor or a scheduled wakeup will resume it.
     pub fn waking(&self) -> bool {

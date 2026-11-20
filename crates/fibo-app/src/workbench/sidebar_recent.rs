@@ -1,7 +1,7 @@
 //! 会话优先's list: what needs you, what runs, then 今天 and 更早. With other machines
 //! configured their rows sort into the same sections by the same rule; each machine's own
 //! host said what state they are in.
-use super::sidebar_list::{End, Listed, RecentOrder, recent_order, split_today};
+use super::sidebar_list::{End, Listed, RecentOrder, RowDetail, recent_order, split_today};
 use super::sidebar_machines::MachineRow;
 use super::sidebar_wasm::{AddRow, Closed};
 use super::*;
@@ -89,6 +89,7 @@ impl Workbench {
                     .get(&l.0.id)
                     .map(|c| fibo_core::content::short(&c.headline(), 100))
                     .filter(|h| !h.trim().is_empty())
+                    .map(RowDetail::Text)
             })
         };
         // Only what asks you or failed gets a second line: the question is what you
@@ -126,7 +127,7 @@ impl Workbench {
                 let asks = |from: &Workbench, l: &Listed| {
                     l.1.blocked()
                         || l.1 == Status::Background
-                        || fibo_core::status::left_behind(&from.workspace, l.0).is_some()
+                        || fibo_core::status::left_behind_detail(&from.workspace, l.0).is_some()
                 };
                 match item {
                     Item::Here(l) => {
