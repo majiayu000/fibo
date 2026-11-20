@@ -44,6 +44,16 @@ while len(got) < want:
         got += os.read(0, 65536)
 open(out, "wb").write(got)
 open(done, "w").close()
+if len(sys.argv) > 5:
+    query = os.path.join(os.path.dirname(done), "query")
+    while not os.path.exists(query):
+        os.write(1, frame)
+    os.write(1, b"\x1b[6n")
+    answer = b""
+    while not answer.endswith(b"R"):
+        answer += os.read(0, 64)
+    open(query + "-partial", "wb").write(answer)
+    os.replace(query + "-partial", query + "-answer")
 while True:
     os.write(1, frame)
 "#;
@@ -282,4 +292,15 @@ fn a_handoff_waits_for_the_paste_with_output_still_draining() {
     assert!(matches!(writing.join().unwrap(), Reply::Ok));
     taking.join().unwrap();
     whole_paste_arrives(&out, &done, started, HANDOFF_PASTE);
+    let answer = host.root.join("query-answer");
+    std::fs::write(host.root.join("query"), []).unwrap();
+    wait_for(
+        &answer,
+        "the old host stopped answering terminal queries after handoff failed",
+    );
+    let answer = std::fs::read(answer).unwrap();
+    assert!(
+        answer.starts_with(b"\x1b[") && answer.ends_with(b"R"),
+        "{answer:?}"
+    );
 }
