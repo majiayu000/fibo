@@ -489,12 +489,18 @@ fn closed_and_exited_terminals_release_their_ptys() {
             .filter(|t| t.id.starts_with('t'))
             .all(|t| t.state == ProcessState::Exited)
     });
-    std::thread::sleep(Duration::from_secs(2));
-    let after = pty_fds(pid);
-    assert!(
-        after <= base,
-        "host holds {after} pty fds after closing 8 terminals (was {base} with one live)"
-    );
+    let until = Instant::now() + Duration::from_secs(2);
+    loop {
+        let after = pty_fds(pid);
+        if after <= base {
+            break;
+        }
+        assert!(
+            Instant::now() < until,
+            "host holds {after} pty fds after closing 8 terminals (was {base} with one live)"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }
 
 /// orca#10475: closing a tab must end its program even when the

@@ -288,7 +288,11 @@ fn recognition_status_stream_recovers_after_log_root_is_rebuilt() {
         "{\"type\":\"session_meta\",\"payload\":{\"id\":\"before\",\"cwd\":\"/tmp\"}}\n",
     )
     .unwrap();
-    std::thread::sleep(Duration::from_secs(1));
+    wait_for(&h, "the old log is in the index before restart", |w| {
+        w.agent_sessions
+            .iter()
+            .any(|s| s.cli_session_id == "before")
+    });
     // Reopen with existing roots so this exercises an actual WatchRoot stream, not only its ancestor.
     h.child.kill().unwrap();
     h.child.wait().unwrap();
@@ -317,7 +321,14 @@ fn recognition_status_stream_recovers_after_log_root_is_rebuilt() {
         Reply::Recognition(_)
     ));
     fs::rename(&root, h.root.join("moved-codex")).unwrap();
-    std::thread::sleep(Duration::from_millis(400));
+    loop {
+        let Reply::Recognition(status) = receive::<Reply>(&mut stream).unwrap() else {
+            panic!("status frame required")
+        };
+        if status.phase == RecognitionPhase::Interrupted {
+            break;
+        }
+    }
     fs::create_dir_all(&root).unwrap();
     fs::write(
         root.join("after.jsonl"),
@@ -325,14 +336,12 @@ fn recognition_status_stream_recovers_after_log_root_is_rebuilt() {
     )
     .unwrap();
     let mut recovering = false;
-    let mut interrupted = false;
     loop {
         let Reply::Recognition(status) = receive::<Reply>(&mut stream).unwrap() else {
             panic!("status frame required")
         };
-        interrupted |= status.phase == RecognitionPhase::Interrupted;
         recovering |= status.phase == RecognitionPhase::Recovering;
-        if interrupted && recovering && status.phase == RecognitionPhase::Healthy {
+        if recovering && status.phase == RecognitionPhase::Healthy {
             break;
         }
     }
