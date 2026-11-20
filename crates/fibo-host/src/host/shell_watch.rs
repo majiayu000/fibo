@@ -253,13 +253,15 @@ fn look_for_commands(
     }
     // Each CLI's processes once per look, whatever number of its sessions are looked for.
     let mut of_cli: HashMap<&'static str, Vec<(u32, String)>> = HashMap::new();
+    let mut found = Vec::with_capacity(looking.len());
+    let mut pids = HashSet::new();
     // The system names a process by its file; a test's fake CLI is a link to the shell.
     let fake = std::env::var("MOORING_CLI_PROCESS").ok();
     for (session, agent, log) in looking {
         let commands = of_cli.entry(agent.executable()).or_insert_with_key(|name| {
             crate::cli_commands::commands_of(fake.as_deref().unwrap_or(name))
         });
-        let mine: Vec<(String, u32)> = commands
+        let mine = commands
             .iter()
             .filter(|(pid, command)| {
                 let key = (session.clone(), *pid);
@@ -272,24 +274,36 @@ fn look_for_commands(
                 }
                 ran
             })
-            .map(|(pid, _)| (pid.to_string(), *pid))
+            .map(|(pid, _)| {
+                pids.insert(*pid);
+                pid.to_string()
+            })
             .collect();
-        let seen = match shells::look_at(&mine) {
-            Ok(seen) => seen,
-            Err(e) => {
-                eprintln!("background shells: {e}");
-                continue;
-            }
-        };
-        let pids = mine.into_iter().map(|(id, _)| id).collect();
-        let Ok(mut host) = lock(shared) else {
+        found.push((session, mine));
+    }
+    // Share the socket scan, while each session sees only the roots its own log claimed.
+    let seen = match shells::look_at(&pids) {
+        Ok(seen) => seen,
+        Err(e) => {
+            eprintln!("background shells: {e}");
             return;
-        };
-        if host.shell_watch.found_now(session, pids, &seen) {
-            let next = host.workspace.clone();
-            if let Err(e) = host.commit(next) {
-                eprintln!("background shells: {e}");
-            }
+        }
+    };
+    let Ok(mut host) = lock(shared) else {
+        return;
+    };
+    // Log and socket reads run outside the lock. Ignore sessions that moved on meanwhile.
+    let still_looking: HashSet<_> = host.looking().into_iter().map(|(id, _, _)| id).collect();
+    let mut changed = false;
+    for (session, mine) in found {
+        if still_looking.contains(session) {
+            changed |= host.shell_watch.found_now(session, mine, &seen);
+        }
+    }
+    if changed {
+        let next = host.workspace.clone();
+        if let Err(e) = host.commit(next) {
+            eprintln!("background shells: {e}");
         }
     }
 }

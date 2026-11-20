@@ -169,11 +169,11 @@ pub fn look(targets: &[(u32, Vec<(String, String)>)]) -> io::Result<HashMap<Stri
     }
     seen_all(found, now)
 }
-/// Looks at processes already found, `(id, pid)`.
-pub fn look_at(pids: &[(String, u32)]) -> io::Result<HashMap<String, Seen>> {
+/// Looks at process roots already found, keyed in the result by their decimal PID.
+pub fn look_at(pids: &HashSet<u32>) -> io::Result<HashMap<String, Seen>> {
     let found = pids
         .iter()
-        .map(|(id, pid)| (id.clone(), *pid, tree(*pid)))
+        .map(|&pid| (pid.to_string(), pid, tree(pid)))
         .collect();
     seen_all(found, fibo_core::content::now())
 }
