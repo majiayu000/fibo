@@ -651,8 +651,8 @@ impl Workbench {
         let agents_changed = previous.terminal_agents != status.terminal_agents;
         let remote_changed = previous.remote != status.remote;
         let titles_changed = previous.terminal_titles != status.terminal_titles;
-        // Workspace refresh and plugin reload notify when they apply. Diagnostic counts
-        // and protocol capabilities are kept in Store without invalidating any view.
+        // Workspace refresh and plugin reload notify when they apply. Store also keeps
+        // diagnostics, protocol capabilities and the phone's mode and trust metadata.
         let redraw = self.store.link_down()
             || agents_changed
             || remote_changed
@@ -660,10 +660,8 @@ impl Workbench {
             || previous.detail != status.detail
             || previous.terminal_hints != status.terminal_hints
             || previous.terminal_notes != status.terminal_notes
-            || previous.terminal_trust != status.terminal_trust
             || previous.terminal_commands != status.terminal_commands
-            || previous.terminal_reports != status.terminal_reports
-            || previous.terminal_modes != status.terminal_modes;
+            || previous.terminal_reports != status.terminal_reports;
         self.follow_plugins(status.plugins_revision, cx);
         if remote_changed && let Some(view) = &self.settings {
             let remote = status.remote.clone();

@@ -84,7 +84,8 @@ pub(super) fn recognition_check(
     handle: WindowHandle<workbench::Workbench>,
     cx: &mut gpui::AsyncApp,
 ) -> String {
-    use fibo_core::protocol::RecognitionPhase;
+    use fibo_core::modes::TerminalModes;
+    use fibo_core::protocol::{RecognitionPhase, TrustPrompt};
 
     const BATCH: usize = 30;
     let frame = |cx: &mut gpui::AsyncApp| {
@@ -101,14 +102,32 @@ pub(super) fn recognition_check(
         |cx: &mut gpui::AsyncApp| handle.update(cx, |v, _, _| v.visual_recognition()).unwrap();
     frame(cx);
     let (original, _) = snapshot(cx);
+    let terminal = handle
+        .update(cx, |v, _, _| v.visual_shown_terminal())
+        .unwrap();
+    let mut status = original.clone();
     let mut last = sidebar(cx);
     let mut draws = 0;
     let (cpu, ins) = (cpu_secs(), instructions());
     for i in 1..=BATCH {
-        let mut status = original.clone();
-        status.metrics.ps_spawns += i as u64;
+        status.metrics.ps_spawns += 1;
+        status.terminal_modes.insert(
+            terminal.clone(),
+            TerminalModes {
+                model: Some((format!("Probe model {i}"), "Logged model".into())),
+                ..Default::default()
+            },
+        );
+        status.terminal_trust.insert(
+            terminal.clone(),
+            TrustPrompt {
+                agent: Default::default(),
+                question: "Trust this folder?".into(),
+                folder: format!("/probe-{i}"),
+            },
+        );
         handle
-            .update(cx, |v, _, cx| v.receive_recognition(status, cx))
+            .update(cx, |v, _, cx| v.receive_recognition(status.clone(), cx))
             .unwrap();
         frame(cx);
         let now = sidebar(cx);
@@ -118,7 +137,10 @@ pub(super) fn recognition_check(
     let used = (cpu_secs() - cpu) * 1000. / BATCH as f64;
     let ins = (instructions() - ins) as f64 / BATCH as f64 / 1e6;
     let (mut current, displayed_revision) = snapshot(cx);
-    let metrics_arrived = current.metrics.ps_spawns == original.metrics.ps_spawns + BATCH as u64;
+    // The gate's existing arrival check also covers both phone metadata fields.
+    let metrics_arrived = current.metrics.ps_spawns == status.metrics.ps_spawns
+        && current.terminal_modes == status.terminal_modes
+        && current.terminal_trust == status.terminal_trust;
     // The host announced a revision. UI work here is synchronous, so the fresh workspace
     // can't land until after this frame. There is nothing new to paint in this frame.
     current.workspace_revision = displayed_revision.max(current.workspace_revision) + 1;
