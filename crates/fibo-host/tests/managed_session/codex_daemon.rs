@@ -362,7 +362,7 @@ fn daemon_codex_short_prompts_bind_to_the_pane_where_enter_was_pressed() {
     daemon_codex(&h, "p0", "proj", &[step("继续", &a, Some(&gates[0]))], "");
     daemon_codex(&h, "p1", "proj", &[step("继续", &b, Some(&gates[1]))], "");
     std::thread::sleep(Duration::from_secs(2));
-    for (pane, gate) in ["p0", "p1"].iter().zip(&gates) {
+    for (i, (pane, gate)) in ["p0", "p1"].iter().zip(&gates).enumerate() {
         let (mut stream, _, writable) = h.attach(pane, false);
         assert!(writable);
         send(
@@ -390,8 +390,10 @@ fn daemon_codex_short_prompts_bind_to_the_pane_where_enter_was_pressed() {
             .join("\n");
         fs::write(seed, format!("{rows}\n")).unwrap();
         fs::write(gate, "").unwrap();
-        // Far enough apart that each logged prompt meets only its own Enter.
-        std::thread::sleep(Duration::from_secs(4));
+        if i == 0 {
+            // The two Enters must be far enough apart that each prompt meets only its own.
+            std::thread::sleep(Duration::from_secs(4));
+        }
     }
     wait_for(
         &h,
