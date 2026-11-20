@@ -81,7 +81,7 @@ export function ModeSheet({
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={{ color: o.full ? t.err : t.text, fontSize: 15 }}>{o.label}</Text>
               {!!o.detail && (
-                <Text numberOfLines={2} style={{ color: t.dim, fontSize: 13, lineHeight: 18 }}>
+                <Text numberOfLines={kind === 'permission' ? undefined : 2} style={{ color: t.dim, fontSize: 13, lineHeight: 18 }}>
                   {o.detail}
                 </Text>
               )}
