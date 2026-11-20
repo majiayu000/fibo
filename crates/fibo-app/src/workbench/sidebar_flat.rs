@@ -285,7 +285,7 @@ impl Workbench {
         detail: Option<String>,
         end: End,
         cx: &Context<Self>,
-    ) -> gpui::AnyElement {
+    ) -> gpui::Stateful<gpui::Div> {
         let open = session.clone();
         let key = there.map_or(session.id.as_str(), |r| r.key()).to_owned();
         let selected = there.map_or(current == Some(session.id.as_str()), |r| r.shown);
@@ -482,8 +482,8 @@ impl Workbench {
             )
         });
         match there.filter(|r| r.quiet()) {
-            Some(r) => self.machine_menu_on(row, r.index, cx).into_any_element(),
-            None => row.into_any_element(),
+            Some(r) => self.machine_menu_on(row, r.index, cx),
+            None => row,
         }
     }
     /// A row's click, or a click on a branch under it.

@@ -7,6 +7,8 @@ use super::sidebar_wasm::{AddRow, Closed};
 use super::*;
 use fibo_core::sidebar::Bucket;
 
+mod history_row;
+
 #[derive(Clone, Copy)]
 enum Item<'a> {
     Here(Listed<'a>),
@@ -42,7 +44,7 @@ impl Workbench {
             out.push(match item {
                 Item::Here(l) => {
                     self.note_row(out.len(), &l);
-                    self.session_row(l, current, None, End::State, cx)
+                    self.history_row(l, current, cx)
                 }
                 Item::There(r) => self.machine_row(r, None, cx),
             });

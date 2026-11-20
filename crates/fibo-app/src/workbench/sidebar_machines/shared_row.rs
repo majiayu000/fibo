@@ -125,6 +125,7 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         self.flat_row(r.from, Some(r), r.l, None, detail, End::State, cx)
+            .into_any_element()
     }
     /// Its second line as the chosen preset shows it.
     pub(in crate::workbench) fn machine_detail(&self, r: &MachineRow) -> Option<String> {

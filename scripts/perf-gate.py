@@ -102,7 +102,9 @@ def main():
     bindir = pathlib.Path(sys.argv[1]).resolve()
     out = pathlib.Path(sys.argv[2] if len(sys.argv) > 2 else ROOT / 'target/perf-gate').resolve()
     fails = []
-    text = probe(bindir, out / 'frames', 'title-check,frames-pane,frames-changes,frames-main,frames-motion,frames-arrive,redraw-check,recognition-check', catch_up=False)
+    text = probe(bindir, out / 'frames', 'title-check,frames-pane,frames-changes,frames-main,frames-motion,frames-arrive,redraw-check,recognition-check,history-check', catch_up=False)
+    if 'history-check:' not in text:
+        fails.append('no history-check line in the probe output')
     measured = {k: float(v) for k, v in re.findall(r'(frames-\w+): [^\n]*?([\d.]+) M instructions', text)}
     ms = {k: float(v) for k, v in re.findall(r'(frames-\w+): ([\d.]+) ms CPU', text)}
     if set(measured) != {'frames-pane', 'frames-changes', 'frames-changesdraw', 'frames-main', 'frames-motion', 'frames-arrive'} or set(ms) != set(measured):
