@@ -161,6 +161,8 @@ pub struct Hovered {
 pub enum PaneEvent {
     /// Run `command` in a new terminal tab started in `cwd`.
     Run { command: String, cwd: String },
+    /// The window handed keyboard focus to this terminal.
+    Focused,
     /// The turn's ask scrolled out of sight or back, for the header's 「↑ 你问」.
     PinnedAsk,
     /// You typed or pasted into this terminal of this machine. Mouse and focus reports are
