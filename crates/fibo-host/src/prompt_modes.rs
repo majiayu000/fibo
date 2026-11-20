@@ -3,7 +3,8 @@
 //! `35;12;9M35;13;9M…`; focus changes type `[I` / `[O`; with the keyboard protocol pushed
 //! (Codex pushes `ESC[>7u` at start), Ctrl-C reaches the shell as `ESC[99;5u` and does not
 //! interrupt. So where a command's end mark is (OSC 133 D after C), whatever of these is
-//! still on is turned off, in the host's screen and in every viewer's.
+//! still on is turned off, in the host's screen and in every viewer's. After a host
+//! handoff, the original shell can mark the end of a command whose start was not seen.
 //!
 //! The screen is checked at the mark itself, not after the whole read: a shell may switch
 //! on its own modes for its prompt right after the mark (fish pushes the keyboard
@@ -77,9 +78,36 @@ pub fn feed<'a>(vt: &mut Vt, bytes: &'a [u8], ends: &[usize]) -> Cow<'a, [u8]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command_marks::Marks;
+    use std::time::Instant;
 
     fn flags(vt: &Vt) -> u8 {
         vt.terminal().kitty_keyboard_flags().unwrap().bits()
+    }
+
+    #[test]
+    fn a_handoff_read_with_two_end_marks_resets_at_the_last_one() {
+        let mut marks = Marks::after_handoff();
+        let mut vt = Vt::new(80, 24).unwrap();
+        // The program emits D and then enables reporting again before returning to the shell.
+        let read =
+            b"\x1b[?1003h\x1b[>7u\x1b]133;D;91\x07\x1b[?1003h\x1b[>7u\x1b]133;D;0\x1b\\\x1b[>5u$ ";
+        assert!(marks.scan(read, Instant::now()).is_empty());
+        // The shell has recovered the foreground by the time the host reads both marks.
+        let out = feed(
+            &mut vt,
+            read,
+            &[marks.take_handoff_prompt(|| true).unwrap()],
+        );
+        let mut viewer = Vt::new(80, 24).unwrap();
+        viewer.feed(&out);
+        for screen in [&vt, &viewer] {
+            assert!(
+                !screen.terminal().is_mouse_tracking().unwrap(),
+                "reporting stayed on at the shell prompt"
+            );
+            assert_eq!(flags(screen), 5);
+        }
     }
 
     #[test]

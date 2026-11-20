@@ -134,6 +134,86 @@ fn a_newer_host_takes_running_terminals_over_without_ending_them() {
 }
 
 #[test]
+fn a_shell_prompt_clears_reporting_after_a_running_terminal_is_handed_over() {
+    use fibo_core::terminal::libghostty_vt::terminal::Mode;
+
+    let mut h = Host::start();
+    h.setup();
+    // Run the program in its own foreground process group, as an interactive shell would.
+    let mut launch = h.launch(
+        "prompt",
+        r#"set -m
+           stty -echo
+           printf 'BEFORE-TUI\n\033]133;C\007'
+           /bin/sh -c '
+               printf "\033[?1049h\033[?1003h\033[?1006h\033[?1004h\033[>7uTUI-READY\n"
+               read -r probe
+               printf "\033]133;D;91\007TUI-STILL-RUNNING\n"
+               read -r end
+               printf "\033[?1049l"
+           '
+           printf '\033]133;D;%s\033\\\033[>5uSHELL-READY\n' "$?"
+           read -r empty
+           printf '\033]133;D;0\007SHELL-STILL-READY\n'
+           read -r finish"#,
+    );
+    if let Request::Launch { argv, .. } = &mut launch {
+        argv[0] = "/bin/bash".into();
+    }
+    h.call(launch).unwrap();
+    let (mut old_stream, mut old_vt, _) = h.attach("prompt", false);
+    read_until(&mut old_stream, &mut old_vt, "TUI-READY");
+    assert!(old_vt.terminal().is_mouse_tracking().unwrap());
+
+    let mut previous = super::restart_binding::take_over(&mut h);
+    std::mem::swap(&mut h.child, &mut previous);
+    let (mut stream, mut vt, writable) = h.attach("prompt", false);
+    assert!(writable);
+    assert!(vt.tail_text(24).unwrap().contains("TUI-READY"));
+    let input = |stream: &mut UnixStream| {
+        send(
+            stream,
+            CONTROL,
+            &Request::Input {
+                bytes: b"\n".to_vec(),
+                lossy: false,
+            },
+        )
+        .unwrap();
+    };
+    let assert_tui_modes = |vt: &Vt| {
+        assert!(vt.terminal().is_mouse_tracking().unwrap());
+        assert!(vt.terminal().mode(Mode::FOCUS_EVENT).unwrap());
+        assert_eq!(vt.terminal().kitty_keyboard_flags().unwrap().bits(), 7);
+    };
+    assert_tui_modes(&vt);
+    input(&mut stream);
+    read_until(&mut stream, &mut vt, "TUI-STILL-RUNNING");
+    assert_tui_modes(&vt);
+
+    input(&mut stream);
+    read_until(&mut stream, &mut vt, "SHELL-READY");
+    assert!(
+        !vt.terminal().is_mouse_tracking().unwrap(),
+        "mouse reports left on at the inherited shell prompt"
+    );
+    assert!(!vt.terminal().mode(Mode::FOCUS_EVENT).unwrap());
+    assert_eq!(vt.terminal().kitty_keyboard_flags().unwrap().bits(), 5);
+
+    input(&mut stream);
+    read_until(&mut stream, &mut vt, "SHELL-STILL-READY");
+    assert_eq!(vt.terminal().kitty_keyboard_flags().unwrap().bits(), 5);
+    assert!(!recognition(&h).terminal_commands.contains_key("prompt"));
+    let (_, reattached, _) = h.attach("prompt", true);
+    assert!(reattached.tail_text(24).unwrap().contains("BEFORE-TUI"));
+    assert!(!reattached.terminal().is_mouse_tracking().unwrap());
+    assert_eq!(
+        reattached.terminal().kitty_keyboard_flags().unwrap().bits(),
+        5
+    );
+}
+
+#[test]
 fn a_viewer_that_falls_behind_a_burst_is_resynced_not_cut() {
     let h = Host::start();
     h.setup();
