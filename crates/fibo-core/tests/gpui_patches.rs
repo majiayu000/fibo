@@ -9,9 +9,12 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// The patch names from the first `for name in ...; do` of bootstrap.sh.
-fn patch_names() -> Vec<String> {
-    let bootstrap = std::fs::read_to_string(root().join("bootstrap.sh")).expect("bootstrap.sh");
+fn bootstrap() -> String {
+    std::fs::read_to_string(root().join("bootstrap.sh")).expect("bootstrap.sh")
+}
+
+/// The GPUI patch names from the first `for name in ...; do` of bootstrap.sh.
+fn patch_names(bootstrap: &str) -> Vec<String> {
     let line = bootstrap
         .lines()
         .find_map(|line| line.strip_prefix("for name in "))
@@ -37,7 +40,7 @@ fn touched_crates(patch: &str) -> impl Iterator<Item = String> + '_ {
 
 #[test]
 fn every_gpui_patch_applies_to_the_pinned_source_in_order() {
-    let names = patch_names();
+    let names = patch_names(&bootstrap());
     let patches: Vec<(String, PathBuf)> = names
         .iter()
         .map(|name| (name.clone(), patch_path(name)))
@@ -99,10 +102,16 @@ fn every_gpui_patch_applies_to_the_pinned_source_in_order() {
 
 #[test]
 fn bootstrap_applies_every_patch_in_the_folder() {
-    let listed: BTreeSet<String> = patch_names()
+    let bootstrap = bootstrap();
+    let mut listed: BTreeSet<String> = patch_names(&bootstrap)
         .iter()
         .map(|name| format!("gpui-{name}.patch"))
         .collect();
+    let ghostty_patch = bootstrap
+        .lines()
+        .find_map(|line| line.strip_prefix("libghostty_patch=$PWD/patches/"))
+        .expect("bootstrap.sh names the libghostty-rs patch");
+    listed.insert(ghostty_patch.to_owned());
     let present: BTreeSet<String> = std::fs::read_dir(root().join("patches"))
         .expect("patches")
         .map(|entry| {
