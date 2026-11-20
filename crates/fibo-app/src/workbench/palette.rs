@@ -140,8 +140,7 @@ impl Workbench {
     pub(super) fn search_palette(&self, cx: &Context<Self>) -> gpui::AnyElement {
         let query = self.search_query(cx);
         let sections = self.search_sections(&query);
-        let section_sizes: Vec<_> = sections.iter().map(|s| s.hits.len()).collect();
-        let total: usize = section_sizes.iter().sum();
+        let total: usize = sections.iter().map(|s| s.hits.len()).sum();
         let index = self.search.index.min(total.saturating_sub(1));
         let selected = sections.iter().flat_map(|s| &s.hits).nth(index).cloned();
         // Each row is one direct child of the list, so the scroll handle can reveal it.
@@ -267,10 +266,6 @@ impl Workbench {
             } else {
                 t!("只搜索本地已索引的内容").into()
             });
-        let empty_query = query.is_empty();
-        let revision = self.workspace.revision;
-        let group = self.search.group;
-        let shown = self.search.shown.clone();
         let panel = div()
             .id("search-palette")
             .w(px(T::PALETTE_WIDTH))
@@ -284,20 +279,9 @@ impl Workbench {
             .rounded(px(T::PALETTE_RADIUS))
             .shadow_lg()
             .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .on_key_down(cx.listener(move |this, event, _, cx| {
-                // A key can arrive between a query or workspace change and the next draw.
-                let results_current = this.workspace.revision == revision
-                    && this.search.group == group
-                    && this.search.shown == shown
-                    && this.search.field.read(cx).text.trim() == query;
-                this.search_key(
-                    event,
-                    results_current.then_some(section_sizes.as_slice()),
-                    cx,
-                )
-            }))
+            .on_key_down(cx.listener(|this, event, _, cx| this.search_key(event, cx)))
             .child(field_row)
-            .when(empty_query, |d| d.child(self.status_filters(cx)))
+            .when(query.is_empty(), |d| d.child(self.status_filters(cx)))
             .child(body)
             .child(footer);
         // Deferred so it paints after the workbench's text, which the scrim must dim too.
