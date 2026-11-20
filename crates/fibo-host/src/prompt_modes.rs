@@ -3,7 +3,8 @@
 //! `35;12;9M35;13;9M…`; focus changes type `[I` / `[O`; with the keyboard protocol pushed
 //! (Codex pushes `ESC[>7u` at start), Ctrl-C reaches the shell as `ESC[99;5u` and does not
 //! interrupt. So where a command's end mark is (OSC 133 D after C), whatever of these is
-//! still on is turned off, in the host's screen and in every viewer's.
+//! still on is turned off, in the host's screen and in every viewer's. After a host
+//! handoff, the original shell can mark the end of a command whose start was not seen.
 //!
 //! The screen is checked at the mark itself, not after the whole read: a shell may switch
 //! on its own modes for its prompt right after the mark (fish pushes the keyboard

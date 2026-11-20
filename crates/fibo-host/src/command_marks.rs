@@ -13,6 +13,8 @@ const LONGEST: usize = 256;
 pub struct Marks {
     partial: Vec<u8>,
     started: Option<Instant>,
+    awaiting_handoff_prompt: bool,
+    handoff_prompt_end: Option<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -29,8 +31,30 @@ pub struct Finished {
 }
 
 impl Marks {
+    /// A running terminal may have reported its command start to the previous host.
+    pub fn after_handoff() -> Self {
+        Self {
+            awaiting_handoff_prompt: true,
+            ..Self::default()
+        }
+    }
+
+    /// An unpaired end can clean up modes only when the original shell has the PTY back.
+    pub fn take_handoff_prompt(
+        &mut self,
+        shell_is_foreground: impl FnOnce() -> bool,
+    ) -> Option<usize> {
+        let end = self.handoff_prompt_end.take()?;
+        if !shell_is_foreground() {
+            return None;
+        }
+        self.awaiting_handoff_prompt = false;
+        Some(end)
+    }
+
     /// The commands that finished in `bytes`, read at `at`.
     pub fn scan(&mut self, bytes: &[u8], at: Instant) -> Vec<Finished> {
+        self.handoff_prompt_end = None;
         let mut found = vec![];
         let joined;
         let data = if self.partial.is_empty() {
@@ -55,18 +79,22 @@ impl Marks {
                 continue;
             }
             let body = &rest[START.len()..];
-            // BEL, or the ESC of ESC \, ends it.
+            // End the mark at BEL or a complete ST so it is safe to insert output there.
             match body.iter().position(|&b| b == 0x07 || b == 0x1b) {
-                Some(end) => {
-                    let mut past = i + off + START.len() + end + 1;
-                    if body[end] == 0x1b && data.get(past) == Some(&b'\\') {
-                        past += 1;
+                Some(end) if body[end] == 0x1b && body.get(end + 1).is_none() => {
+                    if rest.len() <= LONGEST {
+                        self.partial = rest.to_vec();
                     }
+                    break;
+                }
+                Some(end) if body[end] == 0x1b && body[end + 1] != b'\\' => {
+                    i += off + START.len() + end;
+                }
+                Some(end) => {
+                    i += off + START.len() + end + 1 + usize::from(body[end] == 0x1b);
                     // Offsets count in this read; a kept start came from the one before.
                     let carried = data.len() - bytes.len();
-                    let in_read = past.saturating_sub(carried);
-                    self.mark(&body[..end], at, in_read, &mut found);
-                    i += off + START.len() + end + 1;
+                    self.mark(&body[..end], at, i - carried, &mut found);
                 }
                 None => {
                     if rest.len() <= LONGEST {
@@ -81,13 +109,19 @@ impl Marks {
     fn mark(&mut self, body: &[u8], at: Instant, end: usize, found: &mut Vec<Finished>) {
         let mut fields = body.split(|&b| b == b';');
         match fields.next() {
-            Some(b"C") => self.started = Some(at),
+            Some(b"C") => {
+                self.awaiting_handoff_prompt = false;
+                self.handoff_prompt_end = None;
+                self.started = Some(at);
+            }
             Some(b"D") => {
                 let exit = fields
                     .next()
                     .and_then(|f| std::str::from_utf8(f).ok())
                     .and_then(|f| f.trim().parse().ok());
                 if fields.any(|f| f == b"fibo=launch") {
+                    self.awaiting_handoff_prompt = false;
+                    self.handoff_prompt_end = None;
                     found.push(Finished {
                         exit,
                         took: Duration::ZERO,
@@ -101,6 +135,8 @@ impl Marks {
                         launch: false,
                         end,
                     });
+                } else if self.awaiting_handoff_prompt {
+                    self.handoff_prompt_end.get_or_insert(end);
                 }
             }
             _ => {}
@@ -157,6 +193,51 @@ mod tests {
                 .collect();
             assert_eq!(ends, marks, "split at {split}");
         }
+    }
+
+    #[test]
+    fn an_inherited_prompt_requires_a_complete_mark_and_the_original_foreground_shell() {
+        let now = Instant::now();
+        let st = b"\x1b]133;D;143\x1b\\";
+        let bel = b"\x1b]133;D;0\x07";
+        let mut fresh = Marks::default();
+        assert!(fresh.scan(bel, now).is_empty());
+        assert_eq!(fresh.take_handoff_prompt(|| unreachable!()), None);
+
+        for split in 0..st.len() {
+            let mut marks = Marks::after_handoff();
+            assert!(marks.scan(&st[..split], now).is_empty());
+            assert_eq!(marks.take_handoff_prompt(|| unreachable!()), None);
+            assert!(marks.scan(&st[split..], now).is_empty());
+            // A program still owns the foreground. Its mark does not consume the prompt.
+            assert_eq!(marks.take_handoff_prompt(|| false), None);
+            assert!(marks.scan(bel, now).is_empty());
+            assert_eq!(marks.take_handoff_prompt(|| true), Some(bel.len()));
+            assert!(marks.scan(bel, now).is_empty());
+            assert_eq!(marks.take_handoff_prompt(|| unreachable!()), None);
+
+            let mut marks = Marks::after_handoff();
+            marks.scan(&st[..split], now);
+            marks.scan(&st[split..], now);
+            assert_eq!(
+                marks.take_handoff_prompt(|| true),
+                Some(st.len() - split),
+                "split at {split}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_new_start_revokes_the_inherited_prompt_and_keeps_normal_exit_tracking() {
+        let now = Instant::now();
+        let mut marks = Marks::after_handoff();
+        marks.scan(b"\x1b]133;D;0\x07\x1b]133;C\x07", now);
+        assert_eq!(marks.take_handoff_prompt(|| unreachable!()), None);
+        let finished = marks.scan(b"\x1b]133;D;7\x07", now);
+        assert_eq!(finished.len(), 1);
+        assert_eq!(finished[0].exit, Some(7));
+        assert!(marks.scan(b"\x1b]133;D;0\x07", now).is_empty());
+        assert_eq!(marks.take_handoff_prompt(|| unreachable!()), None);
     }
 
     #[test]

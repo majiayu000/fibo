@@ -143,7 +143,7 @@ fn take_over(root: &Path) -> io::Result<(local::Stream, Vec<Taken>)> {
                     title: handed.title,
                     cell,
                     input_at: None,
-                    marks: Default::default(),
+                    marks: crate::command_marks::Marks::after_handoff(),
                     reports: Default::default(),
                 },
                 reader,

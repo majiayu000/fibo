@@ -394,9 +394,17 @@ pub(super) fn pump(
         };
         quiet_at = Some(Instant::now() + SCREEN_QUIET);
         let mut live = lock(terminal)?;
-        let finished = live.marks.scan(&bytes[..n], Instant::now());
+        let Live {
+            marks, master, pid, ..
+        } = &mut *live;
+        let finished = marks.scan(&bytes[..n], Instant::now());
+        let handoff_end =
+            marks.take_handoff_prompt(|| master.foreground_group() == Some(*pid as i32));
         // Back at the prompt: nothing a program that died mid-run left on stays on.
-        let ends: Vec<usize> = finished.iter().map(|f| f.end).collect();
+        let ends: Vec<usize> = handoff_end
+            .into_iter()
+            .chain(finished.iter().map(|f| f.end))
+            .collect();
         let out = crate::prompt_modes::feed(&mut live.vt, &bytes[..n], &ends).into_owned();
         let response = std::mem::take(&mut *lock(&replies)?);
         if !response.is_empty() {
