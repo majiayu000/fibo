@@ -1,8 +1,13 @@
 //! 设置's panel: the nav column and the page beside it, and how the workbench opens it.
 use super::*;
 
+#[cfg(feature = "visual-test")]
+static DRAWS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 impl Render for SettingsView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        #[cfg(feature = "visual-test")]
+        DRAWS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let searching = !self.query(cx).is_empty();
         if !self.market.loaded()
             && if searching {
@@ -205,8 +210,9 @@ impl Workbench {
                     this.settings = None;
                     this.nav.pending_focus = true;
                 } else {
-                    view.update(cx, |v, _| {
+                    view.update(cx, |v, cx| {
                         v.text_error = Some(t!("先打开一个终端窗格，再回来试播").into());
+                        cx.notify();
                     });
                 }
                 cx.notify();
@@ -254,6 +260,16 @@ impl Workbench {
 
 #[cfg(feature = "visual-test")]
 impl Workbench {
+    pub(crate) fn visual_settings_draws() -> usize {
+        DRAWS.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub(crate) fn visual_preview_complete(&self, cx: &mut Context<Self>) {
+        self.settings.as_ref().unwrap().update(cx, |_, cx| {
+            cx.emit(SettingsAction::PreviewComplete(None));
+        });
+    }
+
     pub(crate) fn visual_settings_page_name(&self, cx: &gpui::App) -> &'static str {
         self.settings.as_ref().unwrap().read(cx).page.label()
     }

@@ -1,5 +1,5 @@
-//! Settings over the window. While a plugin's stage plays, settings is a cached view: the
-//! stage asks for every frame and nothing else on the page changes.
+//! The settings panel keeps its layout while panes behind it draw. Plugin previews
+//! have their own view over the panel and can animate without rebuilding it.
 use super::*;
 
 impl Workbench {
@@ -9,18 +9,13 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::AnyElement {
         let player = view.read(cx).playing();
-        let page = gpui::AnyView::from(view);
-        let page = match &player {
-            Some(_) => page
-                .cached(
-                    gpui::StyleRefinement::default()
-                        .w(px(T::SETTINGS_WIDTH))
-                        .max_w_full()
-                        .h(px(PANEL_HEIGHT)),
-                )
-                .into_any_element(),
-            None => page.into_any_element(),
-        };
+        let page = view.cached(
+            gpui::StyleRefinement::default()
+                .w(px(T::SETTINGS_WIDTH))
+                .max_w_full()
+                .h(px(PANEL_HEIGHT))
+                .max_h_full(),
+        );
         gpui::deferred(
             div()
                 .absolute()

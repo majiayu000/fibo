@@ -447,3 +447,130 @@ pub(super) async fn run(
     }
     out.join("\n")
 }
+
+/// Pane output and workspace refreshes must leave a settings page cached until its
+/// own state changes. Check the panel separately from the workbench beneath its scrim.
+pub(super) async fn pane_behind(
+    handle: WindowHandle<Workbench>,
+    pane: &Entity<Pane>,
+    cx: &mut gpui::AsyncApp,
+) -> String {
+    let mut lines = Vec::new();
+    handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
+    let picture = |refresh, cx: &mut gpui::AsyncApp| {
+        cx.update_window(handle.into(), |_, w, a| {
+            if refresh {
+                w.refresh();
+            }
+            w.draw(a).clear(a);
+            let image = w.render_to_image().unwrap();
+            let (width, height) = image.dimensions();
+            image::imageops::crop_imm(
+                &image,
+                width * 3 / 16,
+                height / 7,
+                width * 5 / 8,
+                height * 5 / 7,
+            )
+            .to_image()
+            .into_raw()
+        })
+        .unwrap()
+    };
+    let draw = |cx: &mut gpui::AsyncApp| {
+        pane.update(cx, |_, cx| cx.notify());
+        cx.update_window(handle.into(), |_, w, a| w.draw(a).clear(a))
+            .unwrap();
+    };
+    for (id, page) in [
+        ("general", "通用"),
+        ("plugins", "插件"),
+        ("appearance", "外观"),
+    ] {
+        handle
+            .update(cx, |v, _, a| v.visual_settings_show(page, a))
+            .unwrap();
+        cx.background_executor()
+            .timer(Duration::from_millis(450))
+            .await;
+        draw(cx);
+        draw(cx);
+        let start = Workbench::visual_settings_draws();
+        let (ms, ins) = cost(FRAMES, |_| draw(cx));
+        let draws = Workbench::visual_settings_draws() - start;
+        assert!(
+            picture(false, cx) == picture(true, cx),
+            "{page} cached panel differs from a full refresh"
+        );
+        lines.push(format!("frames-settings-pane-{id}: {ms:.2} ms CPU, {ins:.2} M instructions; settings drew {draws}"));
+    }
+
+    let field = handle
+        .update(cx, |v, _, a| v.visual_settings_query(a))
+        .unwrap();
+    let before = picture(false, cx);
+    field.update(cx, |v, a| {
+        v.set_text("theme");
+        a.notify();
+    });
+    let query = picture(false, cx);
+    assert!(
+        query != before && query == picture(true, cx),
+        "settings search missed a redraw"
+    );
+
+    handle
+        .update(cx, |v, _, a| v.visual_settings_show("通用", a))
+        .unwrap();
+    field.update(cx, |v, a| {
+        v.set_text("");
+        a.notify();
+    });
+    let before = picture(false, cx);
+    let start = Workbench::visual_settings_draws();
+    handle
+        .update(cx, |v, _, a| {
+            let mut snapshot = v.visual_resize_workspace();
+            snapshot.revision += 1;
+            v.visual_resize_apply(snapshot, a);
+        })
+        .unwrap();
+    cx.update_window(handle.into(), |_, w, a| w.draw(a).clear(a))
+        .unwrap();
+    let snapshots = Workbench::visual_settings_draws() - start;
+    handle
+        .update(cx, |v, _, a| {
+            let mut snapshot = v.visual_resize_workspace();
+            snapshot.revision += 1;
+            snapshot.settings.away_minutes += 120;
+            v.visual_resize_apply(snapshot, a);
+        })
+        .unwrap();
+    let changed = picture(false, cx);
+    assert!(
+        changed != before && changed == picture(true, cx),
+        "changed settings missed a redraw"
+    );
+
+    handle
+        .update(cx, |v, w, a| {
+            v.visual_page("EmptyTab", w, a);
+            v.visual_settings_show("外观", a);
+        })
+        .unwrap();
+    let before = picture(false, cx);
+    handle
+        .update(cx, |v, _, a| v.visual_preview_complete(a))
+        .unwrap();
+    let error = picture(false, cx);
+    assert!(
+        error != before && error == picture(true, cx),
+        "preview error missed a redraw"
+    );
+
+    handle
+        .update(cx, |v, _, a| v.visual_settings_close(a))
+        .unwrap();
+    lines.push(format!("settings-pane-check: search, changed settings and preview error painted; equal snapshot drew settings {snapshots}"));
+    lines.join("\n")
+}
