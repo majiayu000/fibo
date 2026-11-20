@@ -1,5 +1,7 @@
 //! Real input and host readback for the default Agent dropdown.
 use super::*;
+use fibo_core::model::Agent;
+use std::time::Instant;
 
 pub(super) fn start(
     handle: Option<WindowHandle<workbench::Workbench>>,
@@ -19,7 +21,6 @@ pub(super) fn start(
     cx.spawn(async move |cx| {
         let executor = cx.background_executor().clone();
         let wait = move |ms| executor.timer(Duration::from_millis(ms));
-        wait(2000).await;
         std::fs::create_dir_all(&directory).unwrap();
         // Match the smaller macOS CI display, including the panel's height clamp.
         handle.update(cx, |v, w, a| {
@@ -71,12 +72,10 @@ pub(super) fn start(
                 .update(cx, |v, _, a| v.visual_agent_menu_open(a))
                 .unwrap()
         };
-        let selected = |cx: &mut gpui::AsyncApp| {
-            handle
-                .update(cx, |v, _, _| v.visual_settings_values().default_agent)
-                .unwrap()
+        let selection = |cx: &mut gpui::AsyncApp| {
+            handle.update(cx, |v, _, _| v.visual_agent_save_state()).unwrap()
         };
-        use fibo_core::model::Agent;
+        let selected = |cx: &mut gpui::AsyncApp| selection(cx).0;
         let agents = Agent::all();
         let mouse_choice = agents[1];
         shot("closed", cx);
@@ -94,7 +93,7 @@ pub(super) fn start(
             };
             if phase == "scroll-readback" {
                 assert_eq!(selected(cx), agents[last], "the off-screen choice was saved");
-                click(810., 148., cx); wait(200).await;
+                click(810., 148., cx);
                 shot("reopened-last", cx);
                 visible(last, cx);
                 handle.update(cx, |_, w, a| {
@@ -106,20 +105,19 @@ pub(super) fn start(
                 visible(last, cx);
             } else {
                 assert_eq!(selected(cx), agents[0], "fresh fixture starts at the first agent");
-                click(810., 148., cx); wait(200).await;
-                for _ in 0..last { key("down", cx); wait(30).await; }
+                click(810., 148., cx);
+                for _ in 0..last { key("down", cx); }
                 shot("keyboard-last", cx);
                 visible(last, cx);
-                key("down", cx); wait(100).await;
+                key("down", cx);
                 visible(0, cx);
-                key("up", cx); wait(100).await;
+                key("up", cx);
                 visible(last, cx);
-                key("enter", cx); wait(600).await;
-                assert_eq!(selected(cx), agents[last]);
+                key("enter", cx);
+                wait_for_save(handle, cx, agents[last]).await;
                 handle.update(cx, |v, _, a| v.visual_settings_close(a)).unwrap();
                 handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
-                wait(200).await;
-                click(810., 148., cx); wait(200).await;
+                click(810., 148., cx);
                 shot("reopened-last", cx);
                 visible(last, cx);
             }
@@ -132,61 +130,46 @@ pub(super) fn start(
         } else {
             let original = selected(cx);
             click(810., 148., cx);
-            wait(200).await;
             assert!(menu_open(cx), "click opens the dropdown");
             shot("open", cx);
             click(810., 148., cx);
-            wait(200).await;
             assert!(
                 !menu_open(cx),
                 "clicking its trigger again closes the dropdown"
             );
             click(810., 148., cx);
-            wait(200).await;
             key("escape", cx);
-            wait(200).await;
             assert!(
                 handle
                     .update(cx, |v, _, _| v.visual_settings_open())
                     .unwrap(),
                 "Esc closes the picker, not settings"
             );
-            assert_eq!(selected(cx), original, "cancel keeps the saved choice");
+            assert_eq!(selection(cx), (original, false), "cancel keeps the saved choice");
             assert!(!menu_open(cx));
             shot("escape", cx);
             click(810., 148., cx);
-            wait(200).await;
             click(300., 90., cx);
-            wait(200).await;
             assert!(!menu_open(cx));
             shot("outside", cx);
-            assert_eq!(selected(cx), original, "outside click does not save");
+            assert_eq!(selection(cx), (original, false), "outside click does not save");
             // Every registered agent, including the last item, can be chosen by keyboard.
             for _ in 0..agents.len() {
                 let before = selected(cx);
                 let i = agents.iter().position(|a| *a == before).unwrap();
                 click(810., 148., cx);
-                wait(100).await;
                 key("down", cx);
                 key("enter", cx);
-                wait(600).await;
-                assert_eq!(
-                    selected(cx),
-                    agents[(i + 1) % agents.len()],
-                    "keyboard choice reached the host"
-                );
+                wait_for_save(handle, cx, agents[(i + 1) % agents.len()]).await;
             }
             // Select the second registered Agent with the mouse.
             click(810., 148., cx);
-            wait(200).await;
             click(810., 215., cx);
-            wait(600).await;
-            assert_eq!(selected(cx), mouse_choice, "mouse choice reached the host");
+            wait_for_save(handle, cx, mouse_choice).await;
             handle
                 .update(cx, |v, _, a| v.visual_settings_close(a))
                 .unwrap();
             handle.update(cx, |v, w, a| v.show_settings(w, a)).unwrap();
-            wait(200).await;
             assert_eq!(
                 selected(cx),
                 mouse_choice,
@@ -199,4 +182,28 @@ pub(super) fn start(
     })
     .detach();
     true
+}
+
+// A workspace update can carry the choice before the request receipt clears busy.
+// Wait for both before sending another choice, which settings would ignore while busy.
+async fn wait_for_save(
+    handle: WindowHandle<workbench::Workbench>,
+    cx: &mut gpui::AsyncApp,
+    expected: Agent,
+) {
+    let until = Instant::now() + Duration::from_secs(5);
+    let executor = cx.background_executor().clone();
+    loop {
+        let (actual, busy) = handle
+            .update(cx, |v, _, _| v.visual_agent_save_state())
+            .unwrap();
+        if actual == expected && !busy {
+            return;
+        }
+        assert!(
+            Instant::now() < until,
+            "host did not settle the Agent choice: expected {expected:?}, got {actual:?} (busy={busy})"
+        );
+        executor.timer(Duration::from_millis(25)).await;
+    }
 }
