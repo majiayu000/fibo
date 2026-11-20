@@ -260,6 +260,9 @@ impl Workbench {
     pub(crate) fn visual_settings_values(&self) -> Settings {
         self.workspace.settings.clone()
     }
+    pub(crate) fn visual_agent_save_state(&self) -> (Agent, bool) {
+        (self.workspace.settings.default_agent, self.store.busy())
+    }
     pub(crate) fn visual_settings_query(&self, cx: &gpui::App) -> Entity<Field> {
         self.settings.as_ref().unwrap().read(cx).query.clone()
     }
