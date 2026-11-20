@@ -4,7 +4,6 @@ use fibo_core::status::{self, Status};
 /// A Codex whose turn ended, its footer saying a command was left running, and that command
 /// as its child with stdin closed. Its log names the command, as a real rollout does.
 fn codex_left_running(h: &Host, pane: &str, command: &str) {
-    h.setup();
     let logs = h.root.join("logs/codex");
     fs::create_dir_all(&logs).unwrap();
     let id = uuid::Uuid::new_v4().to_string();
@@ -18,10 +17,12 @@ fn codex_left_running(h: &Host, pane: &str, command: &str) {
     ];
     fs::write(&log, rows.map(|r| format!("{r}\n")).concat()).unwrap();
     let cli = h.root.join("codex");
-    std::os::unix::fs::symlink("/bin/sh", &cli).unwrap();
-    let pid_file = h.root.join("codex-pid");
+    if !cli.exists() {
+        std::os::unix::fs::symlink("/bin/sh", &cli).unwrap();
+    }
+    let pid_file = h.root.join(format!("{pane}-codex-pid"));
     // The footer comes after the binding, as on a real screen a turn is well under way.
-    let bound = h.root.join("codex-bound");
+    let bound = h.root.join(format!("{pane}-codex-bound"));
     let script = format!(
         "echo $$ > {}; /bin/sh -c {} </dev/null & while [ ! -e {} ]; do /bin/sleep 0.1; done; printf '  1 background terminal running \\302\\267 /ps to view \\302\\267 /stop to close\\n'; read -r line",
         shell_quote(&pid_file.to_string_lossy()),
@@ -95,6 +96,7 @@ fn take_over(h: &mut Host) -> tied::Tied {
 #[test]
 fn a_codex_command_left_running_stays_running_across_a_new_host() {
     let mut h = Host::start();
+    h.setup();
     codex_left_running(&h, "job", "sleep 300; echo codex-job-7c1e");
     wait_shows(&h, "job", Status::Running);
     let _next = take_over(&mut h);
@@ -106,28 +108,36 @@ fn a_codex_command_left_running_stays_running_across_a_new_host() {
     }
 }
 
-/// A server Codex left running is not its turn going on, and nothing waits for it: the turn
-/// is over, with a note of what is still up. Undoing `keep_ended_turns` or `found_tasks`
-/// leaves it 在跑 for as long as it stays up.
+/// A shared scan must give each session only the commands its own log started.
 #[test]
-fn a_server_codex_left_running_ends_its_turn_and_names_the_port() {
+fn a_codex_job_and_a_server_in_different_sessions_keep_their_own_status() {
     let h = Host::start();
+    h.setup();
     // Below where any system starts handing out ports.
     let port = 22000 + (std::process::id() % 900) as u16;
     // `exec`: a fake CLI is a shell, so a shell left waiting on the server would be one more.
     let server = format!("exec python3 -m http.server {port} --bind 127.0.0.1");
     codex_left_running(&h, "srv", &server);
+    codex_left_running(&h, "job", "sleep 300; echo codex-batched-job-c042");
     // Before the screen is read the turn already reads as over, so wait for the note too.
     let want = format!("后台留着 1 个服务 · 端口 {port}");
     let until = Instant::now() + Duration::from_secs(40);
     loop {
         let w = h.workspace();
         let left = (w.current_agent("srv")).and_then(|s| status::left_behind(&w, s));
-        if left.as_deref() == Some(want.as_str()) {
+        let job = w
+            .current_agent("job")
+            .and_then(|s| w.content.get(&s.id))
+            .map(|c| c.shells.as_slice());
+        // The footer alone can say Running before any process has been claimed.
+        if left.as_deref() == Some(want.as_str())
+            && matches!(job, Some([task]) if task.job && task.port.is_none() && task.id.parse::<u32>().is_ok())
+        {
             break;
         }
-        assert!(Instant::now() < until, "still says {left:?}");
+        assert!(Instant::now() < until, "server {left:?}, job {job:?}");
         std::thread::sleep(Duration::from_millis(200));
     }
     wait_shows(&h, "srv", Status::Review);
+    wait_shows(&h, "job", Status::Running);
 }
