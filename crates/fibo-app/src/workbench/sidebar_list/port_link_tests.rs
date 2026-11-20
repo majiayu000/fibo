@@ -40,28 +40,37 @@ impl Render for Row {
 }
 
 #[gpui::test]
-fn local_port_links_open_individually_without_opening_the_row(cx: &mut TestAppContext) {
+fn local_port_links_require_alt_and_keep_plain_row_clicks(cx: &mut TestAppContext) {
     let (row, cx) = cx.add_window_view(|_, _| Row {
         local: true,
         opened: 0,
     });
     cx.refresh().unwrap();
+    let point = cx.debug_bounds("local-port-18746").unwrap().center();
+    cx.simulate_click(point, Modifiers::none());
+    assert!(cx.opened_url().is_none());
+    assert_eq!(row.read_with(cx, |row, _| row.opened), 1);
+
+    let alt = Modifiers {
+        alt: true,
+        ..Modifiers::none()
+    };
     for (selector, url) in [
         ("local-port-8080", "http://127.0.0.1:8080/"),
         ("local-port-18746", "http://127.0.0.1:18746/"),
     ] {
         let point = cx.debug_bounds(selector).unwrap().center();
-        cx.simulate_click(point, Modifiers::none());
+        cx.simulate_click(point, alt);
         assert_eq!(cx.opened_url().as_deref(), Some(url));
-        assert_eq!(row.read_with(cx, |row, _| row.opened), 0);
+        assert_eq!(row.read_with(cx, |row, _| row.opened), 1);
     }
 
     let point = gpui::point(
         px(4.),
         cx.debug_bounds("local-port-8080").unwrap().center().y,
     );
-    cx.simulate_click(point, Modifiers::none());
-    assert_eq!(row.read_with(cx, |row, _| row.opened), 1);
+    cx.simulate_click(point, alt);
+    assert_eq!(row.read_with(cx, |row, _| row.opened), 2);
 }
 
 #[gpui::test]

@@ -67,6 +67,7 @@ impl RowDetail {
                     .flat_map(|(i, port)| {
                         let name = port.to_string();
                         let url = format!("http://127.0.0.1:{port}/");
+                        let hint = t!("按住 Option（Alt）单击，在浏览器中打开");
                         let separator = (i > 0)
                             .then(|| div().flex_shrink_0().child(t!("、")).into_any_element());
                         let link = div()
@@ -74,14 +75,18 @@ impl RowDetail {
                             .debug_selector(move || format!("local-port-{port}"))
                             .role(gpui::accesskit::Role::Link)
                             .aria_label(url.clone())
+                            .aria_description(hint)
+                            .tooltip(super::diagnostics::tip(vec![hint.to_owned()]))
                             .flex_shrink_0()
                             .cursor_pointer()
                             .text_color(T::color(T::link()))
                             .underline()
                             .child(name)
-                            .on_click(move |_, _, cx| {
-                                cx.stop_propagation();
-                                cx.open_url(&url);
+                            .on_click(move |event, _, cx| {
+                                if event.modifiers().alt {
+                                    cx.stop_propagation();
+                                    cx.open_url(&url);
+                                }
                             })
                             .into_any_element();
                         separator.into_iter().chain(std::iter::once(link))
