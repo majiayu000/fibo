@@ -278,6 +278,7 @@
 "{path} 里没有主题" = "no theme files found in {path}"
 
 "这个 Agent 分不出排队和马上发，直接发送就好" = "This Agent does not support queue or steer; send normally instead"
+"这个 Agent 要等手头这一步做完才会读排队的消息" = "This agent reads queued messages after the current step finishes"
 
 "它在等你决定要不要信任这个文件夹，答完才能发消息" = "Decide whether to trust this folder before sending a message"
 

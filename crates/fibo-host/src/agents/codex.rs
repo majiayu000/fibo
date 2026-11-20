@@ -29,6 +29,7 @@ impl Adapter for Codex {
         Some(super::TurnKeys {
             queue: b"\t",
             steer: b"\r",
+            send_now: false,
         })
     }
     fn screen_rules(&self) -> &'static str {

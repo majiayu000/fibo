@@ -64,11 +64,13 @@ mod tests {
         let claude = TurnKeys {
             queue: b"\r",
             steer: b"\x1b[13;5u",
+            send_now: true,
         };
         assert_eq!(keys(Agent::Claude), Some(claude));
         let codex = TurnKeys {
             queue: b"\t",
             steer: b"\r",
+            send_now: false,
         };
         assert_eq!(keys(Agent::Codex), Some(codex));
         assert_eq!(keys(Agent::Grok), None);
