@@ -37,6 +37,27 @@ for name in $pending; do
   git -C .deps/zed apply "$(pwd)/patches/gpui-$name.patch"
 done
 "${ZIG:-zig}" version
+
+# Ghostty pins this Zig package to a Codeberg archive that can fail on cold CI runners.
+# Seed Zig's normal content-addressed cache. System-cache builds use their own packages.
+if [ -z "${GHOSTTY_ZIG_SYSTEM_DIR:-}" ]; then
+  translate_c_archive=$PWD/patches/translate-c/translate-c-4e879eb8.tar.gz
+  translate_c_hash=translate_c-0.0.0-Q_BUWhVNBwDOEcIqub4VFPJPB6D9dgwzUMHTX5KWr8Xr
+  mkdir -p .deps/zig-fetch
+  # Zig 0.16 needs a project directory even when fetch is only seeding the cache.
+  printf '%s\n' 'pub fn build(_: *@import("std").Build) void {}' > .deps/zig-fetch/build.zig
+  translate_c_zig=$(command -v "${ZIG:-zig}")
+  case "$translate_c_zig" in
+    /*|[A-Za-z]:*) ;;
+    *) translate_c_zig=$PWD/$translate_c_zig ;;
+  esac
+  fetched_hash=$(cd .deps/zig-fetch && "$translate_c_zig" fetch "$translate_c_archive")
+  if [ "$fetched_hash" != "$translate_c_hash" ]; then
+    printf 'Ghostty translate-c hash mismatch (expected %s, got %s)\n' "$translate_c_hash" "$fetched_hash" >&2
+    exit 1
+  fi
+  printf 'Verified Ghostty translate-c package %s\n' "$fetched_hash"
+fi
 printf '%s\n' 'Dependencies ready. Build with Xcode available and Zig 0.16.x.'
 # libghostty-vt-sys clones Ghostty into the build directory on its first build (unless
 # GHOSTTY_SOURCE_DIR points at a checkout), so that build still needs the network.
