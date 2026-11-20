@@ -29,8 +29,8 @@ pub(super) struct ShellWatch {
     started: Option<Instant>,
     /// `SETTLE` has ended and clients were told: unjudged shells stop counting as jobs.
     settled: bool,
-    /// Terminal -> since when its screen says a command was left running.
-    pub(super) on_screen: HashMap<String, Instant>,
+    /// Terminals whose screen says a command was left running.
+    pub(super) on_screen: HashSet<String>,
     /// Session -> the pids of the commands found for it, each judged in `judged`.
     pub(super) found: HashMap<String, Vec<String>>,
     wake: Option<SyncSender<()>>,

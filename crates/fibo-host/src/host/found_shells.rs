@@ -4,7 +4,6 @@
 //! docs/decisions/2026-11-04-background-shell-own-client.md has the rules.
 use super::*;
 use crate::agents::BackgroundCommands;
-use crate::background_shells as shells;
 use fibo_core::content::{ShellTask, Turn};
 use std::path::PathBuf;
 
@@ -21,11 +20,11 @@ impl Host {
             }
         });
         let watch = &mut self.shell_watch;
-        if left == watch.on_screen.contains_key(terminal) {
+        if left == watch.on_screen.contains(terminal) {
             return Ok(());
         }
         if left {
-            watch.on_screen.insert(terminal.into(), Instant::now());
+            watch.on_screen.insert(terminal.into());
             watch.poke();
         } else {
             watch.on_screen.remove(terminal);
@@ -53,7 +52,7 @@ impl Host {
     pub(super) fn looking(&self) -> Looking {
         self.shell_watch
             .on_screen
-            .keys()
+            .iter()
             .filter_map(|terminal| self.workspace.current_agent(terminal))
             .filter(|s| self.turn_over(&s.id))
             .map(|s| (s.id.clone(), s.runtime, PathBuf::from(&s.transcript)))
@@ -63,11 +62,10 @@ impl Host {
         let content = self.workspace.content.get(session);
         content.is_some_and(|c| c.turn == Turn::Completed)
     }
-    /// The commands a screen says `session` left running, for `overlay_shells`. A command no
-    /// process was found for counts as a job until it has run past the limit.
+    /// The commands a screen says `session` left running, for `overlay_shells`. The
+    /// footer alone is enough for a note. Keeping the turn open requires a job verdict.
     pub(super) fn found_tasks(&self, terminal: &str, session: &str) -> Option<Vec<ShellTask>> {
-        let since = self.shell_watch.on_screen.get(terminal)?;
-        if !self.turn_over(session) {
+        if !self.shell_watch.on_screen.contains(terminal) || !self.turn_over(session) {
             return None;
         }
         let task = |id: &str, job: bool, why: &str| ShellTask {
@@ -90,17 +88,13 @@ impl Host {
                     )
                 })
                 .collect(),
-            None => vec![task(
-                "screen",
-                since.elapsed().as_secs() < shells::JOB_LIMIT,
-                "屏幕说有后台终端，没对上具体命令",
-            )],
+            None => vec![task("screen", false, "屏幕说有后台终端，没对上具体命令")],
         })
     }
     /// A CLI reports `working` for a turn that ended as long as a command runs, server or
     /// not, and its title may spin. The log and the commands know better.
     pub(super) fn keep_ended_turns(&self, w: &mut Workspace) {
-        for terminal in self.shell_watch.on_screen.keys() {
+        for terminal in &self.shell_watch.on_screen {
             let Some(id) = w.current_agent(terminal).map(|s| s.id.clone()) else {
                 continue;
             };
