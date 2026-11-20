@@ -188,6 +188,32 @@ pub(super) fn start(
             !fake || programs == ["/bin/bash"],
             "⌘T on far ran {programs:?}, not far's own shell"
         );
+        if fake {
+            let terminal = far
+                .read_with(cx, |w, _| w.visual_tab_terminal(&opened))
+                .expect("remote terminal");
+            let before = handle.update(cx, |v, _, _| v.visual_wants()).unwrap();
+            let (mut original, revision) = far.read_with(cx, |w, _| w.visual_recognition());
+            original.workspace_revision = revision;
+            shoot("hosts-trust-0-before.png", cx);
+            let mut pending = original.clone();
+            pending.terminal_trust.insert(
+                terminal,
+                fibo_core::protocol::TrustPrompt {
+                    agent: Default::default(),
+                    question: "Trust this folder?".into(),
+                    folder: "/fixture".into(),
+                },
+            );
+            far.update(cx, |w, cx| w.receive_recognition(pending, cx));
+            let waiting = handle.update(cx, |v, _, _| v.visual_wants()).unwrap();
+            shoot("hosts-trust-1-waiting.png", cx);
+            assert_eq!(waiting, before + 1, "the sidebar missed the remote trust request");
+            far.update(cx, |w, cx| w.receive_recognition(original, cx));
+            let resolved = handle.update(cx, |v, _, _| v.visual_wants()).unwrap();
+            shoot("hosts-trust-2-resolved.png", cx);
+            assert_eq!(resolved, before, "the sidebar kept the answered remote trust request");
+        }
         // 「← 本机」: this machine's own, as it was.
         handle
             .update(cx, |_, _, cx| far.update(cx, |w, cx| w.visual_go_home(cx)))
