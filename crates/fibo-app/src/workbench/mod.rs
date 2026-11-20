@@ -651,11 +651,15 @@ impl Workbench {
         let agents_changed = previous.terminal_agents != status.terminal_agents;
         let remote_changed = previous.remote != status.remote;
         let titles_changed = previous.terminal_titles != status.terminal_titles;
-        // Workspace refresh and plugin reload notify when they apply. Store also keeps
-        // diagnostics, protocol capabilities and the phone's mode and trust metadata.
+        // The window observes embedded workbenches to update the other machines' cards.
+        let remote_cards_changed = self.hosts.embedded
+            && (previous.terminal_trust != status.terminal_trust
+                || previous.terminal_modes != status.terminal_modes);
+        // Workspace refresh and plugin reload notify when they apply.
         let redraw = self.store.link_down()
             || agents_changed
             || remote_changed
+            || remote_cards_changed
             || previous.phase != status.phase
             || previous.detail != status.detail
             || previous.terminal_hints != status.terminal_hints
