@@ -204,6 +204,23 @@ pub fn start(
     overview_evidence::start(handle, evidence.clone(), cx);
 }
 
+/// Evidence PNGs are lossless. A fixed filter avoids trying several filters per scanline.
+fn save_evidence_png(frame: &image::RgbaImage, path: &std::path::Path) -> image::ImageResult<()> {
+    use image::codecs::png::{CompressionType, FilterType, PngEncoder};
+    use image::{ExtendedColorType, ImageEncoder};
+    use std::io::{BufWriter, Write};
+
+    let mut file = BufWriter::new(std::fs::File::create(path)?);
+    PngEncoder::new_with_quality(&mut file, CompressionType::Fast, FilterType::Sub).write_image(
+        frame.as_raw(),
+        frame.width(),
+        frame.height(),
+        ExtendedColorType::Rgba8,
+    )?;
+    file.flush()?;
+    Ok(())
+}
+
 fn native_click(
     window: &mut gpui::Window,
     app: &mut App,

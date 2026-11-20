@@ -29,7 +29,7 @@ pub(super) fn start(
             cx.update_window(handle.into(), |_, w, a| {
                 w.refresh();
                 w.draw(a).clear(a);
-                w.render_to_image().unwrap().save(directory.join(format!("{name}.png"))).unwrap();
+                save_evidence_png(&w.render_to_image().unwrap(), &directory.join(format!("{name}.png"))).unwrap();
             }).unwrap();
         };
         let bounds = |cx: &mut gpui::AsyncApp| {

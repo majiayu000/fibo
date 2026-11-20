@@ -99,7 +99,7 @@ async fn resize_regression(
     };
     let shot = |name: String, cx: &mut gpui::AsyncApp| {
         cx.update_window(handle.into(), |_, w, _| {
-            w.render_to_image().unwrap().save(out.join(name)).unwrap();
+            save_evidence_png(&w.render_to_image().unwrap(), &out.join(name)).unwrap();
         })
         .unwrap();
     };
