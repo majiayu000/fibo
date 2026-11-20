@@ -4,6 +4,8 @@ mod crowded;
 mod fixture;
 mod focus_jump;
 pub use focus_jump::FocusState;
+mod history;
+pub(super) use history::{full_history, skipped_history};
 mod layer_keys;
 mod page;
 mod resize;

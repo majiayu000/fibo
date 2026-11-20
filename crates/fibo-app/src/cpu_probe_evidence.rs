@@ -33,6 +33,8 @@
 //! real frames are not measured, only the cost of each.
 use super::*;
 use gpui::WindowHandle;
+#[path = "cpu_probe_evidence/history.rs"]
+mod history;
 #[path = "cpu_probe_evidence/plugins.rs"]
 mod plugins;
 #[path = "cpu_probe_evidence/recognition.rs"]
@@ -302,6 +304,8 @@ pub(super) fn start(
                 recognition::title_check(handle, cx)
             } else if name == "recognition-check" {
                 recognition::recognition_check(handle, cx)
+            } else if name == "history-check" {
+                history::run(handle, &directory, cx).await
             } else if name == "frames-pane" {
                 wait(500).await;
                 let mut strip = 0;
