@@ -13,7 +13,9 @@ import { type Card, type Machine, reconnect, supports, useHub } from '@/remote/h
 import { useAsk } from '@/remote/useAsk';
 import { setInboxView, useInboxView } from '@/store/inboxView';
 import { drop, useOutbox } from '@/store/outbox';
+import { rowAnswers } from '@/ui/answers';
 import { BlurTop } from '@/ui/blurtop';
+import { CmdPreview } from '@/ui/cmdpreview';
 import { SpaceMark } from '@/ui/icons';
 import { Btn, Group, Round, TITLE_WEIGHT, Wide, mono, useTop } from '@/ui/kit';
 import { QuietSpaces } from '@/ui/quietspaces';
@@ -47,7 +49,10 @@ function ApprovalRow({ m, c, t, place, named }: Item & { t: Theme; place: string
   const online = m.status === 'online';
   const ask = useAsk(m.id, c, online);
   const can = supports(m, 'answer');
-  const settled = useSettled(`${ask.subject}|${ask.note}|${place}`);
+  const [lines, setLines] = useState<number | null>(null);
+  const buttons = rowAnswers(ask, lines, can);
+  // A change from 看全文 to 允许 is a new button under the finger: the wait starts again.
+  const settled = useSettled(`${ask.subject}|${ask.note}|${place}|${buttons.join()}`);
   // Until the list shows the answer, the row is what it was: no second answer for what comes next.
   const [busy, setBusy] = useState(false);
   const off = busy || !settled.ready;
@@ -64,9 +69,7 @@ function ApprovalRow({ m, c, t, place, named }: Item & { t: Theme; place: string
   };
   return (
     <Row m={m} c={c} named={named} boxed onPress={() => open(m, c)}>
-      <Text numberOfLines={3} style={[s.cmd, { backgroundColor: t.well, color: t.text }]}>
-        {ask.subject}
-      </Text>
+      <CmdPreview text={ask.subject} style={[s.cmd, { backgroundColor: t.well, color: t.text }]} onLines={setLines} />
       {!!ask.note && (
         <Text numberOfLines={1} style={{ color: t.dim, fontSize: 13 }}>
           {ask.note}
@@ -74,16 +77,20 @@ function ApprovalRow({ m, c, t, place, named }: Item & { t: Theme; place: string
       )}
       {/* While off, a tap here stops here: it does not fall through and open the conversation. */}
       <View style={s.act} onStartShouldSetResponder={() => off}>
-        {can && (
-          <>
-            <Btn primary icon="face" label={tr('允许')} disabled={off} onPress={() => answer(() => approve(m.id, c, ask))} />
-            <Btn label={tr('拒绝')} disabled={off} onPress={() => answer(() => deny(m.id, c, ask))} />
-          </>
+        {buttons.map((b) =>
+          b === 'allow' ? (
+            <Btn key={b} primary icon="face" label={tr('允许')} disabled={off} onPress={() => answer(() => approve(m.id, c, ask))} />
+          ) : b === 'deny' ? (
+            <Btn key={b} label={tr('拒绝')} disabled={off} onPress={() => answer(() => deny(m.id, c, ask))} />
+          ) : (
+            <Btn
+              key={b}
+              primary={b === 'whole'}
+              label={b === 'whole' ? tr('看全文') : tr('详情')}
+              onPress={() => router.push({ pathname: '/approve', params: { machine: m.id, terminal: c.id } })}
+            />
+          ),
         )}
-        <Btn
-          label={tr('详情')}
-          onPress={() => router.push({ pathname: '/approve', params: { machine: m.id, terminal: c.id } })}
-        />
       </View>
     </Row>
   );
@@ -130,7 +137,8 @@ function Offline({ m, t }: { m: Machine; t: Theme }) {
     <Pressable onPress={() => reconnect(m.id)} style={[s.offline, { borderColor: t.sep }]}>
       <View style={[s.dotSmall, { backgroundColor: m.status === 'refused' ? t.err : t.dim }]} />
       <Text style={{ color: t.text, fontSize: 13 }}>{m.name || tr('电脑')}</Text>
-      <Text numberOfLines={2} style={{ color: m.status === 'refused' ? t.err : t.dim, fontSize: 13, flex: 1 }}>
+      {/* All of it: the reason ends with what to do, cut off on a real phone (11-16 walk). */}
+      <Text style={{ color: m.status === 'refused' ? t.err : t.dim, fontSize: 13, flex: 1 }}>
         {m.status === 'connecting' ? tr('正在连接…') : tr('{why} · 点这里重试', { why: m.error ?? tr('没连上') })}
       </Text>
     </Pressable>

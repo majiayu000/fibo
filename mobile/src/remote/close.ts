@@ -1,7 +1,7 @@
 // Close codes the machine or the relay ends this phone's socket with, one per case, and
 // what each means here. The same numbers live in `crates/fibo-remote/src/close.rs`;
 // `vectors/v1.json` lists them and `test/close.test.ts` checks the two agree.
-import { tr } from '../i18n';
+import { tk, tr } from '../i18n';
 
 export const Close = {
   /** The session ended on its own. */
@@ -61,8 +61,40 @@ export function closeOutcome(code?: number, reason?: string): Outcome {
     case Close.TOO_SLOW:
       return { status: 'offline', retry: 'later', text: tr('网络太慢，中继断开了连接') };
     case undefined:
-      return { status: 'offline', retry: 'later', text: tr('连不上：电脑或中继不在线，或者网络不通') };
+      return { status: 'offline', retry: 'later', text: tr(UNREACHED) };
     default:
-      return { status: 'offline', retry: 'later', text: tr('连不上：电脑或中继不在线，或者网络不通（{code}）', { code }) };
+      return { status: 'offline', retry: 'later', text: tr('连不上：手机没网，或者中继、电脑不在线。先确认手机能上网，再看电脑上的 Fibo 开着没有（{code}）', { code }) };
   }
+}
+
+const UNREACHED = tk('连不上：手机没网，或者中继、电脑不在线。先确认手机能上网，再看电脑上的 Fibo 开着没有');
+
+/**
+ * What the relay's `/healthz` said after the socket failed without a close code of its own:
+ * `up` answered 200, `sick` answered something else, `none` never answered (no network on the
+ * phone, or the relay's address unreachable: the phone cannot tell these two apart), `unknown`
+ * when it was not asked.
+ */
+export type RelayReach = 'up' | 'sick' | 'none' | 'unknown';
+
+/** Why a dial failed, from what the relay's health check said; only what that check can show. */
+export function unreachedText(reach: RelayReach): string {
+  switch (reach) {
+    case 'up':
+      // The relay answers but refused the socket: it has no machine for this phone's token.
+      return tr('电脑不在线：中继连得上，但电脑上的 Fibo 没连到中继。看看电脑是不是睡着了、Fibo 开着没有');
+    case 'sick':
+      return tr('中继没有正常应答，可能不在线或在重启。过一会儿再试');
+    case 'none':
+      return tr('连不上中继：先看看手机有没有网；有网的话，可能是中继不在线');
+    default:
+      return tr(UNREACHED);
+  }
+}
+
+/** An error as the person reads it, and its exact reason for support (empty when there is none). */
+export function whatFailed(e: unknown): { text: string; detail: string } {
+  const err = e as { message?: unknown; detail?: unknown };
+  const text = typeof err?.message === 'string' && err.message ? err.message : String(e);
+  return { text, detail: typeof err?.detail === 'string' ? err.detail : '' };
 }

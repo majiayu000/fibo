@@ -1,4 +1,4 @@
-// Settings kept on this phone: when to be told (switches only, push is not wired yet),
+// Settings kept on this phone: when to be told (switches shown greyed, push is not wired yet),
 // appearance, Face ID / fingerprint, and a second confirmation for dangerous commands.
 import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -32,6 +32,9 @@ function Item({ t, title, sub, children, last, onPress }: { t: Theme; title: str
     <View style={style}>{body}</View>
   );
 }
+
+/** Push is not wired yet: until it is, its switches change nothing and say so by being greyed. */
+const PUSH_READY = false;
 
 const APPEARANCE: Record<Settings['appearance'], string> = { system: tk('跟随系统'), light: tk('浅色'), dark: tk('深色') };
 const NEXT: Record<Settings['appearance'], Settings['appearance']> = { system: 'light', light: 'dark', dark: 'system' };
@@ -71,29 +74,29 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 12, paddingBottom: bottom + 16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Label>{tr('什么时候提醒我')}</Label>
-          <Text style={[s.badge, { color: t.wait, backgroundColor: t.waitBg }]}>{tr('推送还没接')}</Text>
+          <Text style={[s.badge, { color: t.wait, backgroundColor: t.waitBg }]}>{tr('还没做好')}</Text>
         </View>
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>
           <Item t={t} title={tr('等你审批')} sub={tr('立即，带「允许一次」按钮')}>
-            <Switch label={tr('等你审批')} on={v.notify.approval} onChange={notify('approval')} />
+            <Switch label={tr('等你审批')} on={v.notify.approval} onChange={notify('approval')} disabled={!PUSH_READY} />
           </Item>
           <Item t={t} title={tr('等你回答')} sub={tr('Agent 问你问题停下来时')}>
-            <Switch label={tr('等你回答')} on={v.notify.waiting} onChange={notify('waiting')} />
+            <Switch label={tr('等你回答')} on={v.notify.waiting} onChange={notify('waiting')} disabled={!PUSH_READY} />
           </Item>
           <Item t={t} title={tr('出错了')} sub={tr('命令失败或 Agent 报错')}>
-            <Switch label={tr('出错了')} on={v.notify.error} onChange={notify('error')} />
+            <Switch label={tr('出错了')} on={v.notify.error} onChange={notify('error')} disabled={!PUSH_READY} />
           </Item>
           <Item t={t} title={tr('等你验收')} sub={tr('一轮跑完，等你看结果')} last>
-            <Switch label={tr('等你验收')} on={v.notify.done} onChange={notify('done')} />
+            <Switch label={tr('等你验收')} on={v.notify.done} onChange={notify('done')} disabled={!PUSH_READY} />
           </Item>
         </View>
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>
           <Item t={t} title={tr('免打扰')} sub={tr('23:00 – 08:00，审批除外')} last>
-            <Switch label={tr('免打扰')} on={v.notify.quiet} onChange={notify('quiet')} />
+            <Switch label={tr('免打扰')} on={v.notify.quiet} onChange={notify('quiet')} disabled={!PUSH_READY} />
           </Item>
         </View>
         <Text style={{ fontSize: 12, color: t.dim, lineHeight: 18 }}>
-          {tr('推送需要 APNs / FCM 账号，这一版还没接：开关先记在这台手机上，接好后按这里的设置提醒。')}
+          {tr('手机提醒还没做好，这些开关现在不起作用。开着 App 时，要你处理的事会显示在首页最上面。')}
         </Text>
         <Label style={{ marginTop: 8 }}>{tr('外观与安全')}</Label>
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>
