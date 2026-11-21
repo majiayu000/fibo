@@ -142,8 +142,8 @@ fn request(url: &str, credential: &Credential, now: u64) -> Result<Value, Failur
     if bytes.len() > 1024 * 1024 {
         return Err(Failure::read(t!("额度响应过大")));
     }
-    let doc: Value =
-        serde_json::from_slice(&bytes).map_err(|_| Failure::read(t!("额度响应不是 JSON")))?;
+    let doc: Value = serde_json::from_slice(&bytes)
+        .map_err(|_| Failure::read(t!("额度服务返回的内容读不懂")))?;
     windows(&doc).map_err(Failure::read)
 }
 

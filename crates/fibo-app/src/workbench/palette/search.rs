@@ -200,8 +200,10 @@ impl Workbench {
             .chain(self.machine_hits(query))
             .chain(self.space_hits(query))
             .collect();
+        let commands: Vec<Hit> = self.command_hits(&needle);
         // Typed queries select the first row without searching just to find its index.
         for (title, hits) in [
+            (t!("命令"), commands),
             (t!("会话"), sessions),
             (t!("原话"), quotes),
             (t!("待办"), tasks),
@@ -283,6 +285,10 @@ impl Workbench {
             Hit::Space(id) => self.switch_space_quiet(&id, cx),
             Hit::Diagnostics => self.show_diagnostics(window, cx),
             Hit::Hooks => self.show_settings_page(settings::Page::General, window, cx),
+            Hit::Settings(page) => self.show_settings_page(page, window, cx),
+            Hit::Command(action) => {
+                self.shortcut(action, window, cx);
+            }
             Hit::Action(i) => {
                 if let (Some(action), Some(pane)) =
                     (fibo_core::action::all().get(i), self.nav.focused.clone())

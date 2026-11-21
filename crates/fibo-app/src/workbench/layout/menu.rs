@@ -34,7 +34,7 @@ impl Workbench {
                     window.focus(&pane.focus_handle(cx), cx);
                 }
             }
-            tk!("关闭画面") => self.close_pane(id, cx),
+            tk!("关闭窗格") => self.close_pane(id, cx),
             tk!("复制") => {
                 if let Some(pane) = self.layout.panes.get(id) {
                     pane.update(cx, |p, cx| p.copy(cx));

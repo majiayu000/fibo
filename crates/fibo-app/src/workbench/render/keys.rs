@@ -96,6 +96,14 @@ impl Workbench {
                 self.toggle_sidebar(cx);
                 return true;
             }
+            Action::Overview => {
+                self.toggle_overview(self.nav.overview, cx);
+                return true;
+            }
+            Action::NewTodo => {
+                self.show_form(FormKind::Task, window, cx);
+                return true;
+            }
             Action::PrevPane | Action::NextPane => {
                 self.focus_neighbour(action == Action::NextPane, window, cx);
                 return true;

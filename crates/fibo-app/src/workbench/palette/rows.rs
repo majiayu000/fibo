@@ -71,6 +71,17 @@ impl Workbench {
                         String::new(),
                     )
                 }
+                Hit::Command(action) => {
+                    let (title, keys) = self.command_row(*action, cx);
+                    (glyph("⌘"), title, String::new(), String::new(), keys)
+                }
+                Hit::Settings(page) => (
+                    glyph("⚙"),
+                    t!("设置 › {page}", page = page.label()),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                ),
                 Hit::Diagnostics => (
                     glyph("◔"),
                     t!("本机诊断").into(),

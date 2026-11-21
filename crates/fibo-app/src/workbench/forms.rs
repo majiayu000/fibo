@@ -167,7 +167,46 @@ pub(super) fn plain(b: gpui::Stateful<gpui::Div>) -> gpui::Stateful<gpui::Div> {
         .text_color(T::color(T::primary()))
 }
 
+/// Where Tab lands among `count` fields from `at` (none focused: the first, or the last
+/// going back), wrapping around.
+pub(super) fn tab_step(at: Option<usize>, count: usize, forward: bool) -> Option<usize> {
+    if count == 0 {
+        return None;
+    }
+    Some(match (at, forward) {
+        (None, true) => 0,
+        (None, false) => count - 1,
+        (Some(i), true) => (i + 1) % count,
+        (Some(i), false) => (i + count - 1) % count,
+    })
+}
+
 impl Workbench {
+    /// Moves the keyboard to the form's next (or previous) field: its own fields, then
+    /// its acceptance criteria, in the order they are drawn.
+    fn form_focus_step(
+        &mut self,
+        forward: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(form) = &self.tasks.form else {
+            return false;
+        };
+        let handles: Vec<gpui::FocusHandle> = form
+            .fields
+            .iter()
+            .chain(form.criteria.iter().map(|c| &c.field))
+            .map(|f| f.read(cx).focus_handle(cx))
+            .collect();
+        let at = handles.iter().position(|h| h.is_focused(window));
+        let Some(next) = tab_step(at, handles.len(), forward) else {
+            return false;
+        };
+        window.focus(&handles[next], cx);
+        cx.notify();
+        true
+    }
     pub(super) fn show_form(
         &mut self,
         kind: FormKind,
@@ -436,11 +475,18 @@ impl Workbench {
             .overflow_y_scroll()
             .px(px(T::OVERVIEW_X))
             .py(px(T::S20))
-            // ⌘⏎ from any field saves and starts, as the button says.
-            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _, cx| {
+            // ⌘⏎ from any field saves and starts, as the button says; Tab and ⇧Tab go
+            // from field to field, as in any form, instead of only by the mouse.
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 let k = &event.keystroke;
                 if k.key == "enter" && k.modifiers.secondary() {
                     this.save_form(true, cx);
+                    cx.stop_propagation();
+                } else if k.key == "tab"
+                    && !k.modifiers.secondary()
+                    && !k.modifiers.alt
+                    && this.form_focus_step(!k.modifiers.shift, window, cx)
+                {
                     cx.stop_propagation();
                 }
             }))
@@ -536,5 +582,21 @@ impl Workbench {
         for (i, criterion) in task.acceptance.iter().enumerate() {
             self.add_criterion(i, Some(criterion), false, window, cx);
         }
+    }
+}
+
+#[cfg(test)]
+mod tab_tests {
+    use super::tab_step;
+
+    #[test]
+    fn tab_goes_round_the_fields_both_ways() {
+        assert_eq!(tab_step(None, 3, true), Some(0));
+        assert_eq!(tab_step(None, 3, false), Some(2));
+        assert_eq!(tab_step(Some(0), 3, true), Some(1));
+        assert_eq!(tab_step(Some(2), 3, true), Some(0));
+        assert_eq!(tab_step(Some(0), 3, false), Some(2));
+        assert_eq!(tab_step(Some(1), 1, true), Some(0));
+        assert_eq!(tab_step(None, 0, true), None);
     }
 }

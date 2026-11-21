@@ -158,7 +158,7 @@ fn with_quiet(mut specs: Vec<Spec>, host: &str, quiet: bool) -> Option<Vec<Spec>
 /// Sets 先不管 on what the file holds now, leaving everything else in it alone.
 pub fn set_quiet(host: &str, quiet: bool) -> io::Result<()> {
     let specs = with_quiet(load()?, host, quiet)
-        .ok_or_else(|| io::Error::other(t!("machines.json 里没有 {host}", host)))?;
+        .ok_or_else(|| io::Error::other(t!("设置里没有 {host} 这台电脑", host)))?;
     save(&specs)
 }
 /// `next` with what `saved` says about 先不管: a list held since before the switch does not

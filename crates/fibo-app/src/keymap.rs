@@ -29,6 +29,10 @@ pub enum Action {
     NextWaiting,
     /// Fold the left column to a rail and back.
     ToggleSidebar,
+    /// 鸟瞰: into the board and back, as the title row's button.
+    Overview,
+    /// The new-todo form, as 待办's ＋.
+    NewTodo,
     Find,
     Clear,
     SelectAll,
@@ -58,7 +62,7 @@ impl Section {
     }
 }
 impl Action {
-    pub const ALL: [Self; 35] = [
+    pub const ALL: [Self; 37] = [
         Self::NewTab,
         Self::Close,
         Self::SplitRight,
@@ -94,6 +98,8 @@ impl Action {
         Self::Settings,
         Self::NextWaiting,
         Self::ToggleSidebar,
+        Self::Overview,
+        Self::NewTodo,
     ];
     pub fn name(self) -> String {
         match self {
@@ -115,6 +121,8 @@ impl Action {
             Self::Settings => "settings".into(),
             Self::NextWaiting => "next_waiting".into(),
             Self::ToggleSidebar => "toggle_sidebar".into(),
+            Self::Overview => "overview".into(),
+            Self::NewTodo => "new_todo".into(),
             Self::Find => "find".into(),
             Self::Clear => "clear".into(),
             Self::SelectAll => "select_all".into(),
@@ -130,23 +138,25 @@ impl Action {
     pub fn label(self) -> String {
         match self {
             Self::NewTab => t!("新建标签").into(),
-            Self::Close => t!("关闭画面").into(),
+            Self::Close => t!("关闭窗格").into(),
             Self::SplitRight => t!("向右分屏").into(),
             Self::SplitDown => t!("向下分屏").into(),
             Self::PrevTab => t!("上一个标签").into(),
             Self::NextTab => t!("下一个标签").into(),
-            Self::PrevPane => t!("上一个画面").into(),
-            Self::NextPane => t!("下一个画面").into(),
-            Self::PaneLeft => t!("左边的画面").into(),
-            Self::PaneRight => t!("右边的画面").into(),
-            Self::PaneUp => t!("上面的画面").into(),
-            Self::PaneDown => t!("下面的画面").into(),
+            Self::PrevPane => t!("上一个窗格").into(),
+            Self::NextPane => t!("下一个窗格").into(),
+            Self::PaneLeft => t!("左边的窗格").into(),
+            Self::PaneRight => t!("右边的窗格").into(),
+            Self::PaneUp => t!("上面的窗格").into(),
+            Self::PaneDown => t!("下面的窗格").into(),
             Self::Tab(n) => t!("第 {n} 个标签", n),
             Self::LastTab => t!("最后一个标签").into(),
             Self::Search => t!("搜索").into(),
             Self::Settings => t!("设置").into(),
             Self::NextWaiting => t!("下一个等你的").into(),
             Self::ToggleSidebar => t!("收起 / 展开左栏").into(),
+            Self::Overview => t!("鸟瞰全部").into(),
+            Self::NewTodo => t!("新建待办").into(),
             Self::Find => t!("在终端里查找").into(),
             Self::Clear => t!("清屏").into(),
             Self::SelectAll => t!("全选").into(),
@@ -166,9 +176,12 @@ impl Action {
             Self::ScrollTop | Self::ScrollBottom | Self::PageUp | Self::PageDown => {
                 Section::Terminal
             }
-            Self::Search | Self::Settings | Self::NextWaiting | Self::ToggleSidebar => {
-                Section::Workbench
-            }
+            Self::Search
+            | Self::Settings
+            | Self::NextWaiting
+            | Self::ToggleSidebar
+            | Self::Overview
+            | Self::NewTodo => Section::Workbench,
             _ => Section::Tabs,
         }
     }
@@ -207,6 +220,8 @@ impl Action {
             Self::Settings => &["cmd-,"],
             Self::NextWaiting => &["cmd-j"],
             Self::ToggleSidebar => &["cmd-b"],
+            Self::Overview => &["cmd-shift-o"],
+            Self::NewTodo => &["cmd-shift-n"],
             Self::Find => &["cmd-f"],
             Self::Clear => &["cmd-k"],
             Self::SelectAll => &["cmd-a"],

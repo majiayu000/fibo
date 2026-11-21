@@ -74,7 +74,7 @@
 
 [context and delivery]
 "上下文 {pct}% · 已用 {used} / {max}" = "Context {pct}% · {used} / {max} used"
-"没发出去：后台没有响应（{error}）" = "Not sent: host did not respond ({error})"
+"没发出去：后台没有响应（{error}）" = "Not sent: background service did not respond ({error})"
 "不确定是否成功：等回复时断开了（{error}）" = "Outcome unknown: disconnected while waiting for a reply ({error})"
 
 [diagnostics]
@@ -157,7 +157,7 @@
 "程序说在等你" = "Program says it is waiting for you"
 "{said}（程序上报）" = "{said} (reported by program)"
 "程序上报出错" = "Program reported an error"
-"终端里的程序通过 OSC 7501 报告 {state}" = "Program in terminal reported {state} via OSC 7501"
+"终端里的程序报告 {state}（OSC 7501）" = "The program in the terminal reported {state} (OSC 7501)"
 "未对上对话：" = "Unmatched session: "
 "Claude 没有保存对话记录（继承了 CLAUDE_CODE_CHILD_SESSION），无法统计；关掉这个终端重开后再运行 claude" = "Claude is not saving a transcript (inherited CLAUDE_CODE_CHILD_SESSION), so it cannot be tracked; close and reopen this terminal before running claude"
 "正在建立身份索引" = "Indexing sessions"

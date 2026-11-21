@@ -60,7 +60,7 @@ const MONO_FACES: [&str; 15] = [
 ];
 
 pub(super) use plugins::tilde;
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Page {
     General,
     Look,
@@ -72,7 +72,7 @@ pub(super) enum Page {
     About,
 }
 impl Page {
-    const ALL: [Self; 8] = [
+    pub(super) const ALL: [Self; 8] = [
         Self::General,
         Self::Look,
         Self::Terminal,
@@ -82,7 +82,7 @@ impl Page {
         Self::Plugins,
         Self::About,
     ];
-    fn label(self) -> &'static str {
+    pub(super) fn label(self) -> &'static str {
         match self {
             Self::General => t!("通用"),
             Self::Look => t!("外观"),

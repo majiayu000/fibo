@@ -69,7 +69,7 @@ pub fn apply(c: &mut Content, r: &ProgramReport) {
     }
     c.signal = not_ui!("程序上报").into();
     c.signal_at = r.since;
-    c.signal_detail = t!("终端里的程序通过 OSC 7501 报告 {state}", state = &r.state);
+    c.signal_detail = t!("终端里的程序报告 {state}（OSC 7501）", state = &r.state);
 }
 
 #[cfg(test)]
