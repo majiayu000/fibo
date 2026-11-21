@@ -96,7 +96,7 @@ export default function SettingsScreen() {
           </Item>
         </View>
         <Text style={{ fontSize: 12, color: t.dim, lineHeight: 18 }}>
-          {tr('手机提醒还没做好，这些开关现在不起作用。开着 App 时，要你处理的事会显示在首页最上面。')}
+          {tr('手机提醒还没做好，这些开关现在不起作用。开着 App 时，在等你的会话排在首页最上面。')}
         </Text>
         <Label style={{ marginTop: 8 }}>{tr('外观与安全')}</Label>
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>
