@@ -71,17 +71,18 @@ fn run() -> std::io::Result<()> {
     let name = args.next();
     let cmd = match name.as_deref() {
         Some("-h" | "--help" | "help") => {
-            println!("{}", control::usage());
+            match args.next().as_deref() {
+                Some("--all") => println!("{}", control::usage_all()),
+                _ => println!("{}", control::usage()),
+            }
             return Ok(());
         }
         None => return Err(usage_error(t!("缺少命令").into())),
-        Some(name) => {
-            control::command(name).ok_or_else(|| usage_error(t!("没有 {name} 这个命令", name)))?
-        }
+        Some(name) => control::command(name).ok_or_else(|| unknown_command(name))?,
     };
     // Every command is checked against its declared flags before it acts, so a typo or a
     // `--help` never runs it with defaults.
-    let rest: Vec<String> = args.collect();
+    let rest = control::verb_to_flag(cmd, args.collect());
     if control::check(cmd, &rest)? {
         println!("{}", cmd.usage());
         return Ok(());
@@ -99,9 +100,10 @@ fn run() -> std::io::Result<()> {
                 } else if arg == "--recent-days" {
                     days = args
                         .next()
-                        .ok_or_else(|| std::io::Error::other("missing days"))?
-                        .parse::<u64>()
-                        .map_err(std::io::Error::other)?;
+                        .and_then(|d| d.parse::<u64>().ok())
+                        .ok_or_else(|| {
+                            std::io::Error::other(t!("--recent-days 要跟一个天数，比如 7"))
+                        })?;
                 } else {
                     remaining.push(arg);
                 }
@@ -133,6 +135,7 @@ fn run() -> std::io::Result<()> {
         "remote" => remote::run(args),
         "hook" => hook(args),
         "hooks" => hooks_cmd::run(args),
+        "setup" => fibo_host::cli_setup_cmd::run(args),
         "plugins" => plugins_cmd::run(args),
         "themes" => themes_cmd::run(args),
         "--skill" => {
@@ -161,6 +164,18 @@ fn run() -> std::io::Result<()> {
         other => Err(usage_error(t!("{other} 还没有接上", other))),
     }
 }
+/// One line naming what was likely meant, instead of the whole usage again.
+fn unknown_command(name: &str) -> std::io::Error {
+    let what = match control::suggest(name) {
+        Some(meant) => t!(
+            "没有 {name} 这个命令。是不是想用 fibo {meant}？看全部命令：fibo --help",
+            name,
+            meant
+        ),
+        None => t!("没有 {name} 这个命令。看全部命令：fibo --help", name),
+    };
+    std::io::Error::new(std::io::ErrorKind::InvalidInput, what)
+}
 fn usage_error(what: String) -> std::io::Error {
     std::io::Error::new(
         std::io::ErrorKind::InvalidInput,
@@ -173,27 +188,23 @@ fn runtime_dir(mut args: impl Iterator<Item = String>) -> std::io::Result<String
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--runtime" => {
-                runtime = Some(args.next().ok_or_else(|| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "missing --runtime directory",
-                    )
-                })?);
+                runtime = Some(args.next().ok_or_else(missing_runtime)?);
             }
             other => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
-                    format!("unknown argument {other}"),
+                    t!("不认识的参数 {other}", other),
                 ));
             }
         }
     }
-    runtime.ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "missing --runtime directory",
-        )
-    })
+    runtime.ok_or_else(missing_runtime)
+}
+fn missing_runtime() -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::InvalidInput,
+        t!("缺少 --runtime <目录>：后台的运行目录"),
+    )
 }
 
 fn scan(args: impl Iterator<Item = String>) -> std::io::Result<()> {
@@ -204,13 +215,17 @@ fn scan(args: impl Iterator<Item = String>) -> std::io::Result<()> {
         &Request::RefreshAgents,
     )? {
         Reply::Workspace(w) => println!(
-            "{} Agent sessions, {} managed terminals",
-            w.agent_sessions.len(),
-            w.terminals.len()
+            "{}",
+            t!(
+                "{sessions} 个 Agent 会话，{terminals} 个终端",
+                sessions = w.agent_sessions.len(),
+                terminals = w.terminals.len()
+            )
         ),
         other => {
-            return Err(std::io::Error::other(format!(
-                "unexpected scan response: {other:?}"
+            return Err(std::io::Error::other(t!(
+                "后台的回复不对：{other}",
+                other = format!("{other:?}")
             )));
         }
     }
@@ -225,9 +240,16 @@ fn hook(mut args: impl Iterator<Item = String>) -> std::io::Result<()> {
         match arg.as_str() {
             "--runtime" => runtime = args.next(),
             "--agent" => agent = args.next(),
+            "install" | "uninstall" | "status" => {
+                return Err(std::io::Error::other(t!(
+                    "要管理 hook 请用 fibo hooks {arg}（多一个 s）；fibo hook 是 Agent 的 hook 自己调用的",
+                    arg
+                )));
+            }
             _ => {
-                return Err(std::io::Error::other(format!(
-                    "unknown hook argument: {arg}"
+                return Err(std::io::Error::other(t!(
+                    "fibo hook 不认识 {arg}；它是 Agent 的 hook 自己调用的，要管理 hook 请用 fibo hooks",
+                    arg
                 )));
             }
         }
@@ -239,18 +261,18 @@ fn hook(mut args: impl Iterator<Item = String>) -> std::io::Result<()> {
     let agent = agent
         .as_deref()
         .and_then(Agent::from_executable)
-        .ok_or_else(|| std::io::Error::other("hook requires --agent codex|claude|grok"))?;
+        .ok_or_else(|| std::io::Error::other(t!("fibo hook 要写 --agent codex|claude|grok")))?;
     let mut bytes = Vec::new();
     std::io::stdin()
         .take(1024 * 1024 + 1)
         .read_to_end(&mut bytes)?;
     if bytes.len() > 1024 * 1024 {
-        return Err(std::io::Error::other("hook payload exceeds 1 MiB"));
+        return Err(std::io::Error::other(t!("hook 传来的内容超过 1 MiB")));
     }
     let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(std::io::Error::other)?;
     let cli_id = value["session_id"]
         .as_str()
-        .ok_or_else(|| std::io::Error::other("Hook has no session_id"))?;
+        .ok_or_else(|| std::io::Error::other(t!("hook 传来的内容没有 session_id")))?;
     // An absent path is resolved from the daemon's SQLite index, never by walking HOME.
     let transcript = value["transcript_path"].as_str().unwrap_or("").to_owned();
     let request = Request::Hook {
@@ -269,8 +291,9 @@ fn hook(mut args: impl Iterator<Item = String>) -> std::io::Result<()> {
         &request,
     )? {
         Reply::Workspace(_) => Ok(()),
-        other => Err(std::io::Error::other(format!(
-            "unexpected hook response: {other:?}"
+        other => Err(std::io::Error::other(t!(
+            "后台的回复不对：{other}",
+            other = format!("{other:?}")
         ))),
     }
 }

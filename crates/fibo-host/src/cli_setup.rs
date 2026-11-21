@@ -24,9 +24,18 @@ fn current_skill() -> &'static str {
     }
 }
 
+/// Off by the variable, or by `fibo setup remove` (which leaves this file in the config).
+pub(crate) const OFF_FILE: &str = "cli-setup-off";
+
+/// Whether the user turned all of this off.
+pub fn turned_off() -> bool {
+    std::env::var_os(OFF_ENV).is_some()
+        || fibo_core::agent::config_dir().is_some_and(|d| d.join(OFF_FILE).exists())
+}
+
 /// A build under test or a host on a private runtime touches nothing of the user's.
 pub fn install(runtime: &Path) {
-    if std::env::var_os(OFF_ENV).is_some() {
+    if turned_off() {
         return;
     }
     let Ok(exe) = std::env::current_exe() else {
@@ -36,7 +45,7 @@ pub fn install(runtime: &Path) {
     if !cli_entry::in_bundle(&exe) || !cli_entry::is_default_runtime(runtime) {
         return;
     }
-    for name in cli_entry::NAMES {
+    for name in names_to_link(&cli_entry::DIRS) {
         match cli_entry::link(&cli_entry::DIRS, &exe, name) {
             Ok(Some(_)) => {}
             Ok(None) => eprintln!(
@@ -62,6 +71,15 @@ pub fn install(runtime: &Path) {
     }
 }
 
+/// `fibo`, and the old name only for an install that already has it: a new user never
+/// typed `mooring`, and the name was dropped because another tool uses it.
+fn names_to_link(dirs: &[impl AsRef<Path>]) -> Vec<&'static str> {
+    cli_entry::NAMES
+        .into_iter()
+        .filter(|name| *name == cli_entry::NAME || cli_entry::ours_in(dirs, name).is_some())
+        .collect()
+}
+
 /// Only where the CLI is set up, and never over a `fibo` skill someone else wrote. The one
 /// written under the old name (`mooring`) goes, if it is ours: two would both answer 「记一下」.
 fn write_skill(skills: &Path) -> io::Result<bool> {
@@ -85,6 +103,34 @@ fn write_skill(skills: &Path) -> io::Result<bool> {
     Ok(true)
 }
 
+/// Takes away the skills `install` wrote (never one someone else wrote), and says which.
+pub(crate) fn remove_skills(home: &Path) -> io::Result<Vec<std::path::PathBuf>> {
+    let mut gone = vec![];
+    for agent in Agent::all() {
+        let Some(skills) = adapter(agent).skills_dir(home) else {
+            continue;
+        };
+        for name in ["fibo", "mooring"] {
+            let dir = skills.join(name);
+            if fs::read_to_string(dir.join("SKILL.md")).is_ok_and(|now| is_ours(&now)) {
+                fs::remove_dir_all(&dir)?;
+                gone.push(dir);
+            }
+        }
+    }
+    Ok(gone)
+}
+
+/// The skills `install` wrote that are there now.
+pub(crate) fn skills_written(home: &Path) -> Vec<std::path::PathBuf> {
+    Agent::all()
+        .into_iter()
+        .filter_map(|agent| adapter(agent).skills_dir(home))
+        .map(|skills| skills.join("fibo").join("SKILL.md"))
+        .filter(|f| fs::read_to_string(f).is_ok_and(|now| is_ours(&now)))
+        .collect()
+}
+
 fn is_ours(skill: &str) -> bool {
     skill.contains(OURS) || skill.contains(OURS_EN) || skill.contains(OURS_BEFORE)
 }
@@ -103,6 +149,21 @@ mod tests {
         ));
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_new_install_gets_fibo_and_only_an_old_one_keeps_mooring() {
+        let home = scratch();
+        let bin = home.as_path().join("bin");
+        fs::create_dir(&bin).unwrap();
+        let dirs = [bin.clone()];
+        assert_eq!(names_to_link(&dirs), vec![cli_entry::NAME]);
+        let mac = home.as_path().join("Mooring.app/Contents/MacOS");
+        fs::create_dir_all(&mac).unwrap();
+        fs::write(mac.join("mooring"), "").unwrap();
+        std::os::unix::fs::symlink(mac.join("mooring"), bin.join("mooring")).unwrap();
+        assert_eq!(names_to_link(&dirs), cli_entry::NAMES.to_vec());
     }
 
     #[test]
@@ -137,6 +198,25 @@ mod tests {
         fs::write(&file, "用户自己写的").unwrap();
         assert!(!write_skill(&skills).unwrap());
         assert_eq!(fs::read_to_string(&file).unwrap(), "用户自己写的");
+    }
+
+    #[test]
+    fn removing_takes_only_the_skills_fibo_wrote() {
+        // Codex's own home would point the removal at the developer's real skills.
+        if std::env::var_os("CODEX_HOME").is_some() {
+            return;
+        }
+        let home = scratch();
+        let codex = home.as_path().join(".codex/skills");
+        fs::create_dir_all(codex.join("fibo")).unwrap();
+        fs::write(codex.join("fibo/SKILL.md"), current_skill()).unwrap();
+        fs::create_dir_all(codex.join("mine")).unwrap();
+        fs::write(codex.join("mine/SKILL.md"), "用户自己写的").unwrap();
+        assert_eq!(skills_written(&home).len(), 1);
+        let gone = remove_skills(&home).unwrap();
+        assert_eq!(gone, vec![codex.join("fibo")]);
+        assert!(codex.join("mine/SKILL.md").is_file());
+        assert!(skills_written(&home).is_empty());
     }
 
     #[test]

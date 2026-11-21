@@ -53,6 +53,27 @@ pub fn link(dirs: &[impl AsRef<Path>], exe: &Path, name: &str) -> io::Result<Opt
     Ok(None)
 }
 
+/// The first link named `name` in `dirs` that points into a Fibo bundle, if any.
+pub fn ours_in(dirs: &[impl AsRef<Path>], name: &str) -> Option<PathBuf> {
+    dirs.iter()
+        .map(|d| d.as_ref().join(name))
+        .find(|entry| fs::read_link(entry).is_ok_and(|t| ours(&t)))
+}
+
+/// Takes away every link named `name` in `dirs` that points into a Fibo bundle, and says
+/// which went. Anything else there is someone else's and stays.
+pub fn unlink(dirs: &[impl AsRef<Path>], name: &str) -> io::Result<Vec<PathBuf>> {
+    let mut gone = vec![];
+    for dir in dirs.iter().map(AsRef::as_ref) {
+        let entry = dir.join(name);
+        if fs::read_link(&entry).is_ok_and(|t| ours(&t)) {
+            fs::remove_file(&entry)?;
+            gone.push(entry);
+        }
+    }
+    Ok(gone)
+}
+
 /// Whether the name `fibo` reaches `exe`: the first directory that has one decides.
 pub fn reaches(dirs: &[impl AsRef<Path>], exe: &Path) -> bool {
     let first = dirs
@@ -107,6 +128,29 @@ mod tests {
         let exe = mac.join("mooring");
         fs::write(&exe, "").unwrap();
         exe
+    }
+
+    #[test]
+    fn only_links_into_a_fibo_bundle_are_taken_away() {
+        let root = scratch();
+        let bin = root.as_path().join("bin");
+        fs::create_dir(&bin).unwrap();
+        let dirs = [bin.clone()];
+        let app = bundle(root.as_path(), "Fibo.app");
+        link(&dirs, &app, "mooring").unwrap();
+        assert_eq!(ours_in(&dirs, "mooring"), Some(bin.join("mooring")));
+        let theirs = root.as_path().join("their-fibo");
+        fs::write(&theirs, "").unwrap();
+        std::os::unix::fs::symlink(&theirs, bin.join(NAME)).unwrap();
+        assert_eq!(ours_in(&dirs, NAME), None);
+
+        assert_eq!(unlink(&dirs, "mooring").unwrap(), vec![bin.join("mooring")]);
+        assert!(bin.join("mooring").symlink_metadata().is_err());
+        assert!(unlink(&dirs, NAME).unwrap().is_empty());
+        assert!(
+            bin.join(NAME).symlink_metadata().is_ok(),
+            "someone else's stays"
+        );
     }
 
     #[test]

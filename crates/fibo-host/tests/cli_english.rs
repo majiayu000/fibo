@@ -62,11 +62,13 @@ fn cli_renders_english_via_env_and_saved_preference_without_cjk() {
 
     for env_pair in [("MOORING_LANG", "en"), ("FIBO_LANG", "en")] {
         for (args, expected) in [
-            (&["--help"][..], "List terminals"),
+            (&["--help"][..], "Terminals: state, Agent, tab"),
+            (&["--help", "--all"][..], "List terminals"),
             (&["--skill"][..], "# Driving Fibo Terminals"),
             (&["--skill", "plugins"][..], "# Customizing Fibo"),
             (&["--skill", "session"][..], "fibo todo list"),
-            (&["plugins", "--help"][..], "Validate installed plugins"),
+            (&["plugins", "--help"][..], "Check whether plugins load"),
+            (&["setup"][..], "the packaged app"),
             (&["hooks", "status", "--agent", "claude"][..], "claude"),
         ] {
             let (ok, stdout, stderr) = run_cli(tmp.path(), &[env_pair], args);
@@ -96,7 +98,7 @@ fn cli_renders_english_via_env_and_saved_preference_without_cjk() {
     std::fs::write(cfg.join("language"), "en\n").unwrap();
     let (ok, stdout, stderr) = run_cli(tmp.path(), &[], &["--help"]);
     assert!(ok, "{stderr}");
-    assert!(stdout.contains("List terminals"), "{stdout}");
+    assert!(stdout.contains("Terminals: state, Agent, tab"), "{stdout}");
     assert!(!has_cjk(&stdout), "{stdout}");
 
     // A source build without a saved choice follows the same system language as the app.
@@ -105,7 +107,7 @@ fn cli_renders_english_via_env_and_saved_preference_without_cjk() {
     assert!(ok);
     let expected = match fibo_core::i18n::system(&fibo_platform::desktop::preferred_languages()) {
         fibo_core::i18n::Lang::Zh => "终端列表",
-        fibo_core::i18n::Lang::En => "List terminals",
+        fibo_core::i18n::Lang::En => "Terminals: state, Agent, tab",
     };
     assert!(stdout.contains(expected), "{stdout}");
 }

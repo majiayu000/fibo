@@ -6,49 +6,36 @@ use std::path::Path;
 
 use super::plugins_dir;
 
-/// Its lines in `fibo --help`.
+/// Its lines in `fibo --help`, and the start of what `fibo plugins` prints on a mistake.
 pub const COMMAND_USAGE: &str = tk!("\
 fibo plugins [--dir 目录] [--json]         检查插件能不能装上：哪个生效、哪个为什么没生效
 fibo plugins available [--remote]          列出可安装的插件（App 附带的，加 --remote 再查远程目录）
 fibo plugins install <id>[@版本] [--remote] [--yes]
                                              安装或更新一个插件；会跑命令的要确认，非交互时加 --yes
-fibo plugins uninstall <id> [--force]      卸载一个插件；--force 在 teardown 失败时也卸
+fibo plugins uninstall <id> [--force]      卸载一个插件；--force 在 teardown 失败时也卸（加载不了的按目录名卸）
 fibo plugins disable|enable <id> [--force]
                                              停用或打开一个插件；--force 在 teardown 失败时也停用
-fibo plugins log <id>                      这个插件最近的运行和出过的错
-fibo plugins set <id> [<key> <值>]         看或改插件的设置项
+fibo plugins log <id>                      这个插件最近的运行：setup、hook、出过错的装饰和额度命令
+fibo plugins set <id> [<key> <值>]         看或改插件的设置项；值写 true/false、数字或文字
 fibo plugins run <id> <声明 id> [--event 事件] [--cwd 目录] [--send]
-                                             用和 App 一样的环境试跑一条 hook、装饰或额度命令；webhook 加 --send 才真发
+                                             用和 App 一样的环境试跑一条 hook、装饰或额度命令，打印输出；
+                                             webhook 只显示会发什么，加 --send 才真发
 fibo plugins index <目录> [--check] [--key 私钥文件]
                                              为插件目录生成 index.json 并签名（--check 只检查是否最新、签名对不对）
 fibo plugins keygen [--name 发布者] [--key 私钥文件]
                                              生成发布者的签名私钥，默认 <配置>/publisher.key");
 
-pub const USAGE: &str = tk!("用法：fibo plugins [--dir 插件目录] [--json]
-      fibo plugins available [--remote]      列出可安装的插件（App 附带的，加 --remote 再查远程目录）
-      fibo plugins install <id>[@版本] [--remote] [--yes]
-                                              安装或更新一个插件；会跑命令的要确认，非交互时加 --yes
-      fibo plugins uninstall <id> [--force]
-                                              卸载一个插件；--force 在 teardown 失败时也卸（加载不了的按目录名卸）
-      fibo plugins disable|enable <id> [--force]
-                                              停用或打开一个插件；--force 在 teardown 失败时也停用
-      fibo plugins index <目录> [--check] [--key 私钥文件]
-                                              为插件目录生成 index.json 并用私钥签名（--check 只检查是否最新、签名对不对）
-      fibo plugins keygen [--name 发布者] [--key 私钥文件]
-                                              生成发布者的签名私钥，默认 <配置>/publisher.key
-      fibo plugins log <id>                   这个插件最近的运行：setup、hook、出过错的装饰和额度命令
-      fibo plugins set <id> [<key> <值>]      看或改插件的设置项；值写 true/false、数字或文字
-      fibo plugins run <id> <声明 id> [--event 事件] [--cwd 目录]
-                                              用和 App 一样的环境试跑一条 hook、装饰或额度命令，打印输出；
-                                              webhook 只显示会发什么，加 --send 才真发
-
-检查插件能不能装上：逐个读 plugin.json 和它提供的文件，说哪个生效、哪个为什么没生效。
+/// What `fibo plugins` adds after its lines when it prints them for a mistake.
+pub const DETAILS: &str = tk!(
+    "检查插件能不能装上：逐个读 plugin.json 和它提供的文件，说哪个生效、哪个为什么没生效。
 默认目录是 ${XDG_CONFIG_HOME:-$HOME/.config}/fibo/plugins。有问题时以 1 退出。
 手写改了插件目录后，在 Fibo 的 设置 › 插件 点「重新读取」就生效。
-写插件的说明：fibo --skill plugins");
+写插件的说明：fibo --skill plugins"
+);
 
-pub(super) fn usage_text() -> &'static str {
-    i18n::say(USAGE)
+/// One text for both places, so the two cannot drift apart again.
+pub(super) fn usage_text() -> String {
+    format!("{}\n\n{}", i18n::say(COMMAND_USAGE), i18n::say(DETAILS))
 }
 
 /// The first line of the `AGENTS.md` Fibo writes; a file without it is the user's.
