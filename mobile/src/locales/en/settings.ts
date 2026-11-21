@@ -15,7 +15,7 @@ export const settings: Record<string, Entry> = {
   '一轮跑完，等你看结果': 'A turn finished and waits for you',
   免打扰: 'Do not disturb',
   '23:00 – 08:00，审批除外': '23:00 – 08:00, except approvals',
-  '手机提醒还没做好，这些开关现在不起作用。开着 App 时，要你处理的事会显示在首页最上面。':
+  '手机提醒还没做好，这些开关现在不起作用。开着 App 时，在等你的会话排在首页最上面。':
     "Phone notifications aren't ready yet, so these switches do nothing for now. While the app is open, anything that needs you shows at the top of the home screen.",
   外观与安全: 'Appearance & security',
   外观: 'Appearance',
