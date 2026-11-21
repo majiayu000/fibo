@@ -316,6 +316,8 @@ else:
         # has no choice saved and the window follows this Mac's language.
         if os.environ.get('MOORING_LANG'): env['MOORING_LANG'] = os.environ['MOORING_LANG']
         if os.environ.get('MOORING_FIXTURE_CHILD_ADAPTERS'): env['MOORING_FIXTURE_CHILD_ADAPTERS'] = os.environ['MOORING_FIXTURE_CHILD_ADAPTERS']
+        # The Search page types this instead of its default query (反馈).
+        if os.environ.get('MOORING_SEARCH_QUERY'): env['MOORING_SEARCH_QUERY'] = os.environ['MOORING_SEARCH_QUERY']
         result = subprocess.run([str(BIN / 'fibo-app'), '--runtime', str(root / 'runtime'), '--visual-evidence', str(directory)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
         (directory / 'native-render.log').write_bytes(result.stdout); assert result.returncode == 0, result.stdout.decode()[-4000:]
         print('native captures', sorted(p.name for p in directory.glob('*-native.png')))
