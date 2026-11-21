@@ -112,3 +112,16 @@ export function chipSpace<M extends { id: string; status: string; spaceList?: Sp
   }
   return undefined;
 }
+
+/** A folder's own name, as a new space made from it is called. */
+export const folderName = (path: string) => path.replace(/\/+$/, '').split('/').pop() || path;
+
+/**
+ * The question before a folder becomes a space. One tap made it at once, and a tap meant to
+ * stop a scroll landed on it (11-18 walk); the phone cannot remove a space, so it asks first.
+ */
+export const addSpaceAsk = (path: string) => ({
+  title: tr('把「{name}」设为新空间？', { name: folderName(path) }),
+  detail: tr('电脑上会多一个空间，用这个文件夹。手机上删不掉它，要在电脑上删。'),
+  ok: tr('设为新空间'),
+});

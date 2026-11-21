@@ -7,6 +7,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { approve, deny, oops } from '@/actions';
 import { remote, supports, useHub } from '@/remote/hub';
 import { useAsk } from '@/remote/useAsk';
+import { PAGE_ANSWERS } from '@/ui/answers';
 import { useSettings } from '@/store/settings';
 import { cardTitle } from '@/ui/format';
 import { SpaceMark } from '@/ui/icons';
@@ -112,19 +113,23 @@ export default function Approve() {
             )}
             {can ? (
               <View style={{ flexDirection: 'row', gap: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <Wide label={tr('拒绝')} kind="danger" disabled={off} onPress={() => run(() => deny(machine, card, ask))} textStyle={{ fontSize: 17 }} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Wide
-                    label={tr('允许')}
-                    kind="allow"
-                    icon="face"
-                    disabled={off}
-                    onPress={() => run(() => approve(machine, card, ask))}
-                    textStyle={{ fontSize: 17 }}
-                  />
-                </View>
+                {/* The same order as a row's buttons (answers.ts): 允许 last. */}
+                {PAGE_ANSWERS.map((b) => (
+                  <View key={b} style={{ flex: 1 }}>
+                    {b === 'deny' ? (
+                      <Wide label={tr('拒绝')} kind="danger" disabled={off} onPress={() => run(() => deny(machine, card, ask))} textStyle={{ fontSize: 17 }} />
+                    ) : (
+                      <Wide
+                        label={tr('允许')}
+                        kind="allow"
+                        icon="face"
+                        disabled={off}
+                        onPress={() => run(() => approve(machine, card, ask))}
+                        textStyle={{ fontSize: 17 }}
+                      />
+                    )}
+                  </View>
+                ))}
               </View>
             ) : (
               <Notice text={tr('这台手机的权限是「只看」，不能答审批')} />

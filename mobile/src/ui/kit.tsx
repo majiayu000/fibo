@@ -155,7 +155,7 @@ export function Btn({
   primary?: boolean;
   icon?: IconName;
   style?: StyleProp<ViewStyle>;
-  /** 44 pt and stretched, as in the diff's summary. */
+  /** At least 44 pt and stretched, as in the diff's summary. */
   tall?: boolean;
   disabled?: boolean;
   tone?: 'danger';
@@ -170,7 +170,7 @@ export function Btn({
       style={({ pressed }) => [
         s.btn,
         { borderColor: primary ? t.act : t.line, backgroundColor: primary ? t.act : t.card },
-        tall && { height: 44, flex: 1, justifyContent: 'center' },
+        tall && { minHeight: 44, flex: 1, justifyContent: 'center' },
         style,
         (pressed || disabled) && { opacity: disabled ? 0.4 : 0.7 },
       ]}
@@ -268,15 +268,17 @@ export function Sheet({ children, style }: { children: ReactNode; style?: StyleP
   return <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }, style]}>{children}</View>;
 }
 
-export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+/** `disabled`: greyed and deaf to taps, for a setting that does nothing yet. */
+export function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
   const t = useTheme();
   return (
     <Pressable
       accessibilityRole="switch"
       accessibilityLabel={label}
-      accessibilityState={{ checked: on }}
+      accessibilityState={{ checked: on, disabled: !!disabled }}
+      disabled={disabled}
       onPress={() => onChange(!on)}
-      style={[s.sw, { backgroundColor: on ? '#34c759' : t.dark ? '#3a3a42' : '#e4e4e7' }]}
+      style={[s.sw, { backgroundColor: on && !disabled ? '#34c759' : t.dark ? '#3a3a42' : '#e4e4e7' }, disabled && { opacity: 0.5 }]}
     >
       <View style={[s.knob, { left: on ? 22 : 2 }]} />
     </Pressable>
@@ -304,7 +306,8 @@ const s = StyleSheet.create({
   navBig: { fontSize: 18, fontWeight: TITLE_WEIGHT },
   navSub: { fontSize: 12 },
   btn: {
-    height: 36,
+    // At least, not exactly: a larger system font grows the button instead of spilling out of it.
+    minHeight: 36,
     borderRadius: 18,
     borderWidth: 1,
     paddingHorizontal: 14,

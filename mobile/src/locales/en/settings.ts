@@ -8,14 +8,15 @@ export const settings: Record<string, Entry> = {
   通知与设置: 'Notifications & settings',
   什么时候提醒我: 'When to notify me',
   推送还没接: 'Push not set up yet',
+  还没做好: 'Not ready yet',
   '立即，带「允许一次」按钮': 'Right away, with an “Allow once” button',
   'Agent 问你问题停下来时': 'When an Agent stops to ask you something',
   '命令失败或 Agent 报错': 'A command fails or an Agent reports an error',
   '一轮跑完，等你看结果': 'A turn finished and waits for you',
   免打扰: 'Do not disturb',
   '23:00 – 08:00，审批除外': '23:00 – 08:00, except approvals',
-  '推送需要 APNs / FCM 账号，这一版还没接：开关先记在这台手机上，接好后按这里的设置提醒。':
-    "Push needs an APNs / FCM account and isn't set up in this version. The switches are saved on this phone, and notifications will follow them once it is.",
+  '手机提醒还没做好，这些开关现在不起作用。开着 App 时，要你处理的事会显示在首页最上面。':
+    "Phone notifications aren't ready yet, so these switches do nothing for now. While the app is open, anything that needs you shows at the top of the home screen.",
   外观与安全: 'Appearance & security',
   外观: 'Appearance',
   语言: 'Language',
@@ -52,7 +53,6 @@ export const settings: Record<string, Entry> = {
   通知: 'Notifications',
 
   // Pairing
-  '这不是 Fibo 的配对链接（{reason}）': "This isn't a Fibo pairing link ({reason})",
   '没配上：{reason}': "Couldn't pair: {reason}",
   配对电脑: 'Pair a computer',
   '和「{name}」配对？': 'Pair with “{name}”?',
@@ -69,8 +69,8 @@ export const settings: Record<string, Entry> = {
   这里: 'this app',
   下一步: 'Next',
   粘贴配对链接: 'Paste pairing link',
-  '手机和电脑最好在同一个 Wi‑Fi；不在时经中继连接，内容端到端加密':
-    'Best on the same Wi‑Fi as your computer. Otherwise it connects through the relay, end-to-end encrypted.',
+  '手机经中继连到电脑，不用在同一个 Wi‑Fi；内容端到端加密':
+    "The phone reaches your computer through the relay, so they don't need to share a Wi‑Fi. Everything is end-to-end encrypted.",
 
   // Limits
   额度: 'Limits',

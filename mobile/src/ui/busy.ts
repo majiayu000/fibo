@@ -54,3 +54,12 @@ export function whileBusy(controls: AgentControls | null | undefined, how?: How)
   if (mode === 'steer') return STEERS;
   return UNKNOWN;
 }
+
+/**
+ * After a send the box is empty and the send key turns into 停下 under the same thumb: a second
+ * tap meant for 发送 would stop the turn just asked for (11-21 review). It stays deaf this long.
+ */
+export const STOP_AFTER_SEND_MS = 1000;
+
+/** Whether a tap on 停下 counts, `sentAt` the last send (0 for none). */
+export const stopCounts = (sentAt: number, now: number) => now - sentAt >= STOP_AFTER_SEND_MS;

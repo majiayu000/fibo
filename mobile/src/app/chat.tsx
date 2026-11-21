@@ -17,6 +17,8 @@ import { type Pending, updatePending, usePending } from '@/store/pending';
 import { rememberSent, useSentPictures } from '@/store/sentPictures';
 import { countUse } from '@/store/suggestionCounts';
 import { suggestionStats } from '@/store/suggestions';
+import { rowAnswers } from '@/ui/answers';
+import { CmdPreview } from '@/ui/cmdpreview';
 import { HOW_NOTE, type How, QUEUED_TAP, SENT_NOW, sendsNow, steerable, whileBusy } from '@/ui/busy';
 import { Composer } from '@/ui/composer';
 import { KeyboardSafe } from '@/ui/keyboard';
@@ -327,7 +329,9 @@ export default function Chat() {
   );
 
   const ask = useAsk(machine, card, online);
-  const settled = useSettled(`${ask.subject}|${ask.note}`);
+  const [askLines, setAskLines] = useState<number | null>(null);
+  const answerButtons = rowAnswers(ask, askLines, supports(m, 'answer'));
+  const settled = useSettled(`${ask.subject}|${ask.note}|${answerButtons.join()}`);
   const waiting = online && card?.phase === 'waiting' && !card.approval ? card.waiting : null;
   const starting = online && card?.phase === 'shell' && !!card.agent && !card.trust;
   const view = waitView(waiting) ?? (starting ? startingView() : null);
@@ -367,8 +371,15 @@ export default function Chat() {
           <Mine text={pendingText(l.p)} note={l.p.now ? tr(SENT_NOW) : l.p.how ? tr(HOW_NOTE[l.p.how]) : l.p.queued ? tr(whileBusy(card?.controls).note) : tr('发送中…')} tone="pending" />
         )
       ) : (
-        <Pressable onPress={() => l.error && retry(l.id).catch(() => oops(tr('未能保存重试状态，请重试')))} onLongPress={() => drop(l.id).catch(() => oops(tr('未能删除待发送消息，请重试')))}>
-          <Mine text={l.text} note={l.error ? tr('没发出去：{why}（点一下重发，按住删除）', { why: l.error }) : tr('重连后发送（按住删除）')} tone={l.error ? 'error' : 'pending'} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={l.text}
+          accessibilityHint={l.error ? tr('点一下重发，按住删除') : tr('重连后发送（按住删除）')}
+          onPress={() => l.error && retry(l.id).catch(() => oops(tr('未能保存重试状态，请重试')))}
+          onLongPress={() => drop(l.id).catch(() => oops(tr('未能删除待发送消息，请重试')))}
+        >
+          {/* What a tap does first: a long reason after it must not push it out of sight (11-16 walk). */}
+          <Mine text={l.text} note={l.error ? tr('没发出去（点一下重发，按住删除）：{why}', { why: l.error }) : tr('重连后发送（按住删除）')} tone={l.error ? 'error' : 'pending'} />
         </Pressable>
       ),
     [agent, card?.controls, toTools, canSendNow, openQueued, sentPictures, machine, terminal],
@@ -451,7 +462,7 @@ export default function Chat() {
             ) : undefined
           }
           ListEmptyComponent={
-            <Text onPress={canReadBack && !readingBack ? older : undefined} style={{ color: t.dim, textAlign: 'center' }}>
+            <Text onPress={canReadBack && !readingBack ? older : undefined} accessibilityRole={canReadBack && !readingBack ? 'button' : undefined} style={{ color: t.dim, textAlign: 'center' }}>
               {canReadBack ? readBackWords(readingBack, readFailed) : partial ? partialWords(0) : !online ? tr('电脑没连上，连上后这里显示这段对话') : card?.session ? tr('这段对话还没有消息') : card?.trust ? tr('答完下面的问题，它才会开始') : card?.note || tr('这个终端里还没有 Agent 对话；Agent 起来后这里会接上')}
             </Text>
           }
@@ -460,22 +471,22 @@ export default function Chat() {
       {!!card?.approval && online && (
         <View style={{ marginHorizontal: 12, marginBottom: 10, padding: 14, gap: 10, borderRadius: 20, borderWidth: 1.5, borderColor: t.wait, backgroundColor: t.card }}>
           <Text style={{ color: t.wait, fontSize: 14, fontWeight: '500' }}>{tr('等你批准')}</Text>
-          <Text numberOfLines={3} style={{ fontFamily: mono, fontSize: 13, color: t.text, backgroundColor: t.well, borderRadius: 10, padding: 10, overflow: 'hidden' }}>
-            {ask.subject}
-          </Text>
+          <CmdPreview text={ask.subject} style={{ fontFamily: mono, fontSize: 13, color: t.text, backgroundColor: t.well, borderRadius: 10, padding: 10, overflow: 'hidden' }} onLines={setAskLines} />
           {!!ask.note && (
             <Text numberOfLines={2} style={{ color: t.dim, fontSize: 13, lineHeight: 18 }}>
               {ask.note}
             </Text>
           )}
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            {supports(m, 'answer') && (
-              <>
-                <Btn primary icon="face" label={tr('允许')} disabled={!settled.ready} onPress={() => settled.passes() && approve(machine, card, ask).catch((e) => oops(e.message))} />
-                <Btn label={tr('拒绝')} disabled={!settled.ready} onPress={() => settled.passes() && deny(machine, card, ask).catch((e) => oops(e.message))} />
-              </>
+            {answerButtons.map((b) =>
+              b === 'allow' ? (
+                <Btn key={b} primary icon="face" label={tr('允许')} disabled={!settled.ready} onPress={() => settled.passes() && approve(machine, card, ask).catch((e) => oops(e.message))} />
+              ) : b === 'deny' ? (
+                <Btn key={b} label={tr('拒绝')} disabled={!settled.ready} onPress={() => settled.passes() && deny(machine, card, ask).catch((e) => oops(e.message))} />
+              ) : (
+                <Btn key={b} primary={b === 'whole'} label={b === 'whole' ? tr('看全文') : tr('详情')} onPress={() => router.push({ pathname: '/approve', params: { machine, terminal } })} />
+              ),
             )}
-            <Btn label={tr('详情')} onPress={() => router.push({ pathname: '/approve', params: { machine, terminal } })} />
           </View>
         </View>
       )}

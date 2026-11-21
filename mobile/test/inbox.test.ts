@@ -350,6 +350,17 @@ describe('the home screen', () => {
     expect(connectionLine([{ name: 'a', status: 'online' }, { name: 'b', status: 'refused' }]).alert).toBe(true);
   });
 
+  test('a computer still being dialled is connecting, not offline, and no red line', () => {
+    // At a cold start every computer is connecting: the title said 「mac不在线」 in red over 「正在连接…」.
+    expect(connectionLine([{ name: 'mac', status: 'connecting' }])).toEqual({ text: '正在连接mac…', alert: false });
+    expect(connectionLine([{ name: 'a', status: 'connecting' }, { name: 'b', status: 'offline' }])).toEqual({ text: '正在连接电脑…', alert: false });
+    expect(connectionLine([{ name: 'a', status: 'connecting' }, { name: 'b', status: 'refused' }]).alert).toBe(true);
+    // Online beside one still dialling: it is not counted as away.
+    expect(connectionLine([{ name: 'mac', status: 'online' }, { name: 'x', status: 'connecting' }]).text).toBe('mac 在线');
+    // Once the dial failed it says so.
+    expect(connectionLine([{ name: 'mac', status: 'offline' }])).toEqual({ text: 'mac不在线', alert: true });
+  });
+
   test('a computer that is off takes a row only when nothing else can hear you, or it refused this phone', () => {
     const on = { name: 'a', status: 'online' as const };
     const off = { name: 'b', status: 'offline' as const };

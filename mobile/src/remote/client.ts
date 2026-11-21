@@ -2,10 +2,11 @@
 // JSON lines both ways, ACKs, requests by id and streams. What
 // `next/crates/fibo-relay/examples/phone.rs` does, for the app. Protocol shapes:
 // the Keepline repo's `specs/extensions/remote-protocol.md` (not moved here).
-import { tr } from '../i18n';
+import { tk, tr } from '../i18n';
 import { concat, text, utf8 } from './bytes';
 import { type Link, linkUrl } from './link';
-import { closeOutcome } from './close';
+import { closeOutcome, unreachedText } from './close';
+import { reachRelay } from './reach';
 import { CHUNK, type Channel, Handshake } from './noise';
 
 /** Why the connection ended, from the relay's or machine's close code (see `close.ts`). */
@@ -17,10 +18,18 @@ export class RemoteError extends Error {
     message: string,
     readonly code?: number,
     readonly reason?: string,
+    /** What exactly happened, for support; the message is what the person reads. */
+    readonly detail?: string,
   ) {
     super(message);
   }
 }
+
+/** A dial whose socket ended without a close frame: nothing from the relay says why. */
+const noCloseCode = (code: number | undefined) => code === undefined || code === 1005 || code === 1006;
+
+/** The machine's handshake answer did not fit this phone's key. A key: say it with `tr`. */
+const HANDSHAKE_FAILED = tk('电脑没认出这台手机，配对信息对不上。请在电脑的 Fibo 里点标题栏的手机图标，选「配对新手机」重新扫码');
 
 /** What a close code means to the person holding the phone; the number stays for support. */
 export const closeText = (code: number) => closeOutcome(code).text;
@@ -71,12 +80,22 @@ export class Remote {
           resolve(new Remote(ws, hs.finish(new Uint8Array(ev.data as ArrayBuffer))));
         } catch (e) {
           ws.close();
-          reject(new RemoteError(tr('握手失败：{why}', { why: (e as Error).message })));
+          // The machine answered with a key this phone does not share: the pairing no longer matches.
+          reject(new RemoteError(tr(HANDSHAKE_FAILED), undefined, undefined, `handshake: ${(e as Error).message}`));
         }
       };
       ws.onclose = (ev) => {
         clearTimeout(timer);
-        reject(new RemoteError(closeOutcome(ev.code, ev.reason).text, ev.code, ev.reason));
+        if (!noCloseCode(ev.code)) {
+          reject(new RemoteError(closeOutcome(ev.code, ev.reason).text, ev.code, ev.reason));
+          return;
+        }
+        // The socket failed before any close frame (1006 on a phone, whatever the HTTP status):
+        // the relay's health check says whether the relay or the computer is the one away.
+        const detail = `close ${ev.code}${ev.reason ? `: ${ev.reason}` : ''}`;
+        // A browser (the web build) may not read another site's answer; it only tries the UI.
+        const ask = (globalThis as { document?: unknown }).document === undefined ? reachRelay(link.relay) : Promise.resolve('unknown' as const);
+        ask.then((reach) => reject(new RemoteError(unreachedText(reach), undefined, ev.reason, `${detail}; relay ${reach}`)));
       };
       ws.onerror = () => undefined;
     });

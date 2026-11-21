@@ -229,14 +229,21 @@ export const runningShown = <T>(items: T[], all: boolean) => (all ? items : item
 
 type Linked = Pick<Machine, 'name' | 'status'>;
 
-/** The line under the title. `alert` when no computer can hear you or one refused this phone. */
+/**
+ * The line under the title. `alert` when no computer can hear you or one refused this phone.
+ * A computer still being dialled is not yet away: the row under it says 正在连接 (11-21 review).
+ */
 export function connectionLine(machines: Linked[]): { text: string; alert: boolean } {
   const online = machines.filter((m) => m.status === 'online');
-  const off = machines.length - online.length;
+  const dialing = machines.filter((m) => m.status === 'connecting');
+  const off = machines.length - online.length - dialing.length;
+  const refused = machines.some((m) => m.status === 'refused');
   if (machines.length === 0) return { text: '', alert: false };
+  if (online.length === 0 && dialing.length > 0)
+    return { text: machines.length === 1 ? tr('正在连接{name}…', { name: machines[0].name || tr('电脑') }) : tr('正在连接电脑…'), alert: refused };
   if (online.length === 0) return { text: machines.length === 1 ? tr('{name}不在线', { name: machines[0].name || tr('电脑') }) : tr('电脑都不在线'), alert: true };
   const here = online.length === 1 ? tr('{name} 在线', { name: online[0].name || tr('电脑') }) : tr('{n} 台电脑在线', { n: online.length });
-  return { text: off > 0 ? tr('{here} · {n} 台离线', { here, n: off }) : here, alert: machines.some((m) => m.status === 'refused') };
+  return { text: off > 0 ? tr('{here} · {n} 台离线', { here, n: off }) : here, alert: refused };
 }
 
 /** Computers that take a row on the home screen; the rest are counted in the line and listed under 我的. */
