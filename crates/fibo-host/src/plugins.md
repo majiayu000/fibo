@@ -57,14 +57,14 @@ fibo plugins run git-tools <声明 id>   # hook、装饰、额度命令：用和
 - `files` 可选：插件还要带上的其他文件（命令要跑的脚本），相对插件目录写。不写进来的文件从插件目录安装时不会被带上。
 - `touches` 可选：setup 会改的别的程序的文件，如 `["~/.claude/settings.json"]`；`network` 可选：命令会不会联网。安装确认里照写给用户看，Fibo 不拦截，所以要如实写。
 - 命令行安装会跑命令的插件时先列出这些，交互终端里问 y/N，非交互（Agent、脚本）要加 `--yes`。
-- `fibo` 可选：插件需要的插件级别（现在是 9：`setup`、`quota`、`files`、`options` 是 2 级加的，`themes` 和动作的 `agent`、设置项的 `secret` 是 3 级加的，`agent.json` 的 `screen_rules` 和 `interrupt` 是 4 级加的，它的 `answers` 是 5 级加的）。不写时按 `plugin.json` 里用到的类型和字段自动算；用了 2 级以后加的类型文件字段（比如动作的 `agent`）要自己写上。级别不够的 Fibo 会拒绝它并提示更新。
+- `mooring` 可选（键保留旧名，写成 `"fibo"` 不认）：插件需要的插件级别（现在是 9：`setup`、`quota`、`files`、`options` 是 2 级加的，`themes` 和动作的 `agent`、设置项的 `secret` 是 3 级加的，`agent.json` 的 `screen_rules` 和 `interrupt` 是 4 级加的，它的 `answers` 是 5 级加的）。不写时按 `plugin.json` 里用到的类型和字段自动算；用了 2 级以后加的类型文件字段（比如动作的 `agent`）要自己写上。级别不够的 Fibo 会拒绝它并提示更新。
 - `plugin.json` 里新版本才有的类型和字段，旧版本会跳过并在设置页写一条警告，其余照常加载；只有一类都不认识时才整个不加载。hooks 的 `on` 里不认识的事件也只跳过这个事件。
 - `provides` 至少一种：`actions` `sidebar` `decorations` `hooks` `rules` `effects` `setup` `quota` `themes` `agent`。写了哪种就必须有那种的文件；有文件没写进 `provides` 的不会加载。
 - 每个类型文件里也都写 `"api": 1`（`agent.json` 除外，见最后）。类型文件里不认识的字段会让这一份文件不生效，这样写错字段名能马上看到。
 
 ## 所有插件命令都拿得到的环境变量
 
-hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 在终端里跑，用 `{cwd}` 这类模板）：
+hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 在终端里跑，用 `{cwd}` 这类模板）。这几个请用 `MOORING_*` 名字：新版也给同值的 `FIBO_*`，但更早的 Fibo 只给旧名，用新名的插件装在那里会拿到空值：
 
 - `MOORING_PLUGIN_ID`、`MOORING_PLUGIN_DIR`：哪个插件、它的目录（找 `files` 里带的脚本）。
 - `MOORING_PLUGIN_DATA`：插件自己的数据目录，更新时保留，卸载时删除。
@@ -145,7 +145,7 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 ```
 
 - `command` 用 `sh -c` 在窗格目录里跑，显示输出的第一行；退出码不是 0 或没输出就什么都不显示，所以不适用的目录让它安静失败。退出码 126、127（命令跑不起来）不算安静失败，会进运行记录。
-- 能读到 `MOORING_CWD` `MOORING_AGENT` `MOORING_SESSION`，以及 shell 上一条命令的 `MOORING_LAST_EXIT` `MOORING_LAST_DURATION_MS`（还没有时为空）。
+- 能读到 `FIBO_CWD` `FIBO_AGENT` `FIBO_SESSION`，以及 shell 上一条命令的 `FIBO_LAST_EXIT` `FIBO_LAST_DURATION_MS`（还没有时为空）。旧名 `MOORING_*` 照样有，老插件不用改。
 - `place`：`title`（默认，窗格标题栏）或 `tip`（悬停标题时的卡片里单独一行）。
 - `tone`（只对标题栏）：`muted`（默认）、`ok`、`warn`、`error`，跟着状态颜色。
 - `when`：`always`（默认）、`agent`、`shell`。`refresh_s` 多久重跑一次，默认 10；`timeout_ms` 默认 1000。命令要快，别在这里联网。
@@ -156,14 +156,14 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 {
   "api": 1,
   "hooks": [
-    {"id": "notify", "on": ["waiting", "error", "done"], "command": "osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title (item 2 of argv)' -e 'end run' \"$MOORING_DETAIL\" \"$MOORING_TITLE\"", "timeout_ms": 5000}
+    {"id": "notify", "on": ["waiting", "error", "done"], "command": "osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title (item 2 of argv)' -e 'end run' \"$FIBO_DETAIL\" \"$FIBO_TITLE\"", "timeout_ms": 5000}
   ]
 }
 ```
 
 - `on`：`started` `waiting` `error` `done`（会话），`command_done` `command_failed`（shell 里敲的命令跑完）。
-- **事件里的文字来自 Agent 的对话，可能带有任何内容，别把它拼进别的语言的源码**：上面的 `osascript` 用 `on run argv` 收参数；不要写成 `-e "display notification \"$MOORING_DETAIL\""`，那样对话里的一段文字就能执行命令。`python -c`、`node -e`、`sqlite3` 同理。
-- `command`（`sh -c`）和 `webhook`（POST 一个 JSON）写其中一个。事件以 JSON 从标准输入给，也有环境变量：`MOORING_EVENT` `MOORING_SESSION` `MOORING_AGENT` `MOORING_TITLE` `MOORING_CWD` `MOORING_SPACE` `MOORING_DETAIL` `MOORING_TERMINAL`，命令事件还有 `MOORING_EXIT_CODE` `MOORING_DURATION_MS`。
+- **事件里的文字来自 Agent 的对话，可能带有任何内容，别把它拼进别的语言的源码**：上面的 `osascript` 用 `on run argv` 收参数；不要写成 `-e "display notification \"$FIBO_DETAIL\""`，那样对话里的一段文字就能执行命令。`python -c`、`node -e`、`sqlite3` 同理。
+- `command`（`sh -c`）和 `webhook`（POST 一个 JSON）写其中一个。事件以 JSON 从标准输入给，也有环境变量：`FIBO_EVENT` `FIBO_SESSION` `FIBO_AGENT` `FIBO_TITLE` `FIBO_CWD` `FIBO_SPACE` `FIBO_DETAIL` `FIBO_TERMINAL`，命令事件还有 `FIBO_EXIT_CODE` `FIBO_DURATION_MS`。旧名 `MOORING_*` 照样有，老插件不用改。
 - `timeout_ms` 默认 5000，最多 30000；`min_ms` 只对命令事件，跑得比它快的不报。每个插件最多同时跑 2 个 hook，各插件轮流；事件来得太多时，一个插件最多排队 16 个，再多丢最旧的，丢了会进运行记录。
 - hook 只能知道，不能改会话；拿不到对话原文，也拿不到命令行本身。Fibo 没开时后台也会跑 hook。
 

@@ -1,4 +1,4 @@
-use super::processes::{agent_named, hinted_roots};
+use super::processes::{agent_hint_in, agent_named, hinted_roots};
 use super::*;
 use crate::agents::{claude::claude_session_id, codex::codex_args};
 #[test]
@@ -20,6 +20,23 @@ fn an_agent_hint_is_a_key_or_an_executable_in_any_case() {
     assert_eq!(agent_named("Claude"), Some(Agent::Claude));
     assert_eq!(agent_named(" codex "), Some(Agent::Codex));
     assert_eq!(agent_named("vim"), None);
+}
+#[test]
+fn a_wrapper_started_with_fibo_agent_or_the_old_mooring_agent_is_named() {
+    let hint = |vars: &[(&str, &str)]| {
+        agent_hint_in(|name| {
+            vars.iter()
+                .find(|(k, _)| *k == name)
+                .map(|(_, v)| v.to_string())
+        })
+    };
+    assert_eq!(hint(&[("FIBO_AGENT", "codex")]), Some(Agent::Codex));
+    assert_eq!(hint(&[("MOORING_AGENT", "claude")]), Some(Agent::Claude));
+    assert_eq!(
+        hint(&[("FIBO_AGENT", "codex"), ("MOORING_AGENT", "claude")]),
+        Some(Agent::Codex)
+    );
+    assert_eq!(hint(&[("OTHER", "claude")]), None);
 }
 #[test]
 fn agent_hint_counts_the_outermost_wrapper_unless_the_cli_shows_below() {

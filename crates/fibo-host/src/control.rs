@@ -244,7 +244,7 @@ fibo --version                             打印版本和协议版本"),
 ];
 const FOOTER: &str = tk!("\
 <终端> 可以是编号的前几位或标签名；全部命令都接受 --runtime <目录>；-h / --help 只打印用法、什么都不做。
-Agent 藏在包装器（沙盒、虚拟机、nono 等）后面认不出时，启动前设 MOORING_AGENT=<claude|codex|…>。");
+Agent 藏在包装器（沙盒、虚拟机、nono 等）后面认不出时，启动前设 FIBO_AGENT=<claude|codex|…>（旧名 MOORING_AGENT 也认）。");
 /// Every command's lines, then what holds for all of them.
 pub(crate) fn usage() -> String {
     let mut text: String = COMMANDS
