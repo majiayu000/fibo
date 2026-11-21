@@ -201,7 +201,8 @@ impl Workbench {
         root: gpui::Div,
         cx: &Context<Self>,
     ) -> gpui::Div {
-        root.capture_key_down(cx.listener(Self::layer_key_down))
+        self.menu_bar_handlers(root, cx)
+            .capture_key_down(cx.listener(Self::layer_key_down))
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 if let Some(action) = crate::keymap::action(&event.keystroke, cx)
                     && this.shortcut(action, window, cx)

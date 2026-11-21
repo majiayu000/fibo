@@ -25,6 +25,13 @@ unsafe extern "C" {
     );
     fn kl_play_sound();
     fn kl_desktop_withdraw(session: *const c_char);
+    fn kl_mark_menus(window: usize, help: usize);
+}
+
+/// Hands AppKit the bar's 窗口 and 帮助 menus by place, since their titles follow the
+/// language: it lists the windows in one and puts its search field in the other.
+pub fn mark_menus(window: usize, help: usize) {
+    unsafe { kl_mark_menus(window, help) }
 }
 
 pub fn set_dock_icon(png: &[u8]) {

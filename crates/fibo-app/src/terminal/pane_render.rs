@@ -375,6 +375,16 @@ impl Render for Pane {
             .on_mouse_up_out(gpui::MouseButton::Middle,cx.listener(Self::mouse_up))
             .on_scroll_wheel(cx.listener(Self::scroll_wheel))
             .on_key_down(cx.listener(Self::key))
+            // The menu bar's 编辑 and 视图 items, while input is in this pane.
+            .on_action(cx.listener(|this, a: &crate::app_menu::RunKey, window, cx| {
+                if a.0.in_terminal() {
+                    this.run_key(a.0, window, cx);
+                } else {
+                    cx.propagate();
+                }
+            }))
+            .on_action(cx.listener(|this, _: &crate::app_menu::Copy, _, cx| this.copy(cx)))
+            .on_action(cx.listener(|this, _: &crate::app_menu::Paste, _, cx| this.paste(cx)))
             .on_drop(cx.listener(|this, paths: &gpui::ExternalPaths, window, cx| {
                 window.focus(&this.focus, cx);
                 this.drop_paths(paths, cx);

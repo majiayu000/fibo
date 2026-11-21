@@ -37,7 +37,7 @@ static EVENTS: OnceLock<UnboundedSender<String>> = OnceLock::new();
 mod native;
 #[cfg(feature = "visual-test")]
 pub use native::snapshot;
-pub use native::{request_attention, route_applied, set_dock_icon, show};
+pub use native::{mark_menus, request_attention, route_applied, set_dock_icon, show};
 extern "C" fn event(value: *const c_char) {
     if value.is_null() {
         return;

@@ -422,6 +422,11 @@ void kl_desktop_withdraw(const char *session) {
     [[UNUserNotificationCenter currentNotificationCenter]removePendingNotificationRequestsWithIdentifiers:@[sid]];
 }
 void kl_desktop_show(void) { [desktop show:nil]; }
+void kl_mark_menus(size_t window, size_t help) {
+    NSMenu *bar=NSApp.mainMenu;
+    if((NSInteger)window<bar.numberOfItems) NSApp.windowsMenu=[bar itemAtIndex:window].submenu;
+    if((NSInteger)help<bar.numberOfItems) NSApp.helpMenu=[bar itemAtIndex:help].submenu;
+}
 // A terminal bell while Fibo is in the background: one Dock bounce, as in Terminal.app.
 void kl_request_attention(void) { [NSApp requestUserAttention:NSInformationalRequest]; }
 // The running app's Dock tile; the bundle's .icns still shows while it is not running.
