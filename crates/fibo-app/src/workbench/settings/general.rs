@@ -226,6 +226,7 @@ impl SettingsView {
                 segment(format!("lang-{}", choice.key()), text, choice == chosen).on_click(
                     cx.listener(move |this, _, window, cx| {
                         this.text_error = crate::ui::language::choose(choice).err();
+                        crate::set_menus(cx);
                         window.refresh();
                         cx.refresh_windows();
                         cx.notify();

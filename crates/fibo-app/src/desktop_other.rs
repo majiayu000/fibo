@@ -5,6 +5,7 @@ use std::ffi::c_char;
 pub fn set_dock_icon(_png: &[u8]) {}
 pub fn route_applied(_session: &str, _terminal: &str, _tab: &str) {}
 pub fn show() {}
+pub fn mark_menus(_window: usize, _help: usize) {}
 pub fn request_attention() {}
 pub fn install(_callback: extern "C" fn(*const c_char)) {}
 pub fn update(_json: &str) {}

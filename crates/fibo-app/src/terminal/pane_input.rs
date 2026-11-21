@@ -134,6 +134,48 @@ impl Pane {
             Ok(()) => (),
         }
     }
+    /// The terminal's own keymap actions (查找、清屏、字号、滚动), from a key or the menu bar.
+    pub(crate) fn run_key(
+        &mut self,
+        action: crate::keymap::Action,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::keymap::Action;
+        match action {
+            Action::ZoomIn | Action::ZoomOut | Action::ZoomReset => {
+                if let Err(error) = screen::zoom(match action {
+                    Action::ZoomIn => Some(1),
+                    Action::ZoomOut => Some(-1),
+                    _ => None,
+                }) {
+                    self.local_error = Some(error);
+                }
+                cx.refresh_windows();
+            }
+            Action::SelectAll => self.select_all(cx),
+            Action::Find => self.open_search(window, cx),
+            Action::ScrollTop => self.scroll_to(ScrollViewport::Top, cx),
+            Action::ScrollBottom => self.scroll_to(ScrollViewport::Bottom, cx),
+            Action::PageUp | Action::PageDown => {
+                let rows = self.screen.rows.len().max(1) as isize;
+                let rows = if action == Action::PageUp {
+                    -rows
+                } else {
+                    rows
+                };
+                self.scroll_to(ScrollViewport::Delta(rows), cx);
+            }
+            Action::Clear => {
+                self.clear_selection();
+                if let Err(e) = self.connection.send(Request::ClearHistory) {
+                    self.local_error = Some(e.to_string());
+                }
+                cx.notify();
+            }
+            _ => (),
+        }
+    }
     pub(super) fn key(
         &mut self,
         event: &KeyDownEvent,
@@ -157,40 +199,7 @@ impl Pane {
             if !action.in_terminal() {
                 return;
             }
-            use crate::keymap::Action;
-            match action {
-                Action::ZoomIn | Action::ZoomOut | Action::ZoomReset => {
-                    if let Err(error) = screen::zoom(match action {
-                        Action::ZoomIn => Some(1),
-                        Action::ZoomOut => Some(-1),
-                        _ => None,
-                    }) {
-                        self.local_error = Some(error);
-                    }
-                    cx.refresh_windows();
-                }
-                Action::SelectAll => self.select_all(cx),
-                Action::Find => self.open_search(window, cx),
-                Action::ScrollTop => self.scroll_to(ScrollViewport::Top, cx),
-                Action::ScrollBottom => self.scroll_to(ScrollViewport::Bottom, cx),
-                Action::PageUp | Action::PageDown => {
-                    let rows = self.screen.rows.len().max(1) as isize;
-                    let rows = if action == Action::PageUp {
-                        -rows
-                    } else {
-                        rows
-                    };
-                    self.scroll_to(ScrollViewport::Delta(rows), cx);
-                }
-                Action::Clear => {
-                    self.clear_selection();
-                    if let Err(e) = self.connection.send(Request::ClearHistory) {
-                        self.local_error = Some(e.to_string());
-                    }
-                    cx.notify();
-                }
-                _ => (),
-            }
+            self.run_key(action, window, cx);
             cx.stop_propagation();
             return;
         }

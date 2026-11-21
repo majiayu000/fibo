@@ -664,6 +664,7 @@ pub fn update(map: Keymap, cx: &mut App) -> Result<(), String> {
     let path = path().ok_or(t!("找不到配置目录"))?;
     let saved = map.save_at(&path)?;
     cx.set_global(saved);
+    crate::set_menus(cx);
     cx.refresh_windows();
     Ok(())
 }

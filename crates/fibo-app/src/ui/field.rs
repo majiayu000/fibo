@@ -258,6 +258,38 @@ impl Field {
     }
 }
 impl Field {
+    /// The selection to the clipboard, cut out when `cut`; false with nothing to copy.
+    fn copy(&mut self, cut: bool, cx: &mut Context<Self>) -> bool {
+        if self.selection.is_empty() || self.masked {
+            return false;
+        }
+        let text = self.text[self.selection.clone()].to_owned();
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+        if cut {
+            self.replace(None, "");
+        }
+        true
+    }
+    fn paste(&mut self, cx: &mut Context<Self>) {
+        if let Some(text) = cx.read_from_clipboard().and_then(|c| c.text()) {
+            // A one-line field takes a pasted paragraph as one line.
+            let text = if self.compact {
+                text.split_whitespace().collect::<Vec<_>>().join(" ")
+            } else {
+                text
+            };
+            self.replace(None, &text);
+        }
+    }
+    fn undo(&mut self) -> bool {
+        let Some((text, selection)) = self.undo.pop() else {
+            return false;
+        };
+        self.text = text;
+        self.selection = selection;
+        self.reversed = false;
+        true
+    }
     /// Keys that edit or move; anything else falls through to the owner.
     fn key_down(&mut self, event: &gpui::KeyDownEvent, cx: &mut Context<Self>) {
         if self.marked.is_some() {
@@ -269,36 +301,15 @@ impl Field {
         match event.keystroke.key.as_str() {
             "a" if cmd => self.select_all(),
             "c" | "x" if cmd => {
-                if self.selection.is_empty() {
+                if !self.copy(event.keystroke.key == "x", cx) {
                     return;
                 }
-                if self.masked {
-                    return;
-                }
-                let text = self.text[self.selection.clone()].to_owned();
-                cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
-                if event.keystroke.key == "x" {
-                    self.replace(None, "");
-                }
             }
-            "v" if cmd => {
-                if let Some(text) = cx.read_from_clipboard().and_then(|c| c.text()) {
-                    // A one-line field takes a pasted paragraph as one line.
-                    let text = if self.compact {
-                        text.split_whitespace().collect::<Vec<_>>().join(" ")
-                    } else {
-                        text
-                    };
-                    self.replace(None, &text);
-                }
-            }
+            "v" if cmd => self.paste(cx),
             "z" if cmd => {
-                let Some((text, selection)) = self.undo.pop() else {
+                if !self.undo() {
                     return;
-                };
-                self.text = text;
-                self.selection = selection;
-                self.reversed = false;
+                }
             }
             "left" | "right" | "home" | "end" => {
                 let left = matches!(event.keystroke.key.as_str(), "left" | "home");
@@ -519,6 +530,33 @@ impl Render for Field {
                     )
                     .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _, cx| {
                         this.key_down(event, cx)
+                    }))
+                    // The menu bar's 编辑 items act here while the field has input; the
+                    // terminal behind it is left alone.
+                    .on_action(cx.listener(|this, _: &crate::app_menu::Copy, _, cx| {
+                        this.copy(false, cx);
+                    }))
+                    .on_action(cx.listener(|this, _: &crate::app_menu::Cut, _, cx| {
+                        if this.copy(true, cx) {
+                            cx.notify();
+                        }
+                    }))
+                    .on_action(cx.listener(|this, _: &crate::app_menu::Paste, _, cx| {
+                        this.paste(cx);
+                        cx.notify();
+                    }))
+                    .on_action(cx.listener(|this, _: &crate::app_menu::Undo, _, cx| {
+                        if this.undo() {
+                            cx.notify();
+                        }
+                    }))
+                    .on_action(cx.listener(|this, a: &crate::app_menu::RunKey, _, cx| {
+                        if a.0 == crate::keymap::Action::SelectAll {
+                            this.select_all();
+                            cx.notify();
+                        } else {
+                            cx.propagate();
+                        }
                     }))
                     // A one-line field slides its text left as the caret moves right.
                     .child(

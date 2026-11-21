@@ -261,11 +261,13 @@ mod hooks;
 mod landing;
 mod layout;
 mod machines;
+mod menu_bar;
 mod recent_dirs;
 mod review_queue;
 #[cfg(feature = "visual-test")]
 pub use layout::ChangesProbe;
 use layout::LayoutState;
+pub(crate) use menu_bar::install as install_menu_bar;
 mod nav;
 use nav::Nav;
 mod overview;

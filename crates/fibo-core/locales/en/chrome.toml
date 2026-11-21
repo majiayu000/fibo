@@ -32,6 +32,23 @@
 "外观" = "Appearance"
 "退出 Fibo" = "Quit Fibo"
 
+[app_menu]
+"关于 Fibo" = "About Fibo"
+"服务#menu" = "Services"
+"隐藏 Fibo" = "Hide Fibo"
+"隐藏其他" = "Hide Others"
+"全部显示" = "Show All"
+"剪切" = "Cut"
+"视图" = "View"
+"转到" = "Go"
+"切换到标签" = "Go to Tab"
+"窗口" = "Window"
+"最小化" = "Minimize"
+"缩放#window" = "Zoom"
+"帮助" = "Help"
+"Fibo 网站" = "Fibo Website"
+"快捷键一览" = "Keyboard Shortcuts"
+
 [pane_render]
 "进程已退出" = "Process exited"
 "连接断开 · 正在重连…" = "Disconnected · reconnecting…"

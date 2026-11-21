@@ -6,6 +6,7 @@
 extern crate fibo_core;
 
 mod agent_hooks;
+mod app_menu;
 mod attach;
 mod connection;
 mod desktop;
@@ -58,58 +59,7 @@ fn ensure_host(root: &Path) -> io::Result<()> {
     lifecycle::spawn_host(root, false)
 }
 
-gpui::actions!(mooring, [Quit, ShowMenuPanel, ShowSettings]);
-/// Fibo → 外观: one item per choice, the current one checked.
-#[derive(Clone, PartialEq, gpui::Action)]
-#[action(namespace = mooring, no_json)]
-pub(crate) struct ChooseAppearance(pub usize);
-pub(crate) fn set_menus(cx: &mut App) {
-    use ui::appearance::{Appearance, Mode};
-    let chosen = cx.try_global::<Appearance>().cloned().unwrap_or_default();
-    let mut looks = Mode::ALL
-        .iter()
-        .enumerate()
-        .map(|(i, m)| {
-            gpui::MenuItem::action(m.label(), ChooseAppearance(i)).checked(*m == chosen.mode)
-        })
-        .collect::<Vec<_>>();
-    // Choosing below would change nothing in this space, so the menu says why.
-    if let Some(shown) = ui::appearance::shown(cx)
-        && shown.source == ui::appearance::Source::Space
-        && let Some(entry) = shown.entry
-    {
-        looks.push(gpui::MenuItem::separator());
-        looks.push(gpui::MenuItem::action(
-            t!("当前空间单独用着「{name}」", name = entry.name),
-            ShowSettings,
-        ));
-    }
-    // Past the modes, an entry's place in `Themes`: each side has its own check mark.
-    if let Some(themes) = cx.try_global::<ui::themes::Themes>() {
-        for light in [true, false] {
-            let on = chosen.entry(themes, light).map(|entry| entry.id.as_str());
-            looks.push(gpui::MenuItem::separator());
-            for (i, entry) in themes.entries.iter().enumerate() {
-                if entry.light() == light {
-                    looks.push(
-                        gpui::MenuItem::action(
-                            entry.name.as_str(),
-                            ChooseAppearance(Mode::ALL.len() + i),
-                        )
-                        .checked(on == Some(entry.id.as_str())),
-                    );
-                }
-            }
-        }
-    }
-    cx.set_menus([gpui::Menu::new("Fibo").items([
-        gpui::MenuItem::action(t!("设置…"), ShowSettings),
-        gpui::MenuItem::action(t!("菜单栏面板"), ShowMenuPanel),
-        gpui::MenuItem::submenu(gpui::Menu::new(t!("外观")).items(looks)),
-        gpui::MenuItem::separator(),
-        gpui::MenuItem::action(t!("退出 Fibo"), Quit),
-    ])]);
-}
+pub(crate) use app_menu::{ChooseAppearance, ShowMenuPanel, ShowSettings, set_menus};
 
 /// The top bar is the title bar: the traffic lights sit inside it, over the window's own gray.
 fn window_options(bounds: Bounds<gpui::Pixels>) -> WindowOptions {
@@ -412,12 +362,11 @@ fn run() -> io::Result<()> {
     app.on_reopen(move |cx| reopen_window(&reopen_root, cx));
     app.run(move |cx: &mut App| {
         use futures::StreamExt;
-        cx.on_action(|_: &Quit, cx| cx.quit());
+        app_menu::install(cx);
         cx.on_app_quit(|_| async { attach::stop() }).detach();
         #[cfg(feature = "visual-test")]
         cx.on_app_quit(|_| async { stop_evidence_host() }).detach();
         cx.on_action(|_: &ShowMenuPanel, _| desktop::show());
-        cx.bind_keys([gpui::KeyBinding::new("cmd-q", Quit, None)]);
         cx.on_action(|choice: &ChooseAppearance, cx| {
             use ui::appearance::{self, Mode};
             let done = if let Some(&mode) = Mode::ALL.get(choice.0) {
