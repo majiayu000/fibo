@@ -61,6 +61,15 @@ impl Workbench {
             },
         )
         .on_click(cx.listener(|this, _, _, cx| this.toggle_sidebar(cx)))
+        .tooltip(keyed_tip(
+            if self.sidebar_folded() {
+                t!("展开左栏")
+            } else {
+                t!("收起左栏")
+            },
+            crate::keymap::Action::ToggleSidebar,
+            cx,
+        ))
     }
     /// Empty title-bar space moves the window and zooms it on a double press, as the
     /// system title bar did before the top bar replaced it.
@@ -253,7 +262,11 @@ impl Workbench {
         };
         let mark = |agent: Agent, ink| super::super::board::agent_mark_in(agent, ink, T::SMALL);
         let mut others = vec![];
-        for agent in Agent::all().into_iter().filter(|a| *a != first) {
+        let (found, missing): (Vec<Agent>, Vec<Agent>) = Agent::all()
+            .into_iter()
+            .filter(|a| *a != first)
+            .partition(|a| !self.agent_missing(*a));
+        for agent in found {
             others.push(
                 link(
                     format!("empty-tab-{}", agent.executable()),
@@ -261,6 +274,20 @@ impl Workbench {
                     Some(mark(agent, T::color(T::link()))),
                 )
                 .on_click(cx.listener(move |this, _, _, cx| this.run_agent_here(agent, cx)))
+                .into_any_element(),
+            );
+        }
+        // Not on the login shell's PATH: still listed, after the others and greyed, so a
+        // click says what is missing instead of a shell's 「command not found」.
+        for agent in missing {
+            others.push(
+                link(
+                    format!("empty-tab-{}", agent.executable()),
+                    t!("{name}（没装）", name = agent.name()),
+                    Some(mark(agent, T::color(T::muted()))),
+                )
+                .text_color(T::color(T::muted()))
+                .on_click(cx.listener(move |this, _, _, cx| this.say_not_installed(agent, cx)))
                 .into_any_element(),
             );
         }
@@ -305,7 +332,13 @@ impl Workbench {
                     Some(mark(first, T::color(T::on_accent()))),
                 ))
                 .px(px(T::S16))
-                .on_click(cx.listener(move |this, _, _, cx| this.run_agent_here(first, cx))),
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    if this.agent_missing(first) {
+                        this.say_not_installed(first, cx);
+                    } else {
+                        this.run_agent_here(first, cx);
+                    }
+                })),
             )
             .child(
                 div()
@@ -322,6 +355,44 @@ impl Workbench {
             .when_some(split, |d, keys| {
                 d.child(label(t!("打开后可以右键分屏，或按 {keys} 向右分屏", keys)))
             })
+    }
+}
+
+/// A hover tip naming what a button does and the keys that do the same, as the user has
+/// bound them now, so a mouse user learns the shortcut from the button.
+pub(in crate::workbench) fn keyed_tip(
+    text: &str,
+    action: crate::keymap::Action,
+    cx: &gpui::App,
+) -> impl Fn(&mut Window, &mut gpui::App) -> gpui::AnyView + 'static {
+    let keys = crate::keymap::current(cx)
+        .chords(action)
+        .first()
+        .map(|c| c.display());
+    let tip: gpui::SharedString = match keys {
+        Some(keys) => format!("{text}  {keys}").into(),
+        None => text.to_owned().into(),
+    };
+    move |_, cx| cx.new(|_| TextTip(tip.clone())).into()
+}
+
+impl Workbench {
+    /// The login shell was asked and has no such command; unknown counts as there.
+    pub(in crate::workbench) fn agent_missing(&self, agent: Agent) -> bool {
+        self.tasks
+            .found
+            .as_ref()
+            .is_some_and(|found| !found.contains(agent.executable()))
+    }
+    pub(in crate::workbench) fn say_not_installed(&mut self, agent: Agent, cx: &mut Context<Self>) {
+        self.error = Some(t!(
+            "没在登录 shell 里找到 {executable}：先在终端里装好它，再点一次（装好后 Fibo 会重新查找）",
+            executable = agent.executable()
+        ));
+        // Ask again, so the next click finds what was installed meanwhile.
+        self.tasks.found = None;
+        self.probe_agents(cx);
+        cx.notify();
     }
 }
 

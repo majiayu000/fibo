@@ -540,6 +540,25 @@ impl Workbench {
                 })
                 .text_color(T::color(T::muted())),
             )
+            .when(empty, |d| {
+                // An empty board leads somewhere: start the usual Agent in the current
+                // space, instead of only telling the user to go and do it elsewhere.
+                let first = self.first_agent();
+                d.child(div().w(px(T::S8))).child(
+                    link(
+                        "board-start",
+                        t!("开一个 {name}", name = first.name()),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.leave_overview(cx);
+                        if this.agent_missing(first) {
+                            this.say_not_installed(first, cx);
+                        } else {
+                            this.run_agent_here(first, cx);
+                        }
+                    })),
+                )
+            })
             .child(div().w(px(T::S8)))
             .children(chips)
             .child(div().flex_1())

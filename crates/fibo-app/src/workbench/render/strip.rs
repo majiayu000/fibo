@@ -314,6 +314,11 @@ impl Workbench {
             .border_0()
             .text_color(T::color(T::link()))
             .on_click(cx.listener(|this, _, _, cx| this.launch(false, None, cx)))
+            .tooltip(super::bars::keyed_tip(
+                t!("新建终端标签"),
+                crate::keymap::Action::NewTab,
+                cx,
+            ))
             .map(|d| self.new_tab_landing(d, cx));
         // Terminal style puts the tabs in a status line under the panes, tmux-like:
         // the space, the tabs, then what needs you on the right.

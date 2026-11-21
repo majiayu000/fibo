@@ -46,7 +46,6 @@
 "同一待办再点「开始」会切回这个画面" = "Clicking “Start” again on the same to-do switches back to this pane"
 
 # Launch & workbench helpers
-"缺少工作台响应" = "Missing workspace reply"
 "未设目录 · 从 ~ 开始" = "No folder set · starts in ~"
 "从上次的 {dir} 开始" = "Starts where you last were, {dir}"
 "换目录" = "Change"

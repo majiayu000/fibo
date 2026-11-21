@@ -593,6 +593,9 @@ impl Workbench {
         }
         this.sync_panes(cx);
         this.read_hooks(cx);
+        // Which Agent CLIs this machine has, once, in the background: the empty tab greys
+        // out the missing ones instead of starting a shell that says 「command not found」.
+        this.probe_agents(cx);
         // A fresh install is greeted where the empty tab is, instead of with a bare shell.
         if this.first_run.on {
             this.start_first_run(cx);

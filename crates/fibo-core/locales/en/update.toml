@@ -16,7 +16,6 @@
 "正在下载并校验 {version}…" = "Downloading and verifying {version}…"
 "打开发布页" = "Open Release Page"
 "重试" = "Retry"
-"拷贝命令" = "Copy Command"
 "有新版本 {version}；这份由 Homebrew 安装，请运行 {v2}" = "{version} is available; this copy was installed with Homebrew, run {v2}"
 
 [statusbar]

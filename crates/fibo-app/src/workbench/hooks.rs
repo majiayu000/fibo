@@ -118,6 +118,11 @@ impl Workbench {
         if self.hooks.installing {
             return;
         }
+        if self.first_run.notify && !self.workspace.settings.notifications && !self.store.busy() {
+            let mut settings = self.workspace.settings.clone();
+            settings.notifications = true;
+            self.edit(Edit::Settings(settings), cx);
+        }
         if !self.first_run.with_hook {
             self.run_agent_here(agent, cx);
             return;
@@ -142,7 +147,12 @@ impl Workbench {
                 this.hooks.installing = false;
                 match result {
                     Ok(hooks) => this.hooks.read = Some(Ok(hooks)),
-                    Err(e) => this.error = Some(t!("Hook 没装上，Agent 照常启动：{e}", e)),
+                    Err(e) => {
+                        this.error = Some(t!(
+                            "状态提醒没装上（{e}），Agent 照常启动；可以在 设置 › 通用 再装一次",
+                            e
+                        ))
+                    }
                 }
                 this.run_agent_here(agent, cx);
                 cx.notify();
