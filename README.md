@@ -52,7 +52,7 @@ brew install --cask majiayu000/tap/fibo
 
 Open Fibo, run `claude` or `codex` in its terminal, and the session shows up in the sidebar. A release downloaded from GitHub updates itself; one installed with Homebrew updates with `brew upgrade --cask fibo` (see [How do I update?](#faq)).
 
-**Windows (preview):** run `Fibo-Setup-<version>.exe`; it installs for your user only, no admin needed. The installer is not code-signed yet, so SmartScreen warns about an unknown publisher: choose *More info*, then *Run anyway*. The Windows build does not update itself; run the newer installer to update. 0.1.2 was tried on Windows 11 x64; 0.1.3 so far only on a CI runner.
+**Windows (preview):** run `Fibo-Setup-<version>.exe`; it installs for your user only, no admin needed. The installer is not code-signed yet, so SmartScreen warns about an unknown publisher: choose *More info*, then *Run anyway*. The Windows build does not update itself; run the newer installer to update, after ending the terminals in Fibo first: on Windows the host cannot yet hand its terminals to the new version. 0.1.2 was tried on Windows 11 x64; 0.1.3 so far only on a CI runner.
 
 **Linux (preview):** on Ubuntu 24.04, x64 or arm64, run `sudo apt install ./fibo_<version>_amd64.deb` (or `fibo_<version>_arm64.deb`). It does not update itself; install the newer package to update. It has been installed and run on CI runners and in a fresh container, not yet on a real desktop.
 
@@ -79,7 +79,7 @@ Each session has one state, shown the same way in the sidebar, tabs, panes and t
 
 ### 02 · Close it, they keep working
 
-Terminals live in a background host (`fibo serve`), not in the window. Quit, update or crash the app and every terminal is still there when it opens again. If the host itself goes (a reboot), sessions that were cut off show **resume**: one click reopens the same conversation with `claude --resume` or `codex resume`, with the flags it was started with.
+Terminals live in a background host (`fibo serve`), not in the window. Quit, update or crash the app and every terminal is still there when it opens again (the Windows preview needs its terminals ended before an update). If the host itself goes (a reboot), sessions that were cut off show **resume**: one click reopens the same conversation with `claude --resume` or `codex resume`, with the flags it was started with.
 
 ### 03 · Any agent CLI
 
@@ -114,14 +114,14 @@ tmux keeps terminals running after the window closes, and Fibo's host does the s
 
 **An agent does not show up in the sidebar.**
 1. It has to run inside a Fibo terminal; sessions started elsewhere appear on the board only.
-2. If it runs behind a wrapper (a sandbox, a VM), start it with `MOORING_AGENT=claude` (or `codex`, …) so Fibo knows what it is.
+2. If it runs behind a wrapper (a sandbox, a VM), start it with `FIBO_AGENT=claude` (or `codex`, …) so Fibo knows what it is; the old name `MOORING_AGENT` works too.
 3. `fibo explain <terminal>` shows how Fibo read that screen; `fibo hooks status` shows whether the agent's hooks are installed and current.
 
 **I used Mooring or Keepline. What changes?**
 Nothing to redo. On first start Fibo moves `~/.config/mooring` to `~/.config/fibo` (a link stays at the old place), keeps using the old runtime directory so the old host hands its terminals over, and still answers to `mooring` and `MOORING_*`; programs in its terminals also get `FIBO_*`. An app updated in place keeps its folder name (`Mooring.app`); macOS asks once more for notifications, since the app's identifier changed. Run `fibo hooks install` once if Keepline's hook entries are still there.
 
 **What happens when I quit, update or restart?**
-Quitting or updating the app leaves every terminal running. Restarting the machine ends them; each interrupted session then offers to resume its conversation in the same directory.
+Quitting or updating the app leaves every terminal running (the Windows preview needs them ended before an update). Restarting the machine ends them; each interrupted session then offers to resume its conversation in the same directory.
 
 **Windows or Linux?**
 Macs with Apple silicon or Intel, macOS 14 or later. Windows x64 and Ubuntu 24.04 (x64, arm64) have preview packages on the release page; neither updates itself, and the Windows installer is not code-signed yet. The 0.1.3 previews have been tried on CI runners (Linux also in a fresh container), not yet on a real desktop.
@@ -144,7 +144,7 @@ Fibo on macOS works standalone locally without any server or account. To answer 
 
 ## Repository
 
-- `crates/fibo-app`: the GPUI window. `crates/fibo-host`: the background host and the `fibo` command. `crates/fibo-core`: the shared model and protocol. `crates/fibo-remote`, `fibo-relay`: the phone link and its relay.
+- `crates/fibo-app`: the GPUI window. `crates/fibo-host`: the background host and the `fibo` command. `crates/fibo-core`: the shared model and protocol. `crates/fibo-platform`: everything that depends on the operating system (one file per platform). `crates/fibo-plugin-host`: runs sidebar plugins in a sandbox. `crates/fibo-remote`, `fibo-relay`: the phone link and its relay.
 - `plugins/`: example plugins. `mobile/`: the phone chat app (Expo). `eval/`: terminal and protocol checks.
 
 Issues: [GitHub Issues](https://github.com/majiayu000/fibo/issues).

@@ -247,8 +247,13 @@ pub fn runtime() -> Option<PathBuf> {
         .or_else(|| fibo_platform::dirs::home().map(|h| crate::legacy::runtime_dir(&h)))
 }
 
-/// The variables every command of the plugin in `dir` runs with.
+/// The variables every command of the plugin in `dir` runs with, each also under its
+/// `FIBO_*` name (what the plugin guide teaches).
 pub fn env(dir: &Path) -> Vec<(String, String)> {
+    crate::legacy::with_fibo_names(env_old_names(dir))
+}
+
+fn env_old_names(dir: &Path) -> Vec<(String, String)> {
     let mut out = vec![("MOORING_PLUGIN_DIR".to_owned(), dir.display().to_string())];
     if let Some((plugins, p)) = owner(dir) {
         let data = crate::setup::data_dir(&plugins, &p.id);

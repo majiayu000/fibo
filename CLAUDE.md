@@ -7,6 +7,7 @@ Fibo (https://fibo.page): a native macOS workbench for coding agents (Rust, GPUI
 - `crates/fibo-app`: the GPUI window.
 - `crates/fibo-host`: the background host (`fibo serve`) and the `fibo` command Agents use inside its terminals (`fibo --skill`, `fibo --skill plugins`).
 - `crates/fibo-core`: model, protocol, status rules and plugin formats shared by both.
+- `crates/fibo-platform`: everything that depends on the operating system, one file per platform behind one interface. `crates/fibo-plugin-host`: runs sidebar plugins in a sandbox.
 - `crates/fibo-remote`, `crates/fibo-relay`: the phone link and its relay. `mobile/`: the phone app (Expo).
 - `plugins/`: example plugins. Don't commit `plugins/index.json` or `index.sig` by hand: after a push, `.github/workflows/sign-catalog.yml` regenerates and signs them. `eval/`: terminal rendering and protocol checks.
 

@@ -170,6 +170,8 @@ fn the_guides_hook_example_keeps_event_text_out_of_the_script() {
             .env("PATH", path)
             .env("MOORING_DETAIL", PAYLOAD)
             .env("MOORING_TITLE", PAYLOAD)
+            .env("FIBO_DETAIL", PAYLOAD)
+            .env("FIBO_TITLE", PAYLOAD)
             .output()
             .unwrap();
         let script = String::from_utf8_lossy(&out.stdout).into_owned();

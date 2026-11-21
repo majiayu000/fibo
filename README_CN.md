@@ -52,7 +52,7 @@ brew install --cask majiayu000/tap/fibo
 
 打开 Fibo，在它的终端里运行 `claude` 或 `codex`，会话就会出现在左栏。从 GitHub 下载的发布版会自己更新，用 Homebrew 装的用 `brew upgrade --cask fibo` 更新（见[常见问题](#常见问题)里的「怎么更新」）。
 
-**Windows（预览版）：** 运行 `Fibo-Setup-<版本>.exe`，只装给当前用户，不用管理员权限。安装程序还没有代码签名，SmartScreen 会提示「未知发布者」：点「更多信息」，再点「仍要运行」。Windows 版不会自己更新，要更新就运行新版安装程序。0.1.2 在 Windows 11 x64 上试过，0.1.3 目前只在 CI 上试过。
+**Windows（预览版）：** 运行 `Fibo-Setup-<版本>.exe`，只装给当前用户，不用管理员权限。安装程序还没有代码签名，SmartScreen 会提示「未知发布者」：点「更多信息」，再点「仍要运行」。Windows 版不会自己更新，要更新就运行新版安装程序；更新前先结束 Fibo 里的终端：Windows 上的后台还不能把终端交给新版本。0.1.2 在 Windows 11 x64 上试过，0.1.3 目前只在 CI 上试过。
 
 **Linux（预览版）：** Ubuntu 24.04，x64 或 arm64：`sudo apt install ./fibo_<版本>_amd64.deb`（或 `fibo_<版本>_arm64.deb`）。不会自己更新，要更新就装新版的包。目前在 CI 和全新容器里装过、跑过，还没在真桌面上试。
 
@@ -79,7 +79,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./run.sh
 
 ### 02 · 关掉窗口，它们照样跑
 
-终端跑在后台进程（`fibo serve`）里，不在窗口里。退出、更新或 App 崩溃，再打开时终端都还在。连后台也没了（比如重启电脑）时，被打断的会话会显示**接着聊**：点一下就用 `claude --resume` 或 `codex resume` 回到同一段对话，启动时带的参数也一起带上。
+终端跑在后台进程（`fibo serve`）里，不在窗口里。退出、更新或 App 崩溃，再打开时终端都还在（Windows 预览版更新前要先结束终端）。连后台也没了（比如重启电脑）时，被打断的会话会显示**接着聊**：点一下就用 `claude --resume` 或 `codex resume` 回到同一段对话，启动时带的参数也一起带上。
 
 ### 03 · 什么 Agent 都能接
 
@@ -114,14 +114,14 @@ tmux 能让终端在窗口关掉后继续跑，Fibo 的后台也一样。tmux �
 
 **Agent 没出现在左栏。**
 1. 要在 Fibo 的终端里运行；在别处启动的会话只在看板上以「外部·只读」出现。
-2. 套在包装器（沙盒、虚拟机）里运行时，启动前设 `MOORING_AGENT=claude`（或 `codex` 等），让 Fibo 认得它。
+2. 套在包装器（沙盒、虚拟机）里运行时，启动前设 `FIBO_AGENT=claude`（或 `codex` 等），让 Fibo 认得它；旧名 `MOORING_AGENT` 也认。
 3. `fibo explain <终端>` 看 Fibo 怎么读这块屏；`fibo hooks status` 看 Agent 的 hook 装了没有、是不是最新。
 
 **以前用的是 Mooring 或 Keepline，要做什么？**
 不用重来。Fibo 第一次启动时会把 `~/.config/mooring` 搬到 `~/.config/fibo`（原位置留一个链接），继续用旧的运行目录，让老后台把终端交接过来；`mooring` 命令和 `MOORING_*` 变量也照样认，终端里的程序另外还能读到 `FIBO_*`。原地更新的 App 文件夹名不变（还叫 `Mooring.app`）；App 的标识换了，macOS 会再问一次通知权限。Keepline 的 hook 条目还在的话，运行一次 `fibo hooks install`。
 
 **退出、更新或重启会怎样？**
-退出或更新 App，终端都继续跑。重启电脑会结束它们，被打断的会话会提示在原目录接着聊。
+退出或更新 App，终端都继续跑（Windows 预览版更新前要先结束终端）。重启电脑会结束它们，被打断的会话会提示在原目录接着聊。
 
 **有 Windows 或 Linux 版吗？**
 Apple silicon 或 Intel 的 Mac，macOS 14 及以上。Windows x64 和 Ubuntu 24.04（x64、arm64）在发布页有预览版安装包：都不会自动更新，Windows 安装程序还没有代码签名。0.1.3 的预览版目前只在 CI 上试过（Linux 还在全新容器里装过），还没在真桌面上试。
@@ -140,11 +140,11 @@ hook 只在你安装时才写进 Agent 的配置文件：`fibo hooks install`、
 hook 之外，打包版每次启动还会准备命令行：`/opt/homebrew/bin` 或 `/usr/local/bin` 可写时，在里面放 `fibo` 和 `mooring` 两个链接；有 `~/.codex` 时，往 `~/.codex/skills/fibo` 写一个 skill，告诉 Codex 怎么用 `fibo todo`。设 `MOORING_NO_CLI_SETUP=1` 两样都不做；从源码构建的不做这两件事。
 
 **怎么用手机连过来？**
-桌面端在本机完全独立运行，不需要账号或服务器。想在离开电脑时用手机看状态、审批或发话，现阶段请按[自建中继说明](docs/relay/self-host.md)部署 `fibo-relay`，在「设置 › 手机与远程」填入中继地址，再用仓库 [`mobile/`](mobile/) 下的 Expo 应用扫码配对；两端之间用 Noise 端到端加密，中继读不到内容。官方托管中继正在内测。
+桌面端在本机完全独立运行，不需要账号或服务器。想在离开电脑时用手机看状态、审批或发话，现阶段请按[自建中继说明](docs/relay/self-host.md)部署 `fibo-relay`，在「设置 › 手机与远程」填入中继地址，再用仓库 [`mobile/`](mobile/) 下的 Expo 应用扫码配对；两端之间用 Noise 端到端加密，中继读不到内容。手机 App 目前要从源码编译，还没有公开的安装包，也没有默认的托管中继。
 
 ## 仓库结构
 
-- `crates/fibo-app` 是 GPUI 窗口，`crates/fibo-host` 是后台和 `fibo` 命令，`crates/fibo-core` 是共用的模型和协议，`crates/fibo-remote`、`fibo-relay` 是手机连接和中继。
+- `crates/fibo-app` 是 GPUI 窗口，`crates/fibo-host` 是后台和 `fibo` 命令，`crates/fibo-core` 是共用的模型和协议，`crates/fibo-platform` 收着所有跟操作系统有关的代码（macOS、Windows、Linux 各一份），`crates/fibo-plugin-host` 在沙盒里运行左栏插件，`crates/fibo-remote`、`fibo-relay` 是手机连接和中继。
 - `plugins/` 是示例插件，`mobile/` 是手机聊天 App（Expo），`eval/` 是终端和协议的检查工具。
 
 问题反馈：[GitHub Issues](https://github.com/majiayu000/fibo/issues)。

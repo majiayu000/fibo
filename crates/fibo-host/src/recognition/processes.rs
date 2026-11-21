@@ -12,7 +12,20 @@ use std::sync::atomic::Ordering;
 pub fn claude_transcript_off(pid: u32) -> bool {
     inspect::env_var(pid, "CLAUDE_CODE_CHILD_SESSION").is_some()
 }
-/// The Agent a `MOORING_AGENT` value names, by key or executable, in any case.
+/// The Agent a user names before a wrapper: `FIBO_AGENT`, the name the README teaches,
+/// or the older `MOORING_AGENT`. The host reads another process's environment here, so
+/// `legacy::adopt_old_env` (which only copies within its own process) does not cover it.
+fn agent_hint(pid: u32) -> Option<Agent> {
+    agent_hint_in(|name| inspect::env_var(pid, name))
+}
+pub(super) fn agent_hint_in(env: impl Fn(&str) -> Option<String>) -> Option<Agent> {
+    let old = fibo_core::protocol::AGENT_ENV;
+    fibo_core::legacy::fibo_name(old)
+        .and_then(|brand| env(&brand))
+        .or_else(|| env(old))
+        .and_then(|v| agent_named(&v))
+}
+/// The Agent a `FIBO_AGENT` / `MOORING_AGENT` value names, by key or executable, in any case.
 pub(super) fn agent_named(value: &str) -> Option<Agent> {
     let value = value.trim();
     Agent::all()
@@ -76,7 +89,7 @@ pub fn processes(workspace: &Workspace) -> io::Result<Vec<Process>> {
         let parent = parents.get(&pid).copied().unwrap_or(0);
         let runtime = crate::agents::from_argv(&inspect::argv(pid).unwrap_or_default());
         let hint = if runtime.is_none() {
-            inspect::env_var(pid, fibo_core::protocol::AGENT_ENV).and_then(|v| agent_named(&v))
+            agent_hint(pid)
         } else {
             None
         };
