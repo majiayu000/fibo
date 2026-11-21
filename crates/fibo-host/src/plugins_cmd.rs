@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 mod plugins_run;
 use plugins_run::usage_text;
 #[cfg(test)]
-pub use plugins_run::USAGE;
+pub use plugins_run::DETAILS;
 #[cfg(test)]
 use plugins_run::{try_run, write_note, MARK, MARK_EN};
 pub use plugins_run::{write_agents_md, COMMAND_USAGE};

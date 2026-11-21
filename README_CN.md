@@ -137,7 +137,7 @@ Apple silicon 或 Intel 的 Mac，macOS 14 及以上。Windows x64 和 Ubuntu 24
 **Fibo 会改我的 Agent 配置吗？**
 hook 只在你安装时才写进 Agent 的配置文件：`fibo hooks install`、「设置 › 通用」，或在第一次打开的欢迎页里勾着「启动时一起装上」启动 Agent（默认勾着，页面上写明改哪个文件）。`fibo hooks uninstall` 会移除。不装 hook 时，状态从对话记录和画面读。
 
-hook 之外，打包版每次启动还会准备命令行：`/opt/homebrew/bin` 或 `/usr/local/bin` 可写时，在里面放 `fibo` 和 `mooring` 两个链接；有 `~/.codex` 时，往 `~/.codex/skills/fibo` 写一个 skill，告诉 Codex 怎么用 `fibo todo`。设 `MOORING_NO_CLI_SETUP=1` 两样都不做；从源码构建的不做这两件事。
+hook 之外，打包版每次启动还会准备命令行：`/opt/homebrew/bin` 或 `/usr/local/bin` 可写时，在里面放一个 `fibo` 链接（以前装过 Mooring 的还会更新原有的 `mooring` 链接）；有 `~/.codex` 时，往 `~/.codex/skills/fibo` 写一个 skill，告诉 Codex 怎么用 `fibo todo`。`fibo setup` 看放了哪些；`fibo setup remove` 全部拿掉，以后启动也不再放（删 App 之前跑一次，就不会留下指向空处的链接），`fibo setup install` 放回来。从源码构建的不做这两件事。
 
 **怎么用手机连过来？**
 桌面端在本机完全独立运行，不需要账号或服务器。想在离开电脑时用手机看状态、审批或发话，现阶段请按[自建中继说明](docs/relay/self-host.md)部署 `fibo-relay`，在「设置 › 手机与远程」填入中继地址，再用仓库 [`mobile/`](mobile/) 下的 Expo 应用扫码配对；两端之间用 Noise 端到端加密，中继读不到内容。手机 App 目前要从源码编译，还没有公开的安装包，也没有默认的托管中继。

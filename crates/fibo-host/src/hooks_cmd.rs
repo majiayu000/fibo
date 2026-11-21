@@ -5,8 +5,14 @@ use fibo_core::model::Agent;
 use fibo_host::hooks::{self, Status};
 use std::io;
 
-const USAGE: &str =
-    "usage: hooks install|uninstall|status [--agent <cli>] [--json] [--outdated-only]";
+/// The same lines as `fibo hooks --help`, from the one table of commands.
+fn usage() -> io::Error {
+    let lines = crate::control::command("hooks").map_or("", |c| c.usage());
+    io::Error::new(
+        io::ErrorKind::InvalidInput,
+        t!("用法：\n{usage}", usage = lines),
+    )
+}
 
 /// Every CLI that reads hooks when none is named. Prints one line per CLI: what changed
 /// and in which file, or for `status` its state and every difference below it.
@@ -17,14 +23,14 @@ pub fn run(mut args: impl Iterator<Item = String>) -> io::Result<()> {
         match arg.as_str() {
             "--agent" => match args.next().as_deref().and_then(Agent::from_executable) {
                 Some(agent) => agents.push(agent),
-                None => return Err(io::Error::other(USAGE)),
+                None => return Err(usage()),
             },
             "--json" if action == "status" => json = true,
             "--outdated-only" if action == "status" => outdated_only = true,
-            _ => return Err(io::Error::other(USAGE)),
+            _ => return Err(usage()),
         }
     }
-    let home = fibo_platform::dirs::home().ok_or_else(|| io::Error::other("HOME unavailable"))?;
+    let home = fibo_platform::dirs::home().ok_or_else(|| io::Error::other(t!("找不到主目录")))?;
     let named = !agents.is_empty();
     if !named {
         agents = Agent::all();
@@ -48,7 +54,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> io::Result<()> {
                 rows.push((agent, path, hooks::status(agent, &target)));
                 continue;
             }
-            _ => return Err(io::Error::other(USAGE)),
+            _ => return Err(usage()),
         };
         println!("{} · {line}", agent.name());
     }

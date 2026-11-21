@@ -151,7 +151,14 @@ async fn connect(
         match m {
             Ok(Some(Ok(Message::Text(t)))) => match serde_json::from_str::<Frame>(&t) {
                 Ok(Frame::Registered { proto }) => match wire::relay_too_old(proto) {
-                    Some(why) => return (Ended::Refused(why), false),
+                    Some(old) => {
+                        let why = t!(
+                            "中继版本太旧（协议 {old}，这台 Fibo 要 {min} 以上）：请升级中继",
+                            old,
+                            min = wire::MIN_RELAY
+                        );
+                        return (Ended::Refused(why), false);
+                    }
                     None => break proto.unwrap_or(1),
                 },
                 Ok(Frame::Error { message }) => refusal = Some(format!("{message:?}")),

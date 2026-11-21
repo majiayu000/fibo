@@ -10,11 +10,11 @@ pub const PROTOCOL: u32 = 3;
 /// token, which pairing links no longer carry, so no phone could reach it.
 pub const MIN_RELAY: u32 = 3;
 
-/// Why a machine leaves a relay that agreed on `proto` (`None`: a relay too old to say).
-pub fn relay_too_old(proto: Option<u32>) -> Option<String> {
+/// The protocol of a relay too old for a machine to stay on (`None` from the relay: one
+/// too old to say, protocol 1); `None` when it is new enough. The words are the caller's.
+pub fn relay_too_old(proto: Option<u32>) -> Option<u32> {
     let proto = proto.unwrap_or(1);
-    (proto < MIN_RELAY)
-        .then(|| format!("中继版本太旧（协议 {proto}，这台 Fibo 要 {MIN_RELAY} 以上）：请升级中继"))
+    (proto < MIN_RELAY).then_some(proto)
 }
 /// Phones a machine may list in `routes`, and revoked ones in `revoked`.
 pub const MAX_ROUTES: usize = 256;
@@ -179,8 +179,8 @@ mod tests {
 
     #[test]
     fn a_relay_older_than_route_codes_is_named_as_too_old() {
-        assert!(relay_too_old(None).unwrap().contains("协议 1"));
-        assert!(relay_too_old(Some(2)).unwrap().contains("请升级中继"));
+        assert_eq!(relay_too_old(None), Some(1));
+        assert_eq!(relay_too_old(Some(2)), Some(2));
         assert_eq!(relay_too_old(Some(PROTOCOL)), None);
     }
 

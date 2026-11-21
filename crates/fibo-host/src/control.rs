@@ -157,20 +157,23 @@ fibo remote --stdio [--role view|answer|full]     给另一台机器或手机 Ap
                                              答审批、事件），经 ssh 连过来：ssh 主机 fibo remote --stdio
 fibo remote --relay <中继地址> [--relay-key <密钥>] [--report]
                                              连上中继并一直挂着，配对过的手机在哪都能连过来；内容端到端加密，
-                                             中继看不到。中继要密钥时也可以设 MOORING_RELAY_KEY；
+                                             中继看不到。中继要密钥时也可以设 FIBO_RELAY_KEY（旧名 MOORING_RELAY_KEY 也认）；
                                              --report 把连接状态报给后台（后台自己启动它时用）
-fibo remote --pair --relay <中继地址> [--name 名字] [--role view|answer|full] [--new-code]
+fibo remote pair --relay <中继地址> [--name 名字] [--role view|answer|full] [--new-code]
                                              配对一台新手机，打印它的二维码和链接；权限分只看 / 能答审批 / 完全控制（默认）。
                                              加 --new-code 换掉机器码，已配对的手机全部失效
-fibo remote --enable --relay <中继地址> [--relay-key <密钥>] | --disable
-                                             让后台一直挂在中继上（重启后也会自动连回去），或者断开；配对保留
-fibo remote --status [--json]              中继连接状态、配对的手机、现在谁在线、在看哪个终端
-fibo remote --kick <设备>                  立刻断开这台手机正连着的会话，配对保留
-fibo remote --devices                      列出配对过的手机、权限和最近连接时间；操作记在运行目录的 remote-log.jsonl
-fibo remote --device <设备> --role <view|answer|full>
+fibo remote enable --relay <中继地址> [--relay-key <密钥>]
+                                             让后台一直挂在中继上（重启后也会自动连回去）；配对保留
+fibo remote disable                        断开中继，重启后也不再连；配对保留
+fibo remote status [--json]                中继连接状态、配对的手机、现在谁在线、在看哪个终端
+fibo remote kick <设备>                    立刻断开这台手机正连着的会话，配对保留
+fibo remote devices                        列出配对过的手机、权限和最近连接时间；操作记在运行目录的 remote-log.jsonl
+fibo remote device <设备> --role <view|answer|full>
                                              改一台手机的权限；它正连着的会话一秒内断开，重连后按新权限
-fibo remote --revoke <设备编号或名字>      取消一台手机的配对，它正连着的会话一秒内断开
-fibo remote --machine-name <名字>          手机上这台电脑叫什么；给空字符串换回系统主机名，手机重连后显示新名字"),
+fibo remote revoke <设备编号或名字>        取消一台手机的配对，它正连着的会话一秒内断开
+fibo remote machine-name <名字>            手机上这台电脑叫什么；给空字符串换回系统主机名，手机重连后显示新名字
+                                             旧写法 --pair --status --devices --device --kick --revoke --enable --disable
+                                             --machine-name 照样能用"),
     },
     Command {
         name: "themes",
@@ -183,6 +186,15 @@ fibo remote --machine-name <名字>          手机上这台电脑叫什么；�
         valued: &["dir", "event", "cwd", "key", "name"],
         switches: &["json", "remote", "check", "yes", "send", "force"],
         usage: crate::plugins_cmd::COMMAND_USAGE,
+    },
+    Command {
+        name: "setup",
+        valued: &[],
+        switches: &[],
+        usage: tk!("\
+fibo setup [status]                        打包的 App 在外面放了什么：PATH 上的 fibo 链接、写给 Codex 的 skill
+fibo setup remove                          拿掉这些，以后启动也不再放；删掉 App 之前跑一次，不会留下指向空处的链接
+fibo setup install                         放回来，以后每次启动照常检查"),
     },
     Command {
         name: "hooks",
@@ -245,14 +257,135 @@ fibo --version                             打印版本和协议版本"),
 const FOOTER: &str = tk!("\
 <终端> 可以是编号的前几位或标签名；全部命令都接受 --runtime <目录>；-h / --help 只打印用法、什么都不做。
 Agent 藏在包装器（沙盒、虚拟机、nono 等）后面认不出时，启动前设 FIBO_AGENT=<claude|codex|…>（旧名 MOORING_AGENT 也认）。");
-/// Every command's lines, then what holds for all of them.
+/// What the app and the Agents' hooks run themselves: left out of `fibo --help` so the
+/// commands a person or an Agent types are not lost among them; `--help --all` has them.
+pub(crate) const INTERNAL: &[&str] = &["serve", "hook", "scan", "socket"];
+const MORE: &str = tk!("App 和 hook 自己用的命令（serve、hook、scan、socket）：fibo --help --all");
+/// One line per command for `fibo --help`; `fibo <命令> --help` and `--help --all` have the rest.
+const SUMMARIES: &[(&str, &str)] = &[
+    ("list", tk!("终端列表：状态、Agent、标签、目录")),
+    ("read", tk!("看一个终端画面的最后几行")),
+    ("send", tk!("把文字粘贴进一个终端")),
+    ("prompt", tk!("给终端里的 Agent 发一句并回车，可以等它答完")),
+    ("wait", tk!("等 Agent 做完这一轮，或进入别的状态")),
+    ("explain", tk!("Fibo 怎么读一块屏：状态、命中的规则")),
+    ("events", tk!("状态变化一条一行，直到 Ctrl-C")),
+    ("split", tk!("在一个终端旁边开新分屏")),
+    ("run", tk!("派另一个 Agent 去做一件事，结果自动发回来")),
+    ("close", tk!("关掉一块分屏")),
+    ("todo", tk!("待办：看、记一件事、写进展")),
+    ("remote", tk!("手机和别的电脑：配对、状态、断开")),
+    ("themes", tk!("主题：列出、检查")),
+    ("plugins", tk!("插件：检查、安装、卸载、试跑")),
+    (
+        "setup",
+        tk!("PATH 上的 fibo 链接和写给 CLI 的 skill：看、拿掉、放回来"),
+    ),
+    ("hooks", tk!("Agent CLI 里 Fibo 的 hook：装、卸、看状态")),
+    ("--skill", tk!("写给 Agent 看的用法说明")),
+    ("--version", tk!("版本和协议版本")),
+];
+const DETAIL: &str = tk!("每个命令的完整用法：fibo <命令> --help；全部展开：fibo --help --all");
+/// A command's line in the overview.
+pub(crate) fn summary(name: &str) -> Option<&'static str> {
+    SUMMARIES
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, s)| i18n::say(s))
+}
+/// The commands people and Agents type, one line each, then what holds for all of them.
 pub(crate) fn usage() -> String {
     let mut text: String = COMMANDS
         .iter()
+        .filter_map(|cmd| {
+            let name = cmd.name;
+            let shown = format!("fibo {name}");
+            summary(name).map(|s| format!("{shown:<18} {s}\n"))
+        })
+        .collect();
+    text.push('\n');
+    text.push_str(i18n::say(DETAIL));
+    text.push('\n');
+    text.push_str(i18n::say(FOOTER));
+    text.push('\n');
+    text.push_str(i18n::say(MORE));
+    text
+}
+/// Every command, the internal ones too.
+pub(crate) fn usage_all() -> String {
+    usage_of(|_| true)
+}
+fn usage_of(shown: impl Fn(&Command) -> bool) -> String {
+    let mut text: String = COMMANDS
+        .iter()
+        .filter(|c| shown(c))
         .map(|c| format!("{}\n", c.usage()))
         .collect();
     text.push_str(i18n::say(FOOTER));
     text
+}
+/// The command a mistyped name most likely meant: one that starts with it, or one at most
+/// two edits away (`hook` for `hooks` is a real command, so it is never a typo).
+pub(crate) fn suggest(name: &str) -> Option<&'static str> {
+    let name = name.trim_start_matches('-');
+    COMMANDS
+        .iter()
+        .map(|cmd| cmd.name)
+        .filter(|c| !INTERNAL.contains(c))
+        .map(|c| {
+            let d = if c.starts_with(name) && name.len() >= 2 {
+                0
+            } else {
+                edits(name, c.trim_start_matches('-'))
+            };
+            (d, c)
+        })
+        .filter(|(d, _)| *d <= 2)
+        .min_by_key(|(d, _)| *d)
+        .map(|(_, c)| c)
+}
+fn edits(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.chars().enumerate() {
+        let mut prev = row[0];
+        row[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let here = row[j + 1];
+            row[j + 1] = (prev + usize::from(ca != *cb))
+                .min(row[j] + 1)
+                .min(here + 1);
+            prev = here;
+        }
+    }
+    row[b.len()]
+}
+/// `fibo remote status` for `fibo remote --status`: the words a command also takes as
+/// its first argument without the dashes, so subcommands read like `todo` and `hooks`.
+pub(crate) fn verbs(cmd: &Command) -> &'static [&'static str] {
+    match cmd.name {
+        "remote" => &[
+            "pair",
+            "status",
+            "devices",
+            "device",
+            "kick",
+            "revoke",
+            "enable",
+            "disable",
+            "machine-name",
+        ],
+        _ => &[],
+    }
+}
+/// The arguments with a leading verb turned back into the flag the command reads.
+pub(crate) fn verb_to_flag(cmd: &Command, mut args: Vec<String>) -> Vec<String> {
+    if let Some(first) = args.first_mut() {
+        if verbs(cmd).contains(&first.as_str()) {
+            *first = format!("--{first}");
+        }
+    }
+    args
 }
 pub(crate) fn command(name: &str) -> Option<&'static Command> {
     COMMANDS.iter().find(|c| c.name == name)
@@ -393,8 +526,18 @@ pub fn resolve(w: &Workspace, needle: &str) -> io::Result<String> {
     };
     match found.as_slice() {
         [one] => Ok(one.id.clone()),
+        [] if w.terminals.iter().any(|t| {
+            t.state != ProcessState::Running
+                && (t.id.starts_with(needle) || tab_title(w, &t.id) == needle)
+        }) =>
+        {
+            Err(io::Error::other(t!(
+                "终端 {needle} 已经结束了；fibo list 看还开着的终端",
+                needle
+            )))
+        }
         [] => Err(io::Error::other(t!(
-            "没有正在运行的终端匹配 {needle}",
+            "没有正在运行的终端匹配 {needle}；fibo list 看有哪些终端",
             needle
         ))),
         many => Err(io::Error::other(t!(

@@ -49,7 +49,59 @@ fn terminals_resolve_by_unique_prefix_or_tab_title_among_running_ones() {
     assert_eq!(resolve(&w, "aaaa1").unwrap(), "aaaa1111");
     assert_eq!(resolve(&w, "review").unwrap(), "aaaa2222");
     assert!(resolve(&w, "aaaa").is_err(), "ambiguous");
-    assert!(resolve(&w, "bbbb").is_err(), "exited");
+    let exited = resolve(&w, "bbbb").unwrap_err().to_string();
+    assert!(
+        exited.contains("已经结束") || exited.contains("has exited"),
+        "{exited}"
+    );
+    let unknown = resolve(&w, "zzzz").unwrap_err().to_string();
+    assert!(unknown.contains("fibo list"), "{unknown}");
+}
+#[test]
+fn a_mistyped_command_gets_the_one_it_likely_meant() {
+    assert_eq!(suggest("lsit"), Some("list"));
+    assert_eq!(suggest("plugin"), Some("plugins"));
+    assert_eq!(suggest("tod"), Some("todo"));
+    assert_eq!(suggest("skill"), Some("--skill"));
+    assert_eq!(suggest("deploy"), None);
+    // Never points a person at what only the app and hooks run.
+    assert_ne!(suggest("serv"), Some("serve"));
+}
+#[test]
+fn remote_takes_its_subcommands_with_or_without_dashes() {
+    let remote = command("remote").unwrap();
+    let args = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    assert_eq!(
+        verb_to_flag(remote, args(&["status", "--json"])),
+        args(&["--status", "--json"])
+    );
+    assert_eq!(
+        verb_to_flag(remote, args(&["kick", "phone"])),
+        args(&["--kick", "phone"])
+    );
+    assert_eq!(
+        verb_to_flag(remote, args(&["--status"])),
+        args(&["--status"])
+    );
+    // Only the first word: a device named `status` stays a device.
+    assert_eq!(
+        verb_to_flag(remote, args(&["kick", "status"])),
+        args(&["--kick", "status"])
+    );
+    for verb in verbs(remote) {
+        assert!(
+            remote.valued.contains(verb) || remote.switches.contains(verb),
+            "{verb}"
+        );
+        assert!(
+            remote.usage().contains(&format!("fibo remote {verb}")),
+            "{verb}"
+        );
+    }
+    assert_eq!(
+        verb_to_flag(command("list").unwrap(), args(&["status"])),
+        args(&["status"])
+    );
 }
 #[test]
 fn the_skill_names_the_marker_and_every_command() {
@@ -107,20 +159,28 @@ fn every_command_documents_exactly_the_flags_it_takes() {
                 );
             }
         }
-        assert!(usage().contains(c.usage()), "{}", c.name);
+        assert!(usage_all().contains(c.usage()), "{}", c.name);
+        // The overview has one line for every command a person or Agent types, and only those.
+        assert_eq!(
+            summary(c.name).is_some(),
+            !INTERNAL.contains(&c.name),
+            "{}",
+            c.name
+        );
+        if let Some(line) = summary(c.name) {
+            assert!(usage().contains(line), "{}", c.name);
+        }
     }
-    // `fibo plugins` prints its own fuller text on errors; it names the same flags in both languages.
-    let plugins = command("plugins").unwrap();
+    // `fibo plugins` prints its own lines plus a note on errors; the note names no flags of
+    // its own, so the two cannot drift apart again.
     for (lang, text) in [
-        ("zh", crate::plugins_cmd::USAGE),
+        ("zh", crate::plugins_cmd::DETAILS),
         (
             "en",
-            fibo_core::i18n::english(crate::plugins_cmd::USAGE).unwrap(),
+            fibo_core::i18n::english(crate::plugins_cmd::DETAILS).unwrap(),
         ),
     ] {
-        let mut own = flags_in(text, "--skill");
-        own.remove("help");
-        assert_eq!(own, declared(plugins), "{lang}");
+        assert!(flags_in(text, "--skill").is_empty(), "{lang}");
     }
     for name in DRIVES {
         assert!(
