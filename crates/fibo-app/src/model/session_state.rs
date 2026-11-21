@@ -28,7 +28,7 @@ pub fn report_view(
             msg = &r.msg
         )
     };
-    let mut why = t!("终端里的程序自己通过 OSC 7501 报告的状态").to_owned();
+    let mut why = t!("终端里的程序自己报告的状态（OSC 7501）").to_owned();
     if !r.title.is_empty() && r.title != who {
         why = format!("{}\n{why}", r.title);
     }
@@ -193,7 +193,7 @@ pub fn state_reasons(w: &Workspace, terminal: &str, hint: Option<&str>, now: u64
         not_ui!("官方状态") => t!("Agent 自己报告的运行状态"),
         not_ui!("标题") => t!("终端标题里的转圈，Agent 正在跑这一轮"),
         not_ui!("画面在跑") => t!("画面上 Agent 每秒在走的计时行，正在跑这一轮"),
-        not_ui!("程序上报") => t!("终端里的程序自己通过 OSC 7501 报告的状态"),
+        not_ui!("程序上报") => t!("终端里的程序自己报告的状态（OSC 7501）"),
         _ => t!("对话记录"),
     };
     let at = if c.signal_at > 0 {

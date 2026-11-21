@@ -62,6 +62,7 @@ keycap	crates/fibo-app/src/workbench/board/composer.rs	1
 keycap	crates/fibo-app/src/workbench/diagnostics/view.rs	1
 keycap	crates/fibo-app/src/workbench/forms/card.rs	1
 keycap	crates/fibo-app/src/workbench/layout.rs	2
+keycap	crates/fibo-app/src/workbench/palette/rows.rs	1
 keycap	crates/fibo-app/src/workbench/settings.rs	3
 keycap	crates/fibo-app/src/workbench/settings/keys.rs	4
 keycap	crates/fibo-app/src/workbench/settings/plugins.rs	1
@@ -75,7 +76,7 @@ word 做完了	crates/fibo-app/src/workbench/layout/turn_bar.rs	1
 word 做完了	crates/fibo-app/src/workbench/task_detail.rs	1
 word 停下了	crates/fibo-app/src/model/session_state.rs	1
 word 出错(无了)	crates/fibo-app/src/model/session_state.rs	1
-word 出错(无了)	crates/fibo-app/src/workbench/settings/notifications.rs	2
+word 出错(无了)	crates/fibo-app/src/workbench/settings/notifications.rs	1
 word 出错(无了)	crates/fibo-app/src/workbench/sidebar_wasm.rs	1
 word 出错(无了)	crates/fibo-core/src/content.rs	1
 word 出错(无了)	crates/fibo-core/src/market.rs	1

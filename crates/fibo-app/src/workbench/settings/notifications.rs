@@ -77,19 +77,19 @@ impl SettingsView {
                 vec![
                     when(
                         Status::Waiting,
-                        t!("等你回复"),
+                        Status::Waiting.label(),
                         t!("Agent 提问或请求批准；同一次等待只提醒一次"),
                         true,
                     ),
                     when(
                         Status::Error,
-                        t!("出错停下"),
+                        Status::Error.label(),
                         t!("Agent 报错中断；同一条错误只提醒一次"),
                         false,
                     ),
                     when(
                         Status::Review,
-                        t!("做完一轮"),
+                        Status::Review.label(),
                         t!("Agent 做完一轮请你过目；每轮只提醒一次，不响提示音"),
                         false,
                     ),

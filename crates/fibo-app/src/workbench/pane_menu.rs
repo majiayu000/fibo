@@ -33,7 +33,7 @@ pub(super) fn menu_rows(zoomed: bool, agent: bool) -> Vec<Option<&'static str>> 
             INTERRUPT_SHELL
         }),
         Some(tk!("停止 Agent")),
-        Some(tk!("关闭画面")),
+        Some(tk!("关闭窗格")),
     ]
 }
 

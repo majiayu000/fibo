@@ -87,6 +87,7 @@ fn bar(looks: Vec<MenuItem>) -> Vec<Menu> {
         ]),
         Menu::new(t!("文件")).items([
             key(Key::NewTab),
+            key(Key::NewTodo),
             MenuItem::separator(),
             key(Key::SplitRight),
             key(Key::SplitDown),
@@ -119,6 +120,7 @@ fn bar(looks: Vec<MenuItem>) -> Vec<Menu> {
         Menu::new(t!("转到")).items([
             key(Key::Search),
             key(Key::NextWaiting),
+            key(Key::Overview),
             MenuItem::separator(),
             key(Key::PrevTab),
             key(Key::NextTab),

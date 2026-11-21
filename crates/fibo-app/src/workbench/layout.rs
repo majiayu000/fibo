@@ -322,7 +322,9 @@ impl Workbench {
             };
             let dir = socket
                 .parent()
-                .ok_or_else(|| std::io::Error::other(t!("运行目录未知")))?
+                .ok_or_else(|| {
+                    std::io::Error::other(t!("不知道 Fibo 的数据放在哪（运行目录未知）"))
+                })?
                 .join("scrollback");
             std::fs::create_dir_all(&dir)?;
             let path = dir.join(format!("{terminal}.txt"));
@@ -520,7 +522,7 @@ fn menu_shortcut(title: &str, keys: &crate::keymap::Keymap) -> Option<String> {
         tk!("向右分屏") => Action::SplitRight,
         tk!("向下分屏") => Action::SplitDown,
         tk!("搜索滚动内容") => Action::Find,
-        tk!("关闭画面") => Action::Close,
+        tk!("关闭窗格") => Action::Close,
         _ => return None,
     };
     keys.chords(action).first().map(|c| c.display())

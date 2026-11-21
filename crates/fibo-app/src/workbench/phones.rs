@@ -553,7 +553,7 @@ impl Workbench {
                             .when(!can_pair, |b| b.opacity(T::DISABLED_OPACITY)),
                     )
                     .child(
-                        button("phones-settings", t!("设置与记录"))
+                        button("phones-settings", t!("设置 › 手机与远程"))
                             .text_color(T::color(T::secondary()))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.close_phones(cx);
@@ -562,7 +562,7 @@ impl Workbench {
                     ),
             );
             if !can_pair {
-                body = body.child(label(t!("先在「设置与记录」里填中继地址")));
+                body = body.child(label(t!("先在 设置 › 手机与远程 里填中继地址")));
             }
         }
         if let Some(note) = &self.phones.note {

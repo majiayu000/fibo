@@ -31,5 +31,5 @@
 "生成二维码" = "Generate QR code"
 "还没有配对的手机" = "No paired phones yet"
 "配对新手机…" = "Pair a new phone…"
-"设置与记录" = "Settings & log"
-"先在「设置与记录」里填中继地址" = "Set a relay address in “Settings & log” first"
+"设置 › 手机与远程" = "Settings › Phone & remote"
+"先在 设置 › 手机与远程 里填中继地址" = "Set a relay address in Settings › Phone & remote first"

@@ -269,7 +269,7 @@ impl Workbench {
                 d.child(self.pane_meta(session, cx))
             })
             // Everything else the pane offers is one click away in its menu: 看进度,
-            // 放入待办, 标记完成, 待办详情 and 关闭画面 among the rest.
+            // 放入待办, 标记完成, 待办详情 and 关闭窗格 among the rest.
             .child(
                 button(gpui::SharedString::from(format!("pane-more-{id}")), "⋯")
                     .aria_label(t!("更多操作"))

@@ -5,6 +5,7 @@ use super::overview::{quiet, solid};
 use super::*;
 use fibo_core::sidebar as presets;
 
+mod commands;
 mod parts;
 mod preview;
 mod rows;
@@ -39,6 +40,10 @@ pub(super) enum Hit {
     Diagnostics,
     /// Agent Hook: opens 设置 › 通用, where a CLI's hook is installed and taken out.
     Hooks,
+    /// A shortcut action (鸟瞰、新建待办、分屏…), run as its keys would.
+    Command(crate::keymap::Action),
+    /// A settings page, opened.
+    Settings(settings::Page),
     /// 「再显示 N 个」: the rest of a folded group, `hidden` rows past what shows.
     More {
         section: &'static str,
