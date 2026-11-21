@@ -3,10 +3,11 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { tr } from '@/i18n';
 import { pair } from '@/remote/hub';
 import { escape, type Link, parseLink } from '@/remote/link';
+import { whatFailed } from '@/remote/close';
 import { Nav, TITLE_WEIGHT, Wide, useBottom } from '@/ui/kit';
 import { useTheme } from '@/ui/theme';
 
@@ -17,7 +18,16 @@ export default function Pair() {
   const params = useLocalSearchParams<Record<string, string>>();
   const [permission, requestPermission] = useCameraPermissions();
   const [text, setText] = useState('');
+  // What went wrong in the person's words, and the exact reason for support, shown on request.
   const [error, setError] = useState('');
+  const [detail, setDetail] = useState('');
+  const [showDetail, setShowDetail] = useState(false);
+  const fail = (e: unknown, lead?: (why: string) => string) => {
+    const f = whatFailed(e);
+    setError(lead ? lead(f.text) : f.text);
+    setDetail(f.detail);
+    setShowDetail(false);
+  };
   const [busy, setBusy] = useState(false);
   const done = useRef(false);
   // A scanned or opened link waits here until the person says yes (plan stage 4): a
@@ -29,8 +39,9 @@ export default function Pair() {
     try {
       setCandidate(parseLink(linkText));
       setError('');
+      setDetail('');
     } catch (e) {
-      setError(tr('这不是 Fibo 的配对链接（{reason}）', { reason: (e as Error).message }));
+      fail(e);
     }
   }
 
@@ -44,7 +55,7 @@ export default function Pair() {
     } catch (e) {
       done.current = false;
       setCandidate(null);
-      setError(tr('没配上：{reason}', { reason: (e as Error).message }));
+      fail(e, (reason) => tr('没配上：{reason}', { reason }));
     } finally {
       setBusy(false);
     }
@@ -131,6 +142,7 @@ export default function Pair() {
             onChangeText={(v) => {
               setText(v);
               setError('');
+              setDetail('');
             }}
             placeholder="mooring://pair?…"
             placeholderTextColor={t.dim}
@@ -139,7 +151,14 @@ export default function Pair() {
             style={[s.input, { color: t.text, borderColor: t.line, backgroundColor: t.card }]}
           />
         )}
-        {!!error && <Text style={{ color: t.err }}>{error}</Text>}
+        {!!error && <Text style={{ color: t.err, lineHeight: 20 }}>{error}</Text>}
+        {!!error && !!detail && (
+          <Pressable accessibilityRole="button" onPress={() => setShowDetail(!showDetail)} hitSlop={8}>
+            <Text selectable style={{ color: t.dim, fontSize: 12 }}>
+              {showDetail ? tr('详情：{detail}', { detail }) : tr('详情')}
+            </Text>
+          </Pressable>
+        )}
       </View>
       <View style={[s.foot, { paddingBottom: bottom + 4 }]}>
         <Wide
@@ -149,7 +168,7 @@ export default function Pair() {
           onPress={() => (pasting ? use(text) : setPasting(true))}
         />
         <Text style={{ textAlign: 'center', fontSize: 12, color: t.dim, lineHeight: 18 }}>
-          {tr('手机和电脑最好在同一个 Wi‑Fi；不在时经中继连接，内容端到端加密')}
+          {tr('手机经中继连到电脑，不用在同一个 Wi‑Fi；内容端到端加密')}
         </Text>
       </View>
     </View>

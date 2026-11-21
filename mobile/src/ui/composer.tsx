@@ -2,11 +2,11 @@
 // under it. The send key turns into stop while the Agent runs and nothing is typed.
 // The + opens a sheet: take a photo or pick pictures (they wait as thumbnails above the text),
 // and this conversation's permission. The row under the text keeps only +, the model and send.
-import { type ComponentRef, useRef, useState } from 'react';
+import { type ComponentRef, useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AttachSheet } from './attachsheet';
 import { Icon } from './icons';
-import { type How, whileBusy } from './busy';
+import { type How, STOP_AFTER_SEND_MS, stopCounts, whileBusy } from './busy';
 import { useBottomOverKeyboard } from './keyboard';
 import { noOutline } from './kit';
 import { modelName } from './parse';
@@ -69,9 +69,21 @@ export function Composer({
   const how = running && canSteer ? 'queue' : undefined;
   // A second tap before the box redraws empty would send the same words twice.
   const sending = useRef(false);
+  // Just after a send, 停下 in the send key's place waits (STOP_AFTER_SEND_MS): a double tap must not stop the turn.
+  const sentAt = useRef(0);
+  const [justSent, setJustSent] = useState(false);
+  const sentTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(sentTimer.current), []);
+  const stopNow = () => {
+    if (stopCounts(sentAt.current, Date.now())) onStop();
+  };
   async function go(text: string, with_: Picture[] = []) {
     if ((!text.trim() && !with_.length) || sending.current) return;
     sending.current = true;
+    sentAt.current = Date.now();
+    setJustSent(true);
+    clearTimeout(sentTimer.current);
+    sentTimer.current = setTimeout(() => setJustSent(false), STOP_AFTER_SEND_MS);
     setDraft('');
     setPictures([]);
     try {
@@ -179,11 +191,11 @@ export function Composer({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={stop ? tr('停下') : tr('发送')}
-          disabled={!stop && (empty || picking)}
-          onPress={() => (stop ? onStop() : go(draft, pictures))}
+          disabled={stop ? justSent : empty || picking}
+          onPress={() => (stop ? stopNow() : go(draft, pictures))}
           style={({ pressed }) => [
             s.send,
-            { backgroundColor: t.act, opacity: !stop && (empty || picking) ? 0.35 : pressed ? 0.7 : 1 },
+            { backgroundColor: t.act, opacity: (stop ? justSent : empty || picking) ? 0.35 : pressed ? 0.7 : 1 },
           ]}
         >
           <Icon name={stop ? 'stop' : 'up'} size={stop ? 14 : 16} width={2.4} color={t.onAct} />
@@ -231,5 +243,5 @@ const s = StyleSheet.create({
   pictures: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 4, paddingRight: 4 },
   thumb: { width: 56, height: 56, borderRadius: 12 },
   unpick: { position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  send: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  send: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
 });

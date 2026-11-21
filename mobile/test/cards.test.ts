@@ -164,3 +164,28 @@ test('one event alone still refreshes after the merge window', async () => {
   await sleep(MERGE_MS + 40);
   expect(fake.asked.length).toBe(before + 1);
 });
+
+test('opened cold with the computer away, the rows it last listed are there, then replaced by its list', async () => {
+  const kept = new Map<string, any>();
+  kept.set('m', { cards: [{ id: 'old', v: 0 }], spaces: { s: 'S' }, spaceDirs: { '/s': 'S' }, seen: 100 });
+  const writes: string[] = [];
+  hub.keepCardsIn({ read: (id) => kept.get(id) ?? null, write: (id, saved) => (writes.push(id), kept.set(id, saved)), drop: (id) => kept.delete(id) });
+  try {
+    // The dial never answers: what a computer that is away looks like at first.
+    hub.stage([link], () => new Promise(() => undefined));
+    await hub.start();
+    expect(machine().status).toBe('connecting');
+    expect(machine().cards).toEqual([{ id: 'old', v: 0 }] as any);
+    expect(machine().spaces).toEqual({ s: 'S' });
+    expect(machine().seen).toBe(100);
+
+    // Once it answers, its own list replaces the copy and is kept for next time, once.
+    await up(['list']);
+    expect(machine().cards).toEqual([a, b] as any);
+    expect(kept.get('m').cards).toEqual([a, b]);
+    await hub.refresh('m');
+    expect(writes).toEqual(['m']);
+  } finally {
+    hub.keepCardsIn(null);
+  }
+});

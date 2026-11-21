@@ -40,24 +40,43 @@ export function escape(s: string): string {
   }).join('');
 }
 
+/**
+ * A pairing link this phone cannot use. `message` is for the person, with what to do next;
+ * `detail` is what exactly was wrong, for support, shown only under 「详情」.
+ */
+export class LinkError extends Error {
+  constructor(
+    readonly kind: 'foreign' | 'version' | 'broken',
+    readonly detail: string,
+  ) {
+    super(
+      kind === 'foreign'
+        ? tr('这不是 Fibo 的配对链接。请在电脑的 Fibo 里点标题栏的手机图标，选「配对新手机」，扫屏幕上的二维码')
+        : kind === 'version'
+          ? tr('这个配对链接来自另一个版本的 Fibo，手机认不出。请把电脑和手机上的 Fibo 都更新到最新，再重新配对')
+          : tr('配对链接不完整，可能没复制全。请重新扫码，或者重新复制整段链接'),
+    );
+  }
+}
+
 function code(field: string | undefined, name: string): Uint8Array {
   const b = field === undefined ? null : unb64url(field);
-  if (!b || b.length !== 32) throw new Error(`bad ${name}`);
+  if (!b || b.length !== 32) throw new LinkError('broken', `bad ${name}`);
   return b;
 }
 
 export function parseLink(text: string): Link {
   text = text.trim();
   const prefix = 'mooring://pair?';
-  if (!text.startsWith(prefix)) throw new Error('not a mooring://pair link');
+  if (!text.startsWith(prefix)) throw new LinkError('foreign', 'not a mooring://pair link');
   const fields: Record<string, string> = {};
   for (const kv of text.slice(prefix.length).split('&')) {
     const at = kv.indexOf('=');
     if (at > 0 && !(kv.slice(0, at) in fields)) fields[kv.slice(0, at)] = unescape(kv.slice(at + 1));
   }
-  if (Number(fields.v) !== LINK_VERSION) throw new Error(`unsupported link version ${fields.v}`);
-  if (!fields.relay) throw new Error('no relay');
-  if (!fields.device) throw new Error('no device');
+  if (Number(fields.v) !== LINK_VERSION) throw new LinkError('version', `unsupported link version ${fields.v}`);
+  if (!fields.relay) throw new LinkError('broken', 'no relay');
+  if (!fields.device) throw new LinkError('broken', 'no device');
   return {
     relay: fields.relay,
     code: code(fields.code, 'code'),
@@ -86,6 +105,9 @@ export function websocketBase(relay: string): string {
   if (relay && !relay.includes('://')) return 'wss://' + relay;
   throw new Error(tr('看不懂的中继地址 {relay}', { relay }));
 }
+
+/** The relay's own web address, where it answers `/healthz`. */
+export const relayHttpBase = (relay: string): string => websocketBase(relay).replace(/^ws(s?):\/\//, 'http$1://');
 
 /** Where this phone opens its WebSocket. */
 export const linkUrl = (l: Link): string =>

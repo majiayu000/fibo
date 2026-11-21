@@ -1,15 +1,19 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Modal, Pressable, Text, View } from 'react-native';
 import { verify } from '@/actions';
 import { setLanguage, tr, useLang } from '@/i18n';
-import { start } from '@/remote/hub';
+import { keepCardsIn, start } from '@/remote/hub';
 import { Pump } from '@/remote/pump';
+import { cardShelf } from '@/store/cardsCache';
 import { outboxReady, reloadOutbox } from '@/store/outbox';
 import { readSettings, settings } from '@/store/settings';
 import { Icon } from '@/ui/icons';
 import { useTheme } from '@/ui/theme';
+
+// A computer away at a cold start still shows the rows it last listed, marked 断开前.
+keepCardsIn(cardShelf);
 
 /** With the lock on, the app opens only after Face ID / fingerprint, and again on return. */
 function useLocked() {
@@ -118,19 +122,29 @@ export default function Layout() {
           </Stack>
         </View>
       )}
-      {locked && (
-        <View style={{ position: 'absolute', inset: 0, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+      {/* A window of its own over the app, not a view over the pages: back from the background the
+          pages are mounted, and the native stack's screens stayed readable to TalkBack under a
+          covering view with its descendants hidden (11-17 walk). A full-screen window above them
+          leaves nothing of them for a screen reader to reach. */}
+      <Modal
+        visible={locked}
+        animationType="none"
+        statusBarTranslucent
+        navigationBarTranslucent
+        onRequestClose={() => undefined}
+      >
+        <View style={{ flex: 1, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
           <Icon name="face" size={44} color={t.text} />
           {!!error && <Text style={{ color: t.err, paddingHorizontal: 24, textAlign: 'center' }}>{error}</Text>}
           {ready || error ? (
-            <Pressable onPress={error ? retry : unlock} style={{ paddingHorizontal: 20, paddingVertical: 12, borderRadius: 14, backgroundColor: t.act }}>
+            <Pressable accessibilityRole="button" onPress={error ? retry : unlock} style={{ paddingHorizontal: 20, paddingVertical: 12, borderRadius: 14, backgroundColor: t.act }}>
               <Text style={{ color: t.onAct, fontSize: 16, fontWeight: '600' }}>{error ? tr('重试读取') : tr('解锁')}</Text>
             </Pressable>
           ) : (
             <ActivityIndicator accessibilityLabel={tr('正在读取本机设置')} color={t.text} />
           )}
         </View>
-      )}
+      </Modal>
     </>
   );
 }
