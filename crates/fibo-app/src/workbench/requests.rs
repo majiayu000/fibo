@@ -200,6 +200,21 @@ impl Workbench {
                 },
             )));
         }
+        // Every error can be put away: a message the user has read should not stay over
+        // the work until something else replaces it.
+        strip = strip.child(div().flex_1()).child(
+            button("error-dismiss", "×")
+                .aria_label(t!("关掉这条提示"))
+                .w(px(T::ICON_WIDTH))
+                .h(px(T::ICON_WIDTH))
+                .px_0()
+                .text_color(T::color(T::muted()))
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.error = None;
+                    this.unsure = None;
+                    cx.notify();
+                })),
+        );
         Some(strip)
     }
 }

@@ -260,15 +260,15 @@ pub fn spawn_host(root: &Path, takeover: bool) -> io::Result<()> {
         if let Some(status) = child.try_wait()? {
             return Err(io::Error::other(if takeover {
                 t!(
-                    "新后台没能接手终端（{status}），旧后台照常运行；详情见 host.log",
+                    "新后台没能接手终端（{status}），旧后台照常运行；详情见后台日志",
                     status
                 )
             } else {
-                format!("host exited {status}; see host.log")
+                t!("后台启动后退出了（{status}），详情见后台日志", status)
             }));
         }
         if std::time::Instant::now() >= until {
-            return Err(io::Error::other(t!("后台启动超时，请检查 host.log")));
+            return Err(io::Error::other(t!("后台启动超时，详情见后台日志")));
         }
         std::thread::sleep(Duration::from_millis(50));
     }
@@ -283,6 +283,10 @@ fn hello_build(socket: &Path) -> io::Result<fibo_core::protocol::Build> {
         Reply::Hello { build, .. } => Ok(build),
         other => Err(io::Error::other(format!("{other:?}"))),
     }
+}
+/// Whether `restart_host` has a host to replace: one running other code than this app's.
+pub fn host_replaceable() -> bool {
+    stale_build().is_some() || misplaced_host().is_some()
 }
 /// Replaces the stale host, then opens this app again once this process has quit; the
 /// new process connects to the current host. A host that can hand over keeps every
@@ -347,7 +351,7 @@ pub fn connected_host(socket: &Path) -> io::Result<bool> {
                     fibo_core::i18n::text(RESET_NOTICE)
                 } else {
                     t!(
-                        "空间、待办和会话结局沿用现有对象表，不作迁移；重启会中断正在运行的终端。本窗口不会重启后台或删除数据。"
+                        "空间、待办和会话结局沿用现有对象表，不作迁移；重启会中断正在运行的终端。这个后台太旧，这里重启不了它：先处理好正在运行的终端，再在活动监视器里结束 fibo 进程（或重启电脑），然后点「重试」。"
                     )
                 };
                 let old = fibo_core::i18n::text(OLD_BACKEND);

@@ -77,7 +77,7 @@ impl SettingsView {
                     version = r.version,
                     v2 = fibo_core::update::BREW_COMMAND
                 ),
-                Some((t!("拷贝命令"), false)),
+                Some((t!("复制命令"), false)),
             ),
         };
         let control = action.map(|(text, install)| {

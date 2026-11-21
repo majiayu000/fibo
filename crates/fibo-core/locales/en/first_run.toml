@@ -5,7 +5,6 @@
 "在 {place} 打开；换文件夹用左边空间旁的 ＋" = "Opens in {place}; to use another folder, click + beside the spaces on the left"
 "不再显示" = "Don't show again"
 "启动 {name}" = "Start {name}"
-"没在登录 shell 的 PATH 里找到 {executable}。安装：{hint}" = "{executable} isn't on your login shell's PATH. Install: {hint}"
 "正在查找…" = "Looking…"
 "正在检查…" = "Checking…"
 "没能检查：{e}" = "Couldn't check: {e}"
@@ -18,9 +17,14 @@
 "；" = "; "
 
 # crates/fibo-app/src/workbench/hooks.rs: the status bar's hook reminder and the welcome page's install.
-"Hook 没装上，Agent 照常启动：{e}" = "Couldn't install the hooks; the agent starts anyway: {e}"
 "{name} 的 Hook 过期了" = "{name} hooks are outdated"
 "{name} 没装 Hook" = "{name} has no hooks"
 "没有 Hook，它的状态和审批只能靠读终端画面来判断" = "Without hooks, Fibo can only read the terminal screen to tell its state and approvals"
 "点开 设置 › 通用 安装；这条提醒也在那里关" = "Click for Settings › General to install them; this reminder is switched off there too"
 "安装或卸载 Agent 的 Hook" = "Install or remove agent hooks"
+"没找到 {executable}，可以在终端里运行：" = "{executable} wasn't found. Install it by running this in a terminal:"
+"复制命令" = "Copy command"
+"安装说明" = "Install guide"
+"装好了，重新查找" = "Installed? Look again"
+"状态提醒（hook）" = "Status hooks"
+"Agent 等你或做完一轮时发系统通知（以后在 设置 › 通知 改）" = "Send a system notification when an Agent waits for you or finishes a turn (change it later in Settings › Notifications)"

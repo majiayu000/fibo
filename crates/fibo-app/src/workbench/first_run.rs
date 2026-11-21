@@ -32,6 +32,9 @@ pub(super) struct FirstRun {
     pub(super) on: bool,
     /// 「启动时一起装上」: ticked until the reader clears it.
     pub(super) with_hook: bool,
+    /// 「等你时发系统通知」: ticked until cleared; turns notifications on with the start.
+    /// Off by default for everyone else, so a newcomer who switches windows heard nothing.
+    pub(super) notify: bool,
 }
 impl FirstRun {
     pub(super) fn load(w: &Workspace) -> Self {
@@ -39,6 +42,7 @@ impl FirstRun {
         Self {
             on: wanted(w, done),
             with_hook: true,
+            notify: true,
         }
     }
 }
@@ -47,6 +51,14 @@ fn install_hint(agent: Agent) -> Option<&'static str> {
     match agent.executable() {
         "claude" => Some("npm install -g @anthropic-ai/claude-code"),
         "codex" => Some("npm install -g @openai/codex"),
+        _ => None,
+    }
+}
+/// The CLI's own install page, for someone without npm or who wants another way.
+fn install_page(agent: Agent) -> Option<&'static str> {
+    match agent.executable() {
+        "claude" => Some("https://docs.anthropic.com/en/docs/claude-code/setup"),
+        "codex" => Some("https://github.com/openai/codex#installing-and-running-codex-cli"),
         _ => None,
     }
 }
@@ -239,12 +251,62 @@ impl Workbench {
                 .gap_y(px(T::S4))
                 .children(others),
         );
+        let any_missing = !offer.missing.is_empty();
         for agent in offer.missing {
-            column = column.child(label(t!(
-                "没在登录 shell 的 PATH 里找到 {executable}。安装：{hint}",
-                executable = agent.executable(),
-                hint = install_hint(agent).unwrap_or_default()
-            )));
+            let hint = install_hint(agent).unwrap_or_default();
+            let mut row = div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_x(px(T::S8))
+                .child(label(t!(
+                    "没找到 {executable}，可以在终端里运行：",
+                    executable = agent.executable()
+                )))
+                .child(
+                    div()
+                        .font_family(T::mono(cx).family)
+                        .text_size(px(T::META))
+                        .text_color(T::color(T::body()))
+                        .child(hint),
+                )
+                .child(
+                    link(
+                        format!("first-run-copy-{}", agent.executable()),
+                        t!("复制命令").into(),
+                        None,
+                    )
+                    .on_click(move |_, _, cx| {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(hint.to_owned()))
+                    }),
+                );
+            if let Some(page) = install_page(agent) {
+                row = row.child(
+                    link(
+                        format!("first-run-page-{}", agent.executable()),
+                        t!("安装说明").into(),
+                        None,
+                    )
+                    .on_click(move |_, _, cx| cx.open_url(page)),
+                );
+            }
+            column = column.child(row);
+        }
+        // What the login shell found is asked once; after installing, ask again here
+        // instead of leaving the page saying a CLI that is now there is missing.
+        if any_missing && !self.tasks.probing {
+            column = column.child(
+                link(
+                    "first-run-look-again".into(),
+                    t!("装好了，重新查找").into(),
+                    None,
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.tasks.found = None;
+                    this.probe_agents(cx);
+                    cx.notify();
+                })),
+            );
         }
         column
     }
@@ -252,8 +314,8 @@ impl Workbench {
     /// started CLI's hook written with its start.
     fn first_run_hooks_view(&self, cx: &Context<Self>) -> Option<gpui::Div> {
         let hooks = match &self.hooks.read {
-            None => return Some(section("Hook", t!("正在检查…").to_owned())),
-            Some(Err(e)) => return Some(section("Hook", t!("没能检查：{e}", e))),
+            None => return Some(section(t!("状态提醒（hook）"), t!("正在检查…").to_owned())),
+            Some(Err(e)) => return Some(section(t!("状态提醒（hook）"), t!("没能检查：{e}", e))),
             Some(Ok(hooks)) if hooks.is_empty() => return None,
             Some(Ok(hooks)) => hooks,
         };
@@ -293,12 +355,27 @@ impl Workbench {
             .into_any_element()
         };
         body = body.child(div().flex().child(control));
+        if !self.workspace.settings.notifications {
+            body = body.child(
+                div().flex().child(
+                    super::hooks::tick_box(
+                        "first-run-notify",
+                        self.first_run.notify,
+                        t!("Agent 等你或做完一轮时发系统通知（以后在 设置 › 通知 改）").into(),
+                    )
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.first_run.notify = !this.first_run.notify;
+                        cx.notify();
+                    })),
+                ),
+            );
+        }
         Some(
             div()
                 .flex()
                 .flex_col()
                 .gap(px(T::S6))
-                .child(section("Hook", String::new()))
+                .child(section(t!("状态提醒（hook）"), String::new()))
                 .child(body),
         )
     }

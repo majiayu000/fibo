@@ -72,7 +72,7 @@ impl Workbench {
             let _ = this.update(cx, |this, cx| {
                 this.layout.interrupting = None;
                 if let Err(e) = result {
-                    this.error = Some(e.to_string());
+                    this.error = Some(t!("没能打断：{e}", e));
                 }
                 cx.notify();
             });

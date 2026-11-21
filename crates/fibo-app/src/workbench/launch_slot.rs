@@ -253,8 +253,10 @@ impl Workbench {
                             this.sync(cx);
                         }
                     }
-                    Ok(_) => this.error = Some(t!("缺少工作台响应").into()),
-                    Err(e) => this.error = Some(e.to_string()),
+                    Ok(_) => {
+                        this.error = Some(t!("后台没有回话，Agent 可能没启动；再点一次试试").into())
+                    }
+                    Err(e) => this.error = Some(t!("没能启动：{e}", e)),
                 }
                 this.run_waiting(cx);
             });

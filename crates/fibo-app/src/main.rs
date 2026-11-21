@@ -17,6 +17,7 @@ mod keymap;
 mod lifecycle;
 mod machines;
 mod model;
+mod startup_error;
 mod terminal;
 mod ui;
 mod update;
@@ -143,43 +144,11 @@ fn reopen_window(root: &Path, cx: &mut App) {
             }
             cx.activate(true);
         }
-        Err(e) => show_startup_error(e.to_string(), cx),
+        Err(e) => show_startup_error(e.to_string(), root, cx),
     }
 }
-struct StartupError {
-    message: String,
-    focus: gpui::FocusHandle,
-}
-impl gpui::Render for StartupError {
-    fn render(
-        &mut self,
-        _: &mut gpui::Window,
-        _: &mut gpui::Context<Self>,
-    ) -> impl gpui::IntoElement {
-        use gpui::prelude::*;
-        use theme::Theme as T;
-        gpui::div()
-            .size_full()
-            .p(px(T::S16))
-            .bg(T::color(T::app()))
-            .text_color(T::color(T::primary()))
-            .text_size(px(T::BODY_SIZE))
-            .track_focus(&self.focus)
-            .child(self.message.clone())
-    }
-}
-fn show_startup_error(message: String, cx: &mut App) {
-    eprintln!("Fibo: {message}");
-    if let Err(e) = cx.open_window(WindowOptions::default(), |window, cx| {
-        cx.new(|cx| {
-            let focus = cx.focus_handle();
-            window.focus(&focus, cx);
-            StartupError { message, focus }
-        })
-    }) {
-        eprintln!("error window: {e}");
-    }
-    cx.activate(true);
+fn show_startup_error(message: String, root: &Path, cx: &mut App) {
+    startup_error::show(message, root, cx);
 }
 // Finder launches do not inherit run.sh. Enable the same event-driven idle policy
 // before GPUI or any application thread is created. The retained back buffer redraws
@@ -437,7 +406,7 @@ fn run() -> io::Result<()> {
         let workspace = match initial {
             Ok(w) => w,
             Err(e) => {
-                show_startup_error(e.to_string(), cx);
+                show_startup_error(e.to_string(), &root, cx);
                 return;
             }
         };
