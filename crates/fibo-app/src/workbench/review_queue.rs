@@ -182,7 +182,10 @@ mod tests {
 /// The queue 接着验收 starts: what was left, as far as it is still to check, then the rest.
 fn resumed(rest: Vec<String>, queue: Vec<String>) -> Vec<String> {
     let mut ordered: Vec<String> = rest.into_iter().filter(|id| queue.contains(id)).collect();
-    let later: Vec<String> = queue.into_iter().filter(|id| !ordered.contains(id)).collect();
+    let later: Vec<String> = queue
+        .into_iter()
+        .filter(|id| !ordered.contains(id))
+        .collect();
     ordered.extend(later);
     ordered
 }
