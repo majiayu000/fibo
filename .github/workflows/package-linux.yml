@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [main]
     paths: ['crates/**', 'plugins/**', 'packaging/linux/**', 'Cargo.lock', 'rust-toolchain.toml', 'bootstrap.sh', 'patches/**', '.github/workflows/package-linux.yml']
+  # Nightly on main as well (#507): pull requests start this only when their paths match,
+  # so main's own state on this platform was otherwise never checked.
+  schedule:
+    - cron: '37 3 * * *'
   workflow_dispatch:
 
 permissions:
