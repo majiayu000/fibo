@@ -53,21 +53,19 @@ pub fn replace_file(path: &Path, bytes: &[u8]) -> io::Result<bool> {
 fn through_links(path: &Path) -> io::Result<PathBuf> {
     let mut at = path.to_path_buf();
     for _ in 0..MOST_LINKS {
-        match fs::read_link(&at) {
-            Ok(next) => {
+        // Ask whether it is a link before reading one: `read_link` on a plain file fails
+        // with InvalidInput on Unix but with ERROR_NOT_A_REPARSE_POINT (4390) on Windows,
+        // which failed every replace of a file that already existed there (11-24).
+        match fs::symlink_metadata(&at) {
+            Ok(m) if m.file_type().is_symlink() => {
+                let next = fs::read_link(&at)?;
                 at = match at.parent() {
                     Some(dir) => dir.join(next),
                     None => next,
                 }
             }
-            Err(e)
-                if matches!(
-                    e.kind(),
-                    io::ErrorKind::InvalidInput | io::ErrorKind::NotFound
-                ) =>
-            {
-                return Ok(at);
-            }
+            Ok(_) => return Ok(at),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(at),
             Err(e) => return Err(e),
         }
     }
@@ -78,7 +76,7 @@ fn through_links(path: &Path) -> io::Result<PathBuf> {
 }
 
 /// Unique per call: two installs at once must not write into one temporary file.
-fn temporary_beside(real: &Path) -> PathBuf {
+pub(super) fn temporary_beside(real: &Path) -> PathBuf {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let name = real
         .file_name()

@@ -647,7 +647,7 @@ impl Keymap {
         } else {
             path.parent()
                 .map_or(Ok(()), std::fs::create_dir_all)
-                .and_then(|()| crate::ui::status_colors::write_atomic(path, json.as_bytes()))
+                .and_then(|()| fibo_platform::fs::write_atomic(path, json.as_bytes()))
         };
         written.map_err(|e| t!("无法保存 {path}：{e}", path = path.display(), e))?;
         Ok(map)

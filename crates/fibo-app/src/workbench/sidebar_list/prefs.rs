@@ -70,7 +70,7 @@ impl SidebarPrefs {
             for terminal in &self.pinned {
                 body.push_str(&format!("pin {terminal}\n"));
             }
-            let _ = crate::ui::status_colors::write_atomic(&path, body.as_bytes());
+            let _ = fibo_platform::fs::write_atomic(&path, body.as_bytes());
         }
     }
     pub fn preset(&self) -> &'static Preset {

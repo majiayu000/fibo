@@ -51,9 +51,14 @@ fn without_verbatim(path: &Path) -> std::path::PathBuf {
 }
 
 pub fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let temp = path.with_extension(format!("tmp{}", std::process::id()));
-    std::fs::write(&temp, bytes)?;
-    let renamed = std::fs::rename(&temp, path);
+    use std::io::Write;
+    let temp = super::replace::temporary_beside(path);
+    let renamed = std::fs::File::create_new(&temp)
+        .and_then(|mut file| {
+            file.write_all(bytes)?;
+            file.sync_all()
+        })
+        .and_then(|()| std::fs::rename(&temp, path));
     if renamed.is_err() {
         let _ = std::fs::remove_file(&temp);
     }

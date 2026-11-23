@@ -24,14 +24,18 @@ pub fn canonical(path: &Path) -> io::Result<std::path::PathBuf> {
 pub fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
-    let temp = path.with_extension(format!("tmp{}", std::process::id()));
-    let _ = std::fs::remove_file(&temp);
+    // This write's own name: two threads writing one file must not share (and remove)
+    // one temporary, and the bytes are on disk before the rename makes them the file.
+    let temp = super::replace::temporary_beside(path);
     let written = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .mode(0o600)
         .open(&temp)
-        .and_then(|mut file| file.write_all(bytes));
+        .and_then(|mut file| {
+            file.write_all(bytes)?;
+            file.sync_all()
+        });
     let renamed = written.and_then(|()| std::fs::rename(&temp, path));
     if renamed.is_err() {
         let _ = std::fs::remove_file(&temp);

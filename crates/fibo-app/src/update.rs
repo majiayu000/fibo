@@ -191,9 +191,7 @@ pub fn set_auto(on: bool, cx: &mut App) -> Result<(), String> {
     let file = core::auto_check_file().ok_or(t!("找不到配置目录"))?;
     file.parent()
         .map_or(Ok(()), std::fs::create_dir_all)
-        .and_then(|()| {
-            crate::ui::status_colors::write_atomic(&file, if on { b"on" } else { b"off" })
-        })
+        .and_then(|()| fibo_platform::fs::write_atomic(&file, if on { b"on" } else { b"off" }))
         .map_err(|e| t!("无法保存 {display}：{e}", display = file.display(), e))?;
     if let Some(u) = updates(cx) {
         let mut u = u.clone();

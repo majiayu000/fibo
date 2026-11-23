@@ -546,8 +546,7 @@ fn save_quota_pin(pin: Option<fibo_core::agent::Agent>) {
     match pin {
         Some(a) => {
             let _ = path.parent().map(std::fs::create_dir_all);
-            let _ =
-                crate::ui::status_colors::write_atomic(&path, format!("{}\n", a.key()).as_bytes());
+            let _ = fibo_platform::fs::write_atomic(&path, format!("{}\n", a.key()).as_bytes());
         }
         None => {
             let _ = std::fs::remove_file(path);
