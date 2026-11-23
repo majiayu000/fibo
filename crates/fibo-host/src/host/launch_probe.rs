@@ -67,9 +67,9 @@ fn look(shared: &Shared, terminal: &str) -> io::Result<bool> {
         if !waiting(&host, terminal) {
             return Ok(false);
         }
-        host.index.cached()?
+        host.transcripts.clone()
     };
-    refresh_agents(shared, &transcripts)?;
+    refresh_agents(shared, &super::status::all_transcripts(&transcripts)?)?;
     let host = lock(shared)?;
     Ok(waiting(&host, terminal))
 }

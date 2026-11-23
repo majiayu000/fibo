@@ -217,9 +217,18 @@ pub(super) fn refresh_registered(shared: &Shared) -> io::Result<()> {
         {
             return Ok(());
         }
-        host.index.cached()?
+        host.transcripts.clone()
     };
-    refresh_agents(shared, &transcripts)
+    refresh_agents(shared, &all_transcripts(&transcripts)?)
+}
+/// Every known transcript, read after the host lock is let go.
+pub(super) fn all_transcripts(
+    reader: &Mutex<crate::log_index::Index>,
+) -> io::Result<Vec<crate::recognition::Transcript>> {
+    reader
+        .lock()
+        .map_err(|_| io::Error::other("transcript reader lock poisoned"))?
+        .cached()
 }
 pub(super) const SCREEN_QUIET: Duration = Duration::from_secs(1);
 /// How often a screen with output flowing is read for a working line.
@@ -446,9 +455,9 @@ pub(super) fn probe_after_submission(shared: &Shared, terminal: &str) -> io::Res
                 if host.workspace.current_agent(&terminal).is_some() {
                     return Ok(());
                 }
-                host.index.cached()?
+                host.transcripts.clone()
             };
-            refresh_agents(&shared, &transcripts)?;
+            refresh_agents(&shared, &all_transcripts(&transcripts)?)?;
             Ok(())
         })();
         if let Err(e) = result {

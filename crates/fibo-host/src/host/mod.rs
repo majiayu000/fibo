@@ -63,6 +63,9 @@ struct Host {
     closed: std::collections::HashSet<String>,
     instance: String,
     index: crate::log_index::Index,
+    /// Its own connection to the same index, for reading every known transcript without
+    /// holding the host lock (34k rows on a long-used install).
+    transcripts: Arc<Mutex<crate::log_index::Index>>,
     recognition: RecognitionStatus,
     log_events: Option<fibo_platform::file_watch::Notifier>,
     /// Transcript roots after plugins changed, for the log subscription to restart with.

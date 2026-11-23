@@ -218,6 +218,7 @@ pub(super) fn serve_runtime(
         remote: None,
         store,
         index: index.fork(root)?,
+        transcripts: Arc::new(Mutex::new(index.fork(root)?)),
         recognition: RecognitionStatus::default(),
         log_events: None,
         new_roots: None,

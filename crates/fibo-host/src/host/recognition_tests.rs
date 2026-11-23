@@ -455,6 +455,7 @@ fn shared_host(root: &std::path::Path, index: &crate::log_index::Index) -> Share
         closed: Default::default(),
         instance: "test".into(),
         index: index.fork(root).unwrap(),
+        transcripts: Arc::new(Mutex::new(index.fork(root).unwrap())),
         recognition: RecognitionStatus::default(),
         log_events: None,
         new_roots: None,
