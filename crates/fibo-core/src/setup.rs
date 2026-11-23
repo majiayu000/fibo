@@ -195,7 +195,8 @@ mod tests {
     }
 
     /// The setup's limit holds whatever it leaves behind: returns at once for a background
-    /// child, and ends what it started at the limit.
+    /// child, and ends what it started at the limit. The limit counts the shell's own start,
+    /// which Git Bash on a Windows runner sometimes takes most of 200 ms for (#512).
     #[test]
     fn the_time_limit_holds_a_setup_with_children() {
         let root = std::env::temp_dir().join(format!("kl-setup-bg-{}", std::process::id()));
@@ -212,17 +213,17 @@ mod tests {
         std::fs::write(
             dir.join("setup.json"),
             format!(
-                r#"{{"api":1,"setup":"sleep 6 & echo started","teardown":"(sleep 1; touch {}) & wait","timeout_ms":200}}"#,
+                r#"{{"api":1,"setup":"sleep 6 & echo started","teardown":"(sleep 2; touch {}) & wait","timeout_ms":800}}"#,
                 crate::plugin_command::sh_path(&mark)
             ),
         )
         .unwrap();
         let at = Instant::now();
         run(&plugins, &dir, Phase::Setup).unwrap();
-        assert!(at.elapsed() < Duration::from_secs(2), "{:?}", at.elapsed());
+        assert!(at.elapsed() < Duration::from_secs(3), "{:?}", at.elapsed());
         let err = run(&plugins, &dir, Phase::Teardown).unwrap_err();
-        assert!(err.contains("200 ms"), "{err}");
-        std::thread::sleep(Duration::from_millis(1200));
+        assert!(err.contains("800 ms"), "{err}");
+        std::thread::sleep(Duration::from_millis(2500));
         assert!(!mark.exists(), "what it started ended at the limit");
         let _ = std::fs::remove_dir_all(&root);
     }
