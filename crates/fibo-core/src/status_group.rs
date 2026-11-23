@@ -78,9 +78,7 @@ pub fn column(w: &Workspace, s: &AgentSession, now: u64) -> Option<Column> {
 }
 fn completed_within(w: &Workspace, id: &str, now: u64, window: u64) -> bool {
     w.outcome_history
-        .iter()
-        .rev()
-        .find(|h| h.session == id)
+        .last(id)
         .is_some_and(|h| h.after == Outcome::Completed && now.saturating_sub(h.at) < window)
 }
 

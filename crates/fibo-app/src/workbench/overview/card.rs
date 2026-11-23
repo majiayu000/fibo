@@ -97,9 +97,7 @@ impl Workbench {
             if self
                 .workspace
                 .outcome_history
-                .iter()
-                .rev()
-                .find(|h| h.session == session.id)
+                .last(&session.id)
                 .is_some_and(|h| h.reason == not_ui!("暂存到期"))
             {
                 t!(" · 到期")
