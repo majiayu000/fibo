@@ -17,6 +17,7 @@ use std::sync::{
 use std::thread;
 use std::time::{Duration, Instant};
 
+mod archive;
 mod association;
 mod brief;
 mod client;
@@ -613,6 +614,7 @@ impl Host {
         next.revision = self.workspace.revision + 1;
         // Whatever tied a terminal to its first conversation, or ended it, ends its start.
         next.settle_starts();
+        self.readopt_archived(&mut next)?;
         self.store.save_applying(&self.workspace, &next, applied)?;
         // Terminals that just got their Agent conversation. The quiet-screen check after
         // the last output skipped them while unbound; a dialog drawn before binding (an

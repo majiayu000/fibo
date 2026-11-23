@@ -32,6 +32,7 @@ pub mod quota;
 mod quota_merge;
 pub mod reason;
 pub mod remote_cards;
+pub mod retention;
 pub mod rule;
 #[doc(hidden)]
 pub mod sample;
