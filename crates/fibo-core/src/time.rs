@@ -53,13 +53,13 @@ pub fn age(at: u64) -> String {
         crate::t!("{d} 天", d = minutes / 1440)
     }
 }
-/// How long ago, in a row's few columns and on a pane's state: `4分`, `2时`, `1天`, or
-/// 刚刚, as the v3 design writes it everywhere.
+/// How long ago, in a row's few columns and on a pane's state: `4分`, `2小时`, `1天`, or
+/// 刚刚. Not `2时`, which reads as two o'clock (11-24 review).
 pub fn short_ago(updated: u64, now: u64) -> String {
     match now.saturating_sub(updated) {
         age if age < 60 => crate::t!("刚刚").into(),
         age if age < 3600 => crate::t!("{m}分", m = age / 60),
-        age if age < DAY => crate::t!("{h}时", h = age / 3600),
+        age if age < DAY => crate::t!("{h}小时", h = age / 3600),
         age => crate::t!("{d}天", d = age / DAY),
     }
 }
@@ -100,7 +100,7 @@ mod tests {
         assert_eq!(ago(0, 3 * 3600), "3 小时前");
         assert_eq!(short_ago(1000, 1030), "刚刚");
         assert_eq!(short_ago(0, 720), "12分");
-        assert_eq!(short_ago(0, 3 * 3600 + 59), "3时");
+        assert_eq!(short_ago(0, 3 * 3600 + 59), "3小时");
         assert_eq!(short_ago(0, 40 * 86_400), "40天");
         assert_eq!(recency(0, 3600), "最近 24 小时");
         assert_eq!(span_label(5160), "86 分钟");

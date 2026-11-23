@@ -83,7 +83,7 @@ export function asideSpaces<M extends { status: string; quietSpaces?: Space[] }>
 }
 
 /**
- * The space a home-screen chip names, for 新任务 opened while it is shown: on the computer
+ * The space a home-screen chip names, for 新会话 opened while it is shown: on the computer
  * the draft already has when that one has it, else the first online one that does. Chips
  * go by name, the draft by id; a name no computer lists (a folder's) finds nothing. A space
  * with no folder of its own starts where its latest conversation is, not with no directory,

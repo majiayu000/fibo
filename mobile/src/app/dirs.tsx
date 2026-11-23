@@ -298,7 +298,7 @@ export default function Dirs() {
               <View style={[s.lockNote, { borderColor: t.line }]}>
                 <Icon name="lock" size={16} width={2} color={t.dim} />
                 <Text style={{ flex: 1, fontSize: 13, color: t.dim, lineHeight: 19 }}>
-                  {tr('只列文件夹，不读文件内容；跳过 node_modules、.git 和隐藏文件夹。只有「完全控制」权限的手机能浏览和开新任务。')}
+                  {tr('只列文件夹，不读文件内容；跳过 node_modules、.git 和隐藏文件夹。只有「完全控制」权限的手机能浏览和开新会话。')}
                 </Text>
               </View>
             )}

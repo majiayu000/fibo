@@ -334,7 +334,7 @@ export default function Inbox() {
               ) : null}
             </View>
             <Round icon="search" label={tr('搜索')} onPress={() => router.push('/search')} />
-            <Round icon="plus" label={tr('新任务')} onPress={() => newTask(machines, shelf.filter)} />
+            <Round icon="plus" label={tr('新会话')} onPress={() => newTask(machines, shelf.filter)} />
           </View>
           <SpaceChips chips={shelf.chips} filter={shelf.filter} onPick={(space) => setInboxView({ space })} />
         </View>
@@ -363,7 +363,7 @@ export default function Inbox() {
   );
 }
 
-/** 新任务 from a space shown alone goes in that space: the chip was the choice already. */
+/** 新会话 from a space shown alone goes in that space: the chip was the choice already. */
 function newTask(machines: Machine[], filter: string | null) {
   const d = getDraft();
   const at = chipSpace(machines, filter, d.machine);

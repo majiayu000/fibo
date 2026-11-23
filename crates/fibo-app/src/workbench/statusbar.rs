@@ -71,7 +71,7 @@ impl Workbench {
             })
             .tooltip(super::diagnostics::tip(vec![
                 if cut {
-                    t!("和后台 Fibo 的连接断了，侧栏和看板停在断开那一刻").into()
+                    t!("和后台 Fibo 的连接断了，侧栏和鸟瞰停在断开那一刻").into()
                 } else {
                     t!("后台 Fibo 在运行，按事件更新，不定时轮询").into()
                 },
@@ -587,16 +587,16 @@ fn colors(w: &QuotaWindow, stale: bool) -> (gpui::Hsla, gpui::Hsla) {
     }
 }
 
-/// Time left as the bar has room for: `2d4h`, `4h20m`, `12m`.
+/// Time left as the bar has room for: `2天4小时`, `4小时20分`, `12分` (`2d4h` in English).
 pub(super) fn left(at: u64, now: u64) -> String {
     let s = at.saturating_sub(now);
     let (d, h, m) = (s / 86_400, s % 86_400 / 3600, s % 3600 / 60);
     if d > 0 {
-        format!("{d}d{h}h")
+        t!("{d}天{h}小时", d, h)
     } else if h > 0 {
-        format!("{h}h{m}m")
+        t!("{h}小时{m}分", h, m)
     } else {
-        format!("{}m", m.max(1))
+        t!("{m}分", m = m.max(1))
     }
 }
 
@@ -696,10 +696,10 @@ mod tests {
 
     #[test]
     fn time_left_fits_the_bar() {
-        assert_eq!(left(1000 + 2 * 86_400 + 4 * 3600 + 59, 1000), "2d4h");
-        assert_eq!(left(1000 + 4 * 3600 + 20 * 60, 1000), "4h20m");
-        assert_eq!(left(1000 + 30, 1000), "1m");
-        assert_eq!(left(500, 1000), "1m");
+        assert_eq!(left(1000 + 2 * 86_400 + 4 * 3600 + 59, 1000), "2天4小时");
+        assert_eq!(left(1000 + 4 * 3600 + 20 * 60, 1000), "4小时20分");
+        assert_eq!(left(1000 + 30, 1000), "1分");
+        assert_eq!(left(500, 1000), "1分");
     }
 }
 

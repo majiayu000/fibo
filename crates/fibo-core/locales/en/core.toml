@@ -47,7 +47,7 @@
 "{h} 小时" = "{h} {h|hour|hours}"
 "{d} 天" = "{d} {d|day|days}"
 "{m}分" = "{m}m"
-"{h}时" = "{h}h"
+"{h}小时" = "{h}h"
 "{d}天" = "{d}d"
 "{secs} 秒" = "{secs} s"
 "{h} 小时 {m} 分" = "{h} h {m} min"
