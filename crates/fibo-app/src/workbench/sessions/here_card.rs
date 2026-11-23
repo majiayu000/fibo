@@ -265,13 +265,7 @@ impl Workbench {
                 how = binding.label()
             )));
         }
-        if let Some(h) = self
-            .workspace
-            .outcome_history
-            .iter()
-            .rev()
-            .find(|h| h.session == session.id)
-        {
+        if let Some(h) = self.workspace.outcome_history.last(&session.id) {
             panel = panel.child(note(t!(
                 "{reason} · {before} → {after} · 最近一次结局变化",
                 reason = &h.reason,

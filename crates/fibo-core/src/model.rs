@@ -10,7 +10,7 @@ pub struct Workspace {
     #[serde(default)]
     pub settings: Settings,
     #[serde(default)]
-    pub outcome_history: Vec<OutcomeChange>,
+    pub outcome_history: History,
     #[serde(default)]
     pub task_outcomes: std::collections::HashMap<String, Outcome>,
     /// When each todo was written down and closed, and the progress written back.
@@ -367,12 +367,7 @@ impl Workspace {
         }
     }
     pub fn review_since(&self, id: &str) -> u64 {
-        self.outcome_history
-            .iter()
-            .rev()
-            .find(|h| h.session == id && h.reason == not_ui!("暂存到期"))
-            .map(|h| h.at)
-            .unwrap_or(0)
+        self.outcome_history.last_review(id).unwrap_or(0)
     }
     pub fn next_deadline(&self, now: u64) -> Option<u64> {
         let mut times = Vec::new();
@@ -548,7 +543,9 @@ impl Workspace {
 }
 
 mod agent_start;
+mod history;
 pub use agent_start::AgentStart;
+pub use history::History;
 mod edit;
 pub use edit::{Edit, SeenSession};
 mod pins;
