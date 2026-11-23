@@ -30,6 +30,8 @@ pub(super) struct OverviewState {
     pub(super) cleanup_results: HashMap<String, Outcome>,
     /// The queue is 逐个验收: 要你处理's finished turns, not 逐个清理's leftovers.
     pub(super) cleanup_review: bool,
+    /// What was left of 逐个验收 when 继续 opened one of them: 接着验收 picks up there.
+    pub(super) review_rest: Vec<String>,
     /// Marked complete in 逐个验收: its terminal closes when the host has accepted the mark.
     pub(super) review_closing: Option<String>,
     pub(super) show_running: bool,

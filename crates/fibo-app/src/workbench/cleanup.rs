@@ -323,6 +323,7 @@ impl Workbench {
             let resume = s.clone();
             actions = actions.child(quiet(button("cleanup-continue", t!("继续 C"))).on_click(
                 cx.listener(move |this, _, window, cx| {
+                    this.park_review();
                     this.overview.cleanup.clear();
                     this.open_session(&resume, window, cx);
                 }),

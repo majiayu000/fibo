@@ -512,6 +512,7 @@ impl Workbench {
                 cleanup_index: 0,
                 cleanup_results: HashMap::new(),
                 cleanup_review: false,
+                review_rest: Vec::new(),
                 review_closing: None,
                 scroll: gpui::ScrollHandle::new(),
                 columns: Default::default(),

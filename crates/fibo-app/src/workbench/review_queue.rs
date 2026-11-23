@@ -27,12 +27,23 @@ impl Workbench {
         )
     }
     pub(super) fn start_review(&mut self, at: u64, cx: &mut Context<Self>) {
-        let queue = (self.column_sessions(Column::Needs, at).into_iter())
+        let queue: Vec<String> = (self.column_sessions(Column::Needs, at).into_iter())
             .filter(|s| self.session_reviewable(s))
             .map(|s| s.id.clone())
             .collect();
-        self.start_cleanup(queue, cx);
+        // 接着验收: what was left when 继续 opened one comes first, in its order, as far
+        // as it is still to check; the rest of 要你处理 after it.
+        let rest = std::mem::take(&mut self.overview.review_rest);
+        self.start_cleanup(resumed(rest, queue), cx);
         self.overview.cleanup_review = true;
+    }
+    /// 继续 leaves 逐个验收 for one of its sessions: keeps it and what came after, so
+    /// coming back does not start over (#514).
+    pub(super) fn park_review(&mut self) {
+        if self.overview.cleanup_review {
+            let at = self.overview.cleanup_index.min(self.overview.cleanup.len());
+            self.overview.review_rest = self.overview.cleanup[at..].to_vec();
+        }
     }
     /// A form opened from the queue took the keyboard and left 鸟瞰: however it closed
     /// (saved, 取消, Esc), the queue's page and its keys come back.
@@ -165,5 +176,28 @@ mod tests {
         assert_eq!(terminal_to_close(Some("t"), false).as_deref(), Some("t"));
         assert_eq!(terminal_to_close(Some("t"), true), None);
         assert_eq!(terminal_to_close(None, false), None);
+    }
+}
+
+/// The queue 接着验收 starts: what was left, as far as it is still to check, then the rest.
+fn resumed(rest: Vec<String>, queue: Vec<String>) -> Vec<String> {
+    let mut ordered: Vec<String> = rest.into_iter().filter(|id| queue.contains(id)).collect();
+    let later: Vec<String> = queue.into_iter().filter(|id| !ordered.contains(id)).collect();
+    ordered.extend(later);
+    ordered
+}
+
+#[cfg(test)]
+mod resume_tests {
+    use super::resumed;
+    fn ids(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+    #[test]
+    fn coming_back_picks_up_where_continue_left() {
+        // Left at c (a, b already looked at); c was marked done meanwhile, e is new.
+        let order = resumed(ids(&["c", "d"]), ids(&["a", "b", "d", "e"]));
+        assert_eq!(order, ids(&["d", "a", "b", "e"]));
+        assert_eq!(resumed(vec![], ids(&["a"])), ids(&["a"]));
     }
 }

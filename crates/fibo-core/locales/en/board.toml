@@ -212,3 +212,4 @@
 "← 上一个" = "← Previous"
 "跳过 →" = "Skip →"
 "{machine}没连上，不能在这里标" = "{machine} isn't connected; can't mark it from here"
+"接着验收 →" = "Resume review →"
