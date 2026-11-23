@@ -83,7 +83,7 @@ impl Appearance {
     pub(super) fn save(&self) -> Result<(), String> {
         let dir = super::status_colors::config_dir().ok_or(t!("找不到配置目录"))?;
         let write = |name: &str, text: &str| {
-            super::status_colors::write_atomic(&dir.join(name), text.as_bytes())
+            fibo_platform::fs::write_atomic(&dir.join(name), text.as_bytes())
                 .map_err(|e| t!("无法保存 {path}：{e}", path = dir.join(name).display(), e))
         };
         std::fs::create_dir_all(&dir)

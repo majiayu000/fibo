@@ -20,6 +20,13 @@ pub fn link_program(to: &Path, at: &Path) -> io::Result<()> {
     imp::link_program(to, at)
 }
 
+/// Replaces `path` whole with `bytes` the way [`replace_file`] does: a temporary of this
+/// write's own, synced, then renamed, so a crash or a reader on a timer sees the old file or
+/// the new one. The one way the window writes its own settings files.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    replace_file(path, bytes).map(drop)
+}
+
 /// Replaces `path` whole with `bytes`, for this account's eyes as far as the platform allows:
 /// a crash leaves the old file or the new one, never part of either.
 pub fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
@@ -78,4 +85,59 @@ pub fn secure_dir(dir: &Path) -> io::Result<()> {
 /// Creates `dir` and its parents, for this account's eyes as far as the platform allows.
 pub fn create_private_dir(dir: &Path) -> io::Result<()> {
     imp::create_private_dir(dir)
+}
+
+#[cfg(test)]
+mod atomic_tests {
+    use super::*;
+
+    /// Settings files the window writes: whole, no temporary left, a failure said.
+    #[test]
+    fn a_replaced_file_leaves_no_temporary_behind() {
+        let dir = std::env::temp_dir().join(format!("fibo-atomic-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("theme-dark");
+        write_atomic(&path, b"one").unwrap();
+        write_atomic(&path, b"two").unwrap();
+        write_private(&dir.join("key"), b"k1").unwrap();
+        write_private(&dir.join("key"), b"k2").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"two");
+        assert_eq!(std::fs::read(dir.join("key")).unwrap(), b"k2");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
+        std::fs::create_dir(dir.join("gone")).unwrap();
+        assert!(
+            write_atomic(&dir.join("gone"), b"x").is_err(),
+            "a failed write says so"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Two threads writing one file each finish with a whole file: they once shared a
+    /// temporary named after the process and removed each other's.
+    #[test]
+    fn writers_at_once_do_not_share_a_temporary() {
+        let dir = std::env::temp_dir().join(format!("fibo-private-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("devices.json");
+        let threads: Vec<_> = (0..8)
+            .map(|i| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..50 {
+                        write_private(&path, format!("writer {i}").as_bytes()).unwrap();
+                    }
+                })
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        assert!(
+            std::fs::read_to_string(&path)
+                .unwrap()
+                .starts_with("writer ")
+        );
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

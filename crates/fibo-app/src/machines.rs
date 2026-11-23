@@ -143,7 +143,7 @@ fn save_to(f: &std::path::Path, specs: &[Spec]) -> io::Result<()> {
     if let Some(dir) = f.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    crate::ui::status_colors::write_atomic(
+    fibo_platform::fs::write_atomic(
         f,
         &serde_json::to_vec_pretty(specs).map_err(io::Error::other)?,
     )

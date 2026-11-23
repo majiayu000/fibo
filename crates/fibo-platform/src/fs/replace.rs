@@ -78,7 +78,7 @@ fn through_links(path: &Path) -> io::Result<PathBuf> {
 }
 
 /// Unique per call: two installs at once must not write into one temporary file.
-fn temporary_beside(real: &Path) -> PathBuf {
+pub(super) fn temporary_beside(real: &Path) -> PathBuf {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let name = real
         .file_name()

@@ -2,9 +2,10 @@
 //! read when it changes, on a slow timer off the window's thread; drawing never touches
 //! this, only the finished palette `appearance` installed.
 use super::palette::Palette;
-use super::status_colors::{config_dir, write_atomic};
+use super::status_colors::config_dir;
 use fibo_core::terminal::Scheme;
 use fibo_core::theme::{ThemeFile, file_stem};
+use fibo_platform::fs::write_atomic;
 use gpui::{App, AppContext as _, Global};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};

@@ -4,10 +4,11 @@
 //! The old file stays as `colors.json.migrated`. One that cannot be read stays where it is
 //! and 设置 › 外观 names it.
 use super::appearance::Appearance;
-use super::status_colors::{config_dir, write_atomic};
+use super::status_colors::config_dir;
 use super::themes::{Themes, dir};
 use fibo_core::status::Status;
 use fibo_core::theme::{SEEN_NAMES, SeenDot, TONE_NAMES, ThemeFile, file_stem, parse_hex};
+use fibo_platform::fs::write_atomic;
 use gpui::App;
 use std::path::Path;
 

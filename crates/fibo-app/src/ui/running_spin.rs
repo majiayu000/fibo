@@ -29,7 +29,7 @@ pub fn choose(on: bool, cx: &mut App) -> Result<(), String> {
     let path = path().ok_or(t!("找不到配置目录"))?;
     path.parent()
         .map_or(Ok(()), std::fs::create_dir_all)
-        .and_then(|()| super::status_colors::write_atomic(&path, RunningSpin(on).text().as_bytes()))
+        .and_then(|()| fibo_platform::fs::write_atomic(&path, RunningSpin(on).text().as_bytes()))
         .map_err(|e| t!("无法保存 {path}：{e}", path = path.display(), e))?;
     cx.set_global(RunningSpin(on));
     Ok(())
