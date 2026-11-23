@@ -238,7 +238,9 @@ impl SettingsView {
                     )
                     .child(div().flex_shrink_0().child(label(state.to_owned())))
             }));
-        let asked = item.offer.as_ref().and_then(|o| self.confirming(o, cx));
+        let asked = (item.plugin.as_ref())
+            .and_then(|p| self.confirming_removal(&p.id, &p.name, cx))
+            .or_else(|| item.offer.as_ref().and_then(|o| self.confirming(o, cx)));
         let mut manage = div().flex().flex_wrap().items_center().gap(px(T::S8));
         if let Some(complete) = item.complete {
             manage = manage.child(
@@ -271,12 +273,13 @@ impl SettingsView {
                 .parent()
                 .is_some_and(|d| plugin::config().is_some_and(|c| d == plugin::dir(c)));
             if removable {
-                let (id, name) = (p.id.clone(), p.name.clone());
+                let id = p.id.clone();
                 manage = manage.child(
                     secondary(format!("plugin-remove-{}", p.id), t!("卸载")).on_click(cx.listener(
                         move |this, _, _, cx| {
                             if this.market.working.is_none() {
-                                this.uninstall(id.clone(), name.clone(), false, cx);
+                                this.market.removing = Some(id.clone());
+                                cx.notify();
                             }
                         },
                     )),

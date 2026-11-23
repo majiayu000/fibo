@@ -213,3 +213,5 @@
 "潮汐" = "Tide"
 "晨雾" = "Morning mist"
 "旧纸" = "Old paper"
+"确认卸载" = "Uninstall"
+"卸载会删掉它的文件，并运行它的卸载步骤，撤销它装进别的程序的设置。确认吗？" = "Uninstalling deletes its files and runs its uninstall steps, which undo the settings it added to other programs. Continue?"

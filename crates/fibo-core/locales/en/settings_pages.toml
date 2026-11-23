@@ -231,3 +231,4 @@
 [widgets]
 "已开启" = "On"
 "已关闭" = "Off"
+"删除后不能恢复" = "This can't be undone"

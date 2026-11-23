@@ -38,6 +38,8 @@ pub(in crate::workbench) struct Market {
     /// A plugin that would not go because its teardown failed: (id, name, whether removing
     /// or only turning off). You may overrule that; it may have left something behind.
     stuck: Option<(String, String, bool)>,
+    /// 卸载 pressed once: the plugin waiting for 确认卸载.
+    removing: Option<String>,
     /// 自己画一个, while open.
     face: Option<face_editor::FaceEditor>,
     /// Which of the page's two tabs is showing, and which kind 发现 is narrowed to.
