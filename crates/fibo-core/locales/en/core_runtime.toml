@@ -178,3 +178,4 @@
 "写不进钥匙串：{e}" = "Couldn't write to Keychain: {e}"
 "读不了 {path}，未改动：{e}" = "Couldn't read {path} (left unchanged): {e}"
 "{path} 格式不对，未改动：{e}" = "{path} has invalid format (left unchanged): {e}"
+"这台电脑上还不能保存密钥：目前只支持 macOS 钥匙串" = "Secrets can't be kept on this computer yet: only the macOS Keychain is supported"

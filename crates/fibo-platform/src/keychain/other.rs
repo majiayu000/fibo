@@ -1,3 +1,4 @@
+pub const AVAILABLE: bool = false;
 use std::io;
 
 pub(super) fn password(_service: &str, _interactive: bool) -> io::Result<Option<Vec<u8>>> {
