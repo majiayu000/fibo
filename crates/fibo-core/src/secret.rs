@@ -12,6 +12,12 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 const TOOL: &str = "/usr/bin/security";
+/// Only macOS has the keychain this goes through. Elsewhere a secret setting says so instead
+/// of failing to run a program that is not there, and reads as unset (#509).
+pub const SUPPORTED: bool = cfg!(target_os = "macos");
+fn unsupported() -> String {
+    t!("这台电脑上还不能保存密钥：目前只支持 macOS 钥匙串").to_owned()
+}
 
 fn service(plugin: &str) -> String {
     format!("mooring.plugin.{plugin}")
@@ -41,6 +47,9 @@ fn from_hex(text: &str) -> Option<String> {
 /// entry is removed first: updating one in place (`-U`) with an access list makes macOS put
 /// up a password dialog, which a host running in the background must never do.
 fn store(chain: Option<&PathBuf>, plugin: &str, key: &str, value: &str) -> Result<(), String> {
+    if !SUPPORTED {
+        return Err(unsupported());
+    }
     remove(chain, plugin, key);
     // Plugin ids and keys are checked to be plain words, and the value is hex: no quoting.
     let mut line = format!(
@@ -80,6 +89,9 @@ fn store(chain: Option<&PathBuf>, plugin: &str, key: &str, value: &str) -> Resul
 }
 
 fn fetch(chain: Option<&PathBuf>, plugin: &str, key: &str) -> Option<String> {
+    if !SUPPORTED {
+        return None;
+    }
     let mut cmd = Command::new(TOOL);
     cmd.args([
         "find-generic-password",
@@ -104,6 +116,9 @@ fn fetch(chain: Option<&PathBuf>, plugin: &str, key: &str) -> Option<String> {
 }
 
 fn remove(chain: Option<&PathBuf>, plugin: &str, key: &str) {
+    if !SUPPORTED {
+        return;
+    }
     let mut cmd = Command::new(TOOL);
     cmd.args(["delete-generic-password", "-s", &service(plugin), "-a", key]);
     if let Some(chain) = chain {
@@ -157,6 +172,14 @@ pub fn delete(plugin: &str, key: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Linux and Windows have no /usr/bin/security: saying so, not "could not run security".
+    #[test]
+    #[cfg(not(target_os = "macos"))]
+    fn elsewhere_a_secret_says_it_cannot_be_kept() {
+        assert_eq!(store(None, "p", "token", "v"), Err(unsupported()));
+        assert_eq!(fetch(None, "p", "token"), None);
+    }
 
     /// Against a real keychain created for the test and thrown away after. Ignored by
     /// default: `security create-keychain` adds to the user's search list for its duration.
