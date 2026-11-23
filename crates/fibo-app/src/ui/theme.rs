@@ -398,6 +398,8 @@ impl Theme {
     pub const RING_GLOW: f32 = 28.;
     pub const CONTROL_RADIUS: f32 = 6.;
     pub const CHIP_RADIUS: f32 = 4.;
+    /// 出错了's mark: a square with its corners just eased, so it never reads as a dot.
+    pub const ERROR_MARK_RADIUS: f32 = 1.5;
     pub const CARD_RADIUS: f32 = 10.;
     pub const POPOVER_RADIUS: f32 = 12.;
     pub const DOT: f32 = 7.;

@@ -110,7 +110,7 @@ pub fn status_mark_seen(group: Status, unseen: bool) -> gpui::AnyElement {
         Status::Error => div()
             .size(px(T::DOT))
             .flex_shrink_0()
-            .rounded(px(1.5))
+            .rounded(px(T::ERROR_MARK_RADIUS))
             .bg(hue)
             .into_any_element(),
         Status::Running => div()
