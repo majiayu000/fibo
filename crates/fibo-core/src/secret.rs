@@ -14,7 +14,7 @@ use std::process::{Command, Stdio};
 const TOOL: &str = "/usr/bin/security";
 /// Only macOS has the keychain this goes through. Elsewhere a secret setting says so instead
 /// of failing to run a program that is not there, and reads as unset (#509).
-pub const SUPPORTED: bool = cfg!(target_os = "macos");
+pub const SUPPORTED: bool = fibo_platform::keychain::AVAILABLE;
 fn unsupported() -> String {
     t!("这台电脑上还不能保存密钥：目前只支持 macOS 钥匙串").to_owned()
 }

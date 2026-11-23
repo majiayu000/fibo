@@ -1,3 +1,4 @@
+pub const AVAILABLE: bool = true;
 use security_framework::item::{ItemClass, ItemSearchOptions, SearchResult};
 use security_framework::os::macos::keychain::SecKeychain;
 use std::io;
