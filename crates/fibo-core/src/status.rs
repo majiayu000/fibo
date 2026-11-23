@@ -6,7 +6,7 @@
 //! a turn running in a Fibo terminal and one running in a log are both 在跑.
 //! Whether you have looked yet is attention, not a state: an unseen finished turn is
 //! still 等你验收.
-use crate::content::{Content, Turn};
+use crate::content::{Content, LeftBehind, Turn};
 use crate::model::{AgentSession, Outcome, ProcessState, Task, Terminal, Workspace};
 use serde::{Deserialize, Serialize};
 
@@ -351,8 +351,12 @@ pub fn of_terminal(
 /// What this session's finished turn left running in its live terminal: a note on its
 /// state, not a state. Closing that terminal may end it, so 逐个验收 keeps out of it.
 pub fn left_behind(w: &Workspace, s: &AgentSession) -> Option<String> {
+    left_behind_detail(w, s).map(LeftBehind::into_text)
+}
+
+pub fn left_behind_detail(w: &Workspace, s: &AgentSession) -> Option<LeftBehind> {
     live_terminal(w, s)?;
-    w.content.get(&s.id)?.left_behind()
+    w.content.get(&s.id)?.left_behind_detail()
 }
 
 /// The session's state now. The only place that decides it.

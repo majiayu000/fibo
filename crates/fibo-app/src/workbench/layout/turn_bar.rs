@@ -316,7 +316,7 @@ impl Workbench {
         let at = self
             .attention_text(s, g)
             .map(|t| fibo_core::content::short(&fibo_core::content::plain_line(&t), 240))
-            .or_else(|| self.row_detail(s, g))
+            .or_else(|| self.row_detail(s, g).map(|detail| detail.into_text()))
             .map(|d| {
                 // The sidebar's lines already say where it stands; their lead word in
                 // either language is what comes before the first `{` of its key.

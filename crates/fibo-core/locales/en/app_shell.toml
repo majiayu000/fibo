@@ -121,6 +121,7 @@
 "读不了这个文件：{e}" = "Can't read this file: {e}"
 
 [workbench]
+"按住 Option（Alt）单击，在浏览器中打开" = "Hold Option (Alt) and click to open in your browser"
 "{title}：{why}" = "{title}: {why}"
 "重启后台失败：{e}" = "Failed to restart background service: {e}"
 "{done}，{g}" = "{done} · {g}"
