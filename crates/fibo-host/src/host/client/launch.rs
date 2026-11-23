@@ -82,11 +82,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 match pty::spawn(&argv, Path::new(&cwd), cols, rows, &id, colors.colorfgbg()) {
                     Ok(result) => result,
                     Err(error) => {
-                        let mut next = host.workspace.clone();
-                        let session = next.terminals.last_mut().unwrap();
-                        session.state = ProcessState::Failed;
-                        session.error = Some(error.to_string());
-                        host.commit(next)?;
+                        failed(&mut host, &id, &error)?;
                         return Err(error);
                     }
                 };
@@ -98,6 +94,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 Err(e) => {
                     let _ = child.kill();
                     let _ = child.wait();
+                    failed(&mut host, &id, &e)?;
                     return Err(e);
                 }
             };
@@ -109,6 +106,10 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             if let Err(e) = host.commit(next) {
                 let _ = child.kill();
                 let _ = child.wait();
+                // The store just refused a write; the row is still worth trying to end.
+                if let Err(also) = failed(&mut host, &id, &e) {
+                    eprintln!("terminal {id}: could not record its failed start: {also}");
+                }
                 return Err(e);
             }
             let started = host
@@ -151,4 +152,17 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
         }
         _ => unreachable!("request routed by client::dispatch"),
     }
+}
+
+/// A start that went wrong after its row was written: the row says so, rather than staying
+/// 启动中 until the host restarts while a resend of the same ID only hears
+/// 终端启动结果未知.
+fn failed(host: &mut Host, id: &str, error: &io::Error) -> io::Result<()> {
+    let mut next = host.workspace.clone();
+    if let Some(t) = next.terminals.iter_mut().find(|t| t.id == id) {
+        t.state = ProcessState::Failed;
+        t.pid = None;
+        t.error = Some(error.to_string());
+    }
+    host.commit(next)
 }
