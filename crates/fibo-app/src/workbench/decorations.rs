@@ -150,12 +150,15 @@ impl Workbench {
                 );
                 before.and_then(|s| s.line) != line
             });
+            // The line is drawn in the pane's title: redraw the way a pane's change does,
+            // so the sidebar and tab strip keep their draw (R1). An idle window with
+            // pane-facts installed redrew all of them every 10 s (11-24 review).
             if changed {
-                let _ = this.update(cx, |_, cx| cx.notify());
+                let _ = this.update(cx, |this, cx| this.pane_changed(cx));
             }
             // Due again: a redraw runs it once more if the pane is still on screen.
             cx.background_executor().timer(d.refresh()).await;
-            let _ = this.update(cx, |_, cx| cx.notify());
+            let _ = this.update(cx, |this, cx| this.pane_changed(cx));
         })
         .detach();
         old
