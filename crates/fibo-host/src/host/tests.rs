@@ -4,7 +4,9 @@ pub(super) fn fixture() -> (Host, std::path::PathBuf) {
     fs::create_dir_all(&root).unwrap();
     let (store, _) = Store::open(&root).unwrap();
     let index = crate::log_index::Index::open(&root, vec![]).unwrap();
+    let transcripts = Arc::new(Mutex::new(index.fork(&root).unwrap()));
     let host = Host {
+        transcripts,
         store,
         workspace: Workspace::default(),
         terminals: HashMap::new(),

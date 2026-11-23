@@ -237,9 +237,9 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 if let Some(error) = host.store.subscription_error()? {
                     return Err(io::Error::other(error));
                 }
-                host.index.cached()?
+                host.transcripts.clone()
             };
-            refresh_agents(shared, &transcripts)?;
+            refresh_agents(shared, &super::status::all_transcripts(&transcripts)?)?;
             let mut host = lock(shared)?;
             let waiting: Vec<_> = host
                 .workspace
