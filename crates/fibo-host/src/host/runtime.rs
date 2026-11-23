@@ -62,8 +62,18 @@ fn start_deadlines(shared: &Shared) -> io::Result<()> {
                 }
             }
         };
-        if let Err(e) = run() {
-            eprintln!("outcome deadline: {e}");
+        // A failed commit (a busy or full disk) must not stop outcomes expiring until the
+        // host restarts: start the loop again with the same backoff as the log subscription.
+        let mut retry = SUBSCRIPTION_RETRY_MIN;
+        loop {
+            let started = Instant::now();
+            let Err(e) = run() else { return };
+            if started.elapsed() > SUBSCRIPTION_RETRY_MAX {
+                retry = SUBSCRIPTION_RETRY_MIN;
+            }
+            eprintln!("outcome deadline failed, retrying in {retry:?}: {e}");
+            thread::sleep(retry);
+            retry = (retry * 2).min(SUBSCRIPTION_RETRY_MAX);
         }
     });
     Ok(())
