@@ -89,19 +89,28 @@ pub fn glyph(group: Status) -> gpui::Div {
 /// The v3 mark beside a session in the sidebar and on its tab: a filled dot when it
 /// waits on you, a ring for a turn to check, a quarter arc on a pale ring while it runs,
 /// a gray ring once it stopped, and ✓ when you marked it done.
-/// The sidebar's mark: a finished turn you have not looked at yet is a filled green dot;
-/// once seen it turns back into 等你验收's ring.
+/// The sidebar's mark: a finished turn you have not looked at yet is a green dot in its
+/// ring; once seen it is 等你验收's ring alone.
 pub fn status_mark_seen(group: Status, unseen: bool) -> gpui::AnyElement {
     const SIZE: f32 = 10.;
     let hue = group.colors().0;
     let icon = |path: &'static str, color: gpui::Hsla| {
         gpui::svg().path(path).size(px(SIZE)).text_color(color)
     };
+    // Shape tells the loud states apart as well as hue does, for whoever cannot tell
+    // orange, red and green apart (WCAG 1.4.1): 等你回答 a dot, 出错了 a square, a turn
+    // you have not looked at a dot in its ring.
     match group {
-        Status::Waiting | Status::Error => div()
+        Status::Waiting => div()
             .size(px(T::DOT))
             .flex_shrink_0()
             .rounded_full()
+            .bg(hue)
+            .into_any_element(),
+        Status::Error => div()
+            .size(px(T::DOT))
+            .flex_shrink_0()
+            .rounded(px(1.5))
             .bg(hue)
             .into_any_element(),
         Status::Running => div()
@@ -118,10 +127,20 @@ pub fn status_mark_seen(group: Status, unseen: bool) -> gpui::AnyElement {
             )
             .into_any_element(),
         Status::Review | Status::Background if unseen => div()
-            .size(px(T::DOT))
+            .relative()
+            .size(px(SIZE))
             .flex_shrink_0()
-            .rounded_full()
-            .bg(hue)
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .child(icon("icons/ring.svg", hue)),
+            )
+            .child(div().size(px(SIZE / 2.)).rounded_full().bg(hue))
             .into_any_element(),
         Status::Review | Status::Background => icon("icons/ring.svg", hue).into_any_element(),
         Status::Closed => glyph(group).into_any_element(),
