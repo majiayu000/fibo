@@ -147,6 +147,8 @@ pub(super) struct Editor {
     hex: Entity<Field>,
     _hex_changed: Subscription,
     pub(super) error: Option<String>,
+    /// 删除 pressed once: the file goes for good, so it waits for 确认删除.
+    deleting: bool,
 }
 impl SettingsView {
     pub(super) fn open_editor(&mut self, cx: &mut Context<Self>) {
@@ -185,6 +187,7 @@ impl SettingsView {
             hex: hex_field,
             _hex_changed: watch,
             error: None,
+            deleting: false,
         });
         cx.notify();
     }
@@ -350,16 +353,33 @@ impl SettingsView {
                     .items_center()
                     .gap(px(T::S8))
                     .child(div().flex_1().min_w_0().child(editor.name.clone()))
-                    .when(editor.over.is_some(), |d| {
-                        d.child(
-                            secondary("editor-delete", t!("删除"))
+                    .when(editor.over.is_some() && !editor.deleting, |d| {
+                        d.child(secondary("editor-delete", t!("删除")).on_click(cx.listener(
+                            |this, _, _, cx| {
+                                if let Some(editor) = this.editor.as_mut() {
+                                    editor.deleting = true;
+                                }
+                                cx.notify();
+                            },
+                        )))
+                    })
+                    .when(editor.deleting, |d| {
+                        d.child(label(t!("删除后不能恢复"))).child(
+                            secondary("editor-delete-confirm", t!("确认删除"))
+                                .text_color(Tone::Danger.dot())
                                 .on_click(cx.listener(|this, _, _, cx| this.delete_theme(cx))),
                         )
                     })
-                    .child(
-                        secondary("editor-cancel", t!("取消"))
-                            .on_click(cx.listener(|this, _, _, cx| this.close_editor(cx))),
-                    )
+                    .child(secondary("editor-cancel", t!("取消")).on_click(cx.listener(
+                        |this, _, _, cx| match this.editor.as_mut() {
+                            // 取消 first takes back a pending 删除, then closes.
+                            Some(editor) if editor.deleting => {
+                                editor.deleting = false;
+                                cx.notify();
+                            }
+                            _ => this.close_editor(cx),
+                        },
+                    )))
                     .child(
                         secondary("editor-save", t!("保存"))
                             .bg(T::color(T::accent()))

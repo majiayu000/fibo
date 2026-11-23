@@ -109,6 +109,46 @@ impl SettingsView {
         Some((note, controls))
     }
     /// Off the UI thread: the plugin's `teardown` runs first and may take seconds.
+    /// 卸载 runs the plugin's teardown, which may change other programs' settings: asked
+    /// once before it goes, like an install is.
+    pub(super) fn confirming_removal(
+        &self,
+        id: &str,
+        name: &str,
+        cx: &Context<Self>,
+    ) -> Option<(String, gpui::Div)> {
+        if self.market.removing.as_deref() != Some(id) {
+            return None;
+        }
+        let (id, name) = (id.to_owned(), name.to_owned());
+        let controls = div()
+            .flex()
+            .items_center()
+            .gap(px(T::S8))
+            .child(
+                secondary(format!("plugin-remove-cancel-{id}"), t!("取消")).on_click(cx.listener(
+                    |this, _, _, cx| {
+                        this.market.removing = None;
+                        cx.notify();
+                    },
+                )),
+            )
+            .child(
+                secondary(format!("plugin-remove-confirm-{id}"), t!("确认卸载")).on_click(
+                    cx.listener(move |this, _, _, cx| {
+                        if this.market.working.is_none() {
+                            this.market.removing = None;
+                            this.uninstall(id.clone(), name.clone(), false, cx);
+                        }
+                    }),
+                ),
+            );
+        Some((
+            t!("卸载会删掉它的文件，并运行它的卸载步骤，撤销它装进别的程序的设置。确认吗？")
+                .to_owned(),
+            controls,
+        ))
+    }
     pub(super) fn uninstall(
         &mut self,
         id: String,
