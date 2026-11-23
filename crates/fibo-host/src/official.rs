@@ -40,7 +40,9 @@ fn program_for(exe: &str) -> String {
 pub use fibo_platform::inspect::executable;
 
 pub fn query(program: &str) -> io::Result<Vec<Entry>> {
-    let child = Command::new(program)
+    let mut command = Command::new(program);
+    fibo_platform::process::no_console(&mut command);
+    let child = command
         .args(["agents", "--json"])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

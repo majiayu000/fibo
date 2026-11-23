@@ -164,7 +164,9 @@ impl Pane {
                 ..
             } => {
                 let task = cx.background_spawn(async move {
-                    let mut child = std::process::Command::new(program)
+                    let mut command = std::process::Command::new(program);
+                    fibo_platform::process::no_console(&mut command);
+                    let mut child = command
                         .args(args)
                         .stdin(std::process::Stdio::null())
                         .stdout(std::process::Stdio::null())

@@ -39,6 +39,14 @@ pub fn kill(pid: i32) {
     }
 }
 
+/// Keeps a command-line child from opening a console window of its own. The window and the
+/// host have no console, so on Windows each such child gets a new one, which Windows 11 shows
+/// as a Windows Terminal window that flashes and closes (issue #485). Elsewhere it does nothing.
+/// Not for a command started with [`detach`], whose flags it would replace.
+pub fn no_console(command: &mut std::process::Command) {
+    imp::no_console(command)
+}
+
 /// Lets `command` outlive this process and whatever session it runs in; TERM still stops it
 /// (`takes_term`).
 pub fn detach(command: &mut std::process::Command) {

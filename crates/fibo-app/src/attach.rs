@@ -100,12 +100,10 @@ impl Host {
             quoted.join(" ")
         );
         let argv = f.spec.ssh(&script);
-        Some(
-            Command::new(&argv[0])
-                .args(&argv[1..])
-                .stdin(Stdio::null())
-                .output(),
-        )
+        let mut command = Command::new(&argv[0]);
+        command.args(&argv[1..]).stdin(Stdio::null());
+        fibo_platform::process::no_console(&mut command);
+        Some(command.output())
     }
 }
 
@@ -230,6 +228,7 @@ fn remote_socket(spec: &Spec) -> io::Result<(String, String, String, (String, St
     let mut command = Command::new(&argv[0]);
     command.args(&argv[1..]).stdin(Stdio::null());
     fibo_platform::process::takes_term(&mut command);
+    fibo_platform::process::no_console(&mut command);
     let out = command.output()?;
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
     let mut lines = text.lines().map(str::trim);
@@ -281,6 +280,7 @@ fn supervise(forward: &Forward) {
             .stderr(Stdio::null());
         // A window that crashes leaves its forwards behind; TERM must still end them.
         fibo_platform::process::takes_term(&mut command);
+        fibo_platform::process::no_console(&mut command);
         let child = command.spawn();
         let started = Instant::now();
         match child {

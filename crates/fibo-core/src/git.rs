@@ -27,6 +27,7 @@ pub fn command(dir: &Path) -> Command {
         .stdin(Stdio::null())
         .stderr(Stdio::null());
     configure(&mut command);
+    fibo_platform::process::no_console(&mut command);
     command
 }
 
