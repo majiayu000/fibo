@@ -26,6 +26,10 @@ on:
       - .github/workflows/platform-linux.yml
       - '!crates/fibo-platform/src/**/windows.rs'
       - '!crates/fibo-platform/src/**/macos.rs'
+  # Nightly on main as well (#507): pull requests start this only when their paths match,
+  # so main's own state on this platform was otherwise never checked.
+  schedule:
+    - cron: '17 3 * * *'
   workflow_dispatch:
 
 concurrency:

@@ -17,6 +17,10 @@ on:
       - patches/**
       - packaging/windows/**
       - .github/workflows/package-windows.yml
+  # Nightly on main as well (#507): pull requests start this only when their paths match,
+  # so main's own state on this platform was otherwise never checked.
+  schedule:
+    - cron: '47 3 * * *'
   workflow_dispatch:
 
 concurrency:

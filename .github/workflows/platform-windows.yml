@@ -24,6 +24,10 @@ on:
       - '!crates/fibo-platform/src/**/unix.rs'
       - '!crates/fibo-platform/src/**/macos.rs'
       - '!crates/fibo-platform/src/**/linux.rs'
+  # Nightly on main as well (#507): pull requests start this only when their paths match,
+  # so main's own state on this platform was otherwise never checked.
+  schedule:
+    - cron: '27 3 * * *'
   workflow_dispatch:
 
 concurrency:
