@@ -1,6 +1,7 @@
 use fibo_core::model::*;
 use rusqlite::{params, Connection};
 use std::{io, path::Path};
+mod archive;
 mod requests;
 mod starts;
 
@@ -358,57 +359,24 @@ impl Store {
         for row in rows {
             w.tabs.push(row.map_err(db_error)?);
         }
-        let mut statement=self.0.prepare("SELECT id,space_id,argv,cwd,pid,process_state,exit_code,error FROM terminals ORDER BY rowid").map_err(db_error)?;
+        let mut statement = self
+            .0
+            .prepare(&format!("{} ORDER BY rowid", archive::TERMINALS))
+            .map_err(db_error)?;
         let mut rows = statement.query([]).map_err(db_error)?;
         while let Some(r) = rows.next().map_err(db_error)? {
-            let argv: String = r.get(2).map_err(db_error)?;
-            w.terminals.push(Terminal {
-                id: r.get(0).map_err(db_error)?,
-                space: r.get(1).map_err(db_error)?,
-                argv: serde_json::from_str(&argv).map_err(db_error)?,
-                cwd: r.get(3).map_err(db_error)?,
-                pid: r.get(4).map_err(db_error)?,
-                state: enum_value(r.get(5).map_err(db_error)?)?,
-                exit_code: r.get(6).map_err(db_error)?,
-                error: r.get(7).map_err(db_error)?,
-            });
+            w.terminals.push(archive::terminal(r)?);
         }
         for tab in &mut w.tabs {
             tab.layout = load_layout(&self.0, &tab.id, "")?;
         }
-        let mut statement=self.0.prepare("SELECT a.id,a.runtime,a.cli_session_id,a.terminal_id,a.is_current,a.task_id,a.outcome,a.deferred_reason,a.deferred_until,a.updated,a.cwd,a.transcript,b.evidence FROM agent_sessions a LEFT JOIN agent_bindings b ON b.session_id=a.id ORDER BY a.rowid").map_err(db_error)?;
+        let mut statement = self
+            .0
+            .prepare(&format!("{} ORDER BY a.rowid", archive::SESSIONS))
+            .map_err(db_error)?;
         let mut rows = statement.query([]).map_err(db_error)?;
         while let Some(r) = rows.next().map_err(db_error)? {
-            let kind: String = r.get(6).map_err(db_error)?;
-            let outcome = match kind.as_str() {
-                "Open" => Outcome::Open,
-                "Completed" => Outcome::Completed,
-                "Abandoned" => Outcome::Abandoned,
-                "Deferred" => Outcome::Deferred {
-                    reason: r.get(7).map_err(db_error)?,
-                    until: u64::try_from(r.get::<_, i64>(8).map_err(db_error)?)
-                        .map_err(db_error)?,
-                },
-                _ => return Err(io::Error::other("unknown stored outcome")),
-            };
-            w.agent_sessions.push(AgentSession {
-                id: r.get(0).map_err(db_error)?,
-                runtime: enum_value(r.get(1).map_err(db_error)?)?,
-                cli_session_id: r.get(2).map_err(db_error)?,
-                terminal: r.get(3).map_err(db_error)?,
-                current: r.get(4).map_err(db_error)?,
-                task: r.get(5).map_err(db_error)?,
-                outcome,
-                updated: u64::try_from(r.get::<_, i64>(9).map_err(db_error)?).map_err(db_error)?,
-                cwd: r.get(10).map_err(db_error)?,
-                transcript: r.get(11).map_err(db_error)?,
-                binding: r
-                    .get::<_, Option<String>>(12)
-                    .map_err(db_error)?
-                    .map(enum_value)
-                    .transpose()?,
-                name: String::new(),
-            });
+            w.agent_sessions.push(archive::session(r)?);
         }
         // A table of its own, so a daemon from before naming still writes agent_sessions.
         let mut statement = self

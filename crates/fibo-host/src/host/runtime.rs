@@ -224,6 +224,12 @@ pub(super) fn serve_runtime(
                 .insert(s.id.clone(), std::sync::Arc::new(card));
         }
     }
+    // Only the working set stays in memory; the store keeps the rest (fibo_core::retention).
+    fibo_core::retention::archive(
+        &mut workspace,
+        fibo_core::content::now(),
+        &Default::default(),
+    );
     let host = Arc::new(Mutex::new(Host {
         remote: None,
         store,
@@ -315,6 +321,7 @@ pub(super) fn serve_runtime(
         super::launch_probe::look_for_started(&host, &terminal);
     }
     start_deadlines(&host)?;
+    archive::start_archiving(&host);
     shell_watch::start(&host)?;
     start_subscription(Arc::clone(&host), index);
     {
