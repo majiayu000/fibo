@@ -86,3 +86,9 @@ jobs:
 
       - name: A real terminal through the host
         run: cargo test -p fibo-host --test terminal_chain
+
+      # The host's unit tests (#506): only terminal_chain ran here, and a Unix-only assumption
+      # in replace_file hid for two weeks. Tests that cannot hold on Windows are ignored there
+      # by name, with the reason, so the list only shrinks.
+      - name: The host's unit tests
+        run: cargo test -p fibo-host --lib --no-fail-fast
