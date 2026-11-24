@@ -3,4 +3,6 @@ pub(crate) mod brief;
 pub(crate) mod feed;
 pub mod store;
 #[cfg(test)]
+mod store_launch_tests;
+#[cfg(test)]
 mod store_link_tests;

@@ -274,25 +274,52 @@ impl Store {
                 Request::Launch { id, .. } => Some(id.clone()),
                 _ => None,
             };
-            let Reply::Workspace(_) = held.deliver(&socket, request, brief).into_result()? else {
-                return Err(std::io::Error::other("launch response missing"));
+            let launched = held.deliver(&socket, request, brief);
+            // Lost on the way back, it may be running all the same.
+            let maybe = matches!(launched, Settled::Unknown { sent: true, .. });
+            let placed = match launched.into_result() {
+                Ok(Reply::Workspace(_)) => (|| {
+                    if let (Some(task), Some(terminal)) = (task, terminal.clone()) {
+                        let pending = Request::Edit {
+                            request: Some(RequestId::fresh()),
+                            edit: Edit::SetPendingTask {
+                                terminal,
+                                task: Some(task),
+                            },
+                        };
+                        held.deliver(&socket, pending, brief).into_result()?;
+                    }
+                    let place = Request::Edit {
+                        request: Some(RequestId::fresh()),
+                        edit: place,
+                    };
+                    held.deliver(&socket, place, brief).into_result()
+                })(),
+                Ok(_) => Err(io::Error::other("launch response missing")),
+                Err(e) if !maybe => return Err(e),
+                Err(e) => Err(e),
             };
-            if let (Some(task), Some(terminal)) = (task, terminal) {
-                let pending = Request::Edit {
-                    request: Some(RequestId::fresh()),
-                    edit: Edit::SetPendingTask {
-                        terminal,
-                        task: Some(task),
-                    },
-                };
-                held.deliver(&socket, pending, brief).into_result()?;
+            if placed.is_err()
+                && let Some(terminal) = terminal
+            {
+                stop_unplaced(&socket, terminal);
             }
-            let place = Request::Edit {
-                request: Some(RequestId::fresh()),
-                edit: place,
-            };
-            held.deliver(&socket, place, brief).into_result()
+            placed
         }
+    }
+}
+
+/// A launched terminal whose placing failed runs with no pane to show or close it, and
+/// trying again starts another: it is stopped, unless the host shows it placed after all
+/// (an edit whose reply was lost). `Stop` is as old as `Launch`, so any host takes it.
+fn stop_unplaced(socket: &Path, terminal: String) {
+    if let Ok(Reply::Workspace(w)) = rpc(socket, &Request::Workspace)
+        && w.terminal_tab(&terminal).is_some()
+    {
+        return;
+    }
+    if let Err(e) = rpc(socket, &Request::Stop { id: terminal }) {
+        eprintln!("停下没放进画面的终端失败: {e}");
     }
 }
 
