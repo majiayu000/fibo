@@ -104,7 +104,7 @@ def main():
     bindir = pathlib.Path(sys.argv[1]).resolve()
     out = pathlib.Path(sys.argv[2] if len(sys.argv) > 2 else ROOT / 'target/perf-gate').resolve()
     fails = []
-    text = probe(bindir, out / 'frames', 'title-check,frames-pane,frames-changes,frames-main,frames-motion,frames-arrive,redraw-check,recognition-check,history-check', catch_up=False)
+    text = probe(bindir, out / 'frames', 'title-check,frames-pane,frames-changes,frames-main,frames-motion,frames-arrive,redraw-check,recognition-check,typing-check,history-check', catch_up=False)
     if 'history-check:' not in text:
         fails.append('no history-check line in the probe output')
     measured = {k: float(v) for k, v in re.findall(r'(frames-\w+): [^\n]*?([\d.]+) M instructions', text)}
@@ -250,6 +250,13 @@ def main():
         fails.append(f'{titles[0]}: every changed title must reach the strip')
     elif int(titles[1]):
         fails.append(f'{titles[0]}: terminal titles drew the sidebar again')
+    typing = re.search(r'^typing-check: (\d+) sidebar draws, (\d+) strip draws for (\d+) keys; (\d+) px changed$', text, re.M)
+    if not typing:
+        fails.append('no form typing redraw result')
+    elif not int(typing[3]) or not int(typing[4]):
+        fails.append(f'{typing[0]}: the typed text never showed')
+    elif int(typing[1]) or int(typing[2]):
+        fails.append(f'{typing[0]}: typing in a form drew the sidebar or tab strip (R1)')
 
     quiet = probe(bindir, out / 'catch-up', 'redraw-check', catch_up=True)
     # Counting catch-ups is not enough: a runner with a display draws the window by itself,

@@ -230,9 +230,10 @@ impl Workbench {
                 cx.new(|cx| Field::new(t!("说明（可选 · 原样交给 Agent）"), "", cx)),
             ],
         };
+        // Typing draws the form, not the sidebar and tab strip (R1 in docs/performance).
         let watch = fields
             .iter()
-            .map(|f| cx.observe(f, |_, _, cx| cx.notify()))
+            .map(|f| cx.observe(f, |this, _, cx| this.pane_changed(cx)))
             .collect();
         window.focus(&fields[0].focus_handle(cx), cx);
         self.tasks.form = Some(Form {
@@ -305,7 +306,7 @@ impl Workbench {
                 this.add_criterion(i + 1, None, true, window, cx);
             }
         });
-        let watch = cx.observe(&field, |_, _, cx| cx.notify());
+        let watch = cx.observe(&field, |this, _, cx| this.pane_changed(cx));
         if focus {
             window.focus(&field.focus_handle(cx), cx);
         }

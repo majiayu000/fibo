@@ -48,6 +48,8 @@ mod scroll;
 mod settings_terminal;
 #[path = "cpu_probe_evidence/turning.rs"]
 mod turning;
+#[path = "cpu_probe_evidence/typing.rs"]
+mod typing;
 use std::time::{Duration, Instant};
 
 pub(super) fn cpu_secs() -> f64 {
@@ -307,6 +309,8 @@ pub(super) fn start(
                 recognition::title_check(handle, cx)
             } else if name == "recognition-check" {
                 recognition::recognition_check(handle, cx)
+            } else if name == "typing-check" {
+                typing::typing_check(handle, cx)
             } else if name == "history-check" {
                 history::run(handle, &directory, cx).await
             } else if name == "frames-pane" {
