@@ -521,6 +521,24 @@ impl Host {
         }
         Ok(())
     }
+    /// The shell in `terminal` reported a new folder (OSC 7): `fibo list`, the tab's
+    /// tooltip and the shell a restart reopens all go where it went.
+    fn shell_moved(&mut self, terminal: &str, dir: String) -> io::Result<()> {
+        let at = self
+            .workspace
+            .terminals
+            .iter()
+            .position(|t| t.id == terminal);
+        let Some(at) = at.filter(|&i| self.workspace.terminals[i].cwd != dir) else {
+            return Ok(());
+        };
+        if !Path::new(&dir).is_dir() {
+            return Ok(());
+        }
+        let mut next = self.workspace.clone();
+        next.terminals[at].cwd = dir;
+        self.commit(next)
+    }
     fn title_changed(&mut self, terminal: &str, title: &str) -> io::Result<()> {
         let shown = fibo_core::terminal::shown_title(title);
         let mut changed = self.recognition.terminal_titles.get(terminal) != shown.as_ref();

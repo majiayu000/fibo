@@ -166,5 +166,6 @@ fn terminal(pid: u32, master: term::Master) -> LiveTerminal {
         input_at: None,
         marks: Default::default(),
         reports: Default::default(),
+        pwd: String::new(),
     }))
 }

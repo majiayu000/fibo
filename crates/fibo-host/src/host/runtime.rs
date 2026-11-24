@@ -155,6 +155,7 @@ fn take_over(root: &Path) -> io::Result<(local::Stream, Vec<Taken>)> {
                     input_at: None,
                     marks: crate::command_marks::Marks::after_handoff(),
                     reports: Default::default(),
+                    pwd: String::new(),
                 },
                 reader,
                 replies,

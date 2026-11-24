@@ -140,6 +140,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                     input_at: None,
                     marks: Default::default(),
                     reports: Default::default(),
+                    pwd: String::new(),
                 },
                 reader,
                 replies,

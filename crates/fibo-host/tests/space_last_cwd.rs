@@ -1,5 +1,6 @@
 //! A space with no folder of its own remembers where its terminals were when one was
-//! closed, across a host restart; a folder set on the space still wins.
+//! closed, across a host restart; a folder set on the space still wins. A terminal
+//! whose shell reports a `cd` (OSC 7) is recorded there too.
 #[path = "support/tied.rs"]
 mod tied;
 use fibo_core::{layout::Layout, model::*, protocol::*};
@@ -139,6 +140,53 @@ fn closing_a_terminal_remembers_where_an_unpinned_space_was() {
     assert!(same(h.workspace().space_start_dir("free"), &sub));
     h.edit(Edit::RemoveSpace { id: "free".into() });
     assert!(!h.workspace().space_last_cwd.contains_key("free"));
+    drop(h);
+    let _ = fs::remove_dir_all(&root);
+    let _ = fs::remove_dir_all(&work);
+}
+
+#[test]
+fn a_shell_reporting_a_cd_moves_its_terminal_for_good() {
+    let root = std::env::temp_dir().join(format!("kl-sm-{}", uuid::Uuid::new_v4().simple()));
+    let work = std::env::temp_dir().join(format!("kl-smw-{}", uuid::Uuid::new_v4().simple()));
+    let sub = work.join("sub");
+    fs::create_dir_all(&sub).unwrap();
+    let h = Host::start(&root);
+    h.edit(space("s", ""));
+    // What a shell's prompt sends after `cd`; the process itself never moves.
+    let script = format!(
+        "printf '\\033]7;file://localhost%s\\007' '{}'; exec sleep 30",
+        sub.display()
+    );
+    let launch = Request::Launch {
+        id: "m".into(),
+        space: "s".into(),
+        argv: vec!["/bin/sh".into(), "-c".into(), script],
+        cwd: work.display().to_string(),
+        cols: 80,
+        rows: 24,
+        scheme: Default::default(),
+        colors: None,
+        start: None,
+    };
+    rpc(&h.socket, &launch).unwrap();
+    let cwd = |w: &Workspace| (w.terminals.iter().find(|t| t.id == "m")).map(|t| t.cwd.clone());
+    let until = Instant::now() + Duration::from_secs(10);
+    while !cwd(&h.workspace()).is_some_and(|d| same(&d, &sub)) {
+        assert!(
+            Instant::now() < until,
+            "the host kept {:?}",
+            cwd(&h.workspace())
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let w = h.workspace();
+    let t = w.terminals.iter().find(|t| t.id == "m").unwrap();
+    assert!(same(&w.terminal_cwd(t), &sub));
+    drop(h);
+    // Saved: a restarted host reopens it there.
+    let h = Host::start(&root);
+    assert!(cwd(&h.workspace()).is_some_and(|d| same(&d, &sub)));
     drop(h);
     let _ = fs::remove_dir_all(&root);
     let _ = fs::remove_dir_all(&work);
