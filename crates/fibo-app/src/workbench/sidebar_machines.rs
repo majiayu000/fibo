@@ -49,7 +49,7 @@ fn next_index(len: usize, at: Option<usize>) -> usize {
 /// A machine's square letter: gray so it never reads as a state or a space's color.
 /// Whether a machine's terminal is a row: an Agent with no conversation tied to it is
 /// listed too, as at home.
-fn listed_card(c: &Card) -> bool {
+pub(super) fn listed_card(c: &Card) -> bool {
     (c.phase != Phase::Shell || c.note.is_some()) && c.outcome.as_deref() != Some("abandoned")
 }
 

@@ -38,13 +38,7 @@ impl Workbench {
                 .machine
                 .as_ref()
                 .map_or_else(|| view.spec.host.clone(), |m| m.name.clone());
-            let sessions: Vec<&Card> = view
-                .terminals
-                .iter()
-                // An Agent with no conversation tied to it is listed too, as at home.
-                .filter(|c| c.phase != Phase::Shell || c.note.is_some())
-                .collect();
-            let shells = view.terminals.len() - sessions.len();
+            let (sessions, shells) = below_rows(&view.terminals);
             let (note, bad) = match &view.link {
                 Link::Online => (t!("{len} 个会话", len = sessions.len()), false),
                 Link::Connecting => (t!("连接中…").to_owned(), false),
@@ -443,5 +437,49 @@ impl Workbench {
         let read_only =
             (peek.remote.as_ref()).is_some_and(|r| self.machine_view(r.machine).is_none());
         Some((peek.pane.clone(), read_only))
+    }
+}
+
+/// A machine's rows in the Below layout and its plain terminals: the same rows the other
+/// layouts list (no abandoned conversations), and only true shells counted as terminals.
+fn below_rows(terminals: &[Card]) -> (Vec<&Card>, usize) {
+    let sessions = terminals
+        .iter()
+        .filter(|c| super::sidebar_machines::listed_card(c))
+        .collect();
+    let shells = terminals
+        .iter()
+        .filter(|c| c.phase == Phase::Shell && c.note.is_none())
+        .count();
+    (sessions, shells)
+}
+
+#[cfg(test)]
+mod below_tests {
+    use super::*;
+
+    fn card(id: &str, phase: &str, outcome: Option<&str>, note: Option<&str>) -> Card {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "space": "s", "tab": "t", "cwd": "/", "phase": phase,
+            "agent": null, "session": null, "title": null, "approval": null,
+            "waiting": null, "outcome": outcome, "note": note,
+        }))
+        .unwrap()
+    }
+
+    /// An abandoned conversation is not listed under its machine, nor counted in its
+    /// 「N 个会话」, as in every other layout; it is not a plain terminal either.
+    #[test]
+    fn below_lists_what_the_other_layouts_list() {
+        let cards = [
+            card("open", "idle", None, None),
+            card("given-up", "idle", Some("abandoned"), None),
+            card("shell", "shell", None, None),
+            card("unbound", "shell", None, Some("claude")),
+        ];
+        let (rows, shells) = below_rows(&cards);
+        let ids: Vec<&str> = rows.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(ids, ["open", "unbound"]);
+        assert_eq!(shells, 1);
     }
 }
