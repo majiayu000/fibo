@@ -436,3 +436,45 @@ fn row_text_keeps_wide_characters_clusters_and_blanks_as_the_cells_have_them() {
     ];
     assert_eq!(vt.find_prompts(&keys, &prompt).unwrap(), [Some(1), None]);
 }
+#[test]
+fn windows_paths_in_osc7_come_back_as_windows_spells_them() {
+    use super::local_path;
+    assert_eq!(
+        local_path("file://WIN-PC/C:/Users/Administrator/fibo-walk", "win-pc").as_deref(),
+        Some(r"C:\Users\Administrator\fibo-walk")
+    );
+    assert_eq!(
+        local_path("file:///D:/%E4%B8%AD%E6%96%87%20dir", "x").as_deref(),
+        Some(r"D:\中文 dir")
+    );
+    assert_eq!(local_path("file:///c:", "x").as_deref(), Some(r"c:\"));
+    assert_eq!(local_path("file:///C:/", "x").as_deref(), Some(r"C:\"));
+    // Not a drive: a Unix directory whose name merely starts with a letter and a colon.
+    assert_eq!(local_path("file:///C:x/y", "x").as_deref(), Some("/C:x/y"));
+    assert_eq!(local_path("file:///ab:/y", "x").as_deref(), Some("/ab:/y"));
+    assert_eq!(local_path("file://OTHER/C:/x", "win-pc"), None);
+}
+#[test]
+fn a_windows_console_s_own_title_is_no_title() {
+    for console in [
+        r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+        r"管理员: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+        r"Administrator: C:\Program Files\PowerShell\7\pwsh.exe",
+        r"管理员：C:\Program Files\PowerShell\7\pwsh.EXE",
+    ] {
+        assert_eq!(shown_title(console), None, "{console}");
+        let mut vt = Vt::new(80, 24).unwrap();
+        vt.feed(format!("\x1b]0;{console}\x07").as_bytes());
+        assert_eq!(vt.title(), None, "{console}");
+    }
+    // What a program or the user sets still names the tab.
+    for kept in [
+        "~/code — zsh",
+        r"C:\Users\me\fibo-walk",
+        r"Administrator: C:\Users\me",
+        "build: cargo.exe",
+        r"see C:\tools\x.exe",
+    ] {
+        assert_eq!(shown_title(kept).as_deref(), Some(kept), "{kept}");
+    }
+}

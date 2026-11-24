@@ -324,7 +324,7 @@ impl Vt {
             .title()
             .ok()
             .map(str::trim)
-            .filter(|t| !t.is_empty())
+            .filter(|t| !t.is_empty() && !console_default_title(t))
             .map(str::to_owned)
     }
     /// The directory the shell last reported with OSC 7, when it is on `host` (this
@@ -517,6 +517,9 @@ pub fn command_missing(tail: &str) -> bool {
 /// or activity glyph that changes many times a second ("✳ fix login" -> "fix login").
 pub fn shown_title(raw: &str) -> Option<String> {
     let title = raw.trim();
+    if console_default_title(title) {
+        return None;
+    }
     let mut chars = title.chars();
     let first = chars.next()?;
     let rest = chars.as_str();
@@ -549,7 +552,43 @@ pub fn local_path(url: &str, this: &str) -> Option<String> {
             bytes.push(b);
         }
     }
-    String::from_utf8(bytes).ok()
+    let path = String::from_utf8(bytes).ok()?;
+    Some(windows_path(&path).unwrap_or(path))
+}
+
+/// `/C:/Users/me` as Windows spells it, `C:\Users\me`: a drive letter's path in a URL
+/// starts with a slash, which no directory on Windows does. Nowhere else has drive letters,
+/// so this holds on every system and stays testable on all of them.
+fn windows_path(path: &str) -> Option<String> {
+    let rest = path.strip_prefix('/')?;
+    let mut chars = rest.chars();
+    let drive = chars.next().filter(char::is_ascii_alphabetic)?;
+    let after = chars.as_str().strip_prefix(':')?;
+    if !(after.is_empty() || after.starts_with('/')) {
+        return None;
+    }
+    let tail = if after.is_empty() { "/" } else { after };
+    Some(format!("{drive}:{}", tail.replace('/', "\\")))
+}
+
+/// The title a Windows console gives itself before any program sets one: the path of what
+/// it started, after `Administrator: ` (in the system's language) when elevated. It names
+/// no directory or work, only the program the tab already names, so it is no title at all.
+fn console_default_title(title: &str) -> bool {
+    let program = |path: &str| {
+        let bytes = path.as_bytes();
+        bytes.len() > 3
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && bytes[2] == b'\\'
+            && path.to_ascii_lowercase().ends_with(".exe")
+    };
+    let elevated = [": ", not_ui!("\u{ff1a}")].iter().any(|colon| {
+        title
+            .split_once(colon)
+            .is_some_and(|(lead, path)| !lead.contains(['\\', '/']) && program(path.trim()))
+    });
+    program(title) || elevated
 }
 
 #[cfg(test)]
