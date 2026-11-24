@@ -115,26 +115,27 @@ pub(super) struct RecentOrder<R> {
     pub stopped: Vec<R>,
     pub quiet: Vec<R>,
 }
-pub(super) fn recent_order<R: Copy>(rows: &[(R, Bucket, u64)]) -> RecentOrder<R> {
-    let pick = |keep: &dyn Fn(Bucket) -> bool| {
-        let mut picked: Vec<(R, u64)> = rows
+pub(super) fn recent_order<R: Copy>(rows: &[(R, Bucket, Status, u64)]) -> RecentOrder<R> {
+    let pick = |keep: &dyn Fn(Bucket) -> bool, tier: &dyn Fn(Status) -> usize| {
+        let mut picked: Vec<(R, usize, u64)> = rows
             .iter()
-            .filter(|(_, b, _)| keep(*b))
-            .map(|(r, _, when)| (*r, *when))
+            .filter(|(_, b, _, _)| keep(*b))
+            .map(|(r, _, g, when)| (*r, tier(*g), *when))
             .collect();
-        picked.sort_by_key(|(_, when)| std::cmp::Reverse(*when));
-        picked.into_iter().map(|(r, _)| r).collect::<Vec<_>>()
+        picked.sort_by_key(|(_, tier, when)| (*tier, std::cmp::Reverse(*when)));
+        picked.into_iter().map(|(r, _, _)| r).collect::<Vec<_>>()
     };
+    let flat = |_: Status| 0;
     RecentOrder {
-        // What asks you or failed before the finished turns waiting for your check.
-        need: [
-            pick(&|b| b == Bucket::Attention),
-            pick(&|b| b == Bucket::Done),
-        ]
-        .concat(),
-        running: pick(&|b| b == Bucket::Running),
-        stopped: pick(&|b| matches!(b, Bucket::Stopped | Bucket::Fresh)),
-        quiet: pick(&|b| b == Bucket::Stale),
+        // What asks you or failed before the finished turns waiting for your check
+        // (`needs_order`), newest first inside each.
+        need: pick(
+            &|b| matches!(b, Bucket::Attention | Bucket::Done),
+            &fibo_core::status_group::needs_order,
+        ),
+        running: pick(&|b| b == Bucket::Running, &flat),
+        stopped: pick(&|b| matches!(b, Bucket::Stopped | Bucket::Fresh), &flat),
+        quiet: pick(&|b| b == Bucket::Stale, &flat),
     }
 }
 

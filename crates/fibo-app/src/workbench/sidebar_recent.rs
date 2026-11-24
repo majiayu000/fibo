@@ -70,10 +70,14 @@ impl Workbench {
                 .unwrap_or_else(|| self.session_updated(l.0)),
             _ => self.session_updated(l.0),
         };
-        let rows: Vec<(Item, Bucket, u64)> = sessions
+        let rows: Vec<(Item, Bucket, Status, u64)> = sessions
             .iter()
-            .map(|l| (Item::Here(*l), self.row_bucket(l), when(l)))
-            .chain(remote.iter().map(|r| (Item::There(r), r.bucket, r.when)))
+            .map(|l| (Item::Here(*l), self.row_bucket(l), l.1, when(l)))
+            .chain(
+                remote
+                    .iter()
+                    .map(|r| (Item::There(r), r.bucket, r.l.1, r.when)),
+            )
             .collect();
         let RecentOrder {
             need,

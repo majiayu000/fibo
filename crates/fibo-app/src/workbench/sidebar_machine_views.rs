@@ -418,8 +418,10 @@ impl Workbench {
         let (mut pinned, rows): (Vec<&MachineRow>, Vec<&MachineRow>) =
             rows.iter().partition(|r| r.pin.is_some());
         pinned.sort_by_key(|r| r.pin);
-        let keyed: Vec<(&MachineRow, Bucket, u64)> =
-            rows.into_iter().map(|r| (r, r.bucket, r.when)).collect();
+        let keyed: Vec<(&MachineRow, Bucket, Status, u64)> = rows
+            .into_iter()
+            .map(|r| (r, r.bucket, r.l.1, r.when))
+            .collect();
         let order = recent_order(&keyed);
         let history = order
             .stopped
