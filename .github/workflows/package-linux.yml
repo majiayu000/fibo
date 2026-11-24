@@ -64,6 +64,13 @@ jobs:
           for _ in $(seq 1 50); do test -S "$rt/workbench.sock" && break; sleep 0.1; done
           MOORING_RUNTIME="$rt" fibo list --json
           cargo test -p fibo-host --test terminal_chain
+      # The window itself (#508): until now CI only checked that the binary exists. Xvfb has
+      # no GPU, so Mesa's software drivers (lavapipe for Vulkan, llvmpipe for GL) give wgpu
+      # an adapter. The screenshot and the app's log go up with the package.
+      - name: Open the installed window under Xvfb
+        run: |
+          sudo apt-get install -y -qq xvfb x11-utils imagemagick mesa-vulkan-drivers libgl1-mesa-dri libegl1
+          xvfb-run -a -s '-screen 0 1440x900x24' packaging/linux/window-shot.sh target/linux-package/window
       - uses: actions/upload-artifact@v4
         if: always()
         with:
