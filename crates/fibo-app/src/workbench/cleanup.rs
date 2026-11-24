@@ -23,6 +23,27 @@ impl Step {
     }
 }
 
+/// 逐个清理's buttons; each key does what its button does.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum QueueAction {
+    Complete,
+    Continue,
+    Defer,
+    Abandon,
+}
+impl QueueAction {
+    /// ⏎ 完成, C 继续, L 稍后再看, ⌫ 放弃.
+    fn of_key(key: &str) -> Option<Self> {
+        Some(match key {
+            "enter" => Self::Complete,
+            "c" => Self::Continue,
+            "l" => Self::Defer,
+            "backspace" => Self::Abandon,
+            _ => return None,
+        })
+    }
+}
+
 impl Workbench {
     /// 逐个清理's keys, the same actions as its buttons: ⏎ 完成, C 继续, L 稍后再看,
     /// ⌫ 放弃. Only while a session is shown; anything else falls through.
@@ -41,12 +62,26 @@ impl Workbench {
         else {
             return false;
         };
-        if self.review_blocked(&s).is_some() && matches!(key, "enter" | "backspace" | "l") {
+        let Some(action) = QueueAction::of_key(key) else {
+            return false;
+        };
+        if self.review_blocked(&s).is_some() && action != QueueAction::Continue {
             return true;
         }
-        match key {
-            "enter" => self.complete_queued(s.id.clone(), cx),
-            "backspace" => self.edit(
+        self.queue_action(action, &s, window, cx);
+        true
+    }
+    /// What a button or its key does to the session in hand.
+    fn queue_action(
+        &mut self,
+        action: QueueAction,
+        s: &AgentSession,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match action {
+            QueueAction::Complete => self.complete_queued(s.id.clone(), cx),
+            QueueAction::Abandon => self.edit(
                 Edit::SetOutcome {
                     seen: None,
                     id: s.id.clone(),
@@ -54,18 +89,17 @@ impl Workbench {
                 },
                 cx,
             ),
-            "c" => {
+            QueueAction::Continue => {
+                self.park_review();
                 self.overview.cleanup.clear();
-                self.open_session(&s, window, cx);
+                self.open_session(s, window, cx);
             }
-            "l" => {
+            QueueAction::Defer => {
                 self.overview.here = Some(s.id.clone());
                 self.show_form(FormKind::Defer, window, cx);
             }
-            _ => return false,
         }
         cx.notify();
-        true
     }
     fn cleanup_step(&self, index: usize, id: &str) -> Step {
         if index == self.overview.cleanup_index {
@@ -313,43 +347,38 @@ impl Workbench {
                     ),
                 }));
             }
-            let sid = s.id.clone();
             let mut actions = div().flex().flex_wrap().gap(px(T::S8));
+            let act =
+                |id: &'static str, text: &'static str, action: QueueAction| {
+                    let s = s.clone();
+                    button(id, text).on_click(cx.listener(move |this, _, window, cx| {
+                        this.queue_action(action, &s, window, cx)
+                    }))
+                };
             if blocked.is_none() {
-                actions = actions.child(solid(button(not_ui!("完成"), t!("完成 ⏎"))).on_click(
-                    cx.listener(move |this, _, _, cx| this.complete_queued(sid.clone(), cx)),
-                ));
+                actions = actions.child(solid(act(
+                    not_ui!("完成"),
+                    t!("完成 ⏎"),
+                    QueueAction::Complete,
+                )));
             }
-            let resume = s.clone();
-            actions = actions.child(quiet(button("cleanup-continue", t!("继续 C"))).on_click(
-                cx.listener(move |this, _, window, cx| {
-                    this.park_review();
-                    this.overview.cleanup.clear();
-                    this.open_session(&resume, window, cx);
-                }),
-            ));
+            actions = actions.child(quiet(act(
+                "cleanup-continue",
+                t!("继续 C"),
+                QueueAction::Continue,
+            )));
             if blocked.is_none() {
-                let sid = s.id.clone();
-                actions =
-                    actions.child(quiet(button("cleanup-defer", t!("稍后再看… L"))).on_click(
-                        cx.listener(move |this, _, window, cx| {
-                            this.overview.here = Some(sid.clone());
-                            this.show_form(FormKind::Defer, window, cx);
-                        }),
-                    ));
-                let sid = s.id.clone();
-                actions = actions.child(quiet(button("cleanup-abandon", t!("放弃 ⌫"))).on_click(
-                    cx.listener(move |this, _, _, cx| {
-                        this.edit(
-                            Edit::SetOutcome {
-                                seen: None,
-                                id: sid.clone(),
-                                outcome: Outcome::Abandoned,
-                            },
-                            cx,
-                        )
-                    }),
-                ));
+                actions = actions
+                    .child(quiet(act(
+                        "cleanup-defer",
+                        t!("稍后再看… L"),
+                        QueueAction::Defer,
+                    )))
+                    .child(quiet(act(
+                        "cleanup-abandon",
+                        t!("放弃 ⌫"),
+                        QueueAction::Abandon,
+                    )));
             }
             page = page.child(actions);
         } else {
@@ -394,5 +423,20 @@ impl Workbench {
             .flex_col()
             .items_center()
             .child(page)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::QueueAction;
+
+    #[test]
+    fn each_key_does_what_its_button_does() {
+        // C goes through the same 继续 as the button, which keeps 逐个验收's place (#514).
+        assert_eq!(QueueAction::of_key("c"), Some(QueueAction::Continue));
+        assert_eq!(QueueAction::of_key("enter"), Some(QueueAction::Complete));
+        assert_eq!(QueueAction::of_key("l"), Some(QueueAction::Defer));
+        assert_eq!(QueueAction::of_key("backspace"), Some(QueueAction::Abandon));
+        assert_eq!(QueueAction::of_key("x"), None);
     }
 }

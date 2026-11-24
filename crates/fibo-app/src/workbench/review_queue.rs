@@ -41,8 +41,8 @@ impl Workbench {
     /// coming back does not start over (#514).
     pub(super) fn park_review(&mut self) {
         if self.overview.cleanup_review {
-            let at = self.overview.cleanup_index.min(self.overview.cleanup.len());
-            self.overview.review_rest = self.overview.cleanup[at..].to_vec();
+            self.overview.review_rest =
+                left_from(&self.overview.cleanup, self.overview.cleanup_index);
         }
     }
     /// A form opened from the queue took the keyboard and left 鸟瞰: however it closed
@@ -179,6 +179,11 @@ mod tests {
     }
 }
 
+/// The session in hand and what comes after it: what 接着验收 comes back to.
+fn left_from(queue: &[String], at: usize) -> Vec<String> {
+    queue[at.min(queue.len())..].to_vec()
+}
+
 /// The queue 接着验收 starts: what was left, as far as it is still to check, then the rest.
 fn resumed(rest: Vec<String>, queue: Vec<String>) -> Vec<String> {
     let mut ordered: Vec<String> = rest.into_iter().filter(|id| queue.contains(id)).collect();
@@ -192,7 +197,7 @@ fn resumed(rest: Vec<String>, queue: Vec<String>) -> Vec<String> {
 
 #[cfg(test)]
 mod resume_tests {
-    use super::resumed;
+    use super::{left_from, resumed};
     fn ids(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
     }
@@ -202,5 +207,13 @@ mod resume_tests {
         let order = resumed(ids(&["c", "d"]), ids(&["a", "b", "d", "e"]));
         assert_eq!(order, ids(&["d", "a", "b", "e"]));
         assert_eq!(resumed(vec![], ids(&["a"])), ids(&["a"]));
+    }
+    #[test]
+    fn continue_keeps_the_one_in_hand_and_after() {
+        let queue = ids(&["a", "b", "c", "d"]);
+        assert_eq!(left_from(&queue, 2), ids(&["c", "d"]));
+        // Past the end (all looked at): nothing to come back to.
+        assert_eq!(left_from(&queue, 4), Vec::<String>::new());
+        assert_eq!(left_from(&queue, 9), Vec::<String>::new());
     }
 }
