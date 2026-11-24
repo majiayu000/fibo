@@ -48,6 +48,7 @@ fn defaults_follow_the_terminal_apps() {
         ("cmd-p", Action::Search),
         ("cmd-,", Action::Settings),
         ("cmd-j", Action::NextWaiting),
+        ("cmd-shift-j", Action::Back),
         ("cmd-b", Action::ToggleSidebar),
         ("cmd-f", Action::Find),
         ("cmd-k", Action::Clear),

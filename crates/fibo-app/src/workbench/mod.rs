@@ -480,6 +480,7 @@ impl Workbench {
                 focused: None,
                 pending_focus: true,
                 zoomed: None,
+                trail: Default::default(),
             },
             overview: OverviewState {
                 filter_space: None,

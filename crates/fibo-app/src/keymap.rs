@@ -27,6 +27,8 @@ pub enum Action {
     Settings,
     /// The next session that waits on you, as the top bar's chip.
     NextWaiting,
+    /// 回到刚才: where ⌘J or a notification jumped from, and again back (#515).
+    Back,
     /// Fold the left column to a rail and back.
     ToggleSidebar,
     /// 鸟瞰: into the board and back, as the title row's button.
@@ -62,7 +64,7 @@ impl Section {
     }
 }
 impl Action {
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 38] = [
         Self::NewTab,
         Self::Close,
         Self::SplitRight,
@@ -97,6 +99,7 @@ impl Action {
         Self::Search,
         Self::Settings,
         Self::NextWaiting,
+        Self::Back,
         Self::ToggleSidebar,
         Self::Overview,
         Self::NewTodo,
@@ -120,6 +123,7 @@ impl Action {
             Self::Search => "search".into(),
             Self::Settings => "settings".into(),
             Self::NextWaiting => "next_waiting".into(),
+            Self::Back => "back".into(),
             Self::ToggleSidebar => "toggle_sidebar".into(),
             Self::Overview => "overview".into(),
             Self::NewTodo => "new_todo".into(),
@@ -154,6 +158,7 @@ impl Action {
             Self::Search => t!("搜索").into(),
             Self::Settings => t!("设置").into(),
             Self::NextWaiting => t!("下一个等你的").into(),
+            Self::Back => t!("回到刚才").into(),
             Self::ToggleSidebar => t!("收起 / 展开左栏").into(),
             Self::Overview => t!("鸟瞰全部").into(),
             Self::NewTodo => t!("新建待办").into(),
@@ -179,6 +184,7 @@ impl Action {
             Self::Search
             | Self::Settings
             | Self::NextWaiting
+            | Self::Back
             | Self::ToggleSidebar
             | Self::Overview
             | Self::NewTodo => Section::Workbench,
@@ -219,6 +225,7 @@ impl Action {
             Self::Search => &["cmd-p"],
             Self::Settings => &["cmd-,"],
             Self::NextWaiting => &["cmd-j"],
+            Self::Back => &["cmd-shift-j"],
             Self::ToggleSidebar => &["cmd-b"],
             Self::Overview => &["cmd-shift-o"],
             Self::NewTodo => &["cmd-shift-n"],

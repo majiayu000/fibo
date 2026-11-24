@@ -275,6 +275,7 @@ impl Workbench {
         menu
     }
     pub fn navigate_to(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.note_jump(id, cx);
         self.overview.cleanup.clear();
         self.tasks.form = None;
         self.search.hide();

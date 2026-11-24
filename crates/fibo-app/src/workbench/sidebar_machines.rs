@@ -323,25 +323,14 @@ impl Workbench {
             return;
         }
         all.sort_by_key(|(tier, _, _)| *tier);
-        let current = match self.peek.as_ref().filter(|p| p.remote.is_some()) {
-            Some(peek) => Some(peek.terminal.clone()),
-            None if self.hosted_view().is_some() => self.hosted_focus(cx),
-            None => self
-                .nav
-                .focused
-                .as_ref()
-                .and_then(|id| self.current_agent(id))
-                .map(|s| s.id.clone())
-                .or_else(|| {
-                    (self.nav.focused.clone()).filter(|t| self.store.recognition().asks_first(t))
-                })
-                .or_else(|| self.overview.here.clone()),
-        };
+        let current = self.here_key(cx);
         let at = all
             .iter()
             .position(|(_, key, _)| Some(key) == current.as_ref());
         let index = next_index(all.len(), at);
-        match all.swap_remove(index).2 {
+        let (_, key, next) = all.swap_remove(index);
+        self.note_jump(&key, cx);
+        match next {
             Next::Here(session) => {
                 if self.peek.as_ref().is_some_and(|p| p.remote.is_some()) {
                     self.close_peek(cx);

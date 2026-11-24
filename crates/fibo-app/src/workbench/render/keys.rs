@@ -92,6 +92,10 @@ impl Workbench {
                 self.next_waiting(window, cx);
                 return true;
             }
+            Action::Back => {
+                self.go_back(window, cx);
+                return true;
+            }
             Action::ToggleSidebar => {
                 self.toggle_sidebar(cx);
                 return true;
