@@ -48,10 +48,12 @@ impl SettingsView {
                     .gap(px(T::S6))
                     .border_b(px(T::BORDER_WIDTH))
                     .border_color(T::color(T::border()))
-                    // Window buttons, not states.
-                    .child(dot(Tone::Danger.hue()))
-                    .child(dot(Tone::Warn.hue()))
-                    .child(dot(Tone::Ok.hue()))
+                    // The window's own buttons, not states; drawn only where they are dots.
+                    .when(fibo_platform::desktop::WINDOW_BUTTONS_ARE_DOTS, |bar| {
+                        bar.child(dot(Tone::Danger.hue()))
+                            .child(dot(Tone::Warn.hue()))
+                            .child(dot(Tone::Ok.hue()))
+                    })
                     .child(div().flex_1())
                     .child(label(format!(
                         "{} · {} pt · {}×",

@@ -1,5 +1,7 @@
 pub const HAS_COMMAND_KEY: bool = true;
 pub const DRAWS_WINDOW_BUTTONS: bool = false;
+pub const WINDOW_BUTTONS_ARE_DOTS: bool = true;
+pub const NOTIFIER: super::Notifier = super::Notifier::App;
 pub const FILE_MANAGER: &str = "访达";
 pub const FILE_MANAGER_EN: &str = "Finder";
 

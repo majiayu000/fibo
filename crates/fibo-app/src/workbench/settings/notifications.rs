@@ -1,6 +1,20 @@
 //! 设置 › 通知: desktop notifications, the sound, and when either speaks up.
 use super::*;
 
+/// Where to allow notifications again, under the name of whoever posts them.
+fn permission_note() -> Option<&'static str> {
+    use fibo_platform::desktop::{NOTIFIER, Notifier};
+    match NOTIFIER {
+        Notifier::App => Some(t!(
+            "首次开启时 macOS 会询问权限；若已拒绝，到 系统设置 → 通知 → Fibo 重新允许。"
+        )),
+        Notifier::PowerShell => Some(t!(
+            "通知以 Windows PowerShell 的名义弹出；若没看到，到 设置 → 系统 → 通知 → Windows PowerShell 打开。"
+        )),
+        Notifier::Tool => None,
+    }
+}
+
 impl SettingsView {
     pub(super) fn notifications_page(&self, cx: &Context<Self>) -> gpui::Div {
         let notify = self.shows(Page::Notifications, t!("桌面通知"), cx);
@@ -106,9 +120,7 @@ impl SettingsView {
                 .child(label(t!(
                     "只提醒由 Fibo 打开的会话；你正看着的那个终端不会打扰你。"
                 )))
-                .child(label(t!(
-                    "首次开启时 macOS 会询问权限；若已拒绝，到 系统设置 → 通知 → Fibo 重新允许。"
-                ))),
+                .children(permission_note().map(label)),
         )
     }
 }

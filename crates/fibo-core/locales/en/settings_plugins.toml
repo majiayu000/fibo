@@ -2,6 +2,7 @@
 [plugins]
 "搜索插件" = "Search plugins"
 "、" = ", "
+"{said}（这台电脑上还不能保存密钥）" = "{said} (secrets can't be saved on this computer yet)"
 "{said}（存在钥匙串里，不写进文件）" = "{said} (kept in the Keychain, never written to a file)"
 "　└ {title}" = "  └ {title}"
 "（空）" = "(empty)"

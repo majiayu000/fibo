@@ -11,6 +11,22 @@ pub const HAS_COMMAND_KEY: bool = imp::HAS_COMMAND_KEY;
 /// Whether a window with its title bar hidden must draw minimize, maximize and close itself.
 pub const DRAWS_WINDOW_BUTTONS: bool = imp::DRAWS_WINDOW_BUTTONS;
 
+/// Whether the window's own buttons are three colored dots at the left of its title bar, so a
+/// picture of a window draws them.
+pub const WINDOW_BUTTONS_ARE_DOTS: bool = imp::WINDOW_BUTTONS_ARE_DOTS;
+
+/// Who posts the window's notifications, so a label can say where to allow them again.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Notifier {
+    /// The app itself, which the system asks about the first time.
+    App,
+    /// Windows PowerShell's toasts (see `notify`), allowed under PowerShell's name.
+    PowerShell,
+    /// A system tool with nothing of its own to allow.
+    Tool,
+}
+pub const NOTIFIER: Notifier = imp::NOTIFIER;
+
 /// What this system calls the app that shows files in their folders, as a label names it.
 pub const FILE_MANAGER: &str = imp::FILE_MANAGER;
 /// The same in English: Finder, File Explorer.
