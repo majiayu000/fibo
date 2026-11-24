@@ -143,13 +143,20 @@ impl Workbench {
                     )
                     .when(reviewable, |d| {
                         d.child(
-                            button("review-queue", t!("逐个验收 →"))
-                                .h(px(T::SEGMENT_HEIGHT))
-                                .px(px(T::S8))
-                                .text_color(T::color(T::link()))
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.start_review(now(), cx);
-                                })),
+                            button(
+                                "review-queue",
+                                if self.overview.review_rest.is_empty() {
+                                    t!("逐个验收 →")
+                                } else {
+                                    t!("接着验收 →")
+                                },
+                            )
+                            .h(px(T::SEGMENT_HEIGHT))
+                            .px(px(T::S8))
+                            .text_color(T::color(T::link()))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.start_review(now(), cx);
+                            })),
                         )
                     })
                     .when(column == Column::Stale && count > 0, |d| {
