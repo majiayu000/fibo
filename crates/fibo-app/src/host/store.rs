@@ -43,6 +43,10 @@ pub struct Store {
     recognition: RecognitionStatus,
     /// When the status link to the host dropped, and why; `None` while it is up.
     cut_off_at: Option<(Instant, String)>,
+    /// This outage's one automatic host start was made (`start_host_once`).
+    host_started: bool,
+    /// Starting a host for this outage failed: nothing reconnects until the user asks.
+    host_start_failed: bool,
     /// This host's refreshes, shared with the menu bar; edits go through its `Held`.
     feed: Feed,
     _recognition_connection: RecognitionConnection,
@@ -65,6 +69,8 @@ impl Store {
             held_launch: None,
             recognition: RecognitionStatus::default(),
             cut_off_at: None,
+            host_started: false,
+            host_start_failed: false,
             feed,
             _recognition_connection: recognition_connection,
         }
@@ -85,6 +91,8 @@ impl Store {
     /// say recognition is Interrupted while every connection works; that is not a cut.
     pub fn set_recognition(&mut self, status: RecognitionStatus) {
         self.cut_off_at = None;
+        self.host_started = false;
+        self.host_start_failed = false;
         self.recognition = status;
     }
     /// What the status subscription reported. The last status stays while the link is
@@ -92,12 +100,30 @@ impl Store {
     pub fn take_link(&mut self, link: StatusLink) {
         match link {
             StatusLink::Status(status) => self.set_recognition(*status),
-            StatusLink::Lost(error) => {
-                if self.cut_off_at.is_none() {
-                    self.cut_off_at = Some((Instant::now(), error));
-                }
-            }
+            StatusLink::Lost(error) => self.lost_at(error, Instant::now()),
         }
+    }
+    pub(super) fn lost_at(&mut self, error: String, at: Instant) {
+        if self.cut_off_at.is_none() {
+            self.cut_off_at = Some((at, error));
+        }
+    }
+    /// Whether the window starts a host for this outage now: once it is cut off, and only
+    /// once per outage. The status link alone only retries the old socket, so a host that
+    /// died stayed gone behind 「正在重新连接…」 until 「重新连接」 was clicked.
+    pub fn start_host_once(&mut self) -> bool {
+        if !self.cut_off() || self.host_started {
+            return false;
+        }
+        self.host_started = true;
+        true
+    }
+    /// Starting a host failed; the strip stops saying it is reconnecting.
+    pub fn note_start_failed(&mut self) {
+        self.host_start_failed = self.link_down();
+    }
+    pub fn start_failed(&self) -> bool {
+        self.host_start_failed
     }
     /// The status link has been down at least `CUT_OFF_NOTICE`.
     pub fn cut_off(&self) -> bool {

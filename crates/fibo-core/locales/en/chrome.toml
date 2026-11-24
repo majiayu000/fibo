@@ -196,6 +196,7 @@
 "关闭标签 {title}" = "Close tab {title}"
 "新建终端标签" = "New terminal tab"
 "后台连接断开，正在重新连接…" = "Lost the background service connection, reconnecting…"
+"后台连接断开，没能重新连上" = "Lost the background service connection; couldn't reconnect"
 "展开左栏" = "Show sidebar"
 "收起左栏" = "Hide sidebar"
 "重新连接" = "Reconnect"
