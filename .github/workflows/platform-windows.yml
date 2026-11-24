@@ -76,7 +76,7 @@ jobs:
       - name: Cargo test
         run: cargo test -p fibo-platform -p fibo-core -p fibo-remote -p fibo-relay -p fibo-plugin-host --no-fail-fast
 
-      # The host's own tests still assume Unix; this much says it builds and works here.
+      # Lib and bins only; the host's unit tests run below.
       - name: Clippy on the host
         run: cargo clippy -p fibo-host --lib --bins -- -D warnings
 
@@ -93,16 +93,27 @@ jobs:
       - name: The host's unit tests
         run: cargo test -p fibo-host --lib --no-fail-fast
 
-      # The ignores above, by count: a test fixed lowers the baseline here, a new ignore has
-      # to say in its change why it raises it.
-      - name: Host tests ignored on Windows stay counted
+      # The tests above that do not run here, by count, in crates/fibo-host/src: ignored by
+      # `cfg_attr(windows, ignore = "...")` (or `target_os = "windows"`), and #[test]s compiled
+      # out by `cfg(unix)` / `cfg(not(windows))` on the function. Prefer the ignore: it keeps
+      # the test compiling here. A test fixed lowers its baseline; a new one has to say in its
+      # change why it raises it. Not counted: a whole module behind `cfg(unix)`.
+      - name: Host tests skipped on Windows stay counted
         if: ${{ !cancelled() }}
         shell: bash
         run: |
-          baseline=24
-          n=$(find crates/fibo-host -name '*.rs' -print0 | xargs -0 perl -0777 -ne '$n += () = /cfg_attr\(\s*windows,\s*ignore/g; END { print $n + 0 }')
-          echo "fibo-host tests ignored on Windows: $n (baseline $baseline)"
-          if [ "$n" -ne "$baseline" ]; then
-            echo "::error::fibo-host has $n tests ignored on Windows, the baseline is $baseline; change the baseline in platform-windows.yml along with them"
+          ignored_baseline=24
+          unix_only_baseline=8
+          read -r ignored unix_only < <(find crates/fibo-host/src -name '*.rs' -print0 | xargs -0 perl -0777 -ne '
+            $win = qr/(?:windows|target_os\s*=\s*"windows")/;
+            $off = qr/cfg\(\s*(?:unix|not\(\s*$win\s*\))\s*\)/;
+            $at = qr/#\[[^\]]*\]\s*/;
+            $i += () = /cfg_attr\(\s*$win\s*,\s*ignore/g;
+            $u += () = /#\[$off\]\s*(?:$at)*#\[test\]|#\[test\]\s*(?:$at)*#\[$off\]/g;
+            END { print $i + 0, " ", $u + 0, "\n" }' | awk '{ i += $1; u += $2 } END { print i + 0, u + 0 }')
+          echo "fibo-host tests ignored on Windows: $ignored (baseline $ignored_baseline)"
+          echo "fibo-host tests compiled out on Windows: $unix_only (baseline $unix_only_baseline)"
+          if [ "$ignored" -ne "$ignored_baseline" ] || [ "$unix_only" -ne "$unix_only_baseline" ]; then
+            echo "::error::fibo-host skips $ignored + $unix_only tests on Windows, the baselines are $ignored_baseline + $unix_only_baseline; change them in platform-windows.yml along with the tests"
             exit 1
           fi
