@@ -72,3 +72,17 @@ pub fn install_after_exit(
 ) -> std::io::Result<()> {
     Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The check really asks: `fetch` runs curl (here against a closed local port, so its
+    /// own error comes back) instead of saying updates are unsupported.
+    #[test]
+    fn the_release_check_goes_through_curl() {
+        let err = fetch("https://127.0.0.1:1/", false, 1024).unwrap_err();
+        assert!(err.contains("curl"), "{err}");
+        assert_ne!(err, NO);
+    }
+}

@@ -8,7 +8,7 @@
 //! release's installer runs over the install once this process has quit, after stopping
 //! the host (its terminals cannot pass on there), and starts the new window. On Linux
 //! (`core::PAGE_ONLY`) dpkg owns the install: a newer release is only offered as its page.
-use fibo_core::update::{self as core, Found, Release, Tools, Version};
+use fibo_core::update::{self as core, Offer, Release, Tools, Version};
 use gpui::{App, AppContext, Global};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -60,9 +60,7 @@ impl Updates {
             patch: 0,
             pre: None,
         });
-        let exe = (core::SUPPORTED || core::PAGE_ONLY)
-            .then(|| std::env::current_exe().ok())
-            .flatten();
+        let exe = core::CHECKS.then(|| std::env::current_exe().ok()).flatten();
         let packaged = exe.and_then(|exe| {
             if core::PAGE_ONLY {
                 // dpkg installed the version this program was built as.
@@ -174,16 +172,13 @@ pub fn check(manual: bool, cx: &mut App) {
             .await;
         cx.update(|cx| {
             let bundle = updates(cx).and_then(|u| u.bundle.clone());
-            let phase = match found {
-                Ok(Found::Latest(v)) => Phase::Latest(v),
-                Ok(Found::Newer(r)) if core::PAGE_ONLY => Phase::Page(r),
-                Ok(Found::Newer(r))
-                    if bundle
-                        .is_some_and(|b| core::homebrew_managed(&b, &core::brew_prefixes())) =>
-                {
-                    Phase::Homebrew(r)
-                }
-                Ok(Found::Newer(r)) => Phase::Available(r),
+            let homebrew =
+                || bundle.is_some_and(|b| core::homebrew_managed(&b, &core::brew_prefixes()));
+            let phase = match found.map(|f| core::offer(f, core::PAGE_ONLY, homebrew)) {
+                Ok(Offer::Latest(v)) => Phase::Latest(v),
+                Ok(Offer::Page(r)) => Phase::Page(r),
+                Ok(Offer::Homebrew(r)) => Phase::Homebrew(r),
+                Ok(Offer::Install(r)) => Phase::Available(r),
                 Err(e) if manual => Phase::CheckFailed(e),
                 Err(_) => match before {
                     Phase::Checking => Phase::Idle,
