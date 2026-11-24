@@ -214,6 +214,7 @@ pub struct Terminal {
     pub id: String,
     pub space: String,
     pub argv: Vec<String>,
+    /// Where it started, then wherever its shell last said it went (OSC 7).
     pub cwd: String,
     pub pid: Option<u32>,
     pub state: ProcessState,
@@ -493,7 +494,7 @@ impl Workspace {
     }
     /// The folder a terminal works in as every surface names it: its conversation's
     /// when one is current there (an Agent started after a `cd` reports its own),
-    /// else the one it was started in.
+    /// else the one its shell last reported (or was started in).
     pub fn terminal_cwd(&self, terminal: &Terminal) -> String {
         self.current_agent(&terminal.id)
             .map(|s| s.cwd.clone())

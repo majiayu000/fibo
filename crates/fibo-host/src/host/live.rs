@@ -55,6 +55,8 @@ pub(super) struct Live {
     pub(super) marks: crate::command_marks::Marks,
     /// What the program says about itself (OSC 7501).
     pub(super) reports: crate::program_status::Scanner,
+    /// The shell's last OSC 7 report as sent; a new one is a `cd` the host records.
+    pub(super) pwd: String,
 }
 impl Live {
     // Event-driven handoff. No heartbeat or global process scan is needed.
@@ -445,6 +447,14 @@ pub(super) fn pump(
         if let Some(title) = &changed {
             live.title = title.clone();
         }
+        // The same for OSC 7, sent with every prompt but new only after a `cd`.
+        let moved = (live.vt.terminal().pwd().ok())
+            .filter(|p| *p != live.pwd)
+            .map(str::to_owned);
+        let moved = moved.and_then(|url| {
+            live.pwd = url;
+            live.vt.pwd(&super::hostname())
+        });
         let tail = if busy_read.is_none_or(|at| at.elapsed() >= SCREEN_BUSY_EVERY) {
             busy_read = Some(Instant::now());
             Some(live.vt.tail_text(usize::from(live.rows))?)
@@ -456,6 +466,11 @@ pub(super) fn pump(
         if let Some(title) = changed {
             if let Err(e) = lock(shared).and_then(|mut host| host.title_changed(id, &title)) {
                 eprintln!("terminal {id}: title: {e}");
+            }
+        }
+        if let Some(dir) = moved {
+            if let Err(e) = lock(shared).and_then(|mut host| host.shell_moved(id, dir)) {
+                eprintln!("terminal {id}: folder: {e}");
             }
         }
         if let Some(tail) = tail {
