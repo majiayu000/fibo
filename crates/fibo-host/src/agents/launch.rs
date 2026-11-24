@@ -167,6 +167,10 @@ mod tests {
     /// alone: Claude Code's carries its pictures, OpenCode's comes as `--prompt=` and its
     /// value is what the CLI keeps.
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "期望写的是 sh 的引号；Windows 上 launch 生成的是 PowerShell 命令"
+    )]
     fn the_first_message_is_what_the_command_line_hands_over() {
         let words = "--两行\n`代码` \"引号\"";
         for (agent, pictures, sent) in [

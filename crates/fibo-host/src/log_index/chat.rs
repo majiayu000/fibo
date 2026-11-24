@@ -408,6 +408,7 @@ mod tests {
         let (page, more) = i.chat("p", 0, None, None, 2, false).unwrap();
         assert_eq!(words(&page), [200, 900]);
         assert!(more);
+        drop(i); // Windows 不删还开着的文件.
         std::fs::remove_dir_all(dir).unwrap();
     }
 

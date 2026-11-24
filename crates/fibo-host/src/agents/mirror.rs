@@ -403,6 +403,7 @@ mod tests {
             saved,
             "nothing new, nothing saved"
         );
+        drop((mirror, db)); // Windows 不删还开着的文件.
         std::fs::remove_dir_all(&root).unwrap();
     }
 

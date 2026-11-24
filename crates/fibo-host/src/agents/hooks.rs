@@ -459,6 +459,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(windows, ignore = "测试直接起 /bin/sh，Windows 上没有")]
     fn the_command_is_a_no_op_outside_a_mooring_terminal() {
         let out = std::process::Command::new("/bin/sh")
             .args(["-c", &command(Agent::Claude)])

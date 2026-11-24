@@ -228,6 +228,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "测试声明的 transcripts.root 是 /logs，Windows 上不算绝对路径"
+    )]
     fn recognised_by_executable_or_script() {
         let d = declared(true);
         assert!(d.runs("fake-cli", None));
@@ -238,6 +242,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "测试声明的 transcripts.root 是 /logs，Windows 上不算绝对路径"
+    )]
     fn records_bind_and_fill_the_card() {
         let d = declared(true);
         assert_eq!(d.root(Path::new("/h")), Path::new("/logs"));

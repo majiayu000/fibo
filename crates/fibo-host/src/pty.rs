@@ -275,6 +275,7 @@ mod env_tests {
         assert_ne!(found("PATH").unwrap(), "/agent/bin:/usr/bin");
     }
     #[test]
+    #[cfg_attr(windows, ignore = "测试起 /bin/sh 和 /usr/bin/env，Windows 上没有")]
     fn a_spawned_shell_does_not_see_the_hosts_launcher_state() {
         std::env::set_var("CLAUDE_CODE_CHILD_SESSION", "1");
         // The shell outlives `env` so its output is read before the terminal closes: when
@@ -328,6 +329,10 @@ mod integration_tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "期望值是 Unix 路径 /rt/shell-integration/zsh，Windows 的 Path::join 用反斜杠"
+    )]
     fn interactive_shells_start_through_the_integration_and_commands_do_not() {
         let dir = Path::new("/rt/shell-integration");
         let (zsh, env) = super::integration(&argv(&["/bin/zsh", "-l"]), Some(dir));

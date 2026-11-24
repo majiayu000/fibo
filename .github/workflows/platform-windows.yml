@@ -92,3 +92,17 @@ jobs:
       # by name, with the reason, so the list only shrinks.
       - name: The host's unit tests
         run: cargo test -p fibo-host --lib --no-fail-fast
+
+      # The ignores above, by count: a test fixed lowers the baseline here, a new ignore has
+      # to say in its change why it raises it.
+      - name: Host tests ignored on Windows stay counted
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          baseline=24
+          n=$(find crates/fibo-host -name '*.rs' -print0 | xargs -0 perl -0777 -ne '$n += () = /cfg_attr\(\s*windows,\s*ignore/g; END { print $n + 0 }')
+          echo "fibo-host tests ignored on Windows: $n (baseline $baseline)"
+          if [ "$n" -ne "$baseline" ]; then
+            echo "::error::fibo-host has $n tests ignored on Windows, the baseline is $baseline; change the baseline in platform-windows.yml along with them"
+            exit 1
+          fi

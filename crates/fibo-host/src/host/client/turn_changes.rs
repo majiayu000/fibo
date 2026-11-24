@@ -359,6 +359,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "期望值是 Unix 路径 /r/a/b，Windows 的 Path::join 用反斜杠"
+    )]
     fn relative_paths_resolve_against_the_session() {
         assert_eq!(absolute("/r", "a/b"), "/r/a/b");
         assert_eq!(absolute("/r", "/x/y"), "/x/y");

@@ -489,6 +489,7 @@ mod tests {
     /// the command is known only to the log. Undoing the search leaves `jobs` at 0, which
     /// is the session showing 等后台 under 要你处理 while its polling loop still runs.
     #[test]
+    #[cfg_attr(windows, ignore = "测试直接起 /bin/sh，Windows 上没有")]
     fn a_job_still_running_when_the_host_restarts_stays_a_job() {
         let (mut host, root) = crate::host::tests::fixture();
         let command = "sleep 30; echo restart-4e1a";
@@ -552,6 +553,7 @@ mod tests {
     /// session's, but only the subagent's log has its command. Undoing the search of those
     /// logs leaves `jobs` at 0: 等后台 under 要你处理 while its tests still run.
     #[test]
+    #[cfg_attr(windows, ignore = "测试直接起 /bin/sh，Windows 上没有")]
     fn a_job_a_subagent_started_stays_a_job_when_the_host_restarts() {
         let (mut host, root) = crate::host::tests::fixture();
         let command = "sleep 30; echo subagent-7c2d";
