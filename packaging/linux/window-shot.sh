@@ -19,6 +19,20 @@ stop() {
 }
 trap stop EXIT
 
+# Root's children larger than a tooltip (the title follows the workspace, so size is the
+# test). `xwininfo -root -children` lists unmapped windows too, so each one is asked for its
+# map state: the shot waits for a window that is actually on screen.
+viewable_window() {
+  for id in $(xwininfo -root -children | awk '$1 ~ /^0x/ && match($0, /[0-9]+x[0-9]+\+/) {
+      split(substr($0, RSTART, RLENGTH - 1), s, "x"); if (s[1] >= 300 && s[2] >= 200) print $1
+    }'); do
+    if xwininfo -id "$id" 2>/dev/null | grep -q 'Map State: IsViewable'; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 mapped=
 for _ in $(seq 1 60); do
   if ! kill -0 "$pid" 2>/dev/null; then
@@ -26,10 +40,7 @@ for _ in $(seq 1 60); do
     cat "$out/app.log" >&2
     exit 1
   fi
-  # Any top-level window larger than a tooltip counts; the title follows the workspace.
-  if xwininfo -root -children | awk '$1 ~ /^0x/ && match($0, /[0-9]+x[0-9]+\+/) {
-      split(substr($0, RSTART, RLENGTH - 1), s, "x"); if (s[1] >= 300 && s[2] >= 200) found = 1
-    } END { exit !found }'; then
+  if viewable_window; then
     mapped=1
     break
   fi
@@ -49,8 +60,8 @@ import -window root "$out/window.png"
 lit=$(convert "$out/window.png" -alpha off -fill white +opaque black -colorspace Gray -format '%[fx:mean]' info:)
 colours=$(convert "$out/window.png" -alpha off -format '%k' info:)
 echo "non-black share: $lit, distinct colours: $colours"
-# What was on screen, in the log as well as the artifact: the mapped windows and the app's
-# last words (which adapter it got, any renderer error).
+# What was on screen, in the log as well as the artifact: the window tree (mapped or not) and
+# the app's last words (which adapter it got, any renderer error).
 grep -E '^ +0x[0-9a-f]+ .*[0-9]+x[0-9]+\+' "$out/windows.txt" | head -20 || true
 tail -n 20 "$out/app.log" || true
 if ! awk -v lit="$lit" -v colours="$colours" 'BEGIN { exit !(lit > 0.05 && colours > 8) }'; then
