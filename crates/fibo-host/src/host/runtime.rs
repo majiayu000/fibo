@@ -343,10 +343,13 @@ pub(super) fn serve_runtime(
     // bind(2) creates a pathname before listen(2): publish only after startup is ready.
     fs::rename(&pending_socket, &socket)?;
     eprintln!("fibo listening on {}", socket.display());
-    for index in 1u64.. {
-        let stream = listener.accept()?;
+    // Serves until the process ends: nothing a client does stops the host.
+    let mut index = 0u64;
+    loop {
+        index += 1;
+        let stream = next_client(|| listener.accept(), Duration::from_millis(100));
         let host = Arc::clone(&host);
-        thread::spawn(move || {
+        let served = thread::Builder::new().spawn(move || {
             if let Err(e) = serve_client(stream, host, index) {
                 if !matches!(
                     e.kind(),
@@ -358,6 +361,56 @@ pub(super) fn serve_runtime(
                 }
             }
         });
+        // No thread for this client drops only its connection, not the host.
+        if let Err(e) = served {
+            eprintln!("serve client: {e}");
+        }
     }
-    Ok(())
+}
+
+/// The next client, riding out failed accepts. Returning the error would end `fibo serve`
+/// and hang up every terminal it holds over one ECONNABORTED or a moment out of file
+/// descriptors (EMFILE stays until one closes, hence the pause before trying again).
+fn next_client<S>(mut accept: impl FnMut() -> io::Result<S>, pause: Duration) -> S {
+    let mut failed = 0u32;
+    loop {
+        match accept() {
+            Ok(stream) => {
+                if failed > 0 {
+                    eprintln!("accept: recovered after {failed} failures");
+                }
+                return stream;
+            }
+            Err(e) => {
+                failed += 1;
+                // Once per streak, and then rarely: a listener broken for good must not
+                // fill the log ten lines a second.
+                if failed == 1 || failed.is_multiple_of(600) {
+                    eprintln!("accept failed ({failed} in a row): {e}");
+                }
+                thread::sleep(pause);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod accept_tests {
+    use super::*;
+
+    #[test]
+    fn failed_accepts_do_not_end_the_host() {
+        let mut left = 3;
+        let client = next_client(
+            || {
+                if left == 0 {
+                    return Ok("client");
+                }
+                left -= 1;
+                Err(io::Error::from_raw_os_error(24)) // EMFILE
+            },
+            Duration::ZERO,
+        );
+        assert_eq!((client, left), ("client", 0));
+    }
 }
