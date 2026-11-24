@@ -21,6 +21,7 @@ field session-updated	crates/fibo-app/src/model/session_state.rs	1
 field session-updated	crates/fibo-host/src/host/association.rs	2
 field session-updated	crates/fibo-host/src/host/screen_match.rs	1
 field session-updated	crates/fibo-host/src/host/snapshot.rs	1
+field session-updated	crates/fibo-host/src/recognition.rs	1
 field solid-surface	crates/fibo-app/src/terminal/pane_render.rs	1
 field solid-surface	crates/fibo-app/src/ui/field.rs	1
 field solid-surface	crates/fibo-app/src/workbench/board_drawer/drawer.rs	1
