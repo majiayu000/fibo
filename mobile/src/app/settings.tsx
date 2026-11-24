@@ -74,8 +74,8 @@ export default function SettingsScreen() {
           <Text style={[s.badge, { color: t.wait, backgroundColor: t.waitBg }]}>{tr('推送还没接')}</Text>
         </View>
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>
-          <Item t={t} title={tr('等你审批')} sub={tr('立即，带「允许一次」按钮')}>
-            <Switch label={tr('等你审批')} on={v.notify.approval} onChange={notify('approval')} />
+          <Item t={t} title={tr('等你批准')} sub={tr('立即，带「允许一次」按钮')}>
+            <Switch label={tr('等你批准')} on={v.notify.approval} onChange={notify('approval')} />
           </Item>
           <Item t={t} title={tr('等你回答')} sub={tr('Agent 问你问题停下来时')}>
             <Switch label={tr('等你回答')} on={v.notify.waiting} onChange={notify('waiting')} />

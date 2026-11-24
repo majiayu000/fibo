@@ -72,7 +72,7 @@ describe('chipSpace', () => {
   const b = { id: 'b', name: 'vsr', cwd: '/x/vsr' };
   const mac = { id: 'mac', status: 'online', spaceList: [a], cards: [] };
   const pc = { id: 'pc', status: 'online', spaceList: [b], cards: [] };
-  test('the chip shown on home is the space 新任务 opens in', () => {
+  test('the chip shown on home is the space 新会话 opens in', () => {
     expect(chipSpace([mac, pc], 'vsr', undefined)).toEqual({ machine: 'mac', space: 'a' });
     expect(chipSpace([mac, pc], 'vsr', 'pc')).toEqual({ machine: 'pc', space: 'b' });
   });

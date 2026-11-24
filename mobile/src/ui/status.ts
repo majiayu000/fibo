@@ -11,7 +11,7 @@ export function statusKey(c: Card): string {
 }
 
 export function statusWord(c: Card): string {
-  if (c.approval) return tr('等你审批');
+  if (c.approval) return tr('等你批准');
   if (c.status_label) return hostWords(c.status_label);
   return c.phase === 'shell' ? tr('终端') : '';
 }

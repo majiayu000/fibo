@@ -238,7 +238,7 @@ export default function Chat() {
    */
   async function send(text: string, pictures: Picture[] = [], how?: How): Promise<boolean> {
     const blocked = online && card?.approval
-      ? tr('它在等你审批，先允许或拒绝，再发送消息')
+      ? tr('它在等你批准，先允许或拒绝，再发送消息')
       : sendBlocked(view, waiting, warned.current === text);
     warned.current = blocked ? text : '';
     if (blocked) {
@@ -459,7 +459,7 @@ export default function Chat() {
       )}
       {!!card?.approval && online && (
         <View style={{ marginHorizontal: 12, marginBottom: 10, padding: 14, gap: 10, borderRadius: 20, borderWidth: 1.5, borderColor: t.wait, backgroundColor: t.card }}>
-          <Text style={{ color: t.wait, fontSize: 14, fontWeight: '500' }}>{tr('等你审批')}</Text>
+          <Text style={{ color: t.wait, fontSize: 14, fontWeight: '500' }}>{tr('等你批准')}</Text>
           <Text numberOfLines={3} style={{ fontFamily: mono, fontSize: 13, color: t.text, backgroundColor: t.well, borderRadius: 10, padding: 10, overflow: 'hidden' }}>
             {ask.subject}
           </Text>

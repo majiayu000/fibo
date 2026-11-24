@@ -15,7 +15,7 @@ export const common: Record<string, Entry> = {
   很久没动: 'Idle',
   稍后再看: 'Snoozed',
   做完了: 'Done',
-  等你审批: 'Needs approval',
+  等你批准: 'Waiting for approval',
   终端: 'Terminal',
   要你处理: 'Needs you',
   先不管: 'Quiet',

@@ -64,7 +64,7 @@ export default function NewTask() {
       : m.status !== 'online'
         ? tr('电脑没连上')
         : !able
-          ? tr('这台电脑的 Fibo 还不能开新任务')
+          ? tr('这台电脑的 Fibo 还不能开新会话')
           : !cwd
             ? tr('先选一个目录')
             : !draft.prompt.trim() && !draft.resume
@@ -144,7 +144,7 @@ export default function NewTask() {
 
   return (
     <KeyboardSafe style={{ backgroundColor: t.bg }}>
-      <Nav close big title={tr('新任务')} sub={tr('在电脑上开一个新终端，运行 Agent')} />
+      <Nav close big title={tr('新会话')} sub={tr('在电脑上开一个新终端，运行 Agent')} />
       <ScrollView ref={scroll} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 16, paddingBottom: 16 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <View style={s.field}>
           <Label>{tr('电脑')}</Label>

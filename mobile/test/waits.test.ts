@@ -78,7 +78,7 @@ describe('typing while a menu is open', () => {
 });
 
 describe('the line that stopped a send', () => {
-  // 2026-11-17 phone walk: 「它在等你审批」 stayed after the approval was allowed and the turn ended.
+  // 2026-11-17 phone walk: 「它在等你批准」 stayed after the approval was allowed and the turn ended.
   test('stays while the approval or the menu is open', () => {
     expect(stillBlocks(true, null, null)).toBe(true);
     expect(stillBlocks(false, waitView(SAMPLES['hook-permission']), SAMPLES['hook-permission'])).toBe(true);

@@ -16,7 +16,7 @@ export const home: Record<string, Entry> = {
   '已标记「已处理」': 'Marked as handled',
   一小时后再提醒你: "You'll be reminded in an hour",
   搜索: 'Search',
-  新任务: 'New task',
+  新会话: 'New session',
   还没有配对电脑: 'No computers paired yet',
   '在电脑的 Fibo 里点标题栏的手机按钮，选「配对新手机…」，再用这里扫码。':
     'In Fibo on your computer, click the phone button in the title bar, choose “Pair new phone…”, then scan the code here.',
@@ -73,7 +73,7 @@ export const home: Record<string, Entry> = {
   // New task
   '先在「我的」里配对一台电脑': 'Pair a computer under “Me” first',
   电脑没连上: 'Computer not connected',
-  '这台电脑的 Fibo 还不能开新任务': "Fibo on this computer can't start new tasks yet",
+  '这台电脑的 Fibo 还不能开新会话': "Fibo on this computer can't start new sessions yet",
   先选一个目录: 'Pick a folder first',
   写上要它做什么: 'Write what it should do',
   '这个目录里没有 {agent} 的旧对话': 'No earlier {agent} conversation in this folder',
@@ -136,8 +136,8 @@ export const home: Record<string, Entry> = {
   直接用这个路径: 'Use this path',
   '以 ~ 开头的路径按电脑上的家目录展开。路径不存在时用下面的「新建文件夹」。':
     'A path starting with ~ expands to the home folder on the computer. If it doesn’t exist, use “New folder” below.',
-  '只列文件夹，不读文件内容；跳过 node_modules、.git 和隐藏文件夹。只有「完全控制」权限的手机能浏览和开新任务。':
-    'Lists folders only and never reads files; skips node_modules, .git and hidden folders. Only phones with Full control can browse and start tasks.',
+  '只列文件夹，不读文件内容；跳过 node_modules、.git 和隐藏文件夹。只有「完全控制」权限的手机能浏览和开新会话。':
+    'Lists folders only and never reads files; skips node_modules, .git and hidden folders. Only phones with Full control can browse and start sessions.',
   '在 {path} 开始': 'Start in {path}',
   新建文件夹: 'New folder',
   '正在设置…': 'Setting up…',

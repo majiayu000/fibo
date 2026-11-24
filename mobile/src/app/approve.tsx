@@ -81,7 +81,7 @@ export default function Approve() {
             <Text style={[s.title, { color: t.text }]} numberOfLines={2}>
               {card ? cardTitle(card) : tr('审批')}
             </Text>
-            <Text style={{ fontSize: 15, color: gone ? t.dim : t.wait, fontWeight: '500' }}>{gone ? tr('已经不在等了') : tr('等你同意')}</Text>
+            <Text style={{ fontSize: 15, color: gone ? t.dim : t.wait, fontWeight: '500' }}>{gone ? tr('已经不在等了') : tr('等你批准')}</Text>
             <Text style={{ fontSize: 13, color: t.dim }} numberOfLines={1}>
               {[m?.name, space, agentName(card), card?.updated ? ago(card.updated) : ''].filter(Boolean).join(' · ')}
             </Text>
