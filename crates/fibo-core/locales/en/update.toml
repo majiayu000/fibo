@@ -17,6 +17,7 @@
 "正在下载并校验 {version}…" = "Downloading and verifying {version}…"
 "打开发布页" = "Open Release Page"
 "重试" = "Retry"
+"有新版本 {version}（当前 {current}），从发布页下载新的安装包" = "{version} is available (current {current}); download the new package from the release page"
 "有新版本 {version}；这份由 Homebrew 安装，请运行 {v2}" = "{version} is available; this copy was installed with Homebrew, run {v2}"
 
 [statusbar]
@@ -29,6 +30,7 @@
 "新版本 {version}" = "New version {version}"
 "这份由 Homebrew 安装：运行 {v1}" = "Installed with Homebrew: run {v1}"
 "{version} 没装上" = "{version} didn't install"
+"当前 {current}；点击打开发布页，下载新的安装包" = "Current {current}; click to open the release page and download the new package"
 
 [app]
 "无法保存 {display}：{e}" = "Couldn't save {display}: {e}"

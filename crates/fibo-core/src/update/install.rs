@@ -36,12 +36,16 @@ pub enum Found {
 /// Asks `url` for the latest release and compares it with `current`.
 pub fn check(url: &str, current: &Version, arch: &str, tools: &dyn Tools) -> Result<Found, String> {
     let bytes = tools.fetch(url)?;
-    let release = select(&super::parse(&bytes)?, arch)?;
-    Ok(if release.version > *current {
+    Ok(found(select(&super::parse(&bytes)?, arch)?, current))
+}
+
+/// Whether `release` is newer than the running `current` version.
+pub fn found(release: Release, current: &Version) -> Found {
+    if release.version > *current {
         Found::Newer(release)
     } else {
         Found::Latest(release.version)
-    })
+    }
 }
 
 /// Why an update did not install. The installed app is untouched in every case.

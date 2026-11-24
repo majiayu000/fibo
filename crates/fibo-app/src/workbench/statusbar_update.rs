@@ -1,6 +1,6 @@
-//! The status bar's update item: there only while a release is offered. A click installs it;
-//! when this copy cannot install it (Homebrew, no permission, a failed check) the click opens
-//! 设置 › 关于, which says why and what to do.
+//! The status bar's update item: there only while a release is offered. A click installs it,
+//! or on Linux opens its release page; when this copy cannot install it (Homebrew, no
+//! permission, a failed check) the click opens 设置 › 关于, which says why and what to do.
 use super::statusbar::item;
 use super::*;
 use crate::update::{self, Phase};
@@ -44,12 +44,21 @@ impl Workbench {
                     v1 = fibo_core::update::BREW_COMMAND
                 ),
             ),
+            Phase::Page(_) => (
+                t!("新版本 {version}", version),
+                Tone::Ok,
+                t!(
+                    "当前 {current}；点击打开发布页，下载新的安装包",
+                    current = u.current
+                ),
+            ),
             Phase::Failed { message, .. } => {
                 (t!("{version} 没装上", version), Tone::Warn, message.clone())
             }
             _ => return None,
         };
-        let installs = matches!(u.phase, Phase::Available(_));
+        // `install` opens the release page for `Page`.
+        let installs = matches!(u.phase, Phase::Available(_) | Phase::Page(_));
         let busy = matches!(u.phase, Phase::Installing(_));
         Some(
             item("status-update", false)
