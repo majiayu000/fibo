@@ -1,8 +1,13 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-/// macOS's own default.
-pub const SYSTEM_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
+/// The system's own default: macOS's, which `/etc/zprofile` extends; on Linux what
+/// `/etc/environment` gives a login on Ubuntu, since bash's `/etc/profile` there adds nothing.
+pub const SYSTEM_PATH: &str = if cfg!(target_os = "linux") {
+    "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+} else {
+    "/usr/bin:/bin:/usr/sbin:/sbin"
+};
 
 pub const PATH_SEPARATOR: &str = ":";
 
@@ -88,8 +93,10 @@ const RESET_MODES: &str =
     r"\033[?1000l\033[?1002l\033[?1003l\033[?1006l\033[?1015l\033[?1004l\033[<99u\033[?25h";
 
 /// The login identity and locale pass; the login shell's profile adds the rest, `PATH` included.
+/// So does the graphical session a login sits in: no profile sets it, and without it nothing in
+/// the terminal can open a window, reach the clipboard, the keyring or `systemctl --user`.
 pub fn login_env(vars: Vec<(OsString, OsString)>) -> Vec<(OsString, OsString)> {
-    const PASS: [&str; 8] = [
+    const PASS: [&str; 19] = [
         "HOME",
         "USER",
         "LOGNAME",
@@ -98,6 +105,17 @@ pub fn login_env(vars: Vec<(OsString, OsString)>) -> Vec<(OsString, OsString)> {
         "LANG",
         "SSH_AUTH_SOCK",
         "__CF_USER_TEXT_ENCODING",
+        "DISPLAY",
+        "XAUTHORITY",
+        "WAYLAND_DISPLAY",
+        "XDG_RUNTIME_DIR",
+        "DBUS_SESSION_BUS_ADDRESS",
+        "XDG_SESSION_TYPE",
+        "XDG_CURRENT_DESKTOP",
+        "XDG_SESSION_DESKTOP",
+        "DESKTOP_SESSION",
+        "XDG_DATA_DIRS",
+        "XDG_CONFIG_DIRS",
     ];
     let mut env: Vec<_> = vars
         .into_iter()
@@ -181,6 +199,36 @@ mod tests {
                 "{shell}: {out:?}"
             );
             assert!(out.ends_with("\x1b[<99u\x1b[?25h"), "{shell}: {out:?}");
+        }
+    }
+
+    /// A terminal opened inside a desktop session can still reach it: open a browser, paste an
+    /// image, ask the keyring. Linux has no profile that would set these back.
+    #[test]
+    fn the_graphical_session_reaches_the_terminal() {
+        let vars = [
+            ("DISPLAY", ":0"),
+            ("WAYLAND_DISPLAY", "wayland-0"),
+            ("XDG_RUNTIME_DIR", "/run/user/1000"),
+            ("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1000/bus"),
+            ("XDG_CURRENT_DESKTOP", "ubuntu:GNOME"),
+            ("CLAUDECODE", "1"),
+        ]
+        .map(|(k, v)| (k.into(), v.into()));
+        let env = login_env(vars.to_vec());
+        for (k, v) in &vars[..5] {
+            assert!(env.contains(&(k.clone(), v.clone())), "{k:?} left out: {env:?}");
+        }
+        assert!(!env.iter().any(|(k, _)| k == "CLAUDECODE"));
+    }
+
+    #[test]
+    fn linux_starts_from_the_path_a_login_gets() {
+        let dirs: Vec<_> = std::env::split_paths(SYSTEM_PATH).collect();
+        assert!(dirs.contains(&"/usr/bin".into()));
+        if cfg!(target_os = "linux") {
+            assert!(dirs.contains(&"/usr/local/bin".into()), "{dirs:?}");
+            assert!(dirs.contains(&"/snap/bin".into()), "{dirs:?}");
         }
     }
 }

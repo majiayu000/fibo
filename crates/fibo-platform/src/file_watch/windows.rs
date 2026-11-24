@@ -352,11 +352,21 @@ impl Worker {
                     Err(e) => return Err(e),
                 }
             }
-            self.dirs.retain(|_, d| {
-                wanted
-                    .iter()
-                    .any(|(p, r)| *p == d.path && *r == d.recursive)
-            });
+            // Each of these still has a read outstanding: dropping one would free memory the
+            // system writes into when the read ends, so it is retired instead.
+            let unwanted: Vec<usize> = self
+                .dirs
+                .iter()
+                .filter(|(_, d)| {
+                    !wanted
+                        .iter()
+                        .any(|(p, r)| *p == d.path && *r == d.recursive)
+                })
+                .map(|(key, _)| *key)
+                .collect();
+            for key in unwanted {
+                self.retire(key);
+            }
             if !changed {
                 return Ok(());
             }
@@ -552,5 +562,53 @@ impl Worker {
         drop(followed);
         events.retain(|e| self.callback.wants(e));
         deliver(&self.callback, Batch { events });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc::sync_channel;
+
+    /// A watch no root needs any more still has its read outstanding: it is cancelled and kept
+    /// until the port says the read ended, never dropped on the spot.
+    #[test]
+    fn a_watch_no_longer_wanted_is_retired_not_dropped() {
+        let base = std::env::temp_dir().join(format!("fibo-retire-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let root = base.join("not").join("yet");
+        let (tx, _rx) = sync_channel(16);
+        let callback = Arc::new(Callback {
+            tx,
+            overflow: Arc::new(Mutex::new(vec![])),
+            roots: vec![root.clone()],
+        });
+        // SAFETY: asks for a new port with no file on it yet.
+        let raw =
+            unsafe { CreateIoCompletionPort(INVALID_HANDLE_VALUE, std::ptr::null_mut(), 0, 1) };
+        assert!(!raw.is_null());
+        let mut worker = Worker {
+            port: Arc::new(Port(raw)),
+            callback,
+            followed: Arc::new(Mutex::new(HashMap::new())),
+            dirs: HashMap::new(),
+            retired: HashMap::new(),
+            next_key: FIRST_DIR,
+            present: HashSet::new(),
+        };
+        worker.catch_up(&mut vec![]).unwrap();
+        assert!(worker.watching(&base, false));
+        // The nearest existing ancestor moves one step down: `base` is no longer wanted.
+        std::fs::create_dir(base.join("not")).unwrap();
+        worker.catch_up(&mut vec![]).unwrap();
+        assert!(!worker.watching(&base, false));
+        assert!(
+            worker.retired.values().any(|d| d.path == base),
+            "the watch of {} was dropped with its read outstanding",
+            base.display()
+        );
+        worker.stop();
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

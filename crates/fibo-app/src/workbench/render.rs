@@ -2,6 +2,7 @@
 use super::*;
 
 mod bars;
+mod client_frame;
 mod keys;
 mod launch;
 mod layer_keys;
@@ -267,6 +268,9 @@ impl Render for Workbench {
             .children(tail)
             .when(fibo_platform::desktop::DRAWS_WINDOW_BUTTONS, |d| {
                 d.pr_0().child(bars::window_buttons(window))
+            })
+            .when(client_frame::draws_frame(window), |d| {
+                d.pr_0().child(client_frame::buttons(window))
             });
         let mut main = self.main_area(terminal_style, header, page, current, window, cx);
         main = main.children(bottom_tabs.flatten());
@@ -294,6 +298,7 @@ impl Render for Workbench {
             )
             .when(!beside, |d| d.child(self.statusbar_view(width, cx)))
             .children(self.turning_view(cx));
-        self.window_layers(root, window, cx)
+        let root = self.window_layers(root, window, cx);
+        client_frame::resize_edges(root, window)
     }
 }
