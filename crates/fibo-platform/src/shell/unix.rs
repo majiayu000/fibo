@@ -217,7 +217,10 @@ mod tests {
         .map(|(k, v)| (k.into(), v.into()));
         let env = login_env(vars.to_vec());
         for (k, v) in &vars[..5] {
-            assert!(env.contains(&(k.clone(), v.clone())), "{k:?} left out: {env:?}");
+            assert!(
+                env.contains(&(k.clone(), v.clone())),
+                "{k:?} left out: {env:?}"
+            );
         }
         assert!(!env.iter().any(|(k, _)| k == "CLAUDECODE"));
     }
