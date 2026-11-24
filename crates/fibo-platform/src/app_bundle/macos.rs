@@ -3,6 +3,7 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
+pub const INSTALLER: bool = false;
 pub const SUPPORTED: bool = true;
 
 pub fn cache_dir() -> Option<PathBuf> {
@@ -109,4 +110,13 @@ pub fn homebrew_prefixes() -> Vec<PathBuf> {
         }
     }
     out
+}
+
+pub fn install_after_exit(
+    _: u32,
+    _: &Path,
+    _: &Path,
+    _: Vec<std::ffi::OsString>,
+) -> std::io::Result<()> {
+    Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
 }

@@ -54,9 +54,17 @@ impl SettingsView {
                 Some((t!("检查更新"), false)),
             ),
             Phase::CheckFailed(e) => (t!("检查失败：{e}", e), Some((t!("检查更新"), false))),
-            Phase::Available(r) => (
+            Phase::Available(r) if fibo_core::update::KEEPS_TERMINALS => (
                 t!(
                     "有新版本 {version}（当前 {current}），终端会继续运行",
+                    version = r.version,
+                    current
+                ),
+                Some((t!("立即更新"), true)),
+            ),
+            Phase::Available(r) => (
+                t!(
+                    "有新版本 {version}（当前 {current}），更新会关闭正在运行的终端",
                     version = r.version,
                     current
                 ),

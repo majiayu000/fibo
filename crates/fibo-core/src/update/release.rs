@@ -2,7 +2,8 @@
 //!
 //! The release contract: tag `vX.Y.Z`; assets `Fibo-X.Y.Z-<arch>.zip` (a `ditto -c -k
 //! --keepParent` zip of the signed, notarized, stapled Fibo.app), `Fibo-X.Y.Z-<arch>.dmg`
-//! and `SHA256SUMS` (`sha256sum` lines: `<hex>  <file name>`).
+//! `Fibo-Setup-X.Y.Z.exe` (the Windows installer, x64) and `SHA256SUMS` (`sha256sum` lines:
+//! `<hex>  <file name>`).
 use super::version::Version;
 use serde::Deserialize;
 
@@ -35,6 +36,8 @@ pub struct Release {
     pub page: String,
     /// The zip for this Mac; none when the release has no build for its architecture.
     pub zip: Option<Asset>,
+    /// The Windows installer; none when the release has no Windows build.
+    pub installer: Option<Asset>,
     pub sums: Option<Asset>,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -77,6 +80,7 @@ pub fn select(api: &ApiRelease, arch: &str) -> Result<Release, String> {
     };
     Ok(Release {
         zip: find(&format!("Fibo-{version}-{arch}.zip")),
+        installer: find(&format!("Fibo-Setup-{version}.exe")),
         sums: find("SHA256SUMS"),
         version,
         page: api.html_url.clone(),

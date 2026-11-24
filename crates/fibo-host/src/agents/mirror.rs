@@ -20,7 +20,10 @@ use std::time::Duration;
 
 /// Where a sourced CLI's sessions are written: the root its adapter reports.
 pub fn dir(home: &Path, agent: Agent) -> PathBuf {
-    home.join(".local/share/mooring/sources").join(agent.key())
+    fibo_core::legacy::share_dir(home)
+        .join("mooring")
+        .join("sources")
+        .join(agent.key())
 }
 
 /// Preserve byte cursors when the snapshot only grows. A rewritten prefix gets a new

@@ -14,15 +14,27 @@ impl Workbench {
             Phase::Available(_) => (
                 t!("新版本 {version} · 更新", version),
                 Tone::Ok,
-                t!(
-                    "当前 {current}；更新后 App 自动重启，终端继续运行",
-                    current = u.current
-                ),
+                if fibo_core::update::KEEPS_TERMINALS {
+                    t!(
+                        "当前 {current}；更新后 App 自动重启，终端继续运行",
+                        current = u.current
+                    )
+                } else {
+                    t!(
+                        "当前 {current}；更新后 App 自动重启，正在运行的终端会关闭",
+                        current = u.current
+                    )
+                },
             ),
             Phase::Installing(_) => (
                 t!("正在更新到 {version}…", version),
                 Tone::Ok,
-                t!("下载、校验签名后替换 App，然后自动重启").into(),
+                if fibo_core::update::INSTALLER {
+                    t!("下载、校验后运行安装程序，然后自动重启")
+                } else {
+                    t!("下载、校验签名后替换 App，然后自动重启")
+                }
+                .into(),
             ),
             Phase::Homebrew(_) => (
                 t!("新版本 {version}", version),

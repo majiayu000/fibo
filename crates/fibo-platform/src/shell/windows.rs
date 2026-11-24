@@ -48,7 +48,7 @@ pub fn stay(shell: &str) -> Vec<String> {
 }
 
 /// Single quotes take everything literally, and the curly ones count as single quotes.
-fn literal(word: &str) -> String {
+pub(super) fn literal(word: &str) -> String {
     let mut out = String::from("'");
     for c in word.chars() {
         if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201a}' | '\u{201b}') {

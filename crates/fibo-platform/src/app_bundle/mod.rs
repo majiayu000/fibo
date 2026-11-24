@@ -1,14 +1,19 @@
 //! Replacing the installed app with a downloaded release: fetching, unpacking, reading and
-//! checking a bundle with the tools the system ships. Only macOS replaces its own bundle;
-//! elsewhere `SUPPORTED` is false and every call says so (Windows has its installer).
+//! checking a bundle with the tools the system ships. macOS replaces its own bundle; Windows
+//! downloads the release's installer and runs it over the install once the window has quit
+//! (`INSTALLER`); elsewhere `SUPPORTED` is false and every call says so.
 use std::path::{Path, PathBuf};
 
 #[cfg_attr(target_os = "macos", path = "macos.rs")]
-#[cfg_attr(not(target_os = "macos"), path = "other.rs")]
+#[cfg_attr(windows, path = "windows.rs")]
+#[cfg_attr(not(any(target_os = "macos", windows)), path = "other.rs")]
 mod imp;
 
 /// Whether an app here can update itself in place.
 pub const SUPPORTED: bool = imp::SUPPORTED;
+/// Whether an update here is the release's installer run over the install
+/// (`install_after_exit`) rather than a bundle swapped in place.
+pub const INSTALLER: bool = imp::INSTALLER;
 
 /// Where downloads wait to be checked.
 pub fn cache_dir() -> Option<PathBuf> {
@@ -59,4 +64,16 @@ pub fn same_owner(a: &Path, b: &Path) -> std::io::Result<bool> {
 /// Where Homebrew keeps its casks, most likely first.
 pub fn homebrew_prefixes() -> Vec<PathBuf> {
     imp::homebrew_prefixes()
+}
+
+/// Once process `pid` has ended: stops what still runs from `dir`'s programs (the host), runs
+/// `installer` silently over `dir`, deletes it, then starts `dir`'s window with `args`, the new
+/// version or, when the installer failed, the old one. Only where `INSTALLER` is true.
+pub fn install_after_exit(
+    pid: u32,
+    installer: &Path,
+    dir: &Path,
+    args: impl Iterator<Item = std::ffi::OsString>,
+) -> std::io::Result<()> {
+    imp::install_after_exit(pid, installer, dir, args.collect())
 }

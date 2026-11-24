@@ -4,7 +4,9 @@
 //! After the swap this process quits and the new bundle starts with the same arguments, as
 //! `lifecycle::restart_host` does. Its `ensure_host` finds the old host running other code and
 //! has the new host take every terminal over (`spawn_host(root, true)`), exactly as when a
-//! bundle is swapped by hand and the app reopened.
+//! bundle is swapped by hand and the app reopened. On Windows (`core::INSTALLER`) the
+//! release's installer runs over the install once this process has quit, after stopping
+//! the host (its terminals cannot pass on there), and starts the new window.
 use fibo_core::update::{self as core, Found, Release, Tools, Version};
 use gpui::{App, AppContext, Global};
 use std::path::PathBuf;
@@ -31,7 +33,8 @@ pub enum Phase {
 
 #[derive(Clone, Debug)]
 pub struct Updates {
-    /// The bundle this app runs from; none for a development build, which never updates.
+    /// The bundle this app runs from, or on Windows the folder it is installed in; none for a
+    /// development build, which never updates.
     pub bundle: Option<PathBuf>,
     pub current: Version,
     pub auto: bool,
@@ -53,16 +56,20 @@ impl Updates {
             patch: 0,
             pre: None,
         });
-        let packaged = core::SUPPORTED
+        let exe = core::SUPPORTED
             .then(|| std::env::current_exe().ok())
-            .flatten()
-            .and_then(|exe| core::packaged_bundle(&exe))
-            .and_then(|bundle| {
-                let info = system().bundle_info(&bundle).ok()?;
-                [core::BUNDLE_ID, core::OLD_BUNDLE_ID]
-                    .contains(&info.id.as_str())
-                    .then_some((bundle, info.version))
-            });
+            .flatten();
+        let packaged = exe.and_then(|exe| {
+            if core::INSTALLER {
+                // What the installer put there is the version this program was built as.
+                return core::install_dir(&exe).map(|dir| (dir, built.to_string()));
+            }
+            let bundle = core::packaged_bundle(&exe)?;
+            let info = system().bundle_info(&bundle).ok()?;
+            [core::BUNDLE_ID, core::OLD_BUNDLE_ID]
+                .contains(&info.id.as_str())
+                .then_some((bundle, info.version))
+        });
         let (bundle, current) = match packaged {
             Some((bundle, version)) => (Some(bundle), Version::parse(&version).unwrap_or(built)),
             None => (None, built),
@@ -223,6 +230,11 @@ pub fn install(cx: &mut App) {
             .background_spawn(async move {
                 let cache = core::cache_dir()
                     .ok_or(core::Failure::Download(t!("找不到缓存目录").into()))?;
+                let report = |step| eprintln!("update {}: {step:?}", job_release.version);
+                if core::INSTALLER {
+                    return core::download_installer(&job_release, &cache, &system(), &report)
+                        .map(Some);
+                }
                 let real = core::api_base().1;
                 let job = core::Install {
                     release: &job_release,
@@ -231,13 +243,11 @@ pub fn install(cx: &mut App) {
                     brew_prefixes: &core::brew_prefixes(),
                     allow_unnotarized: !real && std::env::var_os(core::UNNOTARIZED_ENV).is_some(),
                 };
-                core::install(&job, &system(), &|step| {
-                    eprintln!("update {}: {step:?}", job_release.version)
-                })
+                core::install(&job, &system(), &report).map(|()| None)
             })
             .await;
         cx.update(|cx| match result {
-            Ok(()) => relaunch(&bundle, cx),
+            Ok(installer) => relaunch(&bundle, installer, cx),
             Err(core::Failure::Homebrew) => set_phase(Phase::Homebrew(release), cx),
             Err(failure) => {
                 eprintln!("update {}: {}", release.version, failure.message());
@@ -256,14 +266,20 @@ pub fn install(cx: &mut App) {
 }
 
 /// Starts the new bundle once this process has gone, with the same arguments (`--runtime`),
-/// and quits. The new app's host takes the terminals over from the one running now.
-fn relaunch(bundle: &std::path::Path, cx: &mut App) {
-    let program = bundle.join("Contents/MacOS/fibo-app");
-    match fibo_platform::process::start_after_exit(
-        std::process::id(),
-        &program,
-        std::env::args_os().skip(1),
-    ) {
+/// and quits. The new app's host takes the terminals over from the one running now. With an
+/// `installer` (Windows), that runs over the install first, then starts the window.
+fn relaunch(bundle: &std::path::Path, installer: Option<PathBuf>, cx: &mut App) {
+    let pid = std::process::id();
+    let args = std::env::args_os().skip(1);
+    let started = match &installer {
+        Some(setup) => fibo_platform::app_bundle::install_after_exit(pid, setup, bundle, args),
+        None => fibo_platform::process::start_after_exit(
+            pid,
+            &bundle.join("Contents/MacOS/fibo-app"),
+            args,
+        ),
+    };
+    match started {
         Ok(()) => cx.quit(),
         // The new version is in place either way; the next start runs it.
         Err(e) => {
@@ -272,8 +288,12 @@ fn relaunch(bundle: &std::path::Path, cx: &mut App) {
                 set_phase(
                     Phase::Failed {
                         release,
-                        message: t!("已装好新版本，但没能自动重启（{e}），请退出后重新打开", e),
-                        page: false,
+                        message: if installer.is_some() {
+                            t!("没能启动安装程序（{e}），请从发布页下载", e)
+                        } else {
+                            t!("已装好新版本，但没能自动重启（{e}），请退出后重新打开", e)
+                        },
+                        page: installer.is_some(),
                     },
                     cx,
                 );
