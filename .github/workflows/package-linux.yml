@@ -66,11 +66,12 @@ jobs:
           cargo test -p fibo-host --test terminal_chain
       # The window itself (#508): until now CI only checked that the binary exists. Xvfb has
       # no GPU, so Mesa's software drivers (lavapipe for Vulkan, llvmpipe for GL) give wgpu
-      # an adapter. The screenshot and the app's log go up with the package.
+      # an adapter. -br keeps the empty screen black, so only what the window drew counts.
+      # The screenshot and the app's log go up with the package.
       - name: Open the installed window under Xvfb
         run: |
           sudo apt-get install -y -qq xvfb x11-utils imagemagick mesa-vulkan-drivers libgl1-mesa-dri libegl1
-          xvfb-run -a -s '-screen 0 1440x900x24' packaging/linux/window-shot.sh target/linux-package/window
+          xvfb-run -a -s '-screen 0 1440x900x24 -br' packaging/linux/window-shot.sh target/linux-package/window
       - uses: actions/upload-artifact@v4
         if: always()
         with:

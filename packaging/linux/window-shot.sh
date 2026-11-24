@@ -49,7 +49,10 @@ import -window root "$out/window.png"
 lit=$(convert "$out/window.png" -alpha off -fill white +opaque black -colorspace Gray -format '%[fx:mean]' info:)
 colours=$(convert "$out/window.png" -alpha off -format '%k' info:)
 echo "non-black share: $lit, distinct colours: $colours"
-grep -E 'GPU|adapter|Adapter' "$out/app.log" || true
+# What was on screen, in the log as well as the artifact: the mapped windows and the app's
+# last words (which adapter it got, any renderer error).
+grep -E '^ +0x[0-9a-f]+ .*[0-9]+x[0-9]+\+' "$out/windows.txt" | head -20 || true
+tail -n 20 "$out/app.log" || true
 if ! awk -v lit="$lit" -v colours="$colours" 'BEGIN { exit !(lit > 0.05 && colours > 8) }'; then
   echo "the screen is black: the window opened but drew nothing" >&2
   cat "$out/app.log" >&2
