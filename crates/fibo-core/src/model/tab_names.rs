@@ -154,8 +154,16 @@ impl Workspace {
             .iter()
             .find(|t| &t.id == id)
             .and_then(|t| t.argv.first())
-            .and_then(|program| program.rsplit('/').next())
+            .and_then(|program| program.rsplit(['/', '\\']).next())
             .map(|program| program.trim_start_matches('-'))
+            // `powershell.exe` is named `powershell`, as `/bin/zsh` is `zsh`.
+            .map(|program| {
+                let len = program.len();
+                match program.get(len.saturating_sub(4)..) {
+                    Some(ext) if len > 4 && ext.eq_ignore_ascii_case(".exe") => &program[..len - 4],
+                    _ => program,
+                }
+            })
             .filter(|program| !program.is_empty())
             .unwrap_or(t!("终端"))
             .into()

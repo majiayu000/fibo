@@ -146,6 +146,23 @@ fn a_real_terminal_is_listed_read_and_typed_into() {
         text(&run(&root, &["read", "t"])).contains("sent-mark")
     });
 
+    // PowerShell's location is its own: only the integration's report says where it went.
+    let moved = work.join("sub dir 中");
+    std::fs::create_dir_all(&moved).unwrap();
+    assert!(run(&root, &["send", "t", "cd 'sub dir 中'", "--enter"])
+        .status
+        .success());
+    until("the shell's directory never followed cd", || {
+        let reply = rpc(&socket, &Request::TerminalCwd { id: "t".into() });
+        matches!(reply, Reply::Cwd(at) if std::fs::canonicalize(&at).ok() == std::fs::canonicalize(&moved).ok())
+    });
+    // Named by its program, as `zsh` is, not by the path Windows started it from.
+    let listed: serde_json::Value =
+        serde_json::from_str(&text(&run(&root, &["list", "--json"]))).unwrap();
+    let program = Path::new(&shell::interactive())
+        .file_stem()
+        .map(|p| p.to_string_lossy().into_owned());
+    assert_eq!(listed[0]["tab"].as_str(), program.as_deref(), "{listed}");
     let split = run(&root, &["split", "t", "--", "echo", "two words"]);
     assert!(split.status.success(), "{split:?}");
     let second = text(&split).trim().to_owned();

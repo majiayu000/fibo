@@ -79,6 +79,11 @@ pub fn install_shell_integration(root: &Path) -> io::Result<()> {
         dir.join("fish/fibo.fish"),
         include_str!("../shell-integration/fish/fibo.fish"),
     )?;
+    std::fs::create_dir_all(dir.join("powershell"))?;
+    std::fs::write(
+        dir.join("powershell/fibo.ps1"),
+        include_str!("../shell-integration/powershell/fibo.ps1"),
+    )?;
     let _ = INTEGRATION.set(dir);
     Ok(())
 }
@@ -86,20 +91,23 @@ pub fn install_shell_integration(root: &Path) -> io::Result<()> {
 /// How an interactive shell starts with the integration: its argv and environment.
 /// zsh goes through the integration's ZDOTDIR, which restores the user's own before any
 /// of their startup files run; bash reads the integration as its init file, which loads
-/// the user's files itself; fish sources it after the user's config. A shell given
-/// anything beyond `-l` / `-i` (a command, a script) starts untouched.
+/// the user's files itself; fish sources it after the user's config; PowerShell runs it
+/// with `-NoExit -Command`, after the user's profile. A shell given anything beyond `-l` /
+/// `-i` (`-NoLogo` / `-NoProfile` for PowerShell), such as a command or a script, starts
+/// untouched.
 fn integration(argv: &[String], dir: Option<&Path>) -> (Vec<String>, Vec<(OsString, OsString)>) {
     let untouched = (argv.to_vec(), Vec::new());
     let Some(dir) = dir else {
         return untouched;
     };
-    let Some(name) = argv
-        .first()
-        .and_then(|p| Path::new(p).file_name())
-        .and_then(|n| n.to_str())
-    else {
+    // Both separators, so a Windows path names its program on every system.
+    let Some(name) = argv.first().and_then(|p| p.rsplit(['/', '\\']).next()) else {
         return untouched;
     };
+    let lower = name.to_ascii_lowercase();
+    if matches!(lower.trim_end_matches(".exe"), "powershell" | "pwsh") {
+        return powershell(argv, dir).map_or(untouched, |argv| (argv, Vec::new()));
+    }
     let flags = &argv[1..];
     let interactive = flags
         .iter()
@@ -143,6 +151,39 @@ fn integration(argv: &[String], dir: Option<&Path>) -> (Vec<String>, Vec<(OsStri
         }
         _ => untouched,
     }
+}
+
+/// PowerShell for someone to work in, then the integration, read as text: a policy that
+/// forbids running script files (the default on Windows) does not cover that, and a failure
+/// in it leaves the shell as it would have been.
+fn powershell(argv: &[String], dir: &Path) -> Option<Vec<String>> {
+    let interactive = argv[1..].iter().all(|f| {
+        matches!(
+            f.to_ascii_lowercase().as_str(),
+            "-nologo" | "-noprofile" | "-login" | "-l"
+        )
+    });
+    if !interactive {
+        return None;
+    }
+    let script = dir.join("powershell").join("fibo.ps1");
+    // PowerShell's single quotes take everything literally but themselves, doubled; the
+    // curly ones count as single quotes too.
+    let mut quoted = String::from("'");
+    for c in script.to_str()?.chars() {
+        if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201a}' | '\u{201b}') {
+            quoted.push(c);
+        }
+        quoted.push(c);
+    }
+    quoted.push('\'');
+    let mut argv = argv.to_vec();
+    argv.extend([
+        "-NoExit".into(),
+        "-Command".into(),
+        format!("try {{ . ([ScriptBlock]::Create([IO.File]::ReadAllText({quoted}))) }} catch {{}}"),
+    ]);
+    Some(argv)
 }
 
 pub fn spawn(
@@ -333,6 +374,34 @@ mod integration_tests {
             );
         }
         assert!(super::integration(&argv(&["/bin/zsh"]), None).1.is_empty());
+    }
+
+    #[test]
+    fn powershell_reads_its_integration_after_the_profile_and_commands_start_untouched() {
+        let dir = Path::new(r"C:\Users\O'Neil\AppData\Local\fibo\shell-integration");
+        let shell = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
+        let (ps, env) = super::integration(&argv(&[shell, "-NoLogo"]), Some(dir));
+        assert!(env.is_empty());
+        assert_eq!(ps[..4], [shell, "-NoLogo", "-NoExit", "-Command"]);
+        let script = dir.join("powershell").join("fibo.ps1");
+        let quoted = format!("'{}'", script.to_str().unwrap().replace('\'', "''"));
+        assert_eq!(
+            ps[4],
+            format!(
+                "try {{ . ([ScriptBlock]::Create([IO.File]::ReadAllText({quoted}))) }} catch {{}}"
+            )
+        );
+        let (pwsh, _) = super::integration(&argv(&["/usr/local/bin/pwsh"]), Some(dir));
+        assert_eq!(pwsh[1], "-NoExit");
+        for untouched in [
+            fibo_platform::shell::run_then_stay(shell, "codex", None),
+            argv(&[shell, "-File", "x.ps1"]),
+        ] {
+            assert_eq!(
+                super::integration(&untouched, Some(dir)),
+                (untouched, vec![])
+            );
+        }
     }
 
     /// Runs a real shell through its integration with `cwd` as the start, and returns

@@ -743,3 +743,31 @@ fn session_names_prefer_the_user_then_the_cli_then_the_first_ask_then_the_task()
         .is_err()
     );
 }
+#[test]
+fn a_windows_shell_s_tab_is_named_like_a_unix_one() {
+    let mut w = workspace();
+    w.edit(Edit::CreateTab {
+        tab: Tab {
+            id: "plain".into(),
+            space: "a".into(),
+            default_task: None,
+            title: String::new(),
+            layout: Some(Layout::Leaf("pty".into())),
+        },
+    })
+    .unwrap();
+    for (path, name) in [
+        (
+            r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+            "powershell",
+        ),
+        (r"C:\Program Files\PowerShell\7\pwsh.EXE", "pwsh"),
+        ("/bin/zsh", "zsh"),
+        (".exe", ".exe"),
+    ] {
+        w.terminals[0].argv = vec![path.into()];
+        let tab = w.tabs.iter().find(|t| t.id == "plain").unwrap().clone();
+        let titles = std::collections::HashMap::new();
+        assert_eq!(w.tab_title(&tab, &titles, None), name, "{path}");
+    }
+}
