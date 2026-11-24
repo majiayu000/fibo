@@ -55,8 +55,8 @@ export const remote: Record<string, Entry> = {
     'Can’t connect: the phone has no network, or the relay or computer is offline. Check the phone is online, then that Fibo is running on the computer',
   '连不上：手机没网，或者中继、电脑不在线。先确认手机能上网，再看电脑上的 Fibo 开着没有（{code}）':
     'Can’t connect: the phone has no network, or the relay or computer is offline. Check the phone is online, then that Fibo is running on the computer ({code})',
-  '电脑不在线：中继连得上，但电脑上的 Fibo 没连到中继。看看电脑是不是睡着了、Fibo 开着没有':
-    'Computer offline: the relay answers, but Fibo on the computer isn’t connected to it. Check the computer is awake and Fibo is running',
+  '中继连得上，但没接通电脑：多半是电脑上的 Fibo 没连到中继，看看电脑是不是睡着了、Fibo 开着没有；也可能是中继这会儿连接太多，暂时拒绝了，过一会儿再试':
+    'The relay answers but didn’t reach the computer. Most likely Fibo on the computer isn’t connected to it: check the computer is awake and Fibo is running. The relay may also be turning away connections because it has too many; try again in a while',
   '中继没有正常应答，可能不在线或在重启。过一会儿再试': 'The relay isn’t answering properly; it may be down or restarting. Try again in a while',
   '连不上中继：先看看手机有没有网；有网的话，可能是中继不在线':
     'Can’t reach the relay. Check the phone has a network; if it does, the relay may be down',

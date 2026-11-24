@@ -67,6 +67,8 @@ export function closeOutcome(code?: number, reason?: string): Outcome {
   }
 }
 
+const RELAY_UP_REFUSED = tk('中继连得上，但没接通电脑：多半是电脑上的 Fibo 没连到中继，看看电脑是不是睡着了、Fibo 开着没有；也可能是中继这会儿连接太多，暂时拒绝了，过一会儿再试');
+
 const UNREACHED = tk('连不上：手机没网，或者中继、电脑不在线。先确认手机能上网，再看电脑上的 Fibo 开着没有');
 
 /**
@@ -81,8 +83,10 @@ export type RelayReach = 'up' | 'sick' | 'none' | 'unknown';
 export function unreachedText(reach: RelayReach): string {
   switch (reach) {
     case 'up':
-      // The relay answers but refused the socket: it has no machine for this phone's token.
-      return tr('电脑不在线：中继连得上，但电脑上的 Fibo 没连到中继。看看电脑是不是睡着了、Fibo 开着没有');
+      // The relay answers but turned the socket away. Most often it has no machine for this
+      // phone's token, but it also refuses a full per-address limit (429) or a machine whose
+      // sockets are all taken (503), and a phone's WebSocket cannot see which: name both.
+      return tr(RELAY_UP_REFUSED);
     case 'sick':
       return tr('中继没有正常应答，可能不在线或在重启。过一会儿再试');
     case 'none':

@@ -50,12 +50,21 @@ describe('what each close means here', () => {
 });
 
 describe('a dial with no close code says which end is away, as far as the relay can tell', () => {
-  test('the relay answering its health check means the computer is the one away', async () => {
+  test('the relay answering its health check points at the computer first', async () => {
     const asked: string[] = [];
     const reach = await reachRelay('https://relay.example/base/', async (url) => (asked.push(url), { ok: true }));
     expect(asked).toEqual(['https://relay.example/base/healthz']);
     expect(reach).toBe('up');
-    expect(unreachedText(reach)).toContain('电脑不在线');
+    expect(unreachedText(reach)).toContain('电脑上的 Fibo 没连到中继');
+  });
+
+  test('a healthy relay does not prove the computer is offline: it may have refused the socket itself', () => {
+    // The relay answers 429 (address limit) or 503 (the machine's sockets all taken) before the
+    // upgrade while /healthz stays fine; the phone sees the same 1006 as for a missing machine.
+    const text = unreachedText('up');
+    expect(text).not.toContain('电脑不在线');
+    expect(text).toContain('连接太多');
+    expect(text).toContain('过一会儿再试');
   });
 
   test('no answer at all is the phone’s network or the relay, and says to check the network first', async () => {
