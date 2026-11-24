@@ -199,11 +199,11 @@ impl SettingsView {
         cx: &Context<Self>,
     ) -> gpui::Div {
         use fibo_core::plugin_context::{Opt, OptKind};
-        let note = if o.secret {
-            let said = o.description.as_deref().unwrap_or_default();
-            t!("{said}（存在钥匙串里，不写进文件）", said)
-        } else {
-            o.description.clone().unwrap_or_default()
+        let said = o.description.as_deref().unwrap_or_default();
+        let note = match (o.secret, fibo_core::secret::SUPPORTED) {
+            (false, _) => said.to_owned(),
+            (true, true) => t!("{said}（存在钥匙串里，不写进文件）", said),
+            (true, false) => t!("{said}（这台电脑上还不能保存密钥）", said),
         };
         let title = t!("　└ {title}", title = o.title);
         let (pid, key) = (id.to_owned(), o.key.clone());

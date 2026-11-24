@@ -1,5 +1,11 @@
 pub const HAS_COMMAND_KEY: bool = false;
 pub const DRAWS_WINDOW_BUTTONS: bool = cfg!(windows);
+pub const WINDOW_BUTTONS_ARE_DOTS: bool = false;
+pub const NOTIFIER: super::Notifier = if cfg!(windows) {
+    super::Notifier::PowerShell
+} else {
+    super::Notifier::Tool
+};
 pub const FILE_MANAGER: &str = if cfg!(windows) {
     "资源管理器"
 } else {

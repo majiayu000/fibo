@@ -306,7 +306,7 @@ impl SettingsView {
         } else if terminal {
             t!("终端原生样式下跟随系统按暗色显示")
         } else {
-            t!("macOS 变换时，在下面两组之间切换")
+            t!("系统明暗变换时，在下面两组之间切换")
         };
         rows.push(self.row(true, t!("明暗"), note, modes).into_any_element());
         if let Some(shown) = appearance::shown(cx)

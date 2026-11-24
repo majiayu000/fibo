@@ -33,7 +33,7 @@ impl SettingsView {
                 self.row(
                     true,
                     t!("让手机连过来"),
-                    t!("这台 Mac 一直挂在中继上，配对过的手机在哪都能连过来；关掉后手机暂时连不上，配对还在。"),
+                    t!("这台电脑一直挂在中继上，配对过的手机在哪都能连过来；关掉后手机暂时连不上，配对还在。"),
                     switch("remote-on", r.enabled).on_click(cx.listener(|this, _, _, cx| {
                         let on = !this.remote.enabled;
                         this.send_remote(on, cx)
