@@ -659,6 +659,7 @@ impl Workbench {
         // The window observes embedded workbenches to update the other machines' cards.
         let remote_cards_changed = self.hosts.embedded
             && (previous.terminal_trust != status.terminal_trust
+                || previous.terminal_update != status.terminal_update
                 || previous.terminal_modes != status.terminal_modes);
         // Workspace refresh and plugin reload notify when they apply.
         let redraw = self.store.link_down()

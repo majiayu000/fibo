@@ -40,6 +40,7 @@ fn unbound(w: &Workspace, seen: &RecognitionStatus, terminal: &str) -> Option<cr
         .then(|| seen.terminal_agents.get(terminal).copied())
         .flatten()
         .or(seen.terminal_trust.get(terminal).map(|p| p.agent))
+        .or(seen.terminal_update.get(terminal).map(|p| p.agent))
 }
 
 /// The Agent a card names for `terminal`: its conversation's, else one found running there.
@@ -72,7 +73,8 @@ fn card(w: &Workspace, seen: &RecognitionStatus, t: &Terminal, now: u64) -> rp::
         content.and_then(|c| c.permission_full)
     };
     let report = seen.terminal_reports.get(&t.id);
-    let status = status::of_terminal(w, &t.id, trust.is_some(), report, now);
+    let asks_first = seen.asks_first(&t.id);
+    let status = status::of_terminal(w, &t.id, asks_first, report, now);
     let phase = match status.map(status::Status::phase) {
         Some(status::Phase::Working) => rp::Phase::Working,
         Some(status::Phase::Waiting) => rp::Phase::Waiting,
@@ -80,9 +82,10 @@ fn card(w: &Workspace, seen: &RecognitionStatus, t: &Terminal, now: u64) -> rp::
         None => rp::Phase::Shell,
     };
     let unbound = unbound(w, seen, &t.id);
-    let note = unbound
-        .filter(|_| trust.is_none())
-        .and_then(|_| seen.terminal_notes.get(&t.id).map(|n| n.note.clone()));
+    let note = unbound.filter(|_| trust.is_none()).and_then(|_| {
+        (seen.terminal_update.get(&t.id).map(|p| p.note()))
+            .or_else(|| seen.terminal_notes.get(&t.id).map(|n| n.note.clone()))
+    });
     let agent = agent(w, seen, &t.id);
     rp::Card {
         agent_name: agent.map_or_else(String::new, |a| a.name().to_owned()),
@@ -108,7 +111,7 @@ fn card(w: &Workspace, seen: &RecognitionStatus, t: &Terminal, now: u64) -> rp::
         waiting: content.and_then(|c| asked(c).or_else(|| said(crate::i18n::say(&c.waiting)))),
         status: status.map(|s| s.key().to_owned()),
         status_label: status.map(|s| s.label().to_owned()),
-        needs_you: trust.is_some() || session.is_some_and(|s| w.needs_you(s, now)),
+        needs_you: asks_first || session.is_some_and(|s| w.needs_you(s, now)),
         trust: trust.map(|p| rp::TrustAsk {
             question: p.question.clone(),
             folder: p.folder.clone(),

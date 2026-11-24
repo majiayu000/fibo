@@ -76,7 +76,7 @@ fn terminal_notice(event: &str, w: &Workspace, id: &str, at: u64) -> Notice {
     n
 }
 /// Only running terminals ask: one that ended took its prompt with it.
-fn map_retain(map: &mut HashMap<String, TrustPrompt>, w: &Workspace) {
+fn map_retain<T>(map: &mut HashMap<String, T>, w: &Workspace) {
     map.retain(|id, _| {
         (w.terminals.iter()).any(|t| t.id == *id && t.state == ProcessState::Running)
     });
@@ -248,6 +248,24 @@ impl Host {
         let at = fibo_core::content::now();
         self.send_events(vec![terminal_notice(event, &w, terminal, at)]);
         Ok(())
+    }
+    /// What the screen says about updating the Agent first; windows and phones see it in the
+    /// status they get. No event of its own: nothing subscribes to one.
+    pub(super) fn set_terminal_update(
+        &mut self,
+        terminal: &str,
+        prompt: Option<UpdatePrompt>,
+    ) -> io::Result<()> {
+        let map = &mut self.recognition.terminal_update;
+        if map.get(terminal) == prompt.as_ref() {
+            return Ok(());
+        }
+        match prompt {
+            Some(p) => map.insert(terminal.to_owned(), p),
+            None => map.remove(terminal),
+        };
+        map_retain(map, &self.workspace);
+        self.publish_status()
     }
     /// Queues `notices` for every subscriber; one that has fallen behind is marked and
     /// told `lagged` once it catches up, never waited for.

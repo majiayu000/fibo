@@ -42,6 +42,7 @@
 "{who} · {word}{progress}：{msg}" = "{who} · {word}{progress}: {msg}"
 "终端里的程序自己报告的状态（OSC 7501）" = "Status the program in the terminal reported itself (OSC 7501)"
 "{agent} · {state} · 要不要信任这个文件夹" = "{agent} · {state} · trust this folder?"
+"{agent} · {state} · 要不要更新 {name}" = "{agent} · {state} · update {name}?"
 "这个画面里没有认出 Agent 对话，只按普通终端显示。" = "No Agent session recognized in this pane; shown as a plain terminal."
 "识别提示：{hint}" = "Recognition note: {hint}"
 "{runtime} 对话 {id}" = "{runtime} session {id}"

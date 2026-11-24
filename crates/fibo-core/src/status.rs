@@ -328,28 +328,30 @@ pub fn asks_for_you(w: &Workspace, s: &AgentSession, now: u64) -> bool {
         && of(w, s, now).needs_you()
 }
 
-/// A terminal whose Agent asks to be trusted with its folder counts in 要你处理 by itself,
-/// when it is in a tab, its space is not put aside, and no session there already counts:
-/// before the answer there is no conversation to count. The phone's card says so too.
-pub fn trust_needs_you(w: &Workspace, terminal: &str, now: u64) -> bool {
+/// A terminal whose Agent asks something before any conversation (to trust its folder, to
+/// update itself: `RecognitionStatus::first_asks`) counts in 要你处理 by itself, when it is
+/// in a tab, its space is not put aside, and no session there already counts: before the
+/// answer there is no conversation to count. The phone's card says so too.
+pub fn first_ask_needs_you(w: &Workspace, terminal: &str, now: u64) -> bool {
     w.terminal_tab(terminal).is_some()
         && !w.terminal_quiet(terminal)
         && w.current_agent(terminal)
             .is_none_or(|s| !needs_you(w, s, now))
 }
 
-/// The state of what runs in a terminal. An Agent asking to be trusted with its folder is
-/// waiting on you, with or without a conversation: it does nothing until you answer. With
+/// The state of what runs in a terminal. An Agent asking something before any conversation
+/// (`asks_first`: trust its folder, update itself) is waiting on you, with or without a
+/// conversation: it does nothing until you answer. With
 /// no conversation, a program that reports its own state (OSC 7501) has that one, as the
 /// window's row shows it.
 pub fn of_terminal(
     w: &Workspace,
     terminal: &str,
-    asks_trust: bool,
+    asks_first: bool,
     report: Option<&crate::protocol::ProgramReport>,
     now: u64,
 ) -> Option<Status> {
-    if asks_trust {
+    if asks_first {
         return Some(Status::Waiting);
     }
     match w.current_agent(terminal) {
@@ -692,9 +694,9 @@ mod tests {
             layout: Some(crate::layout::Layout::Leaf("t".into())),
         });
         assert_eq!(of_terminal(&w, "t", true, None, NOW), Some(Status::Waiting));
-        assert!(trust_needs_you(&w, "t", NOW));
-        assert!(!trust_needs_you(&w, "elsewhere", NOW));
+        assert!(first_ask_needs_you(&w, "t", NOW));
+        assert!(!first_ask_needs_you(&w, "elsewhere", NOW));
         w.quiet_spaces.insert("sp".into());
-        assert!(!trust_needs_you(&w, "t", NOW));
+        assert!(!first_ask_needs_you(&w, "t", NOW));
     }
 }

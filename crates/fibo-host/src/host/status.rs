@@ -271,6 +271,11 @@ pub(super) fn check_screen_wait(
         folder: s.folder,
     });
     lock(shared)?.set_terminal_trust(id, trust)?;
+    let update = crate::screen_ask::update_screen(&tail).map(|s| UpdatePrompt {
+        agent: s.agent,
+        question: s.question,
+    });
+    lock(shared)?.set_terminal_update(id, update)?;
     // Each CLI's own screen rules; one with no Agent yet is read with the default ones.
     let agent = {
         let host = lock(shared)?;

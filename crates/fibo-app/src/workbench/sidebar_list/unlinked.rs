@@ -116,6 +116,7 @@ impl Workbench {
         let mut rows: Vec<_> = (recognition.terminal_notes.keys())
             .chain(recognition.terminal_reports.keys())
             .chain(recognition.terminal_trust.keys())
+            .chain(recognition.terminal_update.keys())
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .filter(|terminal| self.current_agent(terminal).is_none() && keep(terminal))

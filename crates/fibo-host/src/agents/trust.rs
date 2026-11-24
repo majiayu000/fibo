@@ -1,8 +1,8 @@
-//! How each CLI asks to be trusted with a folder, before any conversation. Every part must
-//! be there. Claude Code numbers nothing and starts on 「No, exit」, so Enter alone would quit.
+//! How each CLI asks to be trusted with a folder, or to update itself, before any
+//! conversation. Every part must be there. Claude Code numbers nothing and starts on 「No, exit」, so Enter alone would quit.
 //! Real screens: Claude Code 2.1.318, Codex 0.166 and 0.169 (macOS); Codex's first-run and
 //! Windows footers are from its 0.167 source (`tui/src/onboarding/trust_directory.rs`).
-use crate::screen_ask::TrustScreen;
+use crate::screen_ask::{TrustScreen, UpdateScreen};
 use fibo_core::model::Agent;
 
 fn cursor(line: &str) -> bool {
@@ -69,5 +69,30 @@ pub(super) fn codex(lines: &[&str]) -> Option<TrustScreen> {
         folder: after(lines, "Folder access")?,
         on_yes: cursor(yes),
         toward_yes: "up",
+    })
+}
+
+/// Codex's 「Update available」 picker at start, when a newer release is out: it waits for a
+/// key before anything else. Real screens: Codex 0.169 at 100 and 40 columns (11-24); its
+/// source is `tui/src/update_prompt.rs`. The command in option 1 wraps on a narrow screen,
+/// and so does the footer.
+pub(super) fn codex_update(lines: &[&str]) -> Option<UpdateScreen> {
+    let at = lines
+        .iter()
+        .rposition(|l| l.starts_with("enter continue"))?;
+    if lines.len() - at > 2 || lines[at..].join(" ") != "enter continue · esc skip" {
+        return None;
+    }
+    let options = &lines[..at];
+    let update = options
+        .iter()
+        .rposition(|l| plain(l).starts_with("1. Update now"))?;
+    let skip = |text| options[update..].iter().any(|l| plain(l) == text);
+    if !skip("2. Skip") || !skip("3. Skip until next version") {
+        return None;
+    }
+    Some(UpdateScreen {
+        agent: Agent::Codex,
+        question: words(&lines[..update], "Update available · ", &["Release notes:"])?,
     })
 }

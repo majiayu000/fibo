@@ -434,15 +434,35 @@ pub struct TrustScreen {
     pub toward_yes: &'static str,
 }
 
-/// That prompt when it fills the bottom of the screen, as the CLI that draws it says.
-pub fn trust_screen(tail: &str) -> Option<TrustScreen> {
+/// A screen's last 20 filled lines, where a CLI draws what it asks before any conversation.
+fn filled(tail: &str) -> Vec<&str> {
     let lines: Vec<&str> = (tail.lines().map(str::trim))
         .filter(|l| !l.is_empty())
         .collect();
-    let lines = &lines[lines.len().saturating_sub(20)..];
+    lines[lines.len().saturating_sub(20)..].to_vec()
+}
+
+/// That prompt when it fills the bottom of the screen, as the CLI that draws it says.
+pub fn trust_screen(tail: &str) -> Option<TrustScreen> {
+    let lines = &filled(tail)[..];
     Agent::all()
         .into_iter()
         .find_map(|agent| crate::agents::adapter(agent).trust_screen(lines))
+}
+
+/// An Agent asking whether to update itself, before any conversation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpdateScreen {
+    pub agent: Agent,
+    pub question: String,
+}
+
+/// That picker when it is the last thing on the screen, as the CLI that draws it says.
+pub fn update_screen(tail: &str) -> Option<UpdateScreen> {
+    let lines = &filled(tail)[..];
+    Agent::all()
+        .into_iter()
+        .find_map(|agent| crate::agents::adapter(agent).update_screen(lines))
 }
 
 #[cfg(test)]
@@ -669,6 +689,49 @@ mod tests {
             "Trust this folder? is what Codex asks\n› Ask Codex to do anything\n".to_owned(),
         ] {
             assert_eq!(trust_screen(&broken), None, "{broken}");
+        }
+    }
+    /// Codex 0.167+ stops at 「Update available」 when a newer release is out, before any
+    /// conversation; it read 空闲 (Windows walk 11-24, Mac too).
+    #[test]
+    fn codex_update_picker_is_read_and_ordinary_update_talk_is_not() {
+        let fixture = |name: &str| {
+            let path = format!(
+                "{}/tests/fixtures/screens/codex/{name}.txt",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            std::fs::read_to_string(path).unwrap()
+        };
+        let wide = fixture("update-real");
+        // Codex's own 28x12 snapshot (`update_picker_selected_28x12`): the footer wraps.
+        let short = "  Update available · 0.0.0\n  → 9.9.9\n  Release notes:\n  https://github.com/opena\n  i/codex/releases/latest\n↑\n  1. Update now (runs `npm install -g @openai/codex`)\n  2. Skip\n› 3. Skip until next version\n\n  enter continue · esc\n  skip\n";
+        for screen in [wide.as_str(), &fixture("update-narrow40-real"), short] {
+            let u = update_screen(screen).unwrap_or_else(|| panic!("{screen}"));
+            assert_eq!(u.agent, Agent::Codex);
+            assert!(
+                u.question.starts_with("Update available · "),
+                "{}",
+                u.question
+            );
+            assert!(u.question.contains(" → "), "{}", u.question);
+            assert_eq!(trust_screen(screen), None);
+        }
+        assert_eq!(
+            update_screen(&wide).unwrap().question,
+            "Update available · 0.169.0 → 0.172.0"
+        );
+        for ordinary in [
+            // A conversation about updating, with the composer under it.
+            "• Update available · 1.2 → 1.3 was printed by npm.\n  1. Update now\n  2. Skip\n  3. Skip until next version\n\n› Ask Codex to do anything\n  enter continue · esc skip to undo\n".to_owned(),
+            "• I'll update the README and skip the tests.\n\n› update deps\n".to_owned(),
+            // Answered: Codex carried on below it.
+            format!("{wide}\n• Working (1s • esc to interrupt)\n› Ask Codex\n"),
+            wide.replace("esc skip", "esc back"),
+            wide.replace("3. Skip until next version", "3. Never"),
+            wide.replace("Update available · ", "Update available: "),
+            fixture("trust-real"),
+        ] {
+            assert_eq!(update_screen(&ordinary), None, "{ordinary}");
         }
     }
     #[test]

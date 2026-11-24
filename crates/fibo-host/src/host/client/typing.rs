@@ -146,6 +146,10 @@ fn message_allowed(host: &Host, live: &live::Live, id: &str) -> io::Result<()> {
             "它在等你决定要不要信任这个文件夹，答完才能发消息"
         )));
     }
+    // Enter would pick 「Update now」 there, the option it starts on.
+    if crate::screen_ask::update_screen(&tail).is_some() {
+        return Err(io::Error::other(t!("它在问要不要更新，答完才能发消息")));
+    }
     let rules = host
         .workspace
         .current_agent(id)
