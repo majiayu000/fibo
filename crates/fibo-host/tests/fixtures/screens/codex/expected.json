@@ -117,5 +117,13 @@
   "trust-windows-first-run.txt": {
     "state": "idle",
     "note": "按 Codex 0.167 源码（onboarding/trust_directory.rs）合成：Windows 首次启动的信任提示，2 号选项是 Quit，页脚多了 and create sandbox、写 esc quit；screen_ask::trust_screen 认它"
+  },
+  "update-real.txt": {
+    "state": "idle",
+    "note": "真实 Codex 0.169 画面（100 列，有 0.172 可更新）：启动时的 Update available 选择页，不是审批也不是选择题，screen_ask::update_screen 认它"
+  },
+  "update-narrow40-real.txt": {
+    "state": "idle",
+    "note": "同一页，40 列：网址和 1 号选项里的更新命令都折行；screen_ask::update_screen 认它"
   }
 }

@@ -67,8 +67,10 @@ impl<'a> Steps<'a> {
                 .or_else(|| host.recognition.terminal_agents.get(id).copied())
                 .ok_or_else(|| io::Error::other(t!("这个终端里没有 Agent")))?;
             let trust = host.recognition.terminal_trust.contains_key(id);
+            let update = host.recognition.terminal_update.contains_key(id);
             let ok = match session {
                 _ if trust => Err(t!("它在问要不要信任这个文件夹，答完再换")),
+                _ if update => Err(t!("它在问要不要更新，答完再换")),
                 Some(s) => idle(w, s),
                 None => Ok(()),
             };

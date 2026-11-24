@@ -5,7 +5,7 @@ mod frame;
 mod input;
 mod request;
 pub use frame::*;
-pub use input::{TrustPrompt, TurnInput};
+pub use input::{TrustPrompt, TurnInput, UpdatePrompt};
 pub use request::{HookFacts, HookShell, Request};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -357,6 +357,10 @@ pub struct RecognitionStatus {
     /// folder. Read off its screen; there may be no conversation yet. Live state, not stored.
     #[serde(default)]
     pub terminal_trust: std::collections::HashMap<String, TrustPrompt>,
+    /// Terminal -> an Agent asking, before anything else, whether to update itself. Read
+    /// off its screen like `terminal_trust`. Live state, not stored.
+    #[serde(default)]
+    pub terminal_update: std::collections::HashMap<String, UpdatePrompt>,
     /// Terminal -> the title its program set, spinner dropped. Live state, not stored.
     #[serde(default)]
     pub terminal_titles: std::collections::HashMap<String, String>,
@@ -398,6 +402,7 @@ impl Default for RecognitionStatus {
             terminal_hints: Default::default(),
             terminal_notes: Default::default(),
             terminal_trust: Default::default(),
+            terminal_update: Default::default(),
             terminal_agents: Default::default(),
             terminal_titles: Default::default(),
             terminal_commands: Default::default(),
@@ -410,6 +415,19 @@ impl Default for RecognitionStatus {
             official: Default::default(),
             remote: Default::default(),
         }
+    }
+}
+impl RecognitionStatus {
+    /// The terminals whose Agent asks something before any conversation: to trust its
+    /// folder, or to update itself. Each waits on you (`status::of_terminal`).
+    pub fn first_asks(&self) -> std::collections::BTreeSet<&str> {
+        (self.terminal_trust.keys())
+            .chain(self.terminal_update.keys())
+            .map(String::as_str)
+            .collect()
+    }
+    pub fn asks_first(&self, terminal: &str) -> bool {
+        self.terminal_trust.contains_key(terminal) || self.terminal_update.contains_key(terminal)
     }
 }
 

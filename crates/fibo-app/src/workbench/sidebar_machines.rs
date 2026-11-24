@@ -203,16 +203,14 @@ impl Workbench {
         }
         (count, asks, failed)
     }
-    /// This machine's terminals asking to trust their folder that 要你处理 counts beside its
-    /// sessions (`status::trust_needs_you`), in a fixed order.
+    /// This machine's terminals asking to trust their folder or to update first that 要你处理
+    /// counts beside its sessions (`status::first_ask_needs_you`), in a fixed order.
     pub(super) fn trust_asks(&self) -> Vec<String> {
         let now = crate::model::time::now();
-        let mut asks: Vec<String> = (self.store.recognition().terminal_trust.keys())
-            .filter(|t| fibo_core::status::trust_needs_you(&self.workspace, t, now))
-            .cloned()
-            .collect();
-        asks.sort();
-        asks
+        (self.store.recognition().first_asks().into_iter())
+            .filter(|t| fibo_core::status::first_ask_needs_you(&self.workspace, t, now))
+            .map(str::to_owned)
+            .collect()
     }
     /// What 要你处理 counts on this machine: its sessions and its trust prompts.
     pub(super) fn local_needs(&self) -> usize {
@@ -323,8 +321,7 @@ impl Workbench {
                 .and_then(|id| self.current_agent(id))
                 .map(|s| s.id.clone())
                 .or_else(|| {
-                    (self.nav.focused.clone())
-                        .filter(|t| self.store.recognition().terminal_trust.contains_key(t))
+                    (self.nav.focused.clone()).filter(|t| self.store.recognition().asks_first(t))
                 })
                 .or_else(|| self.overview.here.clone()),
         };

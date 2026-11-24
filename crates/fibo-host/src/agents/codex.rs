@@ -47,6 +47,9 @@ impl Adapter for Codex {
     fn trust_screen(&self, lines: &[&str]) -> Option<crate::screen_ask::TrustScreen> {
         super::trust::codex(lines)
     }
+    fn update_screen(&self, lines: &[&str]) -> Option<crate::screen_ask::UpdateScreen> {
+        super::trust::codex_update(lines)
+    }
     /// Its footer says 「esc to interrupt」. Ctrl-C (0.166) opens 「Task is still running」
     /// over a running turn and, on an idle one, disconnects and quits: real runs, 11-05.
     fn interrupt_key(&self) -> &'static [u8] {

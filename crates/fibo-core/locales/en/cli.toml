@@ -281,6 +281,7 @@
 "这个 Agent 要等手头这一步做完才会读排队的消息" = "This agent reads queued messages after the current step finishes"
 
 "它在等你决定要不要信任这个文件夹，答完才能发消息" = "Decide whether to trust this folder before sending a message"
+"它在问要不要更新，答完才能发消息" = "Answer the update prompt before sending a message"
 
 "它在等你审批，先允许或拒绝，再发送消息" = "Allow or deny the pending approval before sending a message"
 
@@ -390,6 +391,7 @@
 "\n\n（历史仅覆盖索引尾段及之后的增量；此前要求未知。）" = "\n\n(History covers only the indexed tail and later updates; earlier requirements are unknown.)"
 "这个终端里没有 Agent" = "There is no agent in this terminal"
 "它在问要不要信任这个文件夹，答完再换" = "Answer the folder trust prompt before changing this"
+"它在问要不要更新，答完再换" = "Answer the update prompt before changing this"
 "这个 Agent 还不支持在手机上换" = "This agent does not support changing this from the phone yet"
 "它在问你问题，答完再换" = "Answer the agent's question before changing this"
 "这一轮还没结束，等它停下再换" = "Wait for the current turn to finish before changing this"

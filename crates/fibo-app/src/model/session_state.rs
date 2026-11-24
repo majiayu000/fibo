@@ -35,8 +35,8 @@ pub fn report_view(
     (group, fibo_core::protocol::TerminalNote { note, why })
 }
 /// A terminal no conversation is tied to, as its pane and sidebar row show it: the state
-/// core gives it (`status::of_terminal`: an Agent asking to trust its folder waits on you)
-/// and its line. `None` when nothing is known of it.
+/// core gives it (`status::of_terminal`: an Agent asking to trust its folder or to update
+/// itself waits on you) and its line. `None` when nothing is known of it.
 pub fn unlinked_view(
     r: &fibo_core::protocol::RecognitionStatus,
     w: &Workspace,
@@ -44,9 +44,10 @@ pub fn unlinked_view(
 ) -> Option<(Option<Status>, fibo_core::protocol::TerminalNote)> {
     let trust = r.terminal_trust.get(terminal);
     let report = r.terminal_reports.get(terminal);
-    let group = fibo_core::status::of_terminal(w, terminal, trust.is_some(), report, now());
-    let note = match trust {
-        Some(p) => fibo_core::protocol::TerminalNote {
+    let asks = r.asks_first(terminal);
+    let group = fibo_core::status::of_terminal(w, terminal, asks, report, now());
+    let note = match (trust, r.terminal_update.get(terminal)) {
+        (Some(p), _) => fibo_core::protocol::TerminalNote {
             note: t!(
                 "{agent} · {state} · 要不要信任这个文件夹",
                 agent = p.agent.executable(),
@@ -54,15 +55,20 @@ pub fn unlinked_view(
             ),
             why: format!("{}\n{}", p.question, p.folder),
         },
-        None => (r.terminal_notes.get(terminal).cloned())
+        (None, Some(p)) => fibo_core::protocol::TerminalNote {
+            note: p.note(),
+            why: p.question.clone(),
+        },
+        (None, None) => (r.terminal_notes.get(terminal).cloned())
             .or_else(|| report.map(|r| report_view(r).1))?,
     };
     Some((group, note))
 }
-/// Which terminals ask to trust their folder. The window shows that, so it redraws when the
-/// set changes; the words of one prompt stay the phone's, and redraw nothing (0516f477).
+/// Which terminals ask to trust their folder or to update first. The window shows that, so
+/// it redraws when the set changes; the words of one prompt stay the phone's, and redraw
+/// nothing (0516f477).
 pub fn trust_asked(r: &fibo_core::protocol::RecognitionStatus) -> std::collections::BTreeSet<&str> {
-    r.terminal_trust.keys().map(String::as_str).collect()
+    r.first_asks()
 }
 /// How many sessions 要你处理 counts (`status::needs_you`) in each space, in one pass:
 /// asked per space, every render walked all sessions once per space.
@@ -423,6 +429,27 @@ mod needs_tests {
         assert_eq!(group, Some(Status::Waiting));
         assert!(note.note.starts_with("codex · "), "{}", note.note);
         assert!(note.note.contains(Status::Waiting.label()), "{}", note.note);
+        assert!(trust_asked(&r).contains("t"));
+    }
+    /// Codex's 「Update available」 picker at start waits on you the same way, with its
+    /// own line (walk 11-24: it read 空闲 · 未关联对话).
+    #[test]
+    fn an_unlinked_update_picker_reads_as_waiting() {
+        let w = Workspace::default();
+        let mut r = fibo_core::protocol::RecognitionStatus::default();
+        r.terminal_update.insert(
+            "t".into(),
+            fibo_core::protocol::UpdatePrompt {
+                agent: Agent::Codex,
+                question: "Update available · 0.169.0 → 0.172.0".into(),
+            },
+        );
+        let (group, note) = unlinked_view(&r, &w, "t").unwrap();
+        assert_eq!(group, Some(Status::Waiting));
+        assert!(note.note.starts_with("codex · "), "{}", note.note);
+        assert!(note.note.contains(Status::Waiting.label()), "{}", note.note);
+        assert!(note.note.contains("Codex"), "{}", note.note);
+        assert_eq!(note.why, "Update available · 0.169.0 → 0.172.0");
         assert!(trust_asked(&r).contains("t"));
     }
     /// The one-pass count matches asking each space on its own.

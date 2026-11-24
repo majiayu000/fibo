@@ -155,6 +155,10 @@ pub trait Adapter: Sync {
     fn trust_screen(&self, _lines: &[&str]) -> Option<crate::screen_ask::TrustScreen> {
         None
     }
+    /// Its 「update first?」 picker at start, from a screen's last filled lines.
+    fn update_screen(&self, _lines: &[&str]) -> Option<crate::screen_ask::UpdateScreen> {
+        None
+    }
     /// Reads the CLI's report of commands left alive after its interrupt key.
     fn interrupt_background(&self) -> Option<fn(&str) -> bool> {
         None
