@@ -12,6 +12,7 @@
 "{current} 已是最新版本" = "{current} is the latest version"
 "检查失败：{e}" = "Check failed: {e}"
 "有新版本 {version}（当前 {current}），终端会继续运行" = "{version} is available (current {current}); terminals keep running"
+"有新版本 {version}（当前 {current}），更新会关闭正在运行的终端" = "{version} is available (current {current}); updating closes running terminals"
 "立即更新" = "Update Now"
 "正在下载并校验 {version}…" = "Downloading and verifying {version}…"
 "打开发布页" = "Open Release Page"
@@ -21,8 +22,10 @@
 [statusbar]
 "新版本 {version} · 更新" = "New version {version} · Update"
 "当前 {current}；更新后 App 自动重启，终端继续运行" = "Current {current}; the App restarts after updating, terminals keep running"
+"当前 {current}；更新后 App 自动重启，正在运行的终端会关闭" = "Current {current}; the App restarts after updating, running terminals close"
 "正在更新到 {version}…" = "Updating to {version}…"
 "下载、校验签名后替换 App，然后自动重启" = "Downloads, checks the signature, replaces the App, then restarts"
+"下载、校验后运行安装程序，然后自动重启" = "Downloads, checks the checksum, runs the installer, then restarts"
 "新版本 {version}" = "New version {version}"
 "这份由 Homebrew 安装：运行 {v1}" = "Installed with Homebrew: run {v1}"
 "{version} 没装上" = "{version} didn't install"
@@ -31,6 +34,7 @@
 "无法保存 {display}：{e}" = "Couldn't save {display}: {e}"
 "找不到缓存目录" = "No cache folder found"
 "已装好新版本，但没能自动重启（{e}），请退出后重新打开" = "The new version is installed but couldn't restart ({e}); quit and open it again"
+"没能启动安装程序（{e}），请从发布页下载" = "Couldn't start the installer ({e}); download it from the release page"
 
 [install]
 "这份 Fibo 由 Homebrew 安装，请运行 {v1}" = "This Fibo was installed with Homebrew; run {v1}"
@@ -39,6 +43,7 @@
 "校验没通过，没有安装：{why}" = "Verification failed, nothing installed: {why}"
 "替换 App 失败，已恢复原来的版本：{why}" = "Replacing the App failed; the previous version is back: {why}"
 "{version} 没有给这台 Mac（{arch}）的安装包" = "{version} has no build for this Mac ({arch})"
+"{version} 没有 Windows 安装包" = "{version} has no Windows installer"
 "{display} 不是一个 App" = "{display} is not an App"
 "{display}：{e}" = "{display}: {e}"
 "SHA256SUMS 里没有 {name} 的校验和" = "SHA256SUMS has no checksum for {name}"

@@ -38,6 +38,13 @@ pub fn quote(word: &str) -> String {
     imp::quote(word)
 }
 
+/// `word` as one PowerShell string literal, for a value PowerShell itself takes (not a program's
+/// argument, which `quote` is for).
+#[cfg(windows)]
+pub(crate) fn literal(word: &str) -> String {
+    imp::literal(word)
+}
+
 /// One literal word for a POSIX shell, including remote Unix commands on Windows.
 pub fn quote_posix(word: &str) -> String {
     format!("'{}'", word.replace('\'', "'\\''"))

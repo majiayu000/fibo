@@ -1,4 +1,5 @@
-//! Updating the packaged macOS app from GitHub Releases.
+//! Updating the packaged app from GitHub Releases: the macOS bundle in place, and on
+//! Windows the installed copy by running the release's installer over it (`installer`).
 //!
 //! - **When.** At most once a day while 设置 › 关于 › 自动检查更新 is on (the default), and
 //!   whenever 检查更新 is clicked. The check is one `GET` of the latest non-prerelease
@@ -16,11 +17,13 @@
 //! - **Where not.** A bundle Homebrew manages is left to `brew upgrade --cask fibo`, and one
 //!   this user cannot replace (owned by root, a read-only volume) gets the release page.
 mod install;
+mod installer;
 mod release;
 mod system;
 mod version;
 
 pub use install::*;
+pub use installer::*;
 pub use release::*;
 pub use system::System;
 pub use version::Version;

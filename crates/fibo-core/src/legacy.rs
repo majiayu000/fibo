@@ -86,9 +86,10 @@ fn move_dir(old: &Path, new: &Path) -> std::io::Result<()> {
 
 /// The runtime directory under `home`: the new one, unless only an old one exists
 /// (Mooring's before Keepline's). A host from before the rename may be serving it, with
-/// the user's terminals.
+/// the user's terminals. Joined a part at a time: on Windows `".local/share"` in one piece
+/// names the same folder but shows as `C:\Users\me\.local/share\...`.
 pub fn runtime_dir(home: &Path) -> PathBuf {
-    let share = home.join(".local/share");
+    let share = share_dir(home);
     let new = share.join("fibo-workbench");
     if new.exists() {
         return new;
@@ -98,6 +99,11 @@ pub fn runtime_dir(home: &Path) -> PathBuf {
         .map(|old| share.join(old))
         .find(|old| old.is_dir())
         .unwrap_or(new)
+}
+
+/// `~/.local/share`, where the runtime and the sourced CLIs' sessions live on every system.
+pub fn share_dir(home: &Path) -> PathBuf {
+    home.join(".local").join("share")
 }
 
 #[cfg(test)]
@@ -194,6 +200,30 @@ mod tests {
         );
         std::fs::create_dir_all(home.join(".local/share/fibo-workbench")).unwrap();
         assert!(runtime_dir(&home).ends_with("fibo-workbench"));
+        std::fs::remove_dir_all(&home).unwrap();
+    }
+
+    /// The same folder as before, written with one kind of separator: Windows showed
+    /// `C:\Users\me\.local/share\mooring-workbench` in 设置 › 关于 and in the host's
+    /// `--runtime`. Only Windows tells the two apart; the Windows CI runs this.
+    #[test]
+    fn the_runtime_path_uses_one_separator() {
+        let home = std::env::temp_dir().join(format!("fibo-runtime-sep-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let expected = home.join(".local").join("share").join("mooring-workbench");
+        std::fs::create_dir_all(&expected).unwrap();
+        assert_eq!(
+            runtime_dir(&home).to_string_lossy(),
+            expected.to_string_lossy()
+        );
+        let other = if std::path::MAIN_SEPARATOR == '/' {
+            '\\'
+        } else {
+            '/'
+        };
+        let rest = runtime_dir(&home);
+        let rest = rest.strip_prefix(&home).unwrap().to_string_lossy();
+        assert!(!rest.contains(other), "{rest}");
         std::fs::remove_dir_all(&home).unwrap();
     }
 

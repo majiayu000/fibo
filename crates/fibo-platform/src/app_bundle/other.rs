@@ -1,6 +1,7 @@
 //! Systems whose app is not replaced by itself.
 use std::path::{Path, PathBuf};
 
+pub const INSTALLER: bool = false;
 pub const SUPPORTED: bool = false;
 const NO: &str = "这个系统上不能自动更新";
 
@@ -33,4 +34,13 @@ pub fn same_owner(_: &Path, _: &Path) -> std::io::Result<bool> {
 }
 pub fn homebrew_prefixes() -> Vec<PathBuf> {
     Vec::new()
+}
+
+pub fn install_after_exit(
+    _: u32,
+    _: &Path,
+    _: &Path,
+    _: Vec<std::ffi::OsString>,
+) -> std::io::Result<()> {
+    Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
 }

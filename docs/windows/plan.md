@@ -153,7 +153,7 @@ host 单元测试约 343 个，集成测试约 203 个，共约 16000 行集成�
 
 1. ConPTY 改写输出，读屏规则可能要分平台。这是最大的风险，第 2 步回答。
 2. Codex 的原生沙盒可能挡住钩子访问 host 的连接，或让它的子进程不在我们认识的树里。没有查证。
-3. 文件占用：Windows 上 `rename` 碰到打开的文件会失败，涉及 `plugin_context.rs` 的 `runs.jsonl`、`market_install.rs` 的目录替换，以及 App 自更新替换正在跑的 exe。
+3. 文件占用：Windows 上 `rename` 碰到打开的文件会失败，涉及 `plugin_context.rs` 的 `runs.jsonl`、`market_install.rs` 的目录替换。App 自更新（2026-11-24）不替换正在跑的 exe：下载发布里的 `Fibo-Setup-X.Y.Z.exe`、对 `SHA256SUMS` 校验，App 退出后停掉本安装的 host，静默装回原目录再启动窗口（`fibo_core::update::installer`、`app_bundle/windows.rs`）。代价是终端会关闭（ConPTY 不能交给新 host），安装包未签名，校验只靠同一发布的校验和。
 4. job 的时间窗：极快启动子进程的命令可能漏在 job 外。std 稳定后再用启动属性解决。
 5. `pty.rs`、`live.rs` 已有 600 多行，加 Windows 代码会碰 800 行上限，应该放进新文件。
 6. CI 上的 macOS runner 紧张，Windows 检查不要放进 `ci.yml`：改那个文件会让它的缓存键失效。

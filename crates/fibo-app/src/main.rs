@@ -295,9 +295,10 @@ fn run() -> io::Result<()> {
     // again brings the same window back, before a second forward starts.
     let instance_dir = match attach {
         Some(_) => root.join("client"),
-        None => fibo_platform::dirs::home()
-            .ok_or_else(|| io::Error::other("HOME unavailable"))?
-            .join(".local/share/mooring-client"),
+        None => fibo_core::legacy::share_dir(
+            &fibo_platform::dirs::home().ok_or_else(|| io::Error::other("HOME unavailable"))?,
+        )
+        .join("mooring-client"),
     };
     // Visual evidence uses its explicitly isolated runtime without forwarding to or
     // replacing the user's running workbench.

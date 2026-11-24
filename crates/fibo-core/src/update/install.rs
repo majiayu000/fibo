@@ -148,27 +148,8 @@ fn fetch_and_swap(
     tools: &dyn Tools,
     step: &dyn Fn(Step),
 ) -> Result<(), Failure> {
-    step(Step::Downloading);
-    let listed = tools.fetch(&sums.url).map_err(Failure::Download)?;
-    let expected = sum_for(&String::from_utf8_lossy(&listed), &zip.name)
-        .ok_or_else(|| Failure::Verify(t!("SHA256SUMS 里没有 {name} 的校验和", name = zip.name)))?;
     let folder = job.cache.join(job.release.version.to_string());
-    std::fs::create_dir_all(&folder)
-        .map_err(|e| Failure::Download(t!("{display}：{e}", display = folder.display(), e)))?;
-    let file = folder.join(&zip.name);
-    let _ = std::fs::remove_file(&file);
-    let downloaded = tools.download(&zip.url, &file).map_err(Failure::Download);
-    let verified = downloaded.and_then(|()| {
-        step(Step::Verifying);
-        let actual = sha256_file(&file).map_err(Failure::Download)?;
-        if actual != expected {
-            return Err(Failure::Verify(t!(
-                "{name} 的 SHA-256 是 {actual}，SHA256SUMS 写的是 {expected}",
-                name = zip.name,
-                actual,
-                expected
-            )));
-        }
+    let verified = download_verified(zip, sums, &folder, tools, step).and_then(|file| {
         tools
             .unzip(&file, stage)
             .map_err(|e| Failure::Verify(t!("解不开 {name}：{e}", name = zip.name, e)))
@@ -180,6 +161,40 @@ fn fetch_and_swap(
     verify_app(&app, &job.release.version, job.allow_unnotarized, tools)?;
     step(Step::Swapping);
     swap(job.bundle, &app, name)
+}
+
+/// Downloads `asset` into `folder` and checks it against the release's `SHA256SUMS`; the
+/// file it returns is exactly what the release lists.
+pub(super) fn download_verified(
+    asset: &super::Asset,
+    sums: &super::Asset,
+    folder: &Path,
+    tools: &dyn Tools,
+    step: &dyn Fn(Step),
+) -> Result<PathBuf, Failure> {
+    step(Step::Downloading);
+    let listed = tools.fetch(&sums.url).map_err(Failure::Download)?;
+    let expected = sum_for(&String::from_utf8_lossy(&listed), &asset.name).ok_or_else(|| {
+        Failure::Verify(t!("SHA256SUMS 里没有 {name} 的校验和", name = asset.name))
+    })?;
+    std::fs::create_dir_all(folder)
+        .map_err(|e| Failure::Download(t!("{display}：{e}", display = folder.display(), e)))?;
+    let file = folder.join(&asset.name);
+    let _ = std::fs::remove_file(&file);
+    tools
+        .download(&asset.url, &file)
+        .map_err(Failure::Download)?;
+    step(Step::Verifying);
+    let actual = sha256_file(&file).map_err(Failure::Download)?;
+    if actual != expected {
+        return Err(Failure::Verify(t!(
+            "{name} 的 SHA-256 是 {actual}，SHA256SUMS 写的是 {expected}",
+            name = asset.name,
+            actual,
+            expected
+        )));
+    }
+    Ok(file)
 }
 
 /// The one `.app` a release zip holds.
