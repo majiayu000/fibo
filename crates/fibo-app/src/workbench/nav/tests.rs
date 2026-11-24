@@ -66,3 +66,23 @@ fn a_jump_to_what_is_in_view_keeps_the_way_back() {
     fresh.jump(spot("a", "t1"), Some("s1"), "s1");
     assert_eq!(fresh.back(spot("a", "t1")), None);
 }
+
+#[test]
+fn a_session_still_loading_is_noted_once_where_it_lands() {
+    // Mid-trip: ⌘J went from a to s2 and the user is still on s2.
+    let start = spot("a", "t1");
+    let on_s2 = spot("b", "t2");
+    let mut trail = Trail::default();
+    trail.jump(start.clone(), Some("s1"), "s2");
+    // A notification for s3, which has not loaded: nothing is noted while it waits, and
+    // the jump is noted when it lands, still from s2, so it goes on with the same trip.
+    trail.jump(on_s2.clone(), Some("s2"), "s3");
+    assert_eq!(trail.back(spot("c", "t3")), Some(start.clone()));
+    // Noted on the click as well, the second note sees s2 while the trail has landed on
+    // s3, and the way back to where the trip began is lost.
+    let mut twice = Trail::default();
+    twice.jump(start, Some("s1"), "s2");
+    twice.jump(on_s2.clone(), Some("s2"), "s3");
+    twice.jump(on_s2.clone(), Some("s2"), "s3");
+    assert_eq!(twice.back(spot("c", "t3")), Some(on_s2));
+}

@@ -275,7 +275,6 @@ impl Workbench {
         menu
     }
     pub fn navigate_to(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
-        self.note_jump(id, cx);
         self.overview.cleanup.clear();
         self.tasks.form = None;
         self.search.hide();
@@ -286,6 +285,9 @@ impl Workbench {
             .find(|s| s.id == id)
             .cloned()
         {
+            // Noted where it lands: a session still loading comes back here through
+            // open_pending_route, and noting the click too would count one jump twice.
+            self.note_jump(id, cx);
             self.enter_card(&session, window, cx);
             // Report actual selected layout and focused pane, not a queued route intent.
             if !self.nav.overview
