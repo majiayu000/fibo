@@ -2,12 +2,59 @@ use super::*;
 /// Runs handed to CoreText, for the CPU probe to see what a frame shaped.
 #[cfg(feature = "visual-test")]
 pub static SHAPED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-pub fn shape_cell(
-    run: &Run,
-    font: Font,
-    metrics: CellMetrics,
-    window: &Window,
-) -> (ShapedLine, Pixels) {
+/// A cell's shaped text, where it sits in its cells and the size it is drawn at.
+#[derive(Clone)]
+pub struct CellShape {
+    pub line: ShapedLine,
+    pub offset: Pixels,
+    /// The drawn size over the shaped one: an ideograph is shaped once at the terminal's
+    /// size and drawn scaled to the font's ideographic width. Its glyph and outline are
+    /// the same at any size, so a second CoreText pass at the scaled size only multiplied
+    /// every number by this (half of a scrolled Chinese line's cost, #535).
+    pub scale: f32,
+}
+impl CellShape {
+    pub fn width(&self) -> Pixels {
+        self.line.width() * self.scale
+    }
+    pub fn paint(
+        &self,
+        origin: gpui::Point<Pixels>,
+        lh: Pixels,
+        color: Hsla,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if self.scale == 1. {
+            let _ = self.line.paint(
+                origin + point(self.offset, px(0.)),
+                lh,
+                TextAlign::Left,
+                None,
+                window,
+                cx,
+            );
+            return;
+        }
+        // What ShapedLine::paint does with the layout shaped at the scaled size.
+        let (ascent, descent) = (
+            self.line.ascent * self.scale,
+            self.line.descent * self.scale,
+        );
+        let baseline = origin.y + (lh - ascent - descent) / 2. + ascent;
+        let size = px(font_size()) * self.scale;
+        for run in &self.line.runs {
+            for g in &run.glyphs {
+                let at = point(
+                    origin.x + self.offset + g.position.x * self.scale,
+                    baseline + g.position.y * self.scale,
+                );
+                let _ = window.paint_glyph(at, run.font_id, g.id, size, color);
+            }
+        }
+    }
+}
+pub fn shape_cell(run: &Run, font: Font, metrics: CellMetrics, window: &Window) -> CellShape {
     // Cell backgrounds/decorations retain full width; trailing ASCII blanks have no ink.
     #[cfg(feature = "visual-test")]
     SHAPED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -48,7 +95,18 @@ pub fn shape_cell(
                 .and_then(|r| ts.advance(r.font_id, px(font_size()), '水').ok())
                 .map(|s| s.width)
                 .unwrap_or(line.width());
-            (ic / fallback_ic).min(metrics.height / px(font_size()))
+            let scale = (ic / fallback_ic).min(metrics.height / px(font_size()));
+            // A color glyph's advance snaps to its bitmap strike: not linear in the size.
+            if !line.runs.iter().flat_map(|r| &r.glyphs).any(|g| g.is_emoji) {
+                let scale = scale * (target / (line.width() * scale)).min(1.);
+                let offset = ((target - line.width() * scale) / 2.).max(px(0.));
+                return CellShape {
+                    line,
+                    offset,
+                    scale,
+                };
+            }
+            scale
         } else {
             (target / line.width()).min(metrics.height / px(font_size()))
         };
@@ -70,7 +128,11 @@ pub fn shape_cell(
         }
         offset = ((target - line.width()) / 2.).max(px(0.));
     }
-    (line, offset)
+    CellShape {
+        line,
+        offset,
+        scale: 1.,
+    }
 }
 pub fn run_font(run: &Run, f: &Font) -> Font {
     let mut font = if run.text.is_ascii() {
@@ -94,7 +156,7 @@ pub(super) fn printable_cells(run: &Run) -> bool {
 pub struct LayoutCache {
     key: Option<(Font, CellMetrics, u64)>,
     viewport_top: Option<usize>,
-    rows: super::shape_cache::Rows<(ShapedLine, Pixels)>,
+    rows: super::shape_cache::Rows<CellShape>,
     pub(super) ascii: [Option<Option<AsciiGlyphs>>; 4],
 }
 impl LayoutCache {
@@ -281,11 +343,12 @@ fn paint_grid(
             {
                 continue;
             }
-            let (line, offset) = cache.rows.get(y, index, run, || {
+            let shape = cache.rows.get(y, index, run, || {
                 shape_cell(run, run_font(run, f), metrics, window)
             });
             index += 1;
             if run.text.is_ascii() {
+                let line = &shape.line;
                 // One glyph per column: place each on its cell, since the cell width is
                 // rounded to backing pixels and the shaped advances are not.
                 let baseline = (lh - line.ascent - line.descent) / 2. + line.ascent;
@@ -302,14 +365,7 @@ fn paint_grid(
                 }
                 continue;
             }
-            let _ = line.paint(
-                point(ox + *offset, oy),
-                lh,
-                TextAlign::Left,
-                None,
-                window,
-                cx,
-            );
+            shape.paint(point(ox, oy), lh, text_color(run), window, cx);
         }
         cache.rows.end_row(y, index);
     }
