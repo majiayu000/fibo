@@ -73,9 +73,9 @@ pub(super) fn codex(lines: &[&str]) -> Option<TrustScreen> {
 }
 
 /// Codex's 「Update available」 picker at start, when a newer release is out: it waits for a
-/// key before anything else. Real screens: Codex 0.169 at 100 and 40 columns (11-24); its
-/// source is `tui/src/update_prompt.rs`. The command in option 1 wraps on a narrow screen,
-/// and so does the footer.
+/// key before anything else. Real screens: Codex 0.169 at 100, 40 and 27 columns (11-24);
+/// its source is `tui/src/update_prompt.rs`. On a narrow screen every part may wrap: the
+/// question right after its 「·」, the command in option 1, option 3 and the footer.
 pub(super) fn codex_update(lines: &[&str]) -> Option<UpdateScreen> {
     let at = lines
         .iter()
@@ -87,12 +87,15 @@ pub(super) fn codex_update(lines: &[&str]) -> Option<UpdateScreen> {
     let update = options
         .iter()
         .rposition(|l| plain(l).starts_with("1. Update now"))?;
-    let skip = |text| options[update..].iter().any(|l| plain(l) == text);
-    if !skip("2. Skip") || !skip("3. Skip until next version") {
+    let choices: Vec<&str> = options[update..].iter().map(|l| plain(l)).collect();
+    if !choices
+        .join(" ")
+        .ends_with(" 2. Skip 3. Skip until next version")
+    {
         return None;
     }
     Some(UpdateScreen {
         agent: Agent::Codex,
-        question: words(&lines[..update], "Update available · ", &["Release notes:"])?,
+        question: words(&lines[..update], "Update available ·", &["Release notes:"])?,
     })
 }

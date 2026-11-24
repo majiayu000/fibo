@@ -249,6 +249,21 @@ impl Host {
         self.send_events(vec![terminal_notice(event, &w, terminal, at)]);
         Ok(())
     }
+    /// What `tail`, the bottom of a terminal's screen, asks before any conversation: to trust
+    /// its folder, to update the Agent first.
+    pub(super) fn read_first_asks(&mut self, terminal: &str, tail: &str) -> io::Result<()> {
+        let trust = crate::screen_ask::trust_screen(tail).map(|s| TrustPrompt {
+            agent: s.agent,
+            question: s.question,
+            folder: s.folder,
+        });
+        self.set_terminal_trust(terminal, trust)?;
+        let update = crate::screen_ask::update_screen(tail).map(|s| UpdatePrompt {
+            agent: s.agent,
+            question: s.question,
+        });
+        self.set_terminal_update(terminal, update)
+    }
     /// What the screen says about updating the Agent first; windows and phones see it in the
     /// status they get. No event of its own: nothing subscribes to one.
     pub(super) fn set_terminal_update(

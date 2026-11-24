@@ -583,6 +583,12 @@ impl Host {
     }
     /// What the bottom of a bound terminal's screen says about its turn; see `title_changed`.
     fn screen_busy(&mut self, terminal: &str, tail: &str) -> io::Result<()> {
+        // A prompt answered into a running turn: its working line ticks every second, so the
+        // quiet-screen read never comes and the prompt stayed waiting for the whole turn
+        // (16-37 s, v0.1.4 RC1). Only a terminal that asked is read again.
+        if self.recognition.asks_first(terminal) {
+            self.read_first_asks(terminal, tail)?;
+        }
         let busy = self.workspace.current_agent(terminal).and_then(|s| {
             crate::agents::adapter(s.runtime)
                 .screen_busy(tail)
