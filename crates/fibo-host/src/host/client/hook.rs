@@ -138,7 +138,9 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             if let Some(events) = &host.log_events {
                 events.file(path);
             }
-            Ok(Reply::Workspace(host.snapshot()))
+            // The CLI only needs to know it landed: a snapshot here is megabytes built
+            // under the host lock on every hook event, then thrown away.
+            Ok(Reply::Ok)
         }
         _ => unreachable!("request routed by client::dispatch"),
     }

@@ -290,7 +290,8 @@ fn hook(mut args: impl Iterator<Item = String>) -> std::io::Result<()> {
         &std::path::Path::new(&runtime).join("workbench.sock"),
         &request,
     )? {
-        Reply::Workspace(_) => Ok(()),
+        // A host from before 2026-11-24 still answers with the whole workspace.
+        Reply::Ok | Reply::Workspace(_) => Ok(()),
         other => Err(std::io::Error::other(t!(
             "后台的回复不对：{other}",
             other = format!("{other:?}")
