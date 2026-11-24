@@ -118,6 +118,10 @@ impl Pane {
             self.held.extend(bytes);
             return;
         }
+        // Typed while the link is down: kept for the user to send once it is back.
+        if !lossy && self.keep_offline(&bytes, cx) {
+            return;
+        }
         let ready = self.connection.state.lock().is_ok_and(|s| s.vt.is_some());
         if !ready && self.host().attached() {
             self.held = bytes;

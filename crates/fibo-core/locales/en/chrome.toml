@@ -52,6 +52,10 @@
 [pane_render]
 "进程已退出" = "Process exited"
 "连接断开 · 正在重连…" = "Disconnected · reconnecting…"
+"连接断开 · 正在重连… 刚才输入的先留着，连上后问你发不发" = "Disconnected · reconnecting… What you typed is kept; once back you choose whether to send it"
+"断线时输入的还没发：{text}" = "Typed while disconnected, not sent yet: {text}"
+"发送" = "Send"
+"丢弃" = "Discard"
 "正在载入画面…" = "Loading the screen…"
 "只读 · 可明确接管" = "Read-only · can take over"
 "只读 · 尺寸跟另一个窗口（{cols}×{rows}）· 可明确接管" = "Read-only · sized by another window ({cols}×{rows}) · can take over"

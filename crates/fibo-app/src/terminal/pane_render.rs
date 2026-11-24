@@ -110,6 +110,8 @@ impl Render for Pane {
             .and_then(|vt| Some((vt.terminal().cols().ok()?, vt.terminal().rows().ok()?)));
         let status: String = if state.ended {
             t!("进程已退出").into()
+        } else if (state.dropped || self.reconnect_delay > 0) && !self.offline.is_empty() {
+            t!("连接断开 · 正在重连… 刚才输入的先留着，连上后问你发不发").into()
         } else if state.dropped || self.reconnect_delay > 0 {
             t!("连接断开 · 正在重连…").into()
         } else if state.vt.is_none() {
@@ -408,6 +410,39 @@ impl Render for Pane {
                         .on_click(cx.listener(|this,_,_,cx|this.confirm_paste(cx))))
                     .child(div().id("paste-cancel").cursor_pointer().child(t!("取消"))
                         .on_click(cx.listener(|this,_,_,cx|{this.paste_confirm=None;cx.notify();}))))
+            })
+            .when_some(self.offline_offer(), |d, text| {
+                d.child(
+                    div()
+                        .px(px(T::S12))
+                        .py(px(T::S8))
+                        .flex()
+                        .items_center()
+                        .gap(px(T::S12))
+                        .bg(T::surface(T::panel()))
+                        .text_size(px(T::META))
+                        .child(
+                            div()
+                                .flex_1()
+                                .text_color(T::color(T::secondary()))
+                                .child(t!("断线时输入的还没发：{text}", text)),
+                        )
+                        .child(
+                            div()
+                                .id("offline-send")
+                                .cursor_pointer()
+                                .text_color(T::color(T::link()))
+                                .child(t!("发送"))
+                                .on_click(cx.listener(|this, _, _, cx| this.send_offline(cx))),
+                        )
+                        .child(
+                            div()
+                                .id("offline-drop")
+                                .cursor_pointer()
+                                .child(t!("丢弃"))
+                                .on_click(cx.listener(|this, _, _, cx| this.drop_offline(cx))),
+                        ),
+                )
             })
             .when(tint_stale, |d| {
                 d.child(
