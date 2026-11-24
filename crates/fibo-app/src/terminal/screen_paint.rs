@@ -14,6 +14,8 @@ pub struct CellShape {
     pub scale: f32,
 }
 impl CellShape {
+    /// The drawn width, for the native geometry check.
+    #[cfg(feature = "visual-test")]
     pub fn width(&self) -> Pixels {
         self.line.width() * self.scale
     }
