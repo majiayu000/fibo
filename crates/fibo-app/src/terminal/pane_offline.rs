@@ -67,6 +67,39 @@ impl OfflineInput {
             _ => out.into_iter().collect(),
         }
     }
+    /// What becomes of one input. Only what the user typed or pasted is kept: what the
+    /// pane makes up itself (arrows from the wheel, focus and mouse reports) answers a
+    /// screen that is gone by the time the link is back, and would fill the room.
+    pub(super) fn route(
+        &mut self,
+        bytes: &[u8],
+        typed: bool,
+        state: &State,
+        recovering: bool,
+    ) -> Route {
+        if !typed || !link_down(state, recovering) {
+            Route::Send
+        } else if self.keep(bytes) {
+            Route::Kept
+        } else {
+            Route::Full
+        }
+    }
+    /// What the bar under the pane offers to send: only once the link is back.
+    pub(super) fn offer(&self, state: &State) -> Option<String> {
+        (!self.is_empty() && link_back(state)).then(|| self.preview())
+    }
+}
+
+/// What `OfflineInput::route` decided for one input.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Route {
+    /// Goes to the link as before (which may refuse it and say so).
+    Send,
+    /// Kept for the offer.
+    Kept,
+    /// Not kept, for room; the pane says so.
+    Full,
 }
 
 /// Input now would be kept: the program still runs and the link to it dropped, or is
@@ -80,15 +113,23 @@ pub(super) fn link_back(state: &State) -> bool {
 }
 
 impl Pane {
-    /// Keeps `bytes` when the link is down; true when they were taken care of here (kept,
-    /// or refused for room, which says so), not to be sent.
-    pub(super) fn keep_offline(&mut self, bytes: &[u8], cx: &mut Context<Self>) -> bool {
+    /// Keeps what was `typed` while the link is down; true when it was taken care of
+    /// here (kept, or refused for room, which says so), not to be sent.
+    pub(super) fn keep_offline(
+        &mut self,
+        bytes: &[u8],
+        typed: bool,
+        cx: &mut Context<Self>,
+    ) -> bool {
         let recovering = self.reconnecting || self.reconnect_delay > 0;
-        let down = (self.connection.state.lock()).is_ok_and(|s| link_down(&s, recovering));
-        if !down {
+        let route = match self.connection.state.lock() {
+            Ok(state) => self.offline.route(bytes, typed, &state, recovering),
+            Err(_) => Route::Send,
+        };
+        if route == Route::Send {
             return false;
         }
-        if !self.offline.keep(bytes) {
+        if route == Route::Full {
             self.local_error = Some(t!("断线时留着的输入已满 4 KiB，这次的没留").into());
         }
         cx.notify();
@@ -96,11 +137,8 @@ impl Pane {
     }
     /// What was kept, for the offer, once the link is back.
     pub(super) fn offline_offer(&self) -> Option<String> {
-        if self.offline.is_empty() {
-            return None;
-        }
-        let back = self.connection.state.lock().is_ok_and(|s| link_back(&s));
-        back.then(|| self.offline.preview())
+        let state = self.connection.state.lock().ok()?;
+        self.offline.offer(&state)
     }
     pub(super) fn send_offline(&mut self, cx: &mut Context<Self>) {
         let bytes = self.offline.take();

@@ -1,5 +1,6 @@
 use super::*;
 use crate::connection::Connection;
+use crate::terminal::terminal_input::{alternate_scroll, focus_bytes};
 use fibo_core::protocol::*;
 use fibo_core::terminal::Vt;
 use fibo_platform::local;
@@ -71,6 +72,50 @@ fn input_is_kept_only_while_the_link_is_down_or_coming_back() {
     assert!(!link_back(&state(false, true, false, false)));
     assert!(!link_back(&state(false, false, true, false)));
     assert!(!link_back(&state(true, true, true, false)));
+}
+
+/// The wheel over less or man (alternate screen, 1007 on, no mouse tracking) becomes
+/// arrow keys, and a focus change a report: both answer the screen shown now, which is
+/// gone once the link is back. Kept, a few flicks filled the 4 KiB, hid in the offer as
+/// an empty line, and went out as history steps on 发送.
+#[test]
+fn wheel_arrows_and_focus_reports_are_not_kept() {
+    let mut vt = Vt::new(80, 24).unwrap();
+    vt.feed(b"\x1b[?1049h\x1b[?1007h\x1b[?1004h");
+    let arrows = alternate_scroll(&vt, true).unwrap().unwrap();
+    let focus = focus_bytes(&vt, false).unwrap();
+    let mut down = state(true, false, false, false);
+    down.vt = Some(vt);
+    let mut kept = OfflineInput::default();
+    for _ in 0..100 {
+        assert_eq!(kept.route(&arrows, false, &down, false), Route::Send);
+    }
+    assert_eq!(kept.route(&focus, false, &down, true), Route::Send);
+    assert!(
+        kept.is_empty(),
+        "nothing the pane made up waits for the user"
+    );
+    // What the user types on the same screen is kept, and the room is still all there.
+    assert_eq!(kept.route(&[b'a'; LIMIT], true, &down, false), Route::Kept);
+    assert_eq!(kept.route(b"b", true, &down, false), Route::Full);
+}
+
+#[test]
+fn the_offer_waits_for_the_link_and_for_something_kept() {
+    let back = state(false, true, true, false);
+    let mut kept = OfflineInput::default();
+    assert_eq!(kept.offer(&back), None);
+    assert_eq!(kept.route(b"ls\r", true, &back, false), Route::Send);
+    assert_eq!(
+        kept.offer(&back),
+        None,
+        "typed with the link up is sent, not kept"
+    );
+    let down = state(true, true, false, false);
+    assert_eq!(kept.route(b"ls\r", true, &down, false), Route::Kept);
+    assert_eq!(kept.offer(&down), None, "nowhere to send it yet");
+    assert_eq!(kept.offer(&state(false, true, false, false)), None);
+    assert_eq!(kept.offer(&back).as_deref(), Some("ls⏎"));
 }
 
 /// One life of a host: greets, attaches `id` writable, sends a blank screen; then hangs
@@ -153,15 +198,21 @@ fn typed_while_disconnected_reaches_the_program_after_reconnecting() {
             .is_err()
     );
     let mut kept = OfflineInput::default();
-    assert!(link_down(&first.state.lock().unwrap(), false));
-    assert!(kept.keep(typed));
+    let route = kept.route(typed, true, &first.state.lock().unwrap(), false);
+    assert_eq!(route, Route::Kept);
+    assert_eq!(kept.offer(&first.state.lock().unwrap()), None);
 
     let second = Connection::new(&path, "t", false, tx);
     wait_until(&second, &mut wake, link_back);
-    assert_eq!(kept.preview(), "half an answer⏎");
+    let offer = kept.offer(&second.state.lock().unwrap());
+    assert_eq!(offer.as_deref(), Some("half an answer⏎"));
+    // 发送: what was kept goes out like a key now would.
+    let bytes = kept.take();
+    let route = kept.route(&bytes, true, &second.state.lock().unwrap(), false);
+    assert_eq!(route, Route::Send);
     second
         .send(Request::Input {
-            bytes: kept.take(),
+            bytes,
             lossy: false,
         })
         .unwrap();

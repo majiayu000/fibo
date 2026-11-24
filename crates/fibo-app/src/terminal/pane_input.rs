@@ -8,6 +8,17 @@ use fibo_core::{
 use gpui::{Context, KeyDownEvent, Window};
 use std::time::Instant;
 
+/// Where input comes from. Only what the user typed is kept while the link is down.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Origin {
+    /// Keys, paste, IME, a dropped path, an interrupt.
+    Typed,
+    /// Made up by the pane from the screen it shows: wheel arrows, focus reports.
+    Made,
+    /// Mouse reports, which the host may drop while the program is behind on input.
+    Pointer,
+}
+
 impl Pane {
     pub fn interrupt(&mut self, cx: &mut Context<Self>) {
         self.input(vec![3], cx);
@@ -19,7 +30,7 @@ impl Pane {
             cx.notify();
         }
         self.follow_input(cx);
-        self.send_input(bytes, false, cx);
+        self.send_input(bytes, Origin::Typed, cx);
         cx.emit(super::PaneEvent::Typed);
     }
     pub fn terminal_id(&self) -> &str {
@@ -43,7 +54,7 @@ impl Pane {
     }
     /// Mouse reports may be dropped by the host while the program is behind on input.
     pub(super) fn pointer(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) {
-        self.send_input(bytes, true, cx);
+        self.send_input(bytes, Origin::Pointer, cx);
     }
     /// Ghostty's 600 ms phase. The timer runs only while this pane holds focus in the
     /// active window, so idle panes keep no timer.
@@ -109,7 +120,8 @@ impl Pane {
             self.local_error = Some(error);
         }
     }
-    pub(super) fn send_input(&mut self, bytes: Vec<u8>, lossy: bool, cx: &mut Context<Self>) {
+    pub(super) fn send_input(&mut self, bytes: Vec<u8>, origin: Origin, cx: &mut Context<Self>) {
+        let lossy = origin == Origin::Pointer;
         self.take_size(cx);
         self.typed = Some(Instant::now());
         self.restart_blink(cx);
@@ -119,7 +131,7 @@ impl Pane {
             return;
         }
         // Typed while the link is down: kept for the user to send once it is back.
-        if !lossy && self.keep_offline(&bytes, cx) {
+        if self.keep_offline(&bytes, origin == Origin::Typed, cx) {
             return;
         }
         let ready = self.connection.state.lock().is_ok_and(|s| s.vt.is_some());

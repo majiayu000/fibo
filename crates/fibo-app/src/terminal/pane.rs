@@ -409,7 +409,7 @@ impl Pane {
         };
         match bytes {
             // A focus report is not typing; it leaves the scrollback where it is.
-            Some(Ok(b)) if !b.is_empty() => self.send_input(b, false, cx),
+            Some(Ok(b)) if !b.is_empty() => self.send_input(b, input::Origin::Made, cx),
             Some(Err(e)) => {
                 self.local_error = Some(e.to_string());
                 cx.notify();
