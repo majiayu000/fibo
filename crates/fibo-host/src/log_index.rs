@@ -11,11 +11,13 @@ use std::{
 };
 mod chat;
 mod elide;
+mod fork;
 mod recovery;
 mod tools;
 mod update;
 
 use elide::Elide;
+pub use fork::Fork;
 pub use recovery::Recovery;
 /// How long a turn may run before its prompt is logged and still be the one it opened.
 const TURN_LEAD: u64 = 120;
@@ -132,16 +134,10 @@ impl Index {
             touched: Vec::new(),
         })
     }
+    /// A second connection to this same index. Under the host lock, take
+    /// [`Index::forker`] and open it after the lock is let go.
     pub fn fork_current(&self) -> io::Result<Self> {
-        let path = self
-            .db
-            .path()
-            .ok_or_else(|| io::Error::other("index database path unavailable"))?;
-        self.fork(
-            Path::new(path)
-                .parent()
-                .ok_or_else(|| io::Error::other("index database directory unavailable"))?,
-        )
+        self.forker()?.open()
     }
     pub fn fork(&self, root: &Path) -> io::Result<Self> {
         let mut index = Self::open(root, self.roots.clone())?;

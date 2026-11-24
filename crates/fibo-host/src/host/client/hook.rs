@@ -14,10 +14,11 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             terminal,
             cwd,
         } => {
-            let (workspace, mut index) = {
+            let (workspace, index) = {
                 let host = lock(shared)?;
-                (host.workspace.clone(), host.index.fork_current()?)
+                (host.workspace.clone(), host.index.forker()?)
             };
+            let mut index = index.open()?;
             let processes = crate::recognition::processes(&workspace)?;
             // Reject unrelated callers before opening any supplied transcript. A hook whose
             // caller already exited still names its terminal through the environment.
