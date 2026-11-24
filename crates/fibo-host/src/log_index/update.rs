@@ -446,6 +446,12 @@ impl Index {
             // Old files retain the cheap identity-only 16 KiB read.
             let recent = self.recent(updated);
             let budget = meta.len().min(if recent { 384 * 1024 } else { 16 * 1024 });
+            // Where the body read below begins: a line of the prefix before it is read only here.
+            let body_from = if recent {
+                meta.len().saturating_sub(128 * 1024)
+            } else {
+                meta.len()
+            };
             let mut head = Vec::new();
             let mut parsed = 0usize;
             while (head.len() as u64) < budget {
@@ -465,16 +471,15 @@ impl Index {
                     }
                     if recent && !parser.card.first_ask_known {
                         if let Ok(v) = serde_json::from_slice::<serde_json::Value>(line) {
+                            let source = fibo_core::content::Source {
+                                path: key.clone(),
+                                inode: id.inode,
+                                offset: parsed as u64,
+                            };
                             if adapter.is_user(&v) {
-                                parser.add(
-                                    runtime,
-                                    line,
-                                    fibo_core::content::Source {
-                                        path: key.clone(),
-                                        inode: id.inode,
-                                        offset: parsed as u64,
-                                    },
-                                );
+                                parser.add(runtime, line, source);
+                            } else if (parsed as u64) < body_from {
+                                keep_turn_start(&mut parser, runtime, &v, source);
                             }
                         }
                     }
@@ -484,11 +489,7 @@ impl Index {
                     break;
                 }
             }
-            c.offset = if recent {
-                meta.len().saturating_sub(128 * 1024)
-            } else {
-                meta.len()
-            };
+            c.offset = body_from;
             tail_from = (recent && c.offset > 0).then_some(c.offset);
             // The prefix is original intent, never proof of the current turn.
             parser.card.turn = fibo_core::content::Turn::Unknown;
@@ -685,4 +686,25 @@ impl Index {
         }
         Ok(found)
     }
+}
+
+/// Keeps when a turn began from a line of a first read's prefix that the body read skips,
+/// without moving the card: the prefix is intent, not the current turn. Shared-daemon Codex
+/// starts the turn at Enter and logs the prompt seconds later, so a screen's Enter press is
+/// matched to that start (`Index::turn_began`). Codex 0.172 writes over 200 KiB of tools and
+/// instructions between the two (0.169: about 90 KiB); a log first read once that is
+/// written lost the start to the 128 KiB tail, and its first prompt never bound by Enter
+/// (v0.1.4 RC1, 6 of 7 `fibo run codex`).
+fn keep_turn_start(
+    parser: &mut crate::content::Parser,
+    runtime: Agent,
+    v: &serde_json::Value,
+    source: fibo_core::content::Source,
+) {
+    let mut probe = crate::content::Parser::default();
+    let at = crate::content::seconds(&v["timestamp"]);
+    crate::agents::adapter(runtime).add(&mut probe, v, at, &source);
+    parser
+        .records
+        .extend((probe.records.into_iter()).filter(|r| r.kind == "turn" && r.text == "Running"));
 }

@@ -6,6 +6,8 @@ use std::io::Write;
 mod cached_since;
 #[path = "codex_children_tests.rs"]
 mod codex_children;
+#[path = "codex_first_turn_tests.rs"]
+mod codex_first_turn;
 #[path = "generation_tests.rs"]
 mod generation;
 #[path = "query_perf_tests.rs"]
