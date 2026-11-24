@@ -53,6 +53,13 @@ impl Stream {
     pub fn peer_is_this_account(&self) -> io::Result<bool> {
         self.0.peer_is_this_account()
     }
+    /// The process that connected, on systems with a local peer PID credential.
+    pub fn peer_pid(&self) -> Option<u32> {
+        #[cfg(unix)]
+        return self.0.peer_pid();
+        #[cfg(not(unix))]
+        None
+    }
     /// How many bytes the kernel takes from one write before the reader has read any.
     /// macOS starts a Unix socket at 8 KiB: a megabyte then crosses in over a hundred
     /// turns between writer and reader, each a wait for a CPU on a busy machine.

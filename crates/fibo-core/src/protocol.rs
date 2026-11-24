@@ -109,6 +109,7 @@ pub enum Reply {
     NotificationClaimed(bool),
     Recognition(RecognitionStatus),
     Diagnostics(crate::diagnostics::Diagnostics),
+    ReclaimableWorktrees(Vec<crate::diagnostics::ReclaimableWorktree>),
     Attached {
         writable: bool,
         cols: u16,

@@ -6,6 +6,8 @@ fn diagnostic_stream_measures_a_busy_managed_terminal_without_holding_workspace_
     host.setup();
     host.call(host.launch("diag-cpu", "while kill -0 $PPID 2>/dev/null; do :; done"))
         .unwrap();
+    host.call(host.launch("diag-recover", "exec /bin/sleep 60"))
+        .unwrap();
     let before = host.workspace().revision;
     let mut stream = UnixStream::connect(host.socket()).unwrap();
     stream
@@ -32,6 +34,15 @@ fn diagnostic_stream_measures_a_busy_managed_terminal_without_holding_workspace_
     let Reply::Diagnostics(done) = receive::<Reply>(&mut stream).unwrap() else {
         panic!("missing final sample");
     };
+    assert_eq!(partial.unplaced.len(), 2);
+    assert!(partial
+        .unplaced
+        .iter()
+        .any(|t| t.id == "diag-cpu" && t.started_at.is_some()));
+    assert!(
+        done.fibo_memory.is_none(),
+        "a CLI socket is not a Fibo window"
+    );
     assert!(done.complete);
     assert!(done.elapsed_secs >= 14.5 && done.elapsed_secs < 25.);
     assert!(done.cpu_percent.is_some_and(|p| (0. ..=100.).contains(&p)));
@@ -44,6 +55,10 @@ fn diagnostic_stream_measures_a_busy_managed_terminal_without_holding_workspace_
         shell.cpu_percent > 5.,
         "busy shell was not measured: {shell:?}"
     );
+    assert!(done
+        .terminals
+        .iter()
+        .any(|t| t.id == "diag-cpu" && t.cpu_percent.is_some_and(|cpu| cpu > 5.)));
     let shares: f64 = done.apps.iter().filter_map(|a| a.gpu_share_percent).sum();
     assert!(shares == 0. || (shares - 100.).abs() < 0.001);
     assert!(done
@@ -54,8 +69,36 @@ fn diagnostic_stream_measures_a_busy_managed_terminal_without_holding_workspace_
         before,
         "diagnosis mutated workspace"
     );
-    host.call(Request::Stop {
+    let Reply::Workspace(placed) = host
+        .call(Request::RecoverTerminal {
+            id: "diag-recover".into(),
+            place: true,
+        })
+        .unwrap()
+    else {
+        panic!("recovery must return the new layout")
+    };
+    assert!(placed.terminal_tab("diag-recover").is_some());
+    assert!(
+        host.call(Request::RecoverTerminal {
+            id: "diag-recover".into(),
+            place: false,
+        })
+        .is_err(),
+        "a stale diagnostic row cannot stop a placed terminal"
+    );
+    host.call(Request::RecoverTerminal {
         id: "diag-cpu".into(),
+        place: false,
+    })
+    .unwrap();
+    wait_for(&host, "the unplaced terminal was stopped", |w| {
+        w.terminals
+            .iter()
+            .all(|t| t.id != "diag-cpu" || t.state != ProcessState::Running)
+    });
+    host.call(Request::Stop {
+        id: "diag-recover".into(),
     })
     .unwrap();
 }

@@ -40,6 +40,46 @@ pub fn canonical(path: &Path) -> io::Result<std::path::PathBuf> {
     imp::canonical(path)
 }
 
+/// Whether this platform provides allocated disk sizes for a whole directory tree.
+pub const DISK_USAGE_SUPPORTED: bool = cfg!(unix);
+
+/// A command whose first output field is the KiB allocated on the target's filesystem.
+pub fn disk_usage_command(path: &Path) -> io::Result<std::process::Command> {
+    #[cfg(unix)]
+    {
+        let mut command = std::process::Command::new("/usr/bin/du");
+        command.args(["-skx"]).arg(path);
+        Ok(command)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        Err(io::ErrorKind::Unsupported.into())
+    }
+}
+
+/// Opens a regular file for inspection without following links or waiting on a pipe.
+pub fn open_regular_nofollow(path: &Path) -> io::Result<std::fs::File> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+            .open(path)?;
+        if file.metadata()?.is_file() {
+            Ok(file)
+        } else {
+            Err(io::ErrorKind::InvalidInput.into())
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        Err(io::ErrorKind::Unsupported.into())
+    }
+}
+
 /// Which file something is, whatever it is called: two paths with the same id are one file,
 /// and a file replaced under one path has a new one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

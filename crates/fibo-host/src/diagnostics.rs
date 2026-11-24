@@ -1,7 +1,9 @@
 //! On-demand sampling, independent of session recognition and workspace persistence.
 use fibo_core::{
-    diagnostics::{AppUsage, Diagnostics, Memory, Pressure, TerminalUsage},
-    model::Terminal,
+    diagnostics::{
+        AppUsage, Diagnostics, FiboMemory, Memory, Pressure, TerminalUsage, UnplacedTerminal,
+    },
+    model::{Agent, ProcessState, Workspace},
     protocol::*,
 };
 use fibo_platform::local;
@@ -61,6 +63,15 @@ fn wait(stream: &local::Stream, duration: Duration) -> io::Result<()> {
 /// Drain stdout while the child runs, so a large process list cannot fill a pipe.
 /// Only our own transient ps/ioreg child is killed on cancellation or timeout.
 fn capture(command: &mut Command, stream: &local::Stream) -> io::Result<String> {
+    command_output(command, stream, Some(COMMAND_WAIT))
+        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+}
+
+pub(crate) fn command_output(
+    command: &mut Command,
+    stream: &local::Stream,
+    timeout: Option<Duration>,
+) -> io::Result<Vec<u8>> {
     wait(stream, Duration::ZERO)?;
     let mut child = command
         .env("LC_ALL", "C")
@@ -68,20 +79,23 @@ fn capture(command: &mut Command, stream: &local::Stream) -> io::Result<String> 
         .stderr(Stdio::piped())
         .spawn()?;
     let mut stdout = child.stdout.take().unwrap();
+    let mut stderr = child.stderr.take().unwrap();
     let reader = std::thread::spawn(move || {
         let mut bytes = Vec::new();
         stdout.read_to_end(&mut bytes).map(|_| bytes)
     });
-    // ps takes 0.2 s on an idle Mac with 1700 processes; at load 300 it took over 3 s,
-    // and a busy Mac is when diagnostics are opened.
-    let deadline = Instant::now() + COMMAND_WAIT;
+    let errors = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stderr.read_to_end(&mut bytes).map(|_| bytes)
+    });
+    let started = Instant::now();
     let result = loop {
         match child.try_wait() {
-            Ok(Some(_)) => break Ok(()),
+            Ok(Some(status)) => break Ok(status),
             Err(e) => break Err(e),
             Ok(None) => (),
         }
-        if Instant::now() >= deadline {
+        if timeout.is_some_and(|limit| started.elapsed() >= limit) {
             break Err(io::Error::new(io::ErrorKind::TimedOut, "系统采样命令超时"));
         }
         if let Err(e) = wait(stream, Duration::from_millis(10)) {
@@ -90,20 +104,21 @@ fn capture(command: &mut Command, stream: &local::Stream) -> io::Result<String> 
     };
     if result.is_err() {
         let _ = child.kill();
+        let _ = child.wait();
     }
-    let output = child.wait_with_output();
     let bytes = reader
         .join()
-        .map_err(|_| io::Error::other("读取采样输出的线程中断"))?;
-    result?;
-    let output = output?;
-    if !output.status.success() {
+        .map_err(|_| io::Error::other("读取采样输出的线程中断"));
+    let stderr = errors
+        .join()
+        .map_err(|_| io::Error::other("读取采样输出的线程中断"));
+    if !result?.success() {
         return Err(io::Error::other(format!(
             "采样命令失败：{}",
-            String::from_utf8_lossy(&output.stderr).trim()
+            String::from_utf8_lossy(&stderr??).trim()
         )));
     }
-    Ok(String::from_utf8_lossy(&bytes?).into_owned())
+    bytes?
 }
 
 fn cpu_time(text: &str) -> Option<f64> {
@@ -239,26 +254,103 @@ fn same<'a>(before: &'a Snapshot, after: &Snapshot, pid: u32) -> Option<&'a Proc
     let old = before.processes.get(&pid)?;
     (old.started == after.processes.get(&pid)?.started).then_some(old)
 }
-fn terminal_for(
-    pid: u32,
-    first: &Snapshot,
-    current: &Snapshot,
-    terminals: &[Terminal],
-) -> Option<String> {
-    let mut pid = pid;
-    let mut seen = HashSet::new();
-    while seen.insert(pid) {
-        let process = current.processes.get(&pid)?;
-        if let Some(terminal) = terminals.iter().find(|t| t.pid == Some(pid)) {
-            same(first, current, pid)?;
-            return Some(terminal.id.clone());
-        }
-        pid = process.parent;
-    }
-    None
+/// Unix peer credentials keep the existing Diagnose request readable by an older host.
+/// A CLI probe or an SSH forward is not a local window.
+pub(crate) fn window_pid(stream: &local::Stream) -> Option<u32> {
+    let pid = stream.peer_pid()?;
+    let executable = fibo_platform::inspect::executable(pid).ok()?;
+    let name = std::path::Path::new(&executable).file_name()?.to_str()?;
+    matches!(name, "fibo-app" | "mooring-app").then_some(pid)
 }
 
-pub fn serve(stream: &mut local::Stream, terminals: &[Terminal]) -> io::Result<()> {
+#[derive(Default)]
+pub(crate) struct TerminalFacts {
+    usage: HashMap<u32, TerminalUsage>,
+    unplaced: Vec<(u32, UnplacedTerminal)>,
+}
+
+pub(crate) fn terminal_facts(
+    workspace: &Workspace,
+    recognized: &HashMap<String, Agent>,
+) -> TerminalFacts {
+    let mut facts = TerminalFacts::default();
+    for t in &workspace.terminals {
+        let Some(pid) = t.pid.filter(|_| t.state == ProcessState::Running) else {
+            continue;
+        };
+        let agent = workspace
+            .current_agent(&t.id)
+            .map(|s| s.runtime)
+            .or_else(|| recognized.get(&t.id).copied())
+            .or_else(|| workspace.agent_starts.get(&t.id).map(|s| s.agent));
+        facts.usage.insert(
+            pid,
+            TerminalUsage {
+                id: t.id.clone(),
+                agent: agent.map(|agent| agent.executable().to_owned()),
+                ..TerminalUsage::default()
+            },
+        );
+        if workspace.terminal_tab(&t.id).is_none() {
+            facts.unplaced.push((
+                pid,
+                UnplacedTerminal {
+                    id: t.id.clone(),
+                    // Arguments can include private prompts or credentials.
+                    program: agent
+                        .map(|a| a.executable().to_owned())
+                        .or_else(|| t.argv.first().cloned())
+                        .unwrap_or_default(),
+                    cwd: workspace.terminal_cwd(t),
+                    started_at: None,
+                },
+            ));
+        }
+    }
+    facts
+}
+
+#[derive(PartialEq, Eq)]
+enum Owner {
+    Terminal(u32),
+    Window,
+    Host,
+    Other,
+}
+
+fn owner(
+    mut pid: u32,
+    current: &Snapshot,
+    terminals: &HashMap<u32, TerminalUsage>,
+    window: Option<u32>,
+    host: u32,
+) -> Owner {
+    let mut seen = HashSet::new();
+    let mut is_window = Some(pid) == window;
+    while seen.insert(pid) {
+        let Some(process) = current.processes.get(&pid) else {
+            break;
+        };
+        if terminals.contains_key(&pid) {
+            return Owner::Terminal(pid);
+        }
+        if is_window {
+            return Owner::Window;
+        }
+        if pid == host {
+            return Owner::Host;
+        }
+        pid = process.parent;
+        is_window = false;
+    }
+    Owner::Other
+}
+
+pub fn serve(
+    stream: &mut local::Stream,
+    window: Option<u32>,
+    terminals: impl Fn() -> io::Result<TerminalFacts>,
+) -> io::Result<()> {
     let mut report = Diagnostics {
         started_at: fibo_core::content::now(),
         cpu_cores: std::thread::available_parallelism().ok().map(|n| n.get()),
@@ -272,18 +364,21 @@ pub fn serve(stream: &mut local::Stream, terminals: &[Terminal]) -> io::Result<(
     let first = snapshot(stream, &mut report.notes)?;
     let mut previous = None;
     let mut totals: BTreeMap<String, Total> = BTreeMap::new();
+    let mut terminal_cpu: HashMap<String, f64> = HashMap::new();
     for interval in 1..=2 {
         let before = previous.as_ref().unwrap_or(&first);
         wait(stream, INTERVAL.saturating_sub(before.at.elapsed()))?;
         let current = snapshot(stream, &mut report.notes)?;
         let dt = current.at.duration_since(before.at).as_secs_f64();
         let mut interval_cpu: HashMap<String, f64> = HashMap::new();
+        let mut cpu_deltas = HashMap::new();
         for (&pid, process) in &current.processes {
             if let Some(old) = same(before, &current, pid) {
                 if let Some(delta) = (process.cpu_secs - old.cpu_secs)
                     .is_sign_positive()
                     .then_some(process.cpu_secs - old.cpu_secs)
                 {
+                    cpu_deltas.insert(pid, delta);
                     totals.entry(process.app.clone()).or_default().cpu_secs += delta;
                     *interval_cpu.entry(process.app.clone()).or_default() += delta;
                 }
@@ -333,6 +428,19 @@ pub fn serve(stream: &mut local::Stream, terminals: &[Terminal]) -> io::Result<(
                 )
             })
             .collect();
+        let facts = terminals()?;
+        report.unplaced = facts
+            .unplaced
+            .into_iter()
+            .map(|(pid, mut terminal)| {
+                terminal.started_at = fibo_platform::inspect::started(pid);
+                terminal
+            })
+            .collect();
+        let facts = facts.usage;
+        let host = std::process::id();
+        let window = window.filter(|&pid| same(&first, &current, pid).is_some());
+        let mut fibo = FiboMemory::default();
         let mut by_terminal: BTreeMap<String, TerminalUsage> = BTreeMap::new();
         for (&pid, process) in &current.processes {
             let app = apps.entry(process.app.clone()).or_insert_with(|| AppUsage {
@@ -341,21 +449,43 @@ pub fn serve(stream: &mut local::Stream, terminals: &[Terminal]) -> io::Result<(
             });
             app.processes += 1;
             app.memory_bytes += process.memory;
-            if let Some(id) = terminal_for(pid, &first, &current, terminals) {
-                let usage = by_terminal
-                    .entry(id.clone())
-                    .or_insert_with(|| TerminalUsage {
-                        id: id.clone(),
-                        ..TerminalUsage::default()
-                    });
-                usage.memory_bytes += process.memory;
-                usage.processes += 1;
-                if !app.terminals.contains(&id) {
-                    app.terminals.push(id);
+            let bucket = match owner(pid, &current, &facts, window, host) {
+                Owner::Terminal(root) => {
+                    if first.processes.contains_key(&root) && same(&first, &current, root).is_none()
+                    {
+                        continue;
+                    }
+                    let fact = &facts[&root];
+                    let usage = by_terminal
+                        .entry(fact.id.clone())
+                        .or_insert_with(|| fact.clone());
+                    usage.memory_bytes += process.memory;
+                    usage.processes += 1;
+                    if let Some(delta) = cpu_deltas.get(&pid) {
+                        *terminal_cpu.entry(fact.id.clone()).or_default() += delta;
+                    }
+                    if !app.terminals.contains(&fact.id) {
+                        app.terminals.push(fact.id.clone());
+                    }
+                    continue;
                 }
-            }
+                Owner::Window => &mut fibo.window,
+                Owner::Host => &mut fibo.host,
+                Owner::Other => continue,
+            };
+            bucket.memory_bytes += process.memory;
+            bucket.processes += 1;
         }
-        report.terminals = by_terminal.into_values().collect();
+        report.fibo_memory = (fibo.window.processes > 0 && fibo.host.processes > 0).then_some(fibo);
+        report.terminals = by_terminal
+            .into_values()
+            .map(|mut t| {
+                t.cpu_percent = terminal_cpu
+                    .get(&t.id)
+                    .map(|secs| secs / report.elapsed_secs * 100.);
+                t
+            })
+            .collect();
         report.apps = apps.into_values().collect();
         report.apps.sort_by(|a, b| {
             b.cpu_percent
@@ -373,6 +503,26 @@ pub fn serve(stream: &mut local::Stream, terminals: &[Terminal]) -> io::Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn window_host_and_pty_trees_do_not_overlap_even_in_the_same_bundle() {
+        let start = "Wed Oct 28 10:30:00 2026 00:00.01 100";
+        let current = Snapshot {
+            at: Instant::now(),
+            processes: parse_processes(&format!(
+                "20 1 {start} /Fibo.app/Contents/MacOS/fibo-app\n21 20 {start} /Fibo.app/Contents/MacOS/fibo\n22 21 {start} /bin/hook\n23 21 {start} /bin/zsh\n24 23 {start} /bin/claude"
+            )).unwrap(),
+            ticks: None,
+            gpu: Gpu::default(),
+        };
+        let terminals = HashMap::from([(23, TerminalUsage::default())]);
+        let classify = |pid| owner(pid, &current, &terminals, Some(20), 21);
+        assert!(classify(20) == Owner::Window);
+        assert!(classify(21) == Owner::Host);
+        assert!(classify(22) == Owner::Host);
+        assert!(classify(23) == Owner::Terminal(23));
+        assert!(classify(24) == Owner::Terminal(23));
+    }
+
     #[test]
     fn process_snapshot_keeps_bundle_spaces_start_identity_and_long_cpu_time() {
         let p = parse_processes("42 1 Wed Oct 28 10:30:00 2026 123:04.50 2048 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n").unwrap();
@@ -412,7 +562,7 @@ mod tests {
     }
 
     #[test]
-    fn reused_pid_is_not_counted_or_attributed_to_the_old_terminal() {
+    fn reused_pid_does_not_inherit_an_old_cpu_counter() {
         let before = Snapshot {
             at: Instant::now(),
             processes: parse_processes("42 1 Wed Oct 28 10:30:00 2026 12:00.00 100 /bin/sh")
@@ -428,17 +578,6 @@ mod tests {
             gpu: Gpu::default(),
         };
         assert!(same(&before, &after, 42).is_none());
-        let terminal = Terminal {
-            id: "old-shell".into(),
-            space: "s".into(),
-            argv: vec![],
-            cwd: "/tmp".into(),
-            pid: Some(42),
-            state: fibo_core::model::ProcessState::Running,
-            exit_code: None,
-            error: None,
-        };
-        assert!(terminal_for(42, &before, &after, &[terminal]).is_none());
     }
 
     #[test]

@@ -22,6 +22,11 @@ pub struct Diagnostics {
     /// Memory of each managed terminal's whole process tree: the Agent and its children.
     #[serde(default)]
     pub terminals: Vec<TerminalUsage>,
+    /// Present only when this host can identify the window on the other end of the socket.
+    #[serde(default)]
+    pub fibo_memory: Option<FiboMemory>,
+    #[serde(default)]
+    pub unplaced: Vec<UnplacedTerminal>,
     pub notes: Vec<String>,
 }
 
@@ -30,6 +35,61 @@ pub struct TerminalUsage {
     pub id: String,
     pub memory_bytes: u64,
     pub processes: usize,
+    #[serde(default)]
+    pub agent: Option<String>,
+    /// Percent of one core over the report's elapsed time, like the app ranking.
+    #[serde(default)]
+    pub cpu_percent: Option<f64>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProcessMemory {
+    pub memory_bytes: u64,
+    pub processes: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct FiboMemory {
+    pub window: ProcessMemory,
+    pub host: ProcessMemory,
+}
+
+impl Diagnostics {
+    pub fn memory_by_owner(&self) -> Option<[ProcessMemory; 4]> {
+        let FiboMemory { window, host } = self.fibo_memory?;
+        let mut agents = ProcessMemory::default();
+        let mut shells = ProcessMemory::default();
+        for terminal in &self.terminals {
+            let owner = if terminal.agent.is_some() {
+                &mut agents
+            } else {
+                &mut shells
+            };
+            owner.memory_bytes += terminal.memory_bytes;
+            owner.processes += terminal.processes;
+        }
+        Some([window, host, agents, shells])
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UnplacedTerminal {
+    pub id: String,
+    pub program: String,
+    pub cwd: String,
+    pub started_at: Option<u64>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ReclaimableWorktree {
+    pub path: String,
+    pub head: String,
+    pub branch: String,
+    pub committed_at: u64,
+    pub target_bytes: Option<u64>,
+    pub total_bytes: u64,
+    pub space: Option<String>,
+    pub can_remove: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -342,6 +402,20 @@ mod tests {
     }
 
     #[test]
+    fn legacy_report_has_no_owner_chart_or_agent_identity() {
+        let mut wire = serde_json::to_value(Diagnostics::default()).unwrap();
+        wire.as_object_mut().unwrap().remove("fibo_memory");
+        wire.as_object_mut().unwrap().remove("unplaced");
+        wire["terminals"] =
+            serde_json::json!([{"id": "shell", "memory_bytes": 12, "processes": 1}]);
+        let report: Diagnostics = serde_json::from_value(wire).unwrap();
+        assert!(report.memory_by_owner().is_none());
+        assert!(report.terminals[0].agent.is_none());
+        assert!(report.terminals[0].cpu_percent.is_none());
+        assert!(report.unplaced.is_empty());
+    }
+
+    #[test]
     fn summary_names_terminals_and_unattributed_cores() {
         let report = Diagnostics {
             cpu_cores: Some(16),
@@ -402,6 +476,7 @@ mod tests {
                 id: "t1".into(),
                 memory_bytes: 3 << 30,
                 processes: 4,
+                ..TerminalUsage::default()
             }],
             ..Diagnostics::default()
         };

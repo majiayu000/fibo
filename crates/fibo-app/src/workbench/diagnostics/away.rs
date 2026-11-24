@@ -5,13 +5,17 @@ use super::*;
 use crate::workbench::statusbar::item;
 
 impl Workbench {
-    /// Closes the sheet. A run still sampling goes on in the background; anything else
-    /// is dropped, and the next open samples afresh.
+    /// A measurement can continue in the background. A disk scan stops on close,
+    /// while its last completed results remain available on reopen.
     pub(crate) fn hide_diagnostics(&mut self, cx: &mut Context<Self>) {
-        if let Some(view) = self.diagnostics.take()
-            && view.read(cx).sampling.is_some()
-        {
-            self.diagnostics_away = Some(view);
+        if let Some(view) = self.diagnostics.take() {
+            let retain = view.update(cx, |view, _| {
+                view.close_worktree_scan();
+                view.sampling.is_some() || view.has_worktree_result_or_cleanup()
+            });
+            if retain {
+                self.diagnostics_away = Some(view);
+            }
         }
         self.nav.pending_focus = true;
         cx.notify();
