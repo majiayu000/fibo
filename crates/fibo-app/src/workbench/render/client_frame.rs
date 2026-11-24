@@ -42,7 +42,10 @@ pub(in crate::workbench) fn buttons(window: &Window) -> gpui::Div {
             button("window-minimize")
                 .hover(|d| d.bg(T::color(T::selection())))
                 .child(mark(
-                    div().w(px(10.)).h(px(1.)).bg(T::color(T::secondary())),
+                    div()
+                        .w(px(T::S10))
+                        .h(px(T::BORDER_WIDTH))
+                        .bg(T::color(T::secondary())),
                 ))
                 .on_click(|_, window, _| window.minimize_window()),
         )
@@ -51,14 +54,14 @@ pub(in crate::workbench) fn buttons(window: &Window) -> gpui::Div {
                 .hover(|d| d.bg(T::color(T::selection())))
                 .child(mark(
                     div()
-                        .size(px(if maximized { 8. } else { 10. }))
-                        .border(px(1.)),
+                        .size(px(if maximized { T::S8 } else { T::S10 }))
+                        .border(px(T::BORDER_WIDTH)),
                 ))
                 .on_click(|_, window, _| window.zoom_window()),
         )
         .child(
             button("window-close")
-                .text_size(px(16.))
+                .text_size(px(T::S16))
                 .hover(|d| {
                     d.bg(gpui::rgb(T::WINDOW_CLOSE_HOVER))
                         .text_color(gpui::white())

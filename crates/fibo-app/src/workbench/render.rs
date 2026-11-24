@@ -10,6 +10,7 @@ mod main_area;
 mod strip;
 mod tabs;
 pub(super) use bars::marked_button;
+pub(super) use client_frame::resize_edges;
 pub(super) use tabs::TextTip;
 #[cfg(feature = "visual-test")]
 pub(super) use tabs::hidden_tabs;
@@ -299,6 +300,12 @@ impl Render for Workbench {
             .when(!beside, |d| d.child(self.statusbar_view(width, cx)))
             .children(self.turning_view(cx));
         let root = self.window_layers(root, window, cx);
-        client_frame::resize_edges(root, window)
+        // Embedded, this is another machine's main area beside the window's sidebar: the
+        // window's own frame (`hosted_frame`) holds the edges.
+        if self.hosts.embedded {
+            root
+        } else {
+            client_frame::resize_edges(root, window)
+        }
     }
 }
