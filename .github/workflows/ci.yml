@@ -10,10 +10,11 @@ on:
   # Pull requests a workflow opens start no run of their own: sign-catalog asks for this one.
   workflow_dispatch:
 
-# A PR's new commit supersedes its old run. Keep main runs alive: frequent merges
-# must still yield a completed result (2026-11-16-pr-ci-supersedes.md).
+# A PR's new commit supersedes its old run. Every main commit gets its own group:
+# GitHub keeps one pending run per group, so a shared main group dropped queued
+# merges with no result (2026-11-16-pr-ci-supersedes.md).
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
