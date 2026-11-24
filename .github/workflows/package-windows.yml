@@ -81,6 +81,47 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-ChildItem target\installer | ForEach-Object { "$($_.Name) $([int]($_.Length/1MB)) MB" }
 
+      # What every 0.1.3 user does by hand: run the new Setup while the old host is serving.
+      # The host has no window, so only the installer's own stop lets fibo.exe be replaced.
+      - name: Upgrade over a running released host
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $install = "$env:RUNNER_TEMP\fibo-upgraded"
+          $old = "$env:RUNNER_TEMP\fibo-old"
+          gh release download v0.1.3 --repo $env:GITHUB_REPOSITORY --pattern 'Fibo-Setup-*.exe' --dir $old
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download the released installer' }
+          $quiet = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"")
+          $p = Start-Process -FilePath (Get-ChildItem "$old\*.exe")[0].FullName -ArgumentList $quiet -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "Old installer exited $($p.ExitCode)" }
+          $rt = "$env:RUNNER_TEMP\fibo-upgrade-rt"
+          $env:MOORING_RUNTIME = $rt
+          $oldHost = Start-Process -FilePath "$install\bin\fibo.exe" -ArgumentList @('serve','--runtime',$rt) -PassThru -WindowStyle Hidden
+          Start-Sleep 3
+          & "$install\bin\fibo.exe" list --json | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Old host did not answer' }
+          $setup = (Get-ChildItem target\installer\*.exe | Select-Object -First 1).FullName
+          $p = Start-Process -FilePath $setup -ArgumentList ($quiet + "/LOG=`"$PWD\target\installer\upgrade.log`"") -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "Upgrade exited $($p.ExitCode) (log: upgrade.log in the artifact)" }
+          if (-not $oldHost.HasExited) { throw 'The old host is still running' }
+          Get-ChildItem target\windows-stage\bin -File -Recurse | ForEach-Object {
+            $rel = $_.FullName.Substring((Resolve-Path target\windows-stage\bin).Path.Length)
+            if ((Get-FileHash $_.FullName).Hash -ne (Get-FileHash "$install\bin$rel").Hash) { throw "bin$rel is not the new build's" }
+          }
+          # What the window does when it opens: start this build's host on the runtime the
+          # stopped one left behind (its lock and socket file are still there).
+          $newHost = Start-Process -FilePath "$install\bin\fibo.exe" -ArgumentList @('serve','--runtime',$rt) -PassThru -WindowStyle Hidden
+          try {
+            Start-Sleep 3
+            & "$install\bin\fibo.exe" list --json | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw 'The new host did not start on the old runtime' }
+          } finally {
+            Stop-Process -Id $newHost.Id -Force -ErrorAction SilentlyContinue
+          }
+          $p = Start-Process -FilePath "$install\unins000.exe" -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "Uninstall exited $($p.ExitCode)" }
+
       # Exercise the installer itself, in a directory owned only by this job.
       - name: Install, run the installed host, and uninstall
         shell: pwsh

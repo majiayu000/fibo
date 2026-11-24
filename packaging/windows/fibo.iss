@@ -68,3 +68,29 @@ Filename: "{app}\bin\fibo-app.exe"; Description: "{cm:LaunchProgram,Fibo}"; Flag
 ; The host outlives the window; stop this install's own (by path, never another copy's)
 ; before its files go.
 Filename: "powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-Process fibo,mooring,fibo-app,mooring-app -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\bin\*' } | Stop-Process -Force"""; Flags: runhidden; RunOnceId: "StopMooring"
+
+[Code]
+// The host (`fibo serve`) has no window, so CloseApplications cannot ask it to close and
+// its fibo.exe stays in use: a silent install then fails with exit 5 after fibo-app.exe was
+// already replaced. Stop this install's own processes first, as [UninstallRun] does: only
+// under this {app}\bin (never another install's copy) and only in this user's session.
+// The window starts a host again the next time it opens. The updater stops them itself
+// before it runs Setup, so there this finds nothing.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Bin, Script: String;
+  Code: Integer;
+begin
+  Result := '';
+  Bin := ExpandConstant('{app}\bin');
+  StringChangeEx(Bin, '''', '''''', True);
+  Script := '$bin = ''' + Bin + '''; $me = (Get-Process -Id $PID).SessionId; ' +
+    'Get-Process fibo,mooring,fibo-app,mooring-app -ErrorAction Ignore | ' +
+    'Where-Object { $_.SessionId -eq $me -and $_.Path -and $_.Path.StartsWith($bin + ''\'', ''OrdinalIgnoreCase'') } | ' +
+    'Stop-Process -Force -PassThru | Wait-Process -Timeout 10 -ErrorAction Ignore';
+  // SW_HIDE: no console window flashes up.
+  if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    '-NoLogo -NoProfile -NonInteractive -Command "' + Script + '"', '', SW_HIDE,
+    ewWaitUntilTerminated, Code) then
+    Log('Could not run PowerShell to stop the running host: ' + SysErrorMessage(Code));
+end;
