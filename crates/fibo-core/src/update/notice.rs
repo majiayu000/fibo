@@ -133,8 +133,18 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn a_linux_copy_checks_and_is_sent_to_the_release_page() {
-        assert!(PAGE_ONLY && CHECKS);
-        assert!(!super::super::SUPPORTED && !super::super::INSTALLER);
+        // Compared at run time rather than `assert!` on constants (clippy's
+        // `assertions_on_constants`), so undoing one of them fails this test by name.
+        assert_eq!(
+            (
+                PAGE_ONLY,
+                CHECKS,
+                super::super::SUPPORTED,
+                super::super::INSTALLER
+            ),
+            (true, true, false, false),
+            "(PAGE_ONLY, CHECKS, SUPPORTED, INSTALLER) on Linux"
+        );
         let cache = super::super::cache_dir().expect("a cache folder on Linux");
         assert!(cache.ends_with("fibo/updates"), "{}", cache.display());
         let r = deb_release();
