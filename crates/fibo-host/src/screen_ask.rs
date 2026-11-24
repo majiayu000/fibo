@@ -705,7 +705,14 @@ mod tests {
         let wide = fixture("update-real");
         // Codex's own 28x12 snapshot (`update_picker_selected_28x12`): the footer wraps.
         let short = "  Update available · 0.0.0\n  → 9.9.9\n  Release notes:\n  https://github.com/opena\n  i/codex/releases/latest\n↑\n  1. Update now (runs `npm install -g @openai/codex`)\n  2. Skip\n› 3. Skip until next version\n\n  enter continue · esc\n  skip\n";
-        for screen in [wide.as_str(), &fixture("update-narrow40-real"), short] {
+        // 27 columns (v0.1.4 RC1): the question breaks after 「·」 and option 3 wraps too.
+        let narrow27 = fixture("update-narrow27-real");
+        for screen in [
+            wide.as_str(),
+            &fixture("update-narrow40-real"),
+            &narrow27,
+            short,
+        ] {
             let u = update_screen(screen).unwrap_or_else(|| panic!("{screen}"));
             assert_eq!(u.agent, Agent::Codex);
             assert!(
@@ -718,6 +725,10 @@ mod tests {
         }
         assert_eq!(
             update_screen(&wide).unwrap().question,
+            "Update available · 0.169.0 → 0.172.0"
+        );
+        assert_eq!(
+            update_screen(&narrow27).unwrap().question,
             "Update available · 0.169.0 → 0.172.0"
         );
         for ordinary in [

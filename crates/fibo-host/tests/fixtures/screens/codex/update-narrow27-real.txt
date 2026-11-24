@@ -1,0 +1,20 @@
+
+  Update available ·
+  0.169.0 → 0.172.0
+  Release notes:
+  https://github.com/op
+  enai/codex/releases/l
+  atest
+
+› 1. Update now (runs `sh
+     -c 's=$(curl -fsSL
+     https://chatgpt.com/
+     codex/install.sh) &&
+     CODEX_NON_INTERACTIV
+     E=1 eval "$s"'`)
+  2. Skip
+  3. Skip until next
+     version
+
+  enter continue · esc
+  skip

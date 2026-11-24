@@ -265,17 +265,7 @@ pub(super) fn check_screen_wait(
         }
         live.vt.tail_text(usize::from(live.rows))?
     };
-    let trust = crate::screen_ask::trust_screen(&tail).map(|s| TrustPrompt {
-        agent: s.agent,
-        question: s.question,
-        folder: s.folder,
-    });
-    lock(shared)?.set_terminal_trust(id, trust)?;
-    let update = crate::screen_ask::update_screen(&tail).map(|s| UpdatePrompt {
-        agent: s.agent,
-        question: s.question,
-    });
-    lock(shared)?.set_terminal_update(id, update)?;
+    lock(shared)?.read_first_asks(id, &tail)?;
     // Each CLI's own screen rules; one with no Agent yet is read with the default ones.
     let agent = {
         let host = lock(shared)?;

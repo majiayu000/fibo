@@ -125,5 +125,9 @@
   "update-narrow40-real.txt": {
     "state": "idle",
     "note": "同一页，40 列：网址和 1 号选项里的更新命令都折行；screen_ask::update_screen 认它"
+  },
+  "update-narrow27-real.txt": {
+    "state": "idle",
+    "note": "真实 Codex 0.169 画面，约 27 列（v0.1.4 RC1 验收）：问句在 · 后折行、3 号选项和页脚也折行；screen_ask::update_screen 认它"
   }
 }
