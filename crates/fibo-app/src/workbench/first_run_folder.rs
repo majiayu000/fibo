@@ -126,7 +126,7 @@ mod tests {
             std::fs::create_dir_all(&d).unwrap();
             d.to_string_lossy().into_owned()
         };
-        let home = dir("home");
+        let home_dir = dir("home");
         let (plain, repo, sub, worktree) = (
             dir("home/notes"),
             dir("home/code/app"),
@@ -135,7 +135,7 @@ mod tests {
         );
         std::fs::create_dir_all(base.join("home/code/app/.git")).unwrap();
         std::fs::write(base.join("home/code/wt/.git"), "gitdir: elsewhere\n").unwrap();
-        let home = Some(home.as_str());
+        let home = Some(home_dir.as_str());
         assert_eq!(git_root(&plain, home), None);
         assert_eq!(git_root(&sub, home).as_deref(), Some(repo.as_str()));
         assert_eq!(
@@ -157,7 +157,7 @@ mod tests {
         // The first space opened from the Finder starts in home: no project, so the page
         // offers one; a folder of its own (opened from a shell in a project) stays.
         assert!(no_project("", home));
-        assert!(no_project(&format!("{}/", home.unwrap()), home));
+        assert!(no_project(&format!("{home_dir}/"), home));
         assert!(!no_project(&repo, home));
         assert!(no_project("/", home), "nor is /");
         let _ = std::fs::remove_dir_all(base);
