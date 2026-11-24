@@ -209,7 +209,8 @@ impl Workbench {
                 .compact()
                 .placeholder(t!("这台手机叫什么，比如 iPhone"))
         });
-        cx.observe(&name, |_, _, cx| cx.notify()).detach();
+        cx.observe(&name, |this, _, cx| this.pane_changed(cx))
+            .detach();
         window.focus(&name.focus_handle(cx), cx);
         self.phones.pairing = Some(Pairing {
             name,

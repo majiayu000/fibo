@@ -92,8 +92,9 @@ impl Search {
                     0
                 };
                 this.search.scroll.scroll_to_item(0);
+                // New hits: the field's own redraw covers the caret and selection.
+                this.pane_changed(cx);
             }
-            cx.notify();
         })
         .detach();
         cx.subscribe_in(&search, window, |this, _, event, window, cx| match event {
