@@ -474,3 +474,56 @@ async fn one_address_holds_only_so_many_sockets_and_gets_them_back() {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 }
+
+/// A phone that stays connected but stops reading is cut for falling behind, and its
+/// place comes back right away: the relay does not keep waiting on a send the phone will
+/// never take, holding its slot and buffer while the client keeps the socket open.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_phone_cut_for_not_reading_gives_its_place_back_while_still_connected() {
+    let base = relay(Config {
+        phone_buffer: 4 << 20,
+        limits: fibo_relay::limit::Rules {
+            open: 2,
+            per_minute: 0,
+            trust_proxy: false,
+        },
+        ..Config::default()
+    })
+    .await;
+    let mut m = registered(&base, TOKEN).await;
+    let _stalled = phone(&base, TOKEN).await; // kept open, never read
+    let Frame::Wopen { id, .. } = frame(&mut m).await else {
+        panic!()
+    };
+    m.send(Message::text(Frame::Wopened { id: id.clone() }.to_text()))
+        .await
+        .unwrap();
+    let big = vec![7u8; 1 << 20];
+    let mut cut = false;
+    for _ in 0..64 {
+        m.send(Message::binary(wire::encode(bin::WBIN, &id, &big)))
+            .await
+            .unwrap();
+        while let Ok(Some(Ok(Message::Text(t)))) =
+            tokio::time::timeout(Duration::from_millis(5), m.next()).await
+        {
+            cut |= matches!(serde_json::from_str(&t), Ok(Frame::Wclose { .. }));
+        }
+        if cut {
+            break;
+        }
+    }
+    assert!(cut, "the stalled phone was never cut");
+    tokio::spawn(async move { while m.next().await.is_some() {} });
+    let start = Instant::now();
+    while connect_async(format!("{base}/c/{TOKEN}/keepline"))
+        .await
+        .is_err()
+    {
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "the cut phone still holds its place"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
