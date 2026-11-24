@@ -90,8 +90,7 @@ impl Workbench {
                 cx,
             ),
             QueueAction::Continue => {
-                self.park_review();
-                self.overview.cleanup.clear();
+                self.leave_for_one();
                 self.open_session(s, window, cx);
             }
             QueueAction::Defer => {

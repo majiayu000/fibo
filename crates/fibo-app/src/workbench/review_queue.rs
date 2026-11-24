@@ -37,13 +37,15 @@ impl Workbench {
         self.start_cleanup(resumed(rest, queue), cx);
         self.overview.cleanup_review = true;
     }
-    /// 继续 leaves 逐个验收 for one of its sessions: keeps it and what came after, so
-    /// coming back does not start over (#514).
-    pub(super) fn park_review(&mut self) {
-        if self.overview.cleanup_review {
-            self.overview.review_rest =
-                left_from(&self.overview.cleanup, self.overview.cleanup_index);
-        }
+    /// 继续 leaves the queue for one of its sessions: see `leave_queue`.
+    pub(super) fn leave_for_one(&mut self) {
+        let o = &mut self.overview;
+        leave_queue(
+            &mut o.cleanup,
+            o.cleanup_index,
+            o.cleanup_review,
+            &mut o.review_rest,
+        );
     }
     /// A form opened from the queue took the keyboard and left 鸟瞰: however it closed
     /// (saved, 取消, Esc), the queue's page and its keys come back.
@@ -179,6 +181,15 @@ mod tests {
     }
 }
 
+/// 继续 opens one session out of the queue, which empties it. In 逐个验收 the one in hand
+/// and what came after it are kept as `rest`, so coming back does not start over (#514).
+fn leave_queue(queue: &mut Vec<String>, at: usize, review: bool, rest: &mut Vec<String>) {
+    if review {
+        *rest = left_from(queue, at);
+    }
+    queue.clear();
+}
+
 /// The session in hand and what comes after it: what 接着验收 comes back to.
 fn left_from(queue: &[String], at: usize) -> Vec<String> {
     queue[at.min(queue.len())..].to_vec()
@@ -197,7 +208,7 @@ fn resumed(rest: Vec<String>, queue: Vec<String>) -> Vec<String> {
 
 #[cfg(test)]
 mod resume_tests {
-    use super::{left_from, resumed};
+    use super::{leave_queue, left_from, resumed};
     fn ids(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
     }
@@ -215,5 +226,20 @@ mod resume_tests {
         // Past the end (all looked at): nothing to come back to.
         assert_eq!(left_from(&queue, 4), Vec::<String>::new());
         assert_eq!(left_from(&queue, 9), Vec::<String>::new());
+    }
+    #[test]
+    fn continue_parks_review_then_empties_the_queue() {
+        // 逐个验收 at c: 继续 keeps c and d for 接着验收 and leaves the queue (#514).
+        let mut queue = ids(&["a", "b", "c", "d"]);
+        let mut rest = Vec::new();
+        leave_queue(&mut queue, 2, true, &mut rest);
+        assert_eq!(rest, ids(&["c", "d"]));
+        assert!(queue.is_empty());
+        // 逐个清理 is not 逐个验收: nothing is kept, an earlier 接着验收 stays as it was.
+        let mut queue = ids(&["a", "b"]);
+        let mut rest = ids(&["x"]);
+        leave_queue(&mut queue, 1, false, &mut rest);
+        assert_eq!(rest, ids(&["x"]));
+        assert!(queue.is_empty());
     }
 }
