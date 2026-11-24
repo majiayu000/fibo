@@ -1977,7 +1977,7 @@ checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
 
 [[package]]
 name = "fibo-app"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "base64 0.22.1",
  "fibo-core",
@@ -2015,7 +2015,7 @@ dependencies = [
 
 [[package]]
 name = "fibo-host"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "base64 0.22.1",
  "fibo-core",
