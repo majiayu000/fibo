@@ -39,6 +39,9 @@ On the 2000-session workspace of scripts/perf-fixture.py, with no turn running:
   fresh one pixel for pixel, and every animation and theme must really have played or
   applied: a gate over a static picture passes whatever the code does. What the compositor
   spends on a see-through window is not here: see scripts/theme-live.py;
+- starting (scripts' startup): from main to the window's first frame, the 2000-session
+  workspace loaded, must stay within BUDGET. The whole process counts, so threads that
+  run beside the main one count too; three runs differed by 2%;
 - a frame drawn without refreshing must match one drawn with a full refresh, pixel for
   pixel, after each step of redraw-check;
 - a split-pane jump must request frames while its ring is visible and none after it ends,
@@ -104,7 +107,7 @@ def main():
     bindir = pathlib.Path(sys.argv[1]).resolve()
     out = pathlib.Path(sys.argv[2] if len(sys.argv) > 2 else ROOT / 'target/perf-gate').resolve()
     fails = []
-    text = probe(bindir, out / 'frames', 'title-check,frames-pane,frames-changes,frames-main,frames-motion,frames-arrive,redraw-check,recognition-check,typing-check,history-check', catch_up=False)
+    text = probe(bindir, out / 'frames', 'startup,title-check,frames-pane,frames-changes,frames-main,frames-motion,frames-arrive,redraw-check,recognition-check,typing-check,history-check', catch_up=False)
     if 'history-check:' not in text:
         fails.append('no history-check line in the probe output')
     measured = {k: float(v) for k, v in re.findall(r'(frames-\w+): [^\n]*?([\d.]+) M instructions', text)}
@@ -113,6 +116,11 @@ def main():
         fails.append(f'no frame numbers in the probe output: {measured} {ms}')
         ms = {'frames-pane': 1, 'frames-main': 1}
     share = ms['frames-pane'] / ms['frames-main']
+    started = re.search(r'^startup: [\d.]+ ms wall, ([\d.]+) M instructions', text, re.M)
+    if started:
+        measured['startup'] = float(started[1])
+    else:
+        fails.append('no startup line in the probe output')
     # Counted, not timed, so a virtual machine gates it too: a line of output brings 18 new
     # runs, and a cache that loses the runs that only moved shapes the whole screen (774).
     # Its own workspace: after the others the shell in the shown pane no longer runs what

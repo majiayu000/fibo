@@ -21,4 +21,5 @@ frames-turning 4.08
 pane-share 0.12
 settings-open 0.06
 settings-plugins-first-frame 268.97
+startup 2449.68
 theme-share 1.06
