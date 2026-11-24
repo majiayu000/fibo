@@ -403,17 +403,17 @@ async fn run_agent(relay: Arc<Relay>, socket: WebSocket) {
                     next = outbox.recv() => match next {
                         Some(Out::Msg(m, _permit)) => {
                             meter.to_machine(size(&m));
-                            if sink.send(m).await.is_err() { break }
+                            if !deliver(&mut sink, m, ping * 2).await { break }
                         }
                         Some(Out::Close(code, reason)) => {
-                            let _ = sink.send(close(code, reason)).await;
+                            deliver(&mut sink, close(code, reason), ping * 2).await;
                             break;
                         }
                         None => break,
                     },
                     _ = tick.tick() => {
                         let silent = seen.lock().map(|s| s.elapsed()).unwrap_or_default();
-                        if silent > ping * 2 || sink.send(Message::Ping(Default::default())).await.is_err() {
+                        if silent > ping * 2 || !deliver(&mut sink, Message::Ping(Default::default()), ping * 2).await {
                             break;
                         }
                     }
@@ -582,12 +582,19 @@ async fn run_phone(relay: Arc<Relay>, agent: Arc<Agent>, path: String, socket: W
                         let Some(m) = m else { break };
                         let n = size(&m);
                         let closing = matches!(m, Message::Close(_));
-                        if sink.send(m).await.is_err() || closing { break }
+                        // A cut while this send waits on a phone that stopped reading ends
+                        // it now: the reader is already gone and waits on this task.
+                        let sent = tokio::select! {
+                            biased;
+                            _ = was_cut(&mut writer_cut) => false,
+                            sent = deliver(&mut sink, m, ping * 2) => sent,
+                        };
+                        if !sent || closing { break }
                         behind.fetch_sub(n, Ordering::AcqRel);
                     }
                     _ = tick.tick() => {
                         let silent = seen.lock().map(|s| s.elapsed()).unwrap_or_default();
-                        if silent > ping * 2 || sink.send(Message::Ping(Default::default())).await.is_err() {
+                        if silent > ping * 2 || !deliver(&mut sink, Message::Ping(Default::default()), ping * 2).await {
                             break;
                         }
                     }
@@ -726,6 +733,16 @@ fn sanitize(code: Option<u16>) -> u16 {
 }
 
 /// Resolves once the phone is cut; a bridge dropped without cutting is not a cut.
+/// Sends one message, giving up once the peer has taken nothing for `limit`. A peer that
+/// stops reading fills its TCP window and a plain `send` would wait forever, and with it
+/// the socket's slot, its buffer and the ping that would have noticed.
+async fn deliver<S>(sink: &mut S, m: Message, limit: Duration) -> bool
+where
+    S: futures_util::Sink<Message> + Unpin,
+{
+    matches!(tokio::time::timeout(limit, sink.send(m)).await, Ok(Ok(())))
+}
+
 async fn was_cut(rx: &mut watch::Receiver<Option<(u16, String)>>) -> (u16, String) {
     let why = rx
         .wait_for(Option::is_some)
