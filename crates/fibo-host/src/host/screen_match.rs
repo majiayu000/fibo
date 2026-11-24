@@ -271,9 +271,10 @@ pub(super) fn associate_pane(shared: &Shared, id: &str) -> io::Result<Reply> {
             panes(&host),
             host.workspace.clone(),
             host.submits.clone(),
-            host.index.fork_current()?,
+            host.index.forker()?,
         )
     };
+    let index = index.open()?;
     let answer = |session: Option<String>| Ok(Reply::ScreenAssociated { session });
     if let Some(s) = workspace.current_agent(id) {
         return answer(Some(s.id.clone()));

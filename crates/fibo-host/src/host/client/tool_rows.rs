@@ -23,7 +23,9 @@ fn tool_log(shared: &Shared, session: &str) -> io::Result<(ToolLog, crate::log_i
         path: s.transcript.clone(),
         runtime: s.runtime,
     };
-    Ok((log, host.index.fork_current()?))
+    let index = host.index.forker()?;
+    drop(host);
+    Ok((log, index.open()?))
 }
 
 pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {

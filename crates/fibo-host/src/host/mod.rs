@@ -226,12 +226,15 @@ impl Host {
         if due.is_empty() {
             return later;
         }
-        let Ok(index) = self.index.fork_current() else {
+        let Ok(index) = self.index.forker() else {
             return later;
         };
         let shared = shared.clone();
         std::thread::spawn(move || {
-            if let Err(e) = apply_official(&shared, &index, &due) {
+            if let Err(e) = index
+                .open()
+                .and_then(|index| apply_official(&shared, &index, &due))
+            {
                 eprintln!("fibo: official status unavailable: {e}");
             }
         });

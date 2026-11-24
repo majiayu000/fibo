@@ -37,9 +37,10 @@ pub(super) fn read(shared: &Shared, session: &str) -> io::Result<Reply> {
             s.cwd.clone(),
             content.map_or(0, |c| c.turn_key().0),
             touched,
-            host.index.fork_current()?,
+            host.index.forker()?,
         )
     };
+    let index = index.open()?;
     let start = index.turn_start(&log, since)?;
     let until = Instant::now() + READ_FOR;
     let log_id = fibo_platform::fs::file_id(Path::new(&log), &std::fs::metadata(&log)?)?.inode;
