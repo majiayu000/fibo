@@ -370,19 +370,26 @@ pub fn reconcile(
     processes: &[Process],
     open_files: &HashMap<u32, Vec<String>>,
 ) -> io::Result<()> {
-    let known: std::collections::HashSet<_> = workspace
-        .agent_sessions
-        .iter()
-        .map(|s| (s.runtime, s.cli_session_id.as_str()))
-        .collect();
-    for transcript in transcripts
-        .iter()
-        .filter(|t| known.contains(&(t.runtime, t.cli_id.as_str())))
-        .cloned()
-        .collect::<Vec<_>>()
-    {
+    // Every log ever seen comes in (10k on a long-used install) and observing one scans
+    // every session, all under the host lock: only a log that moved is observed again.
+    let mut known: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, s) in workspace.agent_sessions.iter().enumerate() {
+        known.entry(s.cli_session_id.clone()).or_default().push(i);
+    }
+    for t in transcripts {
+        // Observing a known conversation replaces it in place, so these positions hold.
+        let Some(s) = known.get(&t.cli_id).and_then(|at| {
+            at.iter()
+                .map(|&i| &workspace.agent_sessions[i])
+                .find(|s| s.runtime == t.runtime)
+        }) else {
+            continue;
+        };
+        if s.updated >= t.updated && s.cwd == t.cwd && s.transcript == t.path {
+            continue;
+        }
         workspace
-            .observe_agent(observation(&transcript, None))
+            .observe_agent(observation(t, None))
             .map_err(io::Error::other)?;
     }
     let mut bindings = Vec::new();
@@ -680,5 +687,7 @@ pub fn open_transcripts(
 mod binding_tests;
 #[cfg(test)]
 mod launched_tests;
+#[cfg(test)]
+mod refresh_tests;
 #[cfg(test)]
 mod tests;
