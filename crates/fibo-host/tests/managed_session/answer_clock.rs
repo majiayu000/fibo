@@ -44,7 +44,11 @@ fn an_answer_typed_in_the_terminal_ends_the_wait_for_the_turn_clock() {
         let s = w.current_agent("clock").expect("bound").clone();
         w.content.get(&s.id).cloned().unwrap_or_default()
     };
-    h.call(hook("UserPromptSubmit")).unwrap();
+    // A hook is answered with a bare Ok, not a workspace snapshot nobody reads.
+    assert!(matches!(
+        h.call(hook("UserPromptSubmit")).unwrap(),
+        Reply::Ok
+    ));
     std::thread::sleep(Duration::from_millis(1100));
     h.call(hook("PermissionRequest")).unwrap();
     let asked = card();
