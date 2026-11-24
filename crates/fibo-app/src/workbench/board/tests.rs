@@ -111,3 +111,25 @@ fn todo_add_row_survives_filtering_to_empty_and_back() {
     assert_eq!(list.state.item_count(), 2);
     assert_eq!(list.ids, ["c"]);
 }
+
+/// 在跑's card said nothing of what the Agent was doing (#516). It says the turn's latest
+/// record, as its sidebar row does; a card in another column without a question says nothing.
+#[test]
+fn a_running_card_says_what_its_turn_is_at() {
+    use super::card::card_quote_in;
+    let mut w = crate::workbench::tests::fixture();
+    let s = w.agent_sessions[0].clone();
+    w.content.insert(
+        s.id.clone(),
+        std::sync::Arc::new(crate::workbench::sessions::running_turn(
+            "crates/app/src/tabs.rs",
+        )),
+    );
+    let quote = |column| card_quote_in(&w, &s, column, false, "fix the login");
+    assert_eq!(quote(Column::Running).as_deref(), Some("正在改 tabs.rs"));
+    assert_eq!(quote(Column::Review), None);
+    let src = include_str!("card.rs");
+    assert!(
+        src.contains("card_quote_in(&self.workspace, session, column, asks_you.is_some(), &title)")
+    );
+}

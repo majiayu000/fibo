@@ -224,16 +224,7 @@ impl Workbench {
             _ => left.extend(branch_pill.map(|p| p.into_any_element())),
         }
         let title = self.session_title(session);
-        // What it asks, unless that only repeats the title (an interrupted turn says nothing);
-        // in 在跑, what the turn is at, as its sidebar row says it (#516).
-        let quote = match asks_you {
-            Some(_) => Some(self.session_line(session))
-                .filter(|q| !q.trim().is_empty() && q.trim() != title.trim()),
-            None if column == Column::Running => {
-                super::super::sessions::running_line_in(&self.workspace, session)
-            }
-            None => None,
-        };
+        let quote = card_quote_in(&self.workspace, session, column, asks_you.is_some(), &title);
 
         let lit = session.task.is_some() && self.overview.hover_task == session.task;
         card_frame(gpui::SharedString::from(format!("card-{}", session.id)))
@@ -361,5 +352,23 @@ impl Workbench {
             .when(self.overview.here.as_ref() == Some(&session.id), |d| {
                 d.child(self.here_card(session, false, cx))
             })
+    }
+}
+
+/// A session card's line under its title: what it asks, unless that only repeats the
+/// title (an interrupted turn says nothing); in 在跑, what the turn is at, as its sidebar
+/// row says it (#516); elsewhere nothing.
+pub(super) fn card_quote_in(
+    w: &Workspace,
+    session: &AgentSession,
+    column: Column,
+    asks_you: bool,
+    title: &str,
+) -> Option<String> {
+    match (asks_you, column) {
+        (true, _) => Some(super::super::sessions::session_line_in(w, session))
+            .filter(|q| !q.trim().is_empty() && q.trim() != title.trim()),
+        (false, Column::Running) => super::super::sessions::running_line_in(w, session),
+        (false, _) => None,
     }
 }

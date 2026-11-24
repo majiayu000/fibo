@@ -119,6 +119,12 @@ def prepare(root, bindir, N=2000, T=60, SPIN=0):
             if g == 0: rec.append((stamp, 'event_msg', {'type': 'request_user_input', 'message': '要不要继续？', 'questions': [{'question': '要不要继续？', 'options': [{'label': '继续'}, {'label': '停'}]}]}))
             elif g < 7: rec.append((stamp, 'event_msg', {'type': 'task_complete', 'last_agent_message': '已完成，请核对。'}))
             elif g != 9 or os.environ.get('NORUN'): rec.append((stamp, 'event_msg', {'type': 'turn_aborted'}))
+            else:
+                # The running turn has changed a file, so its row in 在跑 has a second line
+                # (`正在改 mod3.rs`, #516) and the probes draw rows that tall.
+                path = f'src/mod{n % 7}.rs'; call = f'{cid}-patch'
+                rec += [(stamp - 900, 'response_item', {'type': 'function_call', 'name': 'apply_patch', 'call_id': call, 'arguments': json.dumps({'input': f'*** Begin Patch\n*** Update File: {path}\n@@\n+fixed\n-broken\n*** End Patch'})}),
+                        (stamp - 900, 'response_item', {'type': 'function_call_output', 'call_id': call, 'output': f'Success. Updated the following files:\nM {path}'})]
             (logs / (cid + '.jsonl')).write_text(''.join(json.dumps({'timestamp': at, 'type': t, 'payload': p}, ensure_ascii=False) + '\n' for at, t, p in rec))
             os.utime(logs / (cid + '.jsonl'), (stamp, stamp))
         # SUB=K: K finished subagents, hidden from the lists but in the snapshot, spread over

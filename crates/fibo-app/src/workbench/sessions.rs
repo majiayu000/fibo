@@ -129,11 +129,7 @@ impl Workbench {
         self.workspace.session_updated(s)
     }
     pub(super) fn session_line(&self, s: &AgentSession) -> String {
-        self.workspace
-            .content
-            .get(&s.id)
-            .map(|c| fibo_core::content::short(&c.headline(), 100))
-            .unwrap_or_else(|| t!("内容尚未索引").into())
+        session_line_in(&self.workspace, s)
     }
     pub(super) fn save_session_task(&mut self, session: &AgentSession, cx: &mut Context<Self>) {
         let Some(c) = self.workspace.content.get(&session.id) else {
@@ -373,6 +369,12 @@ pub(super) fn session_open_in(
         .or_else(|| resume_terminal(w, resumed, s))
         .is_some_and(|t| w.terminal_tab(&t.id).is_some())
 }
+pub(super) fn session_line_in(w: &Workspace, s: &AgentSession) -> String {
+    w.content
+        .get(&s.id)
+        .map(|c| fibo_core::content::short(&c.headline(), 100))
+        .unwrap_or_else(|| t!("内容尚未索引").into())
+}
 /// What a running turn is at, for 在跑's board cards and 会话优先's rows (#516): its
 /// latest tool or command this turn in words (`正在改 tabs.rs`), never the ask its title
 /// already says, so a fresh turn shows nothing. It reads the content alone, not the clock:
@@ -393,6 +395,28 @@ pub(super) fn automation_hidden_in<'a>(w: &'a Workspace, s: &AgentSession) -> Op
         // A hook can bind a new conversation before its first prompt writes anything.
         None if s.current && s.binding.is_some() => None,
         None => Some(t!("缺少交互入口证据#workbench")),
+    }
+}
+
+/// A running turn that has changed `file` since it was asked, for 在跑's tests.
+#[cfg(test)]
+pub(super) fn running_turn(file: &str) -> fibo_core::content::Content {
+    use fibo_core::content::{Content, Evidence, Quote, Turn};
+    Content {
+        turn: Turn::Running,
+        turn_started: 100,
+        asks: vec![Quote {
+            text: "fix the login".into(),
+            ..Default::default()
+        }],
+        evidence: vec![Evidence {
+            kind: "file".into(),
+            summary: file.into(),
+            exit_code: None,
+            at: 120,
+            source: Default::default(),
+        }],
+        ..Default::default()
     }
 }
 
