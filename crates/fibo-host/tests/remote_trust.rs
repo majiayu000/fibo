@@ -143,6 +143,30 @@ fn not_trusting_is_esc_on_both_and_trusting_codex_is_enter_on_its_first_option()
     assert!(h.screen("no").contains("CHOSE=esc"));
 }
 
+/// Codex's first-run prompt on Windows (0.167: `2. Quit`, `esc quit`, `and create sandbox`)
+/// read as 空闲 in the 11-24 walk; it waits like the Mac one and Enter trusts it.
+#[test]
+fn the_windows_first_run_codex_prompt_waits_and_trusts_on_enter() {
+    let h = Host::start();
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/screens/codex/trust-windows-first-run.txt");
+    let windows = std::fs::read_to_string(path).unwrap();
+    fake(&h, "w", &windows, &windows, 0, true);
+    let mut r = Remote::open(&h, None, &[]);
+    let c = wait_trust(&mut r, "w");
+    assert_eq!(
+        (c["agent"].as_str(), c["status"].as_str()),
+        (Some("codex"), Some("waiting"))
+    );
+    assert_eq!(c["needs_you"], true);
+    let folder = r"C:\Users\Administrator\fibo-walk2";
+    assert_eq!(c["trust"]["folder"], folder);
+    r.ok(
+        json!({ "op": "trust", "terminal": "w", "folder": folder, "trust": true, "request": "t" }),
+    );
+    assert!(h.screen("w").contains("CHOSE=yes"));
+}
+
 /// The real answer ends the prompt: the card stops waiting and `trust` replies at once.
 #[test]
 fn the_card_stops_asking_once_the_prompt_is_gone() {

@@ -357,7 +357,7 @@ impl Workbench {
                         .filter(|s| self.workspace.space_quiet(&s.id))
                         .count(),
                 ),
-                need: self.needs_you().len(),
+                need: self.local_needs(),
                 open,
                 add: None,
                 machine: None,
@@ -505,7 +505,7 @@ impl Workbench {
         // While the mark slides to it the mark says so.
         let on = self.machine_scope() == index;
         let lit = on && self.sidebar.motion.rail_at().is_none();
-        let need = index.map_or_else(|| self.needs_you().len(), |i| self.remote_needs(i));
+        let need = index.map_or_else(|| self.local_needs(), |i| self.remote_needs(i));
         let face = match index {
             None => gpui::svg()
                 .path("icons/terminal.svg")

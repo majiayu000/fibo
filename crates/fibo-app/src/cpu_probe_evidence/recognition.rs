@@ -106,6 +106,18 @@ pub(super) fn recognition_check(
         .update(cx, |v, _, _| v.visual_shown_terminal())
         .unwrap();
     let mut status = original.clone();
+    let trust = |i: usize| TrustPrompt {
+        agent: Default::default(),
+        question: "Trust this folder?".into(),
+        folder: format!("/probe-{i}"),
+    };
+    // A prompt appearing is drawn (its terminal waits on you); only its words changing is
+    // the bookkeeping measured here.
+    status.terminal_trust.insert(terminal.clone(), trust(0));
+    handle
+        .update(cx, |v, _, cx| v.receive_recognition(status.clone(), cx))
+        .unwrap();
+    frame(cx);
     let mut last = sidebar(cx);
     let mut draws = 0;
     let (cpu, ins) = (cpu_secs(), instructions());
@@ -118,14 +130,7 @@ pub(super) fn recognition_check(
                 ..Default::default()
             },
         );
-        status.terminal_trust.insert(
-            terminal.clone(),
-            TrustPrompt {
-                agent: Default::default(),
-                question: "Trust this folder?".into(),
-                folder: format!("/probe-{i}"),
-            },
-        );
+        status.terminal_trust.insert(terminal.clone(), trust(i));
         handle
             .update(cx, |v, _, cx| v.receive_recognition(status.clone(), cx))
             .unwrap();

@@ -115,16 +115,17 @@ impl Workbench {
         let recognition = self.store.recognition();
         let mut rows: Vec<_> = (recognition.terminal_notes.keys())
             .chain(recognition.terminal_reports.keys())
+            .chain(recognition.terminal_trust.keys())
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .filter(|terminal| self.current_agent(terminal).is_none() && keep(terminal))
             .map(|terminal| {
-                let report = (recognition.terminal_reports.get(terminal))
-                    .map(crate::model::session_state::report_view);
-                let group = report.as_ref().map(|(g, _)| *g);
-                let n = (recognition.terminal_notes.get(terminal).cloned())
-                    .or_else(|| report.map(|(_, n)| n))
-                    .expect("listed from notes or reports");
+                let (group, n) = crate::model::session_state::unlinked_view(
+                    recognition,
+                    &self.workspace,
+                    terminal,
+                )
+                .expect("listed from notes, reports or trust prompts");
                 Unlinked {
                     terminal: terminal.clone(),
                     note: n.note,

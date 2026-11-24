@@ -34,6 +34,36 @@ pub fn report_view(
     }
     (group, fibo_core::protocol::TerminalNote { note, why })
 }
+/// A terminal no conversation is tied to, as its pane and sidebar row show it: the state
+/// core gives it (`status::of_terminal`: an Agent asking to trust its folder waits on you)
+/// and its line. `None` when nothing is known of it.
+pub fn unlinked_view(
+    r: &fibo_core::protocol::RecognitionStatus,
+    w: &Workspace,
+    terminal: &str,
+) -> Option<(Option<Status>, fibo_core::protocol::TerminalNote)> {
+    let trust = r.terminal_trust.get(terminal);
+    let report = r.terminal_reports.get(terminal);
+    let group = fibo_core::status::of_terminal(w, terminal, trust.is_some(), report, now());
+    let note = match trust {
+        Some(p) => fibo_core::protocol::TerminalNote {
+            note: t!(
+                "{agent} · {state} · 要不要信任这个文件夹",
+                agent = p.agent.executable(),
+                state = Status::Waiting.label()
+            ),
+            why: format!("{}\n{}", p.question, p.folder),
+        },
+        None => (r.terminal_notes.get(terminal).cloned())
+            .or_else(|| report.map(|r| report_view(r).1))?,
+    };
+    Some((group, note))
+}
+/// Which terminals ask to trust their folder. The window shows that, so it redraws when the
+/// set changes; the words of one prompt stay the phone's, and redraw nothing (0516f477).
+pub fn trust_asked(r: &fibo_core::protocol::RecognitionStatus) -> std::collections::BTreeSet<&str> {
+    r.terminal_trust.keys().map(String::as_str).collect()
+}
 /// How many sessions 要你处理 counts (`status::needs_you`) in each space, in one pass:
 /// asked per space, every render walked all sessions once per space.
 pub fn needs_by_space(w: &Workspace) -> HashMap<&str, usize> {
@@ -366,6 +396,35 @@ mod section_tests {
 #[cfg(test)]
 mod needs_tests {
     use super::*;
+    /// A Codex at its trust prompt with no conversation: its row and pane say it waits,
+    /// whatever its title made the host note (Windows walk 11-24 showed 空闲).
+    #[test]
+    fn an_unlinked_trust_prompt_reads_as_waiting() {
+        let w = Workspace::default();
+        let mut r = fibo_core::protocol::RecognitionStatus::default();
+        assert!(unlinked_view(&r, &w, "t").is_none());
+        r.terminal_notes.insert(
+            "t".into(),
+            fibo_core::protocol::TerminalNote {
+                note: "codex · 空闲 · 未关联对话".into(),
+                why: String::new(),
+            },
+        );
+        assert_eq!(unlinked_view(&r, &w, "t").unwrap().0, None);
+        r.terminal_trust.insert(
+            "t".into(),
+            fibo_core::protocol::TrustPrompt {
+                agent: Agent::Codex,
+                question: "Trust this folder?".into(),
+                folder: "C:\\x".into(),
+            },
+        );
+        let (group, note) = unlinked_view(&r, &w, "t").unwrap();
+        assert_eq!(group, Some(Status::Waiting));
+        assert!(note.note.starts_with("codex · "), "{}", note.note);
+        assert!(note.note.contains(Status::Waiting.label()), "{}", note.note);
+        assert!(trust_asked(&r).contains("t"));
+    }
     /// The one-pass count matches asking each space on its own.
     #[test]
     fn needs_by_space_matches_counting_each_space() {

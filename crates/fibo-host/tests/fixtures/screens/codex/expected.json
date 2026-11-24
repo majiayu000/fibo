@@ -113,5 +113,9 @@
   "neg-ultra-composer-mentions.txt": {
     "state": "idle",
     "note": "Ultra 档的输入框用 `»`，里面的提示词含有审批问句；输入框下面两行取自真实 Codex 0.169 Ultra 画面（mode-screens/codex-ultra-idle.txt）"
+  },
+  "trust-windows-first-run.txt": {
+    "state": "idle",
+    "note": "按 Codex 0.167 源码（onboarding/trust_directory.rs）合成：Windows 首次启动的信任提示，2 号选项是 Quit，页脚多了 and create sandbox、写 esc quit；screen_ask::trust_screen 认它"
   }
 }

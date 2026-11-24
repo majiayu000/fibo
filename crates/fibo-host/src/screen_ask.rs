@@ -604,13 +604,14 @@ mod tests {
     }
     #[test]
     fn a_trust_prompt_needs_all_its_parts() {
-        let screen = |cli: &str| {
+        let fixture = |cli: &str, name: &str| {
             let path = format!(
-                "{}/tests/fixtures/screens/{cli}/trust-real.txt",
+                "{}/tests/fixtures/screens/{cli}/{name}.txt",
                 env!("CARGO_MANIFEST_DIR")
             );
             std::fs::read_to_string(path).unwrap()
         };
+        let screen = |cli: &str| fixture(cli, "trust-real");
         let claude = screen("claude");
         let t = trust_screen(&claude).unwrap();
         assert_eq!(t.agent, Agent::Claude);
@@ -633,8 +634,32 @@ mod tests {
         assert!(t.question.starts_with("Trust this folder?"));
         assert!(t.question.ends_with("will be saved."), "{}", t.question);
         assert!(t.on_yes);
+        // Windows 11, Codex 0.167: the first-run prompt read as 空闲 (11-24 walk).
+        let windows = screen("codex").replace("~/t/new-folder", r"C:\Users\x\new");
+        let windows = windows
+            .replace("Back to Agent Command Center", "Quit")
+            .replace(
+                "enter continue · esc back",
+                "enter continue and create sandbox · esc quit",
+            );
+        assert_eq!(
+            trust_screen(&fixture("codex", "trust-windows-first-run")).map(|t| t.folder),
+            Some(r"C:\Users\Administrator\fibo-walk2".to_owned())
+        );
+        let narrow = windows.replace(" · esc quit", " · esc\n  quit");
+        for (name, screen) in [("windows", &windows), ("narrow", &narrow)] {
+            let t = trust_screen(screen).unwrap_or_else(|| panic!("{name}: {screen}"));
+            assert_eq!(
+                (t.agent, t.folder.as_str()),
+                (Agent::Codex, r"C:\Users\x\new")
+            );
+            assert!(t.on_yes);
+        }
+        assert!(trust_screen(&codex.replace("esc back", "esc cancel")).is_some());
 
         for broken in [
+            codex.replace("esc back", "esc skip"),
+            format!("{codex}\n  more\n  lines\n"),
             claude.replace("No, exit", "No"),
             claude.replace("Yes, I trust this folder", "Yes"),
             claude.replace("Accessing workspace:", "Workspace:"),
