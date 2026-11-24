@@ -328,6 +328,16 @@ pub fn asks_for_you(w: &Workspace, s: &AgentSession, now: u64) -> bool {
         && of(w, s, now).needs_you()
 }
 
+/// A terminal whose Agent asks to be trusted with its folder counts in 要你处理 by itself,
+/// when it is in a tab, its space is not put aside, and no session there already counts:
+/// before the answer there is no conversation to count. The phone's card says so too.
+pub fn trust_needs_you(w: &Workspace, terminal: &str, now: u64) -> bool {
+    w.terminal_tab(terminal).is_some()
+        && !w.terminal_quiet(terminal)
+        && w.current_agent(terminal)
+            .is_none_or(|s| !needs_you(w, s, now))
+}
+
 /// The state of what runs in a terminal. An Agent asking to be trusted with its folder is
 /// waiting on you, with or without a conversation: it does nothing until you answer. With
 /// no conversation, a program that reports its own state (OSC 7501) has that one, as the
@@ -666,5 +676,25 @@ mod tests {
         // Still at the prompt in its terminal: waiting.
         let w = workspace(Some(content(Turn::Waiting)), None);
         assert_eq!(of(&w, &session(Some("t"), true), NOW), Status::Waiting);
+    }
+
+    /// Before any conversation, a CLI asking to trust its folder is 要你处理 on its own
+    /// (Windows walk 11-24: it read 空闲 and was not counted); not once its space is put
+    /// aside, nor when no tab shows it.
+    #[test]
+    fn a_trust_prompt_in_a_tab_needs_you_without_a_conversation() {
+        let mut w = workspace(None, None);
+        w.tabs.push(crate::model::Tab {
+            id: "tab".into(),
+            space: "sp".into(),
+            default_task: None,
+            title: String::new(),
+            layout: Some(crate::layout::Layout::Leaf("t".into())),
+        });
+        assert_eq!(of_terminal(&w, "t", true, None, NOW), Some(Status::Waiting));
+        assert!(trust_needs_you(&w, "t", NOW));
+        assert!(!trust_needs_you(&w, "elsewhere", NOW));
+        w.quiet_spaces.insert("sp".into());
+        assert!(!trust_needs_you(&w, "t", NOW));
     }
 }

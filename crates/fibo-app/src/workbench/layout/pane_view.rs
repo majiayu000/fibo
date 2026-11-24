@@ -67,14 +67,13 @@ impl Workbench {
         let rang = pane.read(cx).bell;
         // What the Agent's adapter says about one it sees here but cannot read.
         let recognition = self.store.recognition();
-        let unread = recognition.terminal_notes.get(id).cloned().or_else(|| {
-            // A program that reports its own status, with no conversation read here.
-            session
-                .is_none()
-                .then(|| recognition.terminal_reports.get(id))
-                .flatten()
-                .map(|r| crate::model::session_state::report_view(r).1)
-        });
+        // With no conversation read here, a program that reports its own status or an
+        // Agent asking to trust its folder says so too.
+        let unread = match session {
+            Some(_) => recognition.terminal_notes.get(id).cloned(),
+            None => crate::model::session_state::unlinked_view(recognition, &self.workspace, id)
+                .map(|(_, n)| n),
+        };
         let takeover = id.to_owned();
         let focus = pane.focus_handle(cx);
         let focus_id = id.to_owned();

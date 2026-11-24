@@ -1,6 +1,7 @@
 //! How each CLI asks to be trusted with a folder, before any conversation. Every part must
 //! be there. Claude Code numbers nothing and starts on 「No, exit」, so Enter alone would quit.
-//! Real screens: Claude Code 2.1.318, Codex 0.166.
+//! Real screens: Claude Code 2.1.318, Codex 0.166 and 0.169 (macOS); Codex's first-run and
+//! Windows footers are from its 0.167 source (`tui/src/onboarding/trust_directory.rs`).
 use crate::screen_ask::TrustScreen;
 use fibo_core::model::Agent;
 
@@ -46,9 +47,19 @@ pub(super) fn claude(lines: &[&str]) -> Option<TrustScreen> {
     })
 }
 
+/// What Esc does on Codex's prompt, as its footer ends: back to the Agent Command Center
+/// (the daemon's prompt), quit (the first-run one, the only one on Windows), or keep the
+/// task's folder (changing folders inside a task).
+const CODEX_ESC: [&str; 3] = ["esc back", "esc quit", "esc cancel"];
+
 pub(super) fn codex(lines: &[&str]) -> Option<TrustScreen> {
-    let footer = lines.last()?;
-    if !(footer.starts_with("enter continue") && footer.contains("esc back")) {
+    // `enter continue · esc back`, or on Windows `enter continue and create sandbox · esc
+    // quit`, which a narrow screen wraps onto a second line.
+    let at = lines
+        .iter()
+        .rposition(|l| l.starts_with("enter continue"))?;
+    let footer = lines[at..].join(" ");
+    if lines.len() - at > 2 || !CODEX_ESC.iter().any(|esc| footer.ends_with(esc)) {
         return None;
     }
     let yes = option(lines, "1. Trust and continue")?;

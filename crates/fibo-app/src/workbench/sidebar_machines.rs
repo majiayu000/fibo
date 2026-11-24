@@ -203,6 +203,21 @@ impl Workbench {
         }
         (count, asks, failed)
     }
+    /// This machine's terminals asking to trust their folder that 要你处理 counts beside its
+    /// sessions (`status::trust_needs_you`), in a fixed order.
+    pub(super) fn trust_asks(&self) -> Vec<String> {
+        let now = crate::model::time::now();
+        let mut asks: Vec<String> = (self.store.recognition().terminal_trust.keys())
+            .filter(|t| fibo_core::status::trust_needs_you(&self.workspace, t, now))
+            .cloned()
+            .collect();
+        asks.sort();
+        asks
+    }
+    /// What 要你处理 counts on this machine: its sessions and its trust prompts.
+    pub(super) fn local_needs(&self) -> usize {
+        self.needs_you().len() + self.trust_asks().len()
+    }
     /// Whether the title row shows 下一个要你的.
     pub(super) fn anything_waits(&self) -> bool {
         self.wants().0 > 0
@@ -217,16 +232,16 @@ impl Workbench {
         // Worked out once a second per snapshot: the title row asks every frame.
         let facts = self.facts();
         let (waiting, error) = (facts.needs_asking, facts.needs_failed);
-        let needs = self.needs_you();
+        let needs = self.local_needs();
         let (there, asks, failed) = self.remote_wants();
-        let group = if asks || waiting {
+        let group = if asks || waiting || needs > self.needs_you().len() {
             Status::Waiting
         } else if failed || error {
             Status::Error
         } else {
             Status::Review
         };
-        (needs.len() + there, group)
+        (needs + there, group)
     }
     /// 下一个要你的: every session 要你处理 counts, on every machine, since the key goes to
     /// all of them. The chip takes the color of the most urgent kind it holds (asking, then
@@ -275,6 +290,7 @@ impl Workbench {
         }
         enum Next {
             Here(AgentSession),
+            Trust(String),
             There(usize, Box<Card>, String),
         }
         let mut all: Vec<(String, Next)> = self
@@ -282,6 +298,11 @@ impl Workbench {
             .into_iter()
             .map(|s| (s.id.clone(), Next::Here(s.clone())))
             .collect();
+        all.extend(
+            self.trust_asks()
+                .into_iter()
+                .map(|t| (t.clone(), Next::Trust(t))),
+        );
         for index in 0..self.machines.len() {
             for r in self.remote_rows_of(index) {
                 if r.online && !r.quiet && r.card.needs_you {
@@ -301,6 +322,10 @@ impl Workbench {
                 .as_ref()
                 .and_then(|id| self.current_agent(id))
                 .map(|s| s.id.clone())
+                .or_else(|| {
+                    (self.nav.focused.clone())
+                        .filter(|t| self.store.recognition().terminal_trust.contains_key(t))
+                })
                 .or_else(|| self.overview.here.clone()),
         };
         let at = all
@@ -315,6 +340,17 @@ impl Workbench {
                 let space = self.workspace.session_space(&session).map(str::to_owned);
                 self.reveal_machine(None, space.as_deref());
                 self.enter_card(&session, window, cx);
+            }
+            Next::Trust(terminal) => {
+                if self.peek.as_ref().is_some_and(|p| p.remote.is_some()) {
+                    self.close_peek(cx);
+                }
+                let space = self
+                    .workspace
+                    .terminal_tab(&terminal)
+                    .map(|t| t.space.clone());
+                self.reveal_machine(None, space.as_deref());
+                self.focus_terminal(&terminal, window, cx);
             }
             Next::There(index, card, name) => {
                 self.reveal_machine(Some(index), Some(&card.space));
@@ -378,7 +414,7 @@ impl Workbench {
         self.next_waiting(window, cx);
     }
     pub fn visual_wants(&self) -> usize {
-        self.needs_you().len() + self.remote_wants().0
+        self.local_needs() + self.remote_wants().0
     }
     pub fn visual_rail_add(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.show_settings_page(settings::Page::Phones, window, cx);

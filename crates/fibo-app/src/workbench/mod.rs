@@ -670,7 +670,8 @@ impl Workbench {
             || previous.terminal_hints != status.terminal_hints
             || previous.terminal_notes != status.terminal_notes
             || previous.terminal_commands != status.terminal_commands
-            || previous.terminal_reports != status.terminal_reports;
+            || previous.terminal_reports != status.terminal_reports
+            || trust_asked(previous) != trust_asked(&status);
         self.follow_plugins(status.plugins_revision, cx);
         if remote_changed && let Some(view) = &self.settings {
             let remote = status.remote.clone();
