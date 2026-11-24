@@ -51,7 +51,7 @@ impl Workbench {
                 return true;
             }
             Action::Close => {
-                self.close_focused(cx);
+                self.close_key(cx);
                 return true;
             }
             Action::SplitRight | Action::SplitDown => {

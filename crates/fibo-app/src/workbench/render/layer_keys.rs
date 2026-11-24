@@ -36,7 +36,7 @@ impl Workbench {
     fn self_keyed_layer(&self) -> bool {
         self.settings.is_some() || self.diagnostics.is_some() || self.search.is_open()
     }
-    fn menu_open(&self) -> bool {
+    pub(super) fn menu_open(&self) -> bool {
         self.layout.menu.is_some()
             || self.sidebar.view_menu.is_some()
             || self.phones.open
@@ -50,7 +50,7 @@ impl Workbench {
     }
     /// Closes the topmost open layer, in the reverse of the order `window_layers` draws
     /// them, so Esc takes back the last thing that appeared.
-    fn dismiss_top_layer(&mut self) {
+    pub(super) fn dismiss_top_layer(&mut self) {
         if self.layout.confirm_close.take().is_some()
             || self.sidebar.machine_menu.take().is_some()
             || self.layout.space_menu.take().is_some()
