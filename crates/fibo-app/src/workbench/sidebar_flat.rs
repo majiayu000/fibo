@@ -357,7 +357,12 @@ impl Workbench {
                 None => short_ago(from.session_updated(session), now()),
             },
         };
-        let asks_ink = g.colors().1;
+        // A question or an error is in its state's ink; what a running turn does is not
+        // something to act on, so it reads like the rest of the row's small text.
+        let asks_ink = match bucket(g) {
+            Bucket::Running => ink(F::second()),
+            _ => g.colors().1,
+        };
         let row = gpui::SharedString::from(match there {
             Some(r) => format!("remote-{}", r.key()),
             None => format!("session-{}", session.id),

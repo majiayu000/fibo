@@ -173,6 +173,9 @@ if sys.argv[1] == 'prepare':
             records += call(cid, 1, None, patch('crates/fibo-core/src/model.rs'), stamp - 400)
             records += call(cid, 2, 'cargo test -p fibo-app tab_title_survives_exit', 'Process exited with code 0\ntest result: ok. 1 passed; 0 failed', stamp - 300)
             records += call(cid, 3, 'cargo test -p fibo-app', 'Process exited with code 0\ntest result: ok. 213 passed; 0 failed', stamp - 200)
+        if n == 4 and os.environ.get('MOORING_FIXTURE_BOARD'):
+            # The live running turn has changed a file: 在跑's card and row say so (#516).
+            records += call(cid, 1, None, patch('crates/fibo-app/src/workbench/board/card.rs'), stamp - 300)
         group = n % 8
         if group == 0: records.append((stamp, 'event_msg', {'type': 'request_user_input', 'message': '标签名在退出后要不要保留？我倾向保留，等你确认。', 'questions': [{'question': '标签名在退出后要不要保留？', 'options': [{'label': '保留，下次打开还叫这个名字'}, {'label': '不保留，按目录重新起名'}]}]}))
         elif group == 1: records.append((stamp, 'event_msg', {'type': 'task_complete', 'last_agent_message': '已找到 tab_name 的来源。'}))

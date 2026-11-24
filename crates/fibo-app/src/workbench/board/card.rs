@@ -224,10 +224,16 @@ impl Workbench {
             _ => left.extend(branch_pill.map(|p| p.into_any_element())),
         }
         let title = self.session_title(session);
-        // What it asks, unless that only repeats the title (an interrupted turn says nothing).
-        let quote = asks_you
-            .map(|_| self.session_line(session))
-            .filter(|q| !q.trim().is_empty() && q.trim() != title.trim());
+        // What it asks, unless that only repeats the title (an interrupted turn says nothing);
+        // in 在跑, what the turn is at, as its sidebar row says it (#516).
+        let quote = match asks_you {
+            Some(_) => Some(self.session_line(session))
+                .filter(|q| !q.trim().is_empty() && q.trim() != title.trim()),
+            None if column == Column::Running => {
+                super::super::sessions::running_line_in(&self.workspace, session)
+            }
+            None => None,
+        };
 
         let lit = session.task.is_some() && self.overview.hover_task == session.task;
         card_frame(gpui::SharedString::from(format!("card-{}", session.id)))

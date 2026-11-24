@@ -96,9 +96,13 @@ impl Workbench {
                     .map(RowDetail::Text)
             })
         };
-        // Only what asks you or failed gets a second line: the question is what you
-        // act on. A finished turn or a running one reads from its state mark alone,
-        // so 要你处理 and 在跑 fit one screen even with dozens of sessions.
+        // What asks you or failed gets a second line: the question is what you act on.
+        // A running one gets one only once its log names a tool or command this turn
+        // (`正在改 tabs.rs`), never the ask its title already says, so a list of fresh
+        // turns still reads one line each (#516). A finished turn reads from its mark.
+        let doing = |from: &Workbench, l: &Listed| {
+            super::sessions::running_line_in(&from.workspace, l.0).map(RowDetail::Text)
+        };
         for (key, title, rows, lines) in [
             (
                 "recent:need",
@@ -135,16 +139,18 @@ impl Workbench {
                 };
                 match item {
                     Item::Here(l) => {
-                        let d = if lines && asks(self, &l) {
-                            second(self, &l)
-                        } else {
-                            None
+                        let d = match lines {
+                            true => asks(self, &l).then(|| second(self, &l)).flatten(),
+                            false => doing(self, &l),
                         };
                         push(out, l, d, End::State);
                     }
                     Item::There(r) => {
-                        let d = (lines && asks(r.from, &r.l)).then(|| second(r.from, &r.l));
-                        out.push(self.machine_row(r, d.flatten(), cx));
+                        let d = match lines {
+                            true => asks(r.from, &r.l).then(|| second(r.from, &r.l)).flatten(),
+                            false => doing(r.from, &r.l),
+                        };
+                        out.push(self.machine_row(r, d, cx));
                     }
                 }
             }
