@@ -73,6 +73,8 @@ pub fn was_signalled(status: &std::process::ExitStatus) -> bool {
     status.signal().is_some()
 }
 
+pub fn no_console(_command: &mut std::process::Command) {}
+
 pub fn detach(command: &mut std::process::Command) {
     use std::os::unix::process::CommandExt;
     // SAFETY: setsid and signal are async-signal-safe.

@@ -543,7 +543,9 @@ pub fn remote_url() -> String {
 }
 
 fn curl(url: &str) -> Result<Vec<u8>, String> {
-    let out = std::process::Command::new("curl")
+    let mut command = std::process::Command::new("curl");
+    fibo_platform::process::no_console(&mut command);
+    let out = command
         .args(["-fsSL", "--max-time", "20", "--max-filesize"])
         .arg(MAX_FILE.to_string())
         .arg("--proto")

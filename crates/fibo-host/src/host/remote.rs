@@ -205,6 +205,7 @@ impl Supervisor {
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::piped());
+            fibo_platform::process::no_console(&mut command);
             match &config.key {
                 Some(key) => command.env("MOORING_RELAY_KEY", key),
                 None => command.env_remove("MOORING_RELAY_KEY"),

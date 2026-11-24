@@ -18,6 +18,11 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 /// Windows has no TERM to inherit.
 pub fn takes_term(_command: &mut Command) {}
 
+pub fn no_console(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
 pub fn detach(command: &mut Command) {
     use std::os::windows::process::CommandExt;
     command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);

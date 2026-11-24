@@ -70,11 +70,9 @@ fn hand_on(data: &Path, payload: &[u8]) {
     if std::fs::metadata(&original).map_or(true, |m| m.len() == 0) {
         return;
     }
-    let Ok(mut child) = Command::new(fibo_platform::shell::sh())
-        .arg(&original)
-        .stdin(Stdio::piped())
-        .spawn()
-    else {
+    let mut command = Command::new(fibo_platform::shell::sh());
+    fibo_platform::process::no_console(&mut command);
+    let Ok(mut child) = command.arg(&original).stdin(Stdio::piped()).spawn() else {
         return;
     };
     if let Some(mut stdin) = child.stdin.take() {

@@ -138,6 +138,7 @@ pub fn run(spec: Run) -> Result<Finished, Failed> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     crate::git::configure(&mut cmd);
+    fibo_platform::process::no_console(&mut cmd);
     if let Some(cwd) = spec.cwd {
         cmd.current_dir(cwd);
     }
@@ -236,6 +237,7 @@ fn login_path(shell: &Path, timeout: Duration) -> Option<String> {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
+    fibo_platform::process::no_console(&mut cmd);
     let (mut child, group) = Group::spawn(&mut cmd).ok()?;
     let (out, closed) = collect(child.stdout.take()?, 1024 * 1024);
     let deadline = Instant::now() + timeout;

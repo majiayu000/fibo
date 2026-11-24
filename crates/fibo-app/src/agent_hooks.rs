@@ -27,10 +27,12 @@ pub struct Hook {
 fn fibo(host: &crate::attach::Host, args: &[&str]) -> io::Result<Vec<u8>> {
     let out = match host.run(args) {
         Some(out) => out?,
-        None => Command::new(crate::lifecycle::host_program()?)
-            .args(args)
-            .stdin(std::process::Stdio::null())
-            .output()?,
+        None => {
+            let mut command = Command::new(crate::lifecycle::host_program()?);
+            command.args(args).stdin(std::process::Stdio::null());
+            fibo_platform::process::no_console(&mut command);
+            command.output()?
+        }
     };
     if !out.status.success() {
         let why = String::from_utf8_lossy(&out.stderr);
