@@ -5,17 +5,22 @@ use gpui::{App, Context, Focusable, Window, prelude::*};
 
 impl Pane {
     pub fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let field = cx.new(|cx| crate::ui::field::Field::new(t!("搜索滚动内容"), "", cx));
+        // One line: Enter and Esc are the field's to report, so neither reaches the
+        // program in the terminal behind it.
+        let field = cx.new(|cx| crate::ui::field::Field::new(t!("搜索滚动内容"), "", cx).compact());
         window.focus(&field.focus_handle(cx), cx);
-        // Enter finds, then steps to the next match; the panel's buttons do the same.
-        let events = cx.subscribe(&field, |this, _, event, cx| {
-            if let crate::ui::field::FieldEvent::Submit = event {
+        // Enter finds, then steps to the next match (Shift-Enter the previous); the
+        // panel's buttons do the same. Esc closes the search.
+        let events = cx.subscribe_in(&field, window, |this, _, event, window, cx| match event {
+            crate::ui::field::FieldEvent::Submit => {
                 if this.search.matches.is_empty() || this.search.searched != this.search_query(cx) {
                     this.find_text(cx);
                 } else {
-                    this.step_match(1, cx);
+                    this.step_match(if window.modifiers().shift { -1 } else { 1 }, cx);
                 }
             }
+            crate::ui::field::FieldEvent::Cancel => this.close_search(window, cx),
+            crate::ui::field::FieldEvent::ClickOut => {}
         });
         self.search.field = Some(field);
         self.search._events = Some(events);
