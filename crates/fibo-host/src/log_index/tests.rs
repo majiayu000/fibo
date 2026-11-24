@@ -39,6 +39,7 @@ fn line(id: &str) -> String {
 /// would be, and reports the cost per line.
 #[test]
 #[ignore]
+#[cfg(unix)] // getrusage; a benchmark run by hand.
 fn append_cost() {
     let Some(src) = std::env::var_os("MOORING_BENCH_LOG") else {
         return;
@@ -719,8 +720,9 @@ fn eliding_long_strings_keeps_each_line_valid_json() {
 }
 
 /// One unreadable log (e.g. written by `sudo claude`) does not stop every other
-/// session from indexing.
+/// session from indexing. Unix only: mode 000 is how the test makes a file unreadable.
 #[test]
+#[cfg(unix)]
 fn an_unreadable_log_does_not_block_the_index() {
     use std::os::unix::fs::PermissionsExt;
     let f = Fixture::new();

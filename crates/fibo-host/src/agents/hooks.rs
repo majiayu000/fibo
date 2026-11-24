@@ -471,7 +471,9 @@ mod tests {
         assert!(out.stdout.is_empty() && out.stderr.is_empty());
     }
 
+    /// Unix only: the hook command and the fake host are sh.
     #[test]
+    #[cfg(unix)]
     fn a_terminal_from_before_the_rename_still_reports() {
         use std::os::unix::fs::PermissionsExt;
         let dir = std::env::temp_dir().join(format!("kl-hookcall-{}", uuid::Uuid::new_v4()));

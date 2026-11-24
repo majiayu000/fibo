@@ -580,7 +580,9 @@ mod tests {
         assert!(same(&before, &after, 42).is_none());
     }
 
+    /// Unix only: the child is /bin/sh and it is looked for with kill(pid, 0).
     #[test]
+    #[cfg(unix)]
     fn cancelling_during_a_command_reaps_our_child() {
         let (a, b) = local::Stream::pair().unwrap();
         let root =

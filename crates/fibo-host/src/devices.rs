@@ -561,12 +561,15 @@ mod tests {
         let (a, key) = add(&socket, "iPhone", Role::Full).unwrap();
         let (b, _) = add(&socket, "iPad", Role::View).unwrap();
         assert_eq!(load(&socket)[0].key(), Some(key));
-        use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(file(&socket))
-            .unwrap()
-            .permissions()
-            .mode();
-        assert_eq!(mode & 0o777, 0o600);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(file(&socket))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
         assert!(remove(&socket, "nope").is_err());
         assert_eq!(
             set_role(&socket, "iPad", Role::Answer).unwrap().role,
@@ -616,12 +619,15 @@ mod tests {
         let socket = dir.join("workbench.sock");
         let a = machine_code(&socket, false).unwrap();
         assert_eq!(machine_code(&socket, false).unwrap(), a);
-        use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(dir.join("remote-code"))
-            .unwrap()
-            .permissions()
-            .mode();
-        assert_eq!(mode & 0o777, 0o600);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(dir.join("remote-code"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
         assert!(retired(&socket).is_empty());
         let b = machine_code(&socket, true).unwrap();
         assert_ne!(a, b);
@@ -649,23 +655,27 @@ mod tests {
         assert_eq!(set_machine_name(&socket, "  apple ").unwrap().name, "apple");
         assert_eq!(machine(&socket).unwrap().id, a.id);
         assert_eq!(set_machine_name(&socket, "").unwrap().name, a.name);
-        use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(dir.join("machine-id"))
-            .unwrap()
-            .permissions()
-            .mode();
-        assert_eq!(mode & 0o777, 0o600);
-        // Where the id cannot be written, say so instead of handing out a new one each time.
-        // Root writes anywhere (a container, say), so there it has nothing to report.
-        if unsafe { libc::geteuid() } == 0 {
-            std::fs::remove_dir_all(dir).unwrap();
-            return;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(dir.join("machine-id"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
         }
-        std::fs::remove_file(dir.join("machine-id")).unwrap();
-        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
-        let unwritable = machine(&socket);
-        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
-        assert!(unwritable.is_err(), "{unwritable:?}");
+        // Where the id cannot be written, say so instead of handing out a new one each time.
+        // Root writes anywhere (a container, say), so there it has nothing to report. A
+        // directory made unwritable by mode bits is Unix's; Windows would need an ACL.
+        #[cfg(unix)]
+        if unsafe { libc::geteuid() } != 0 {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::remove_file(dir.join("machine-id")).unwrap();
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+            let unwritable = machine(&socket);
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+            assert!(unwritable.is_err(), "{unwritable:?}");
+        }
         std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]

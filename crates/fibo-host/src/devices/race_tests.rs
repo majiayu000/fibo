@@ -4,7 +4,6 @@
 use super::*;
 use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Read};
-use std::os::fd::AsRawFd;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Barrier};
 
@@ -221,7 +220,7 @@ fn clearing_beside_pairing_leaves_each_phone_paired_or_revoked() {
     assert_no_temporaries(&socket);
 }
 
-/// flock does not recognise its own process: a second open file waits like anyone else. This
+/// The lock does not recognise its own process: a second open file waits like anyone else. This
 /// is what keeps the host's threads apart, and why nothing may lock while holding the lock.
 #[test]
 fn the_lock_excludes_another_open_file_in_this_process_and_is_private() {
@@ -229,8 +228,8 @@ fn the_lock_excludes_another_open_file_in_this_process_and_is_private() {
     let socket = dir.socket();
     let try_lock = || {
         let other = std::fs::File::open(socket.with_file_name("remote-devices.lock")).unwrap();
-        // SAFETY: flock on a file this closure holds open.
-        unsafe { libc::flock(other.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) == 0 }
+        // The same call `lock` makes: flock on Unix, LockFileEx on Windows.
+        other.try_lock().is_ok()
     };
     let held = lock(&socket).unwrap();
     assert!(!try_lock(), "持锁时第二个 fd 不该拿到");
@@ -246,12 +245,16 @@ fn the_lock_excludes_another_open_file_in_this_process_and_is_private() {
         );
         std::thread::yield_now();
     }
-    use std::os::unix::fs::PermissionsExt;
-    let mode = std::fs::metadata(socket.with_file_name("remote-devices.lock"))
-        .unwrap()
-        .permissions()
-        .mode();
-    assert_eq!(mode & 0o777, 0o600);
+    // Windows has no mode bits; who may open the file there is its ACL's business.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(socket.with_file_name("remote-devices.lock"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
 }
 
 #[test]

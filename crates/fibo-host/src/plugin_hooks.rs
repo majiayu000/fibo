@@ -636,8 +636,10 @@ mod tests {
         assert!(err.contains("bad") || err.contains("exit"), "{err}");
     }
 
-    /// A timed-out hook's children are stopped with it.
+    /// A timed-out hook's children are stopped with it. Unix only: it asks whether the
+    /// child lives with kill(pid, 0), and the hook is sh.
     #[test]
+    #[cfg(unix)]
     fn a_timed_out_hook_stops_its_children() {
         let f = std::env::temp_dir().join(format!("kl-hook-child-{}", std::process::id()));
         let _ = std::fs::remove_file(&f);
