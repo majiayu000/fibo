@@ -15,7 +15,7 @@ pub(super) struct RecentDirs(RefCell<Option<(Key, Rc<Vec<String>>)>>);
 type Key = (u64, usize);
 
 impl Workbench {
-    fn recent_dirs(&self) -> Rc<Vec<String>> {
+    pub(super) fn recent_dirs(&self) -> Rc<Vec<String>> {
         let key = (self.workspace.revision, self.workspace.agent_sessions.len());
         let mut cache = self.recent_dirs.0.borrow_mut();
         if let Some((at, dirs)) = cache.as_ref()

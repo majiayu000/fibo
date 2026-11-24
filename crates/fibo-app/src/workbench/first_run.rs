@@ -35,6 +35,9 @@ pub(super) struct FirstRun {
     /// 「等你时发系统通知」: ticked until cleared; turns notifications on with the start.
     /// Off by default for everyone else, so a newcomer who switches windows heard nothing.
     pub(super) notify: bool,
+    /// The newest git work tree worked in, offered while the shown space has no folder of
+    /// its own; starting from the page makes it the space's (`first_run_folder.rs`).
+    pub(super) repo: Option<String>,
 }
 impl FirstRun {
     pub(super) fn load(w: &Workspace) -> Self {
@@ -43,6 +46,7 @@ impl FirstRun {
             on: wanted(w, done),
             with_hook: true,
             notify: true,
+            repo: None,
         }
     }
 }
@@ -138,14 +142,11 @@ impl Workbench {
         if self.first_run.on && ran_here(&self.workspace) {
             self.finish_first_run(cx);
         }
+        if self.first_run.on {
+            self.first_run_suggest();
+        }
     }
     pub(super) fn first_run_view(&self, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
-        let space = self
-            .workspace
-            .spaces
-            .iter()
-            .find(|s| s.id == self.nav.space);
-        let place = space.map_or_else(|| "~".to_owned(), |s| self.space_label(s));
         let agents = self.first_run_agents(cx);
         div()
             .id("first-run")
@@ -174,10 +175,7 @@ impl Workbench {
                         use fibo_core::status::Status;
                         t!("每个 Agent 都跑在这里的真终端里。在这里启动 Claude Code 或 Codex，左边就会列出这个会话和它现在的状态：{running}、{waiting}、{review}。", running = Status::Running.label(), waiting = Status::Waiting.label(), review = Status::Review.label())
                     }))
-                    .child(section(
-                        t!("启动一个 Agent"),
-                        t!("在 {place} 打开；换文件夹用左边空间旁的 ＋", place),
-                    ))
+                    .child(self.first_run_place(cx))
                     .child(agents)
                     .children(self.first_run_hooks_view(cx))
                     .child(
@@ -238,8 +236,12 @@ impl Workbench {
         // A bare shell sits with the Agents, as on an empty tab: down by 「不再显示」 it
         // read as part of closing the page and was hard to find.
         others.push(
-            link("first-run-shell".into(), t!("空终端").into(), None)
-                .on_click(cx.listener(|this, _, _, cx| this.launch(false, None, cx))),
+            link("first-run-shell".into(), t!("空终端").into(), None).on_click(cx.listener(
+                |this, _, _, cx| {
+                    this.first_run_pin(cx);
+                    this.launch(false, None, cx)
+                },
+            )),
         );
         column = column.child(
             div()
@@ -409,7 +411,7 @@ impl Workbench {
     }
 }
 /// A section's title with a note after it.
-fn section(title: &'static str, note: String) -> gpui::Div {
+pub(super) fn section(title: &'static str, note: String) -> gpui::Div {
     div()
         .pt(px(T::S8))
         .flex()

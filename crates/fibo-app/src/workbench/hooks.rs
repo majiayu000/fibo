@@ -118,6 +118,7 @@ impl Workbench {
         if self.hooks.installing {
             return;
         }
+        self.first_run_pin(cx);
         if self.first_run.notify && !self.workspace.settings.notifications && !self.store.busy() {
             let mut settings = self.workspace.settings.clone();
             settings.notifications = true;
