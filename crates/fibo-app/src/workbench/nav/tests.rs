@@ -3,6 +3,8 @@ use super::*;
 fn spot(space: &str, focused: &str) -> Spot {
     Spot {
         host: None,
+        hosted: None,
+        peek: None,
         page: (space.into(), Some(format!("{space}-tab")), false, None),
         focused: Some(focused.into()),
         here: None,
@@ -85,4 +87,25 @@ fn a_session_still_loading_is_noted_once_where_it_lands() {
     twice.jump(on_s2.clone(), Some("s2"), "s3");
     twice.jump(on_s2.clone(), Some("s2"), "s3");
     assert_eq!(twice.back(spot("c", "t3")), Some(on_s2));
+}
+
+/// From s2, where ⌘J landed, the user opened its to-do's detail over the same pane: the
+/// next ⌘J starts a new trip, and the way back is that detail, not where s2's trip began.
+#[test]
+fn a_page_opened_after_landing_starts_a_new_trip() {
+    let start = spot("a", "t1");
+    let landed = spot("b", "t2");
+    let mut detail = landed.clone();
+    detail.page.3 = Some("todo".into());
+    let mut trail = Trail::default();
+    trail.jump(start.clone(), Some("s1"), "s2");
+    trail.landed_on(landed.page.clone());
+    trail.jump(detail.clone(), Some("s2"), "s3");
+    assert_eq!(trail.back(spot("c", "t3")), Some(detail));
+    // Still on the page it landed on, the same trip goes on.
+    let mut same = Trail::default();
+    same.jump(start.clone(), Some("s1"), "s2");
+    same.landed_on(landed.page.clone());
+    same.jump(landed, Some("s2"), "s3");
+    assert_eq!(same.back(spot("c", "t3")), Some(start));
 }

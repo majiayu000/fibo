@@ -355,6 +355,7 @@ impl Workbench {
                 self.open_remote_peek(index, *card, &name, window, cx);
             }
         }
+        self.note_landed();
     }
     /// Makes sure the row ⌘J went to, in `space`, is on the list: a space shown alone stays
     /// so when the row is in it, on this machine and on another alike.

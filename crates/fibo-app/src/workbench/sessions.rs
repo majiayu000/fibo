@@ -289,6 +289,7 @@ impl Workbench {
             // open_pending_route, and noting the click too would count one jump twice.
             self.note_jump(id, cx);
             self.enter_card(&session, window, cx);
+            self.note_landed();
             // Report actual selected layout and focused pane, not a queued route intent.
             if !self.nav.overview
                 && let Some(terminal) = live_terminal(&self.workspace, &session)
