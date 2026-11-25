@@ -1,7 +1,7 @@
 // Where a new task lands: what the phone shows is what it sends, and a folder in no space
 // says where it is going instead of quietly going to the first space.
 import { describe, expect, test } from 'bun:test';
-import { asideSpaces, chipSpace, holds, ignoredPick, landing, landingNote, pickDir, pickSpace, spaceOf, temporary } from '../src/ui/spaces';
+import { addSpaceAsk, asideSpaces, chipSpace, folderName, holds, ignoredPick, landing, landingNote, pickDir, pickSpace, spaceOf, temporary } from '../src/ui/spaces';
 
 const work = { id: 'w', name: '工作空间', cwd: '/Users/me' };
 const app = { id: 'a', name: 'mooring', cwd: '/Users/me/code/mooring' };
@@ -105,4 +105,12 @@ describe('chipSpace', () => {
     expect(chipSpace([{ id: 'mac', status: 'online', spaceList: [bare], cards: [cards[1]] }], 'mooring', 'mac')).toEqual({ machine: 'mac', space: 'm' });
     expect(temporary('/tmpfiles/x')).toBe(false);
   });
+});
+
+test('making a folder a space asks first, by the folder’s name, and says it is undone on the computer', () => {
+  expect(folderName('/Users/me/work/api/')).toBe('api');
+  const ask = addSpaceAsk('/Users/me/work/api/');
+  expect(ask.title).toBe('把「api」设为新空间？');
+  expect(ask.detail).toContain('电脑上删');
+  expect(ask.ok).toBe('设为新空间');
 });

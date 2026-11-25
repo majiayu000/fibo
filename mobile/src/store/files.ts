@@ -42,6 +42,18 @@ export function writeJson(dir: string, name: string, value: unknown) {
   }
 }
 
+/** Deletes a JSON file `writeJson` kept; nothing when it is not there. */
+export function dropJson(dir: string, name: string) {
+  const d = folder(dir);
+  if (!d) return;
+  try {
+    const f = new File(d, name);
+    if (f.exists) f.delete();
+  } catch {
+    // Already gone.
+  }
+}
+
 /** Copies a file (a picture the picker left in the cache) into `dir`; its new uri, or null. */
 export function keepCopy(dir: string, from: string, name: string): string | null {
   const d = folder(dir);

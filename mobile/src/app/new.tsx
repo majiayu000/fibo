@@ -8,7 +8,7 @@ import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { type ComponentRef, useEffect, useRef, useState } from 'react';
 import { Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { oops } from '@/actions';
+import { confirm, oops } from '@/actions';
 import { tr } from '@/i18n';
 import { NOT_YET, refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
 import { getDraft, resetDraft, setDraft, useDraft } from '@/store/draft';
@@ -18,7 +18,7 @@ import { Btn, Label, Nav, Notice, Wide, mono, noOutline } from '@/ui/kit';
 import { MAX_PICTURES, type Picture, pick } from '@/ui/pictures';
 import { KeyboardSafe, useBottomOverKeyboard } from '@/ui/keyboard';
 import { SpaceField } from '@/ui/spacefield';
-import { ignoredPick, landing, pickSpace } from '@/ui/spaces';
+import { addSpaceAsk, ignoredPick, landing, pickSpace } from '@/ui/spaces';
 import { tilde } from '@/ui/status';
 import { ago, useTheme } from '@/ui/theme';
 
@@ -133,6 +133,8 @@ export default function NewTask() {
 
   async function addSpace(path: string) {
     if (!m) return;
+    const ask = addSpaceAsk(path);
+    if (!(await confirm(ask.title, ask.detail, ask.ok))) return;
     try {
       const made = await write(m.id, 'addspace', { path });
       await refresh(m.id);

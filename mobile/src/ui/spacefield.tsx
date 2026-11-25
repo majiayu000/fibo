@@ -5,7 +5,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { tr } from '../i18n';
 import { SpaceMark, Icon } from './icons';
 import { Label, mono } from './kit';
-import { type Landing, type Space, holds, landingNote } from './spaces';
+import { type Landing, type Space, folderName, holds, landingNote } from './spaces';
 import { tilde } from './status';
 import { useTheme } from './theme';
 
@@ -102,7 +102,7 @@ export function SpaceField({
         >
           {adding ? <ActivityIndicator size="small" /> : <Icon name="plus" size={16} width={2.2} color={t.link} />}
           <Text numberOfLines={1} style={{ flex: 1, fontSize: 15, color: t.link }}>
-            {tr('把「{name}」设为新空间', { name: cwd.replace(/\/+$/, '').split('/').pop() || cwd })}
+            {tr('把「{name}」设为新空间', { name: folderName(cwd) })}
           </Text>
         </Pressable>
       )}

@@ -173,6 +173,30 @@ function set(id: string, patch: Partial<Machine>) {
 
 const get = (id: string) => state.machines.find((m) => m.id === id);
 
+/** What a computer last listed, kept on this phone: at a cold start with the computer away
+ *  its rows show as 「断开前：…」 instead of an empty home screen. */
+export type SavedCards = Pick<Machine, 'cards' | 'spaces' | 'spaceDirs' | 'seen'>;
+export type CardShelf = { read: (id: string) => SavedCards | null; write: (id: string, saved: SavedCards) => void; drop: (id: string) => void };
+let shelf: CardShelf | null = null;
+/** What last went on the shelf per machine, so an unchanged list is not written again. */
+const shelved = new Map<string, string>();
+
+/** Where the lists are kept; the root layout passes the file-backed one, tests their own. */
+export function keepCardsIn(s: CardShelf | null) {
+  shelf = s;
+  shelved.clear();
+}
+
+function shelve(id: string) {
+  const m = get(id);
+  if (!shelf || !m || m.status !== 'online') return;
+  const saved: SavedCards = { cards: m.cards, spaces: m.spaces, spaceDirs: m.spaceDirs, seen: m.seen };
+  const text = JSON.stringify(saved);
+  if (shelved.get(id) === text) return;
+  shelved.set(id, text);
+  shelf.write(id, saved);
+}
+
 /** What `spaces` says, as a machine keeps it; only when the reply says it. */
 function listed(list: { spaces?: any[]; quiet?: any[] | null; todos?: Todo[]; machine?: { name?: string; agent_names?: Record<string, string> } }, id: string): Partial<Machine> {
   return {
@@ -196,6 +220,7 @@ async function load(id: string, r: Remote) {
   if (!supports(get(id), 'cards')) {
     const list = await r.request('list');
     set(id, { cards: list.terminals, ...listed({ ...list, spaces: list.spaces ?? [], todos: list.todos ?? [] }, id) });
+    shelve(id);
     return;
   }
   const since = revs.get(r);
@@ -209,6 +234,7 @@ async function load(id: string, r: Remote) {
   }
   revs.set(r, reply.rev);
   set(id, { cards, ...listed(reply, id) });
+  shelve(id);
 }
 
 /** The refresh on its way for a machine, and the one that follows it if more were asked for. */
@@ -367,15 +393,26 @@ export async function start() {
   const links = staged ?? (await loadMachines());
   state = {
     loaded: true,
-    machines: links.map((link) => ({
-      id: machineId(link),
-      link,
-      name: link.name,
-      status: 'offline',
-      ops: [],
-      cards: [],
-      spaces: {},
-    })),
+    machines: links.map((link) => {
+      const id = machineId(link);
+      let saved: SavedCards | null = null;
+      try {
+        saved = shelf?.read(id) ?? null;
+      } catch {
+        // An unreadable copy is no copy: the computer's next list replaces it.
+      }
+      return {
+        id,
+        link,
+        name: link.name,
+        status: 'offline' as const,
+        ops: [],
+        cards: Array.isArray(saved?.cards) ? saved.cards : [],
+        spaces: saved?.spaces ?? {},
+        ...(saved?.spaceDirs && { spaceDirs: saved.spaceDirs }),
+        ...(saved?.seen && { seen: saved.seen }),
+      };
+    }),
   };
   listeners.forEach((l) => l());
   state.machines.forEach((m) => connect(m.id));
@@ -422,6 +459,8 @@ export async function forget(id: string) {
   dialing.delete(id);
   stopRetry(id);
   await forgetQuota(id);
+  shelf?.drop(id);
+  shelved.delete(id);
   beats.delete(id);
   beatListeners.forEach((l) => l());
   state = { ...state, machines: state.machines.filter((m) => m.id !== id) };

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { AgentControls } from '../src/remote/hub';
-import { HOW_NOTE, QUEUED_TAP, sendsNow, steerable, whileBusy } from '../src/ui/busy';
+import { HOW_NOTE, QUEUED_TAP, STOP_AFTER_SEND_MS, sendsNow, steerable, stopCounts, whileBusy } from '../src/ui/busy';
 
 const queues: AgentControls = { steer: true, send_now: true, effort: true, busy_input: 'queue' };
 const steers: AgentControls = { ...queues, busy_input: 'steer' };
@@ -32,4 +32,14 @@ test('controls come from the host, including unknown future Agents and old hosts
   expect(HOW_NOTE.queue).toContain('排队');
   expect(HOW_NOTE.steer).toContain('插进去');
   expect(QUEUED_TAP).toContain('立刻发送');
+});
+
+test('停下 in the send key’s place does nothing for a moment after a send, so a double tap cannot stop the turn', () => {
+  const sent = 50_000;
+  expect(stopCounts(sent, sent + 150)).toBe(false);
+  expect(stopCounts(sent, sent + STOP_AFTER_SEND_MS - 1)).toBe(false);
+  expect(stopCounts(sent, sent + STOP_AFTER_SEND_MS)).toBe(true);
+  // Nothing sent from this box: a stop counts at once.
+  expect(stopCounts(0, sent)).toBe(true);
+  expect(STOP_AFTER_SEND_MS).toBeGreaterThanOrEqual(800);
 });

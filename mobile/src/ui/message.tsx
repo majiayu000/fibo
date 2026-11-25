@@ -36,10 +36,10 @@ function useCopied() {
 }
 
 /** The meta line, with a way to pick out part of the text just after copying all of it. */
-function Meta({ text, note, right, color, onSelect }: { text: string; note: string; right?: boolean; color: string; onSelect: () => void }) {
+function Meta({ text, note, right, color, onSelect, whole }: { text: string; note: string; right?: boolean; color: string; onSelect: () => void; whole?: boolean }) {
   const t = useTheme();
   return (
-    <Text numberOfLines={1} style={[s.meta, { color }, right && { textAlign: 'right' }]}>
+    <Text numberOfLines={whole ? undefined : 1} style={[s.meta, { color }, right && { textAlign: 'right' }]}>
       {note === COPIED ? tr(COPIED) : note || text}
       {note === COPIED && (
         <Text style={{ color: t.link }} onPress={onSelect}>
@@ -90,7 +90,8 @@ export const Mine = memo(function Mine({ text, at, note, tone, copyable, onPress
           </>
         )}
       </Pressable>
-      <Meta text={note ?? (at ? clock(at) : '')} note={said} right color={tone === 'error' ? t.err : tone === 'queued' ? t.run : t.dim} onSelect={() => setSelecting(true)} />
+      {/* Why it failed and what to do about it, all of it: one line cut off the way out (11-16 walk). */}
+      <Meta text={note ?? (at ? clock(at) : '')} note={said} right whole={tone === 'error'} color={tone === 'error' ? t.err : tone === 'queued' ? t.run : t.dim} onSelect={() => setSelecting(true)} />
       {selecting && <SelectSheet text={text} onClose={() => setSelecting(false)} />}
     </View>
   );
@@ -112,7 +113,7 @@ export const Worked = memo(function Worked({ tools, onPress }: { tools: Tools; o
   const removed = files.reduce((n, f) => n + f.removed, 0);
   const name = files.length === 1 ? files[0].path.split('/').pop() : tr('{n} 个文件', { n: files.length });
   return (
-    <Pressable onPress={onPress} disabled={!onPress} style={[s.worked, { borderColor: t.sep }]}>
+    <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? 'button' : undefined} style={[s.worked, { borderColor: t.sep }]}>
       <Text numberOfLines={1} style={{ color: t.dim, fontSize: 13, flex: 1 }}>
         {[took > 0 ? tr('干了 {time}', { time: span(took) }) : '', commands > 0 ? tr('跑了 {n} 个命令', { n: commands }) : '', calls > 0 ? tr('用了 {n} 个工具', { n: calls }) : ''].filter(Boolean).join(' · ')}
         {(took > 0 || commands > 0) && files.length > 0 && ' · '}
