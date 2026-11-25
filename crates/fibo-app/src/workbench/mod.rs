@@ -255,6 +255,7 @@ mod dir_seen;
 mod divergence;
 mod filters;
 mod first_run;
+mod first_run_folder;
 mod forms;
 mod frame_facts;
 mod hooks;

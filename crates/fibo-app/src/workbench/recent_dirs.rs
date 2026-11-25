@@ -15,7 +15,7 @@ pub(super) struct RecentDirs(RefCell<Option<(Key, Rc<Vec<String>>)>>);
 type Key = (u64, usize);
 
 impl Workbench {
-    fn recent_dirs(&self) -> Rc<Vec<String>> {
+    pub(super) fn recent_dirs(&self) -> Rc<Vec<String>> {
         let key = (self.workspace.revision, self.workspace.agent_sessions.len());
         let mut cache = self.recent_dirs.0.borrow_mut();
         if let Some((at, dirs)) = cache.as_ref()
@@ -92,6 +92,7 @@ impl Workbench {
                     .text_size(px(T::SMALL))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.layout.choosing_dir = None;
+                        this.space_dir_chosen(&pinned.id, &pinned.cwd);
                         this.edit(Edit::UpdateSpace(pinned.clone()), cx);
                     }))
                     .into_any_element(),

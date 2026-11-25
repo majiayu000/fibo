@@ -118,7 +118,12 @@ impl Workbench {
         if self.hooks.installing {
             return;
         }
-        if self.first_run.notify && !self.workspace.settings.notifications && !self.store.busy() {
+        // Decided before the folder's pin, which makes the store busy: the settings edit
+        // then waits behind it instead of being skipped.
+        let notify =
+            self.first_run.notify && !self.workspace.settings.notifications && !self.store.busy();
+        self.first_run_pin(cx);
+        if notify {
             let mut settings = self.workspace.settings.clone();
             settings.notifications = true;
             self.edit(Edit::Settings(settings), cx);
