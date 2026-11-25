@@ -111,7 +111,7 @@ pub(super) struct Opened {
     pub(super) overflow: Option<String>,
 }
 pub(super) fn split(a: Args) -> io::Result<()> {
-    let opened = open(&a, a.arg(0, t!("终端"))?, &a.rest, a.has("tab"))?;
+    let opened = open(&a, a.arg(0, t!("终端"))?, &a.rest, a.has("tab"), None)?;
     if a.has("json") {
         println!(
             "{}",
@@ -140,8 +140,15 @@ pub(super) fn split(a: Args) -> io::Result<()> {
     Ok(())
 }
 /// Opens a shell beside `needle`'s terminal (or in its side tab when `to_tab`, when that
-/// tab is full, or when a split would leave a half too small) running `command`.
-pub(super) fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> io::Result<Opened> {
+/// tab is full, or when a split would leave a half too small) running `command`; `start`
+/// is what the host keeps of the Agent it starts there (`Workspace::agent_starts`).
+pub(super) fn open(
+    a: &Args,
+    needle: &str,
+    command: &[String],
+    to_tab: bool,
+    start: Option<fibo_core::model::AgentStart>,
+) -> io::Result<Opened> {
     if a.has("here") && to_tab {
         return Err(io::Error::other(t!("--here 和 --tab 只能选一个")));
     }
@@ -242,7 +249,7 @@ pub(super) fn open(a: &Args, needle: &str, command: &[String], to_tab: bool) -> 
             rows,
             scheme: Default::default(),
             colors: None,
-            start: None,
+            start,
         },
     )? {
         Reply::Workspace(_) => (),

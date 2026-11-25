@@ -372,3 +372,65 @@ fn command_line_splits_a_pane_beside_a_terminal_and_closes_it() {
         std::thread::sleep(Duration::from_millis(50));
     }
 }
+
+/// `fibo run` keeps the task it hands over as the pane's start, as a phone's 新任务 does: the
+/// screen cannot say which conversation that is when the task ran in this folder before
+/// (v0.1.4 RC2 walk, 2026-11-25: the old conversation, its newest prompt the same task, took
+/// the new pane for good; `recognition::tests::a_task_run_again_binds_its_new_thread…`).
+#[test]
+fn running_an_agent_keeps_the_task_it_hands_over_as_the_panes_start() {
+    let h = Host::start();
+    h.setup();
+    // Stands in for the shell and the Codex it starts: an input box to hand the task to.
+    let fake = h.root.join("fake-codex-shell");
+    fs::write(
+        &fake,
+        "#!/bin/sh\nprintf '› Ask Codex to do anything\\n'\nexec cat >/dev/null\n",
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
+    h.call(h.launch("base", "exec /bin/sh -i")).unwrap();
+    h.call(Request::Edit {
+        request: None,
+        edit: Edit::CreateTab {
+            tab: Tab {
+                id: "t".into(),
+                space: "s".into(),
+                default_task: None,
+                title: String::new(),
+                layout: Some(Layout::Leaf("base".into())),
+            },
+        },
+    })
+    .unwrap();
+    wait_for(&h, "the base shell starts", |w| {
+        w.terminals
+            .iter()
+            .any(|t| t.id == "base" && t.state == ProcessState::Running)
+    });
+    let task = "把发布脚本里的回滚步骤整理成清单";
+    let out = Command::new(env!("CARGO_BIN_EXE_fibo"))
+        .args(["run", "--runtime", &h.root.to_string_lossy()])
+        .args([
+            "codex",
+            task,
+            "--from",
+            "base",
+            "--no-report",
+            "--timeout",
+            "20",
+        ])
+        .env("SHELL", &fake)
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "{err}");
+    let id = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+    let start = h.workspace().agent_starts.get(&id).cloned();
+    assert_eq!(
+        start.map(|s| (s.agent, s.prompt)),
+        Some((fibo_core::agent::Agent::Codex, Some(task.to_owned()))),
+        "the host keeps no start for the Agent `fibo run` began"
+    );
+}

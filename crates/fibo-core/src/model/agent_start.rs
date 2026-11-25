@@ -10,7 +10,8 @@ use super::*;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentStart {
     pub agent: Agent,
-    /// The first message, exactly as the command line hands it to the CLI.
+    /// The first message, exactly as the command line hands it to the CLI (or `fibo run`
+    /// types it in once the input shows).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
     /// The conversation it resumes, in the CLI's own id.
