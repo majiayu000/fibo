@@ -505,6 +505,7 @@
 "没认出提问框（{why}；规则 {origin}）" = "No prompt recognized ({why}; rules {origin})"
 "审批" = "Approval"
 "选择题" = "Multiple choice"
+"计划" = "Plan"
 "App 和 hook 自己用的命令（serve、hook、scan、socket）：fibo --help --all" = "Commands the app and hooks run themselves (serve, hook, scan, socket): fibo --help --all"
 "终端 {needle} 已经结束了；fibo list 看还开着的终端" = "terminal {needle} has exited; fibo list shows the open ones"
 "中继版本太旧（协议 {old}，这台 Fibo 要 {min} 以上）：请升级中继" = "The relay is too old (protocol {old}; this Fibo needs {min} or later): upgrade the relay"

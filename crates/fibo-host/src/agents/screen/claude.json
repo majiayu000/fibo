@@ -1,6 +1,6 @@
 {
   "id": "claude",
-  "version": "2026.11.06.1",
+  "version": "2026.11.26.1",
   "bottom_lines": 16,
   "rules": [
     {
@@ -21,6 +21,15 @@
       "anchor_within": 3,
       "menu": { "side": "above", "cursor": true },
       "ask": "above_menu"
+    },
+    {
+      "id": "plan",
+      "name": "计划",
+      "state": "waiting",
+      "note": "计划模式的「按这个计划开始吗」：问句前面先说 Claude has written up a plan，下面是以 Yes 开头的 1 号选项；菜单只露出前几项，下面还有「↑ N more lines」和折行的「ctrl+g to edit · 计划文件」。不当审批：1 号会切到全部放行，手机只给看终端加 ↑ ↓ 回车。",
+      "anchor": { "starts_with": ["Claude has written up a plan"], "ends_with": "?" },
+      "menu": { "side": "below", "first_starts_with": "Yes", "last_within": 4 },
+      "ask": "anchor"
     }
   ]
 }
