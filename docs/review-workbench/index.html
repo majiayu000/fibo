@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fibo · 逐个验收</title>
+<style>
+:root {
+  color-scheme: light;
+  --ink: #232822; --muted: #535e55; --quiet: #646e63;
+  --paper: #fff; --shell: #f5f6f2; --rail: #f9faf7; --line: #e2e6de;
+  --green: #235e45; --green-bg: #e7f2e9; --amber: #82500e; --amber-bg: #faf0de;
+  --red: #993b34; --red-bg: #fcf0ee; --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  font: 14px/1.55 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: var(--ink); background: var(--shell);
+}
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+body { margin: 0 }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; border-radius: 7px }
+button:focus-visible, summary:focus-visible, a:focus-visible, pre:focus-visible { outline: 2px solid var(--green); outline-offset: 3px }
+button:hover { background: #eaf0e8 }
+button:disabled { opacity: .45; cursor: default }
+h1, h2, h3, p { margin: 0 }
+.mono, kbd { font-family: var(--mono); font-variant-numeric: tabular-nums }
+.quiet { color: var(--quiet) }
+.shell { height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto }
+.top { min-height: 56px; padding: 0 22px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 14px; background: var(--shell) }
+.brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 760; letter-spacing: .16em }
+.brandmark { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: #245a44 }
+.brandmark::before { content: ""; width: 10px; height: 11px; border-left: 2px solid #fff; border-top: 2px solid #fff; border-radius: 2px; background: linear-gradient(#fff,#fff) left 3px / 7px 2px no-repeat }
+.preview { font-size: 11px; color: var(--muted); padding-left: 13px; border-left: 1px solid #d7ddd4 }
+.switch { margin-left: auto; display: flex; align-items: center; gap: 4px; padding: 3px; background: #eaede6; border: 1px solid #e4e8de; border-radius: 9px }
+.switch button { padding: 4px 11px; font-size: 12px; white-space: nowrap }
+.switch button[aria-pressed="true"] { background: var(--paper); box-shadow: 0 1px 2px #253b2712; color: var(--green); font-weight: 680 }
+.count { font: 600 11px var(--mono); color: var(--green); padding-left: 3px }
+.workbench { display: grid; grid-template-columns: 254px minmax(0, 1fr); min-height: 0 }
+.queue { background: var(--rail); border-right: 1px solid var(--line); overflow: auto; padding: 26px 13px 16px }
+.queue-head { padding: 0 10px 18px }
+.queue-head h2 { font-size: 17px; letter-spacing: -.025em }
+.queue-head p { margin-top: 3px; color: var(--muted); font-size: 12px }
+.label { color: var(--muted); font-size: 11px; font-weight: 620 }
+.queue .label { margin: 7px 10px }
+.queue-row { display: grid; width: 100%; min-width: 0; grid-template-columns: auto minmax(0, 1fr); gap: 0 10px; text-align: left; padding: 10px; margin-bottom: 4px; border: 1px solid transparent }
+.queue-row[aria-current="true"] { background: #ecf3eb; border-color: #d9e8d9 }
+.queue-row strong { font-size: 13px; font-weight: 650; overflow-wrap: anywhere }
+.queue-row small { grid-column: 2; margin-top: 1px; color: var(--muted); font-size: 11px }
+.dot { flex: none; display: inline-block; width: 7px; height: 7px; border-radius: 100%; background: currentColor }
+.queue-row .dot { margin-top: 7px; color: #37835b }
+.queue-row .dot.error { color: #bc6158 }
+.queue-row .dot.done { background: transparent; border: 1px solid #778077; color: #778077 }
+.main { display: grid; min-width: 0; min-height: 0; grid-template-rows: auto minmax(0, 1fr) auto; background: var(--paper) }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 11px 20px; border-bottom: 1px solid var(--line); background: var(--paper) }
+.context { font: 12px var(--mono); color: var(--muted); margin-right: auto; overflow-wrap: anywhere }
+.toolbar button, .footer button, .action { padding: 5px 10px; border: 1px solid var(--line); font-size: 12px; font-weight: 600; white-space: nowrap }
+.toolbar button[aria-pressed="true"] { color: var(--green); background: var(--green-bg); border-color: #cfe1d2 }
+.split { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr) 290px }
+.content { min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; background: var(--paper) }
+.reader { width: 100%; max-width: 900px; margin: 0 auto; padding: 36px clamp(23px, 4vw, 56px) 40px; overflow-wrap: anywhere }
+.focus .split { grid-template-columns: minmax(0, 1fr) }
+.focus .task { display: none }
+.focus .reader { max-width: none }
+.kicker { display: flex; gap: 8px; align-items: center; color: var(--green); font-size: 12px; font-weight: 650 }
+.kicker.error { color: var(--red) }
+.reader h1 { font-size: clamp(26px, 3.1vw, 38px); letter-spacing: -.045em; line-height: 1.22; margin: 9px 0 9px }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 13px; color: var(--muted); font-size: 12px }
+.meta .agent { color: #3a5867; font-weight: 690 }
+.reply { margin-top: 25px; color: #313a32; line-height: 1.8 }
+.reply p { margin: 0 0 16px }
+.reply h2 { margin: 23px 0 10px; font-size: 16px; line-height: 1.4; color: var(--ink) }
+.reply strong { color: var(--ink) }
+.table-wrap, .code { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 9px; margin: 0 0 14px }
+table { border-collapse: collapse; width: 100%; font-size: 13px; text-align: left }
+td, th { padding: 8px 12px; border-bottom: 1px solid var(--line) }
+th { background: #f5f7f3; font-size: 11px; color: var(--muted); font-weight: 650 }
+tr:last-child td { border: 0 }
+.check { color: var(--green); white-space: nowrap; font-weight: 660; font-size: 12px }
+.wait { color: var(--amber); white-space: nowrap; font-weight: 660; font-size: 12px }
+.code { padding: 11px 13px; background: #f7f8f5; font: 12px/1.65 var(--mono); white-space: pre }
+.reply code:not(pre code), .task code { font: 12px var(--mono); background: #eef1eb; border-radius: 4px; padding: 2px 4px }
+details { border-top: 1px solid var(--line); padding-top: 11px; margin-top: 18px; font-size: 12px; color: var(--muted) }
+summary { cursor: pointer; list-style-position: inside; font-weight: 650; margin-bottom: 8px }
+details ul { margin: 4px 0 8px; padding-left: 20px }
+.alert { border-radius: 8px; background: var(--red-bg); border: 1px solid #f1d9d5; color: var(--red); padding: 10px 12px; margin-top: 16px; font-size: 12px }
+.task { min-width: 0; overflow: auto; border-left: 1px solid var(--line); background: var(--rail); padding: 26px 20px 22px }
+.task h2 { font-size: 15px }
+.task-card { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-top: 13px }
+.task-top { display: flex; align-items: center; gap: 7px; flex-wrap: wrap }
+.task-top strong { font-size: 13px }
+.task-title { margin-top: 8px; font-size: 13px; font-weight: 630 }
+.task-card .mono { color: var(--muted); font-size: 10px; margin-top: 3px; overflow-wrap: anywhere }
+.pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 5px; padding: 2px 6px; width: fit-content; font-size: 11px; white-space: nowrap; color: var(--green); background: var(--green-bg) }
+.pill.waiting { color: var(--amber); background: var(--amber-bg) }
+.pill.error { color: var(--red); background: var(--red-bg) }
+.timeline { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 9px }
+.timeline li { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 1.4; color: var(--muted) }
+.timeline .dot { width: 6px; height: 6px; margin-inline: 1px; background: #a1ab9e }
+.timeline .is-done .dot { background: #387859 }
+.timeline .is-now { color: var(--amber); font-weight: 660 }
+.timeline .is-now .dot { background: #ae691f; box-shadow: 0 0 0 3px #f6ead8 }
+.task-note { border-top: 1px solid var(--line); margin-top: 13px; padding-top: 10px; font-size: 11px; color: var(--muted) }
+.agent-state { margin-top: 20px; padding: 0 1px; font-size: 12px }
+.agent-state .pill { margin-top: 8px }
+.footer { background: #fff; border-top: 1px solid var(--line); min-width: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 20px }
+.footer-text { margin-right: auto; color: var(--muted); font-size: 12px }
+.footer .primary { color: white; background: #245a44; border-color: #245a44 }
+.footer .primary:hover { background: #194d37 }
+.status { min-width: 0; padding: 4px 17px; min-height: 32px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--shell); color: var(--muted); font-size: 11px; position: relative }
+.device { color: var(--green); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap }
+.status button { padding: 2px 7px; font-size: 11px; text-align: right; color: var(--muted) }
+.quota { position: absolute; bottom: calc(100% + 8px); right: 12px; z-index: 3; background: #fff; padding: 13px; border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 7px 24px #2232241a; min-width: 236px }
+.quota p + p { margin-top: 7px }
+.terminal { background: #f7f9f5; padding: 22px clamp(15px, 3vw, 38px); }
+.terminal pre { margin: 0; font: 13px/1.7 var(--mono); color: #37483c; white-space: pre-wrap; overflow-wrap: anywhere }
+.board { background: var(--paper); min-width: 0; overflow: auto; padding: 25px clamp(15px, 3vw, 42px) }
+.board h1 { font-size: 27px; margin-bottom: 18px; letter-spacing: -.03em }
+.lanes { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px }
+.lane { background: var(--rail); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0 }
+.lane h2 { font-size: 13px; margin-bottom: 9px }
+.board-card { padding: 10px; margin-top: 6px; display: grid; gap: 5px; width: 100%; text-align: left; border: 1px solid var(--line); background: white; overflow-wrap: anywhere }
+.board-card small { color: var(--muted) }
+.empty { color: var(--quiet); font-size: 12px }
+@media (max-width: 1050px) {
+  .workbench { grid-template-columns: 199px minmax(0, 1fr) }
+  .split { grid-template-columns: minmax(0, 1fr) 225px }
+  .task { padding-inline: 13px }
+}
+@media (max-width: 800px) {
+  .workbench { display: block; overflow: auto }
+  .queue { border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 12px; }
+  .queue-head { padding: 0 2px 5px }
+  .queue-head h2 { font-size: 14px }
+  .queue-head p, .queue .label { display: none }
+  #queue-items { display: flex; flex-wrap: wrap; gap: 4px }
+  .queue-row { width: auto; max-width: 100%; margin: 0; padding: 4px 6px; gap: 0 5px }
+  .queue-row strong { font-size: 11px }
+  .queue-row small { display: none }
+  .queue-row .dot { width: 5px; height: 5px }
+  .main { min-height: 0; display: block }
+  .split { display: block }
+  .content { overflow: visible }
+  .task { border-left: 0; border-top: 1px solid var(--line); padding: 17px }
+  .task-card { margin-top: 7px }
+  .reader { padding: 25px 17px }
+  .toolbar, .footer { padding-inline: 13px }
+  .footer { position: sticky; bottom: 0 }
+}
+@media (max-width: 440px) {
+  .top { padding-inline: 10px; gap: 6px; min-height: 49px }
+  .preview { display: none }
+  .switch button { padding-inline: 8px }
+  .toolbar .context { width: 100% }
+  .status { padding-inline: 9px }
+  .lanes { grid-template-columns: 1fr }
+}
+</style>
+</head>
+<body>
+<div class="shell" id="app">
+  <header class="top">
+    <div class="brand"><span class="brandmark" aria-hidden="true"></span>FIBO</div>
+    <span class="preview">交互原型 · 示例数据</span>
+    <nav class="switch" aria-label="工作台视图">
+      <button type="button" id="review-view" aria-pressed="true">逐个验收 <span class="count" id="queue-count">3</span></button>
+      <button type="button" id="board-view" aria-pressed="false">鸟瞰</button>
+    </nav>
+  </header>
+  <div class="workbench" id="workbench">
+    <aside class="queue" aria-label="验收队列">
+      <div class="queue-head"><h2>要你处理</h2><p id="queue-summary"></p></div>
+      <p class="label">验收队列</p>
+      <div id="queue-items"></div>
+    </aside>
+    <main class="main" id="review">
+      <div class="toolbar">
+        <span class="context" id="context"></span>
+        <button type="button" id="expand" aria-pressed="false">放大阅读</button>
+        <button type="button" id="toggle-terminal" aria-pressed="false">回到终端</button>
+      </div>
+      <div class="split">
+        <div class="content" id="content" role="region" aria-label="本轮回复">
+          <article class="reader" id="reader"></article>
+        </div>
+        <div class="content terminal" id="terminal" role="region" aria-label="终端示例" hidden></div>
+        <aside class="task" id="task" aria-label="任务进度"></aside>
+      </div>
+      <div class="footer">
+        <span class="footer-text" id="review-status" aria-live="polite"></span>
+        <button type="button" id="copy">复制回复</button>
+        <button type="button" id="next">下一条</button>
+        <button type="button" id="accept" class="primary">标记已验收</button>
+      </div>
+    </main>
+    <main class="board" id="board" hidden>
+      <h1>鸟瞰</h1>
+      <div class="lanes" id="lanes"></div>
+    </main>
+  </div>
+  <footer class="status">
+    <span class="device"><span class="dot" aria-hidden="true"></span>本机</span>
+    <button type="button" id="quota-trigger" aria-expanded="false" aria-controls="quota">Claude Code 5h <strong>86%</strong> · 2h 54m 后重置 ▴</button>
+    <div id="quota" class="quota" hidden>
+      <p><strong>Claude Code · 5h</strong>　86% · 2h 54m 后重置</p>
+      <p><strong>Codex · 周</strong>　8% · 6d 16h 后重置</p>
+      <p class="quiet">示例读数</p>
+    </div>
+  </footer>
+</div>
+<script>
+const samples = [
+  {
+    title: '修复手机端图文发送', agent: 'Codex', space: 'fibo', time: '17:24', duration: '4 分 12 秒',
+    branch: 'fix/phone-image-queue', pr: 'PR #812', progress: 'CI 运行中', steps: ['分支已推送', 'CI 运行中', '等待 Review', '合入主分支'],
+    summary: '已修复手机端连续发送图文时偶发漏图的问题。发送动作现在会等本条消息的附件全部就绪，再把图片和正文一起交给后台。',
+    detail: '两张图片上传完成的先后顺序可能不同。队列现在按添加顺序组织附件，重试只会重新上传失败的那一张。',
+    checks: [['单图加文字','已通过','图片与正文在同一条消息中'],['两图上传顺序反转','已通过','按选择顺序发送'],['上传失败后点击重试','已通过','保留成功的附件'],['真实 Android 手机','待验','需要装包走查']],
+    command: 'cargo test -p fibo-host --test attachment_queue',
+    extra: '真实 Android 走查仍待完成。建议先发一条双图消息，再在第二张上传中断后重试，确认收到的图片数量和顺序。',
+    trace: ['读取附件队列与发送逻辑','运行附件队列的专项测试','推送分支，创建 PR #812'],
+    terminal: ['Compiling fibo-host', 'running 3 attachment queue cases', 'ok  sends_image_with_message', 'ok  preserves_insertion_order', 'ok  retries_only_failed_attachment', '', 'PR #812 opened', 'Rust checks: in progress']
+  },
+  {
+    title: '核对鸟瞰卡片的验收状态', agent: 'Claude Code', space: 'fibo', time: '17:18', duration: '2 分 38 秒',
+    branch: 'fix/review-card-state', pr: 'PR #813', progress: '等 Review', steps: ['分支已推送', 'CI 已通过', '等待 Review', '合入主分支'],
+    summary: '同一个会话在鸟瞰和侧栏现在使用同一份验收状态。把会话标记完成后，两边都能在下一次刷新看到结果。',
+    detail: '已检查 Agent 跑完、用户仍未验收，以及标记完成后三种切换。待复核一台远程主机断线再接回时的刷新顺序。',
+    checks: [['结束一轮回复','已通过','进入要你处理'],['点击标记完成','已通过','侧栏与鸟瞰一致'],['远程断线后重连','待验','需要另一台主机']],
+    command: 'cargo test -p fibo-core --test status_group -- review_card_keeps_the_same_state_after_reconnecting_to_its_original_host',
+    extra: '验收时从鸟瞰打开会话，标记完成，再切到侧栏确认会话状态。',
+    trace: ['读取会话状态映射','运行状态专项测试','CI 已通过，等待审查'],
+    terminal: ['status_group: 18 passed', 'Remote reconnect: pending manual test', '', 'PR #813 opened', 'Rust checks: passed']
+  },
+  {
+    title: '检查端口面板的跳转', agent: 'Codex', space: 'fibo', time: '16:56', duration: '1 分 09 秒',
+    branch: '', pr: '', progress: '', steps: [],
+    summary: '本轮完成了本地端口面板的导航检查。打开和关闭面板后，仍能回到原来选中的会话。',
+    detail: '已验证会话选择保持。收尾钩子报错，报告保存步骤需要复查。',
+    checks: [['打开本机端口面板','已通过','按终端列出端口'],['返回原会话','已通过','选中的会话保持'],['收尾报告保存','待验','Stop hook 执行失败']],
+    command: 'cargo test -p fibo-app --test port_panel',
+    extra: '重新验收前先确认本轮报告是否已落盘，再检查钩子退出原因。',
+    trace: ['打开面板并回到原会话','运行本地导航检查','执行 Stop hook'],
+    error: 'Stop hook 执行失败 · 退出码 1',
+    terminal: ['Ports panel: opened', 'Active session: restored', '', 'Stop hook failed: exit code 1']
+  }
+];
+
+const ui = Object.fromEntries(Array.from(document.querySelectorAll('[id]'), element => [element.id, element]));
+const reviewed = new Set();
+const positions = samples.map(() => ({ reply: 0, terminal: 0 }));
+let current = 0;
+let view = 'reply';
+let boardOpen = false;
+let focusMode = false;
+let message = '';
+
+const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+}[char]));
+const dot = '<span class="dot" aria-hidden="true"></span>';
+const activeScroll = () => {
+  if (matchMedia('(max-width: 800px)').matches) return ui.workbench;
+  return view === 'reply' ? ui.content : ui.terminal;
+};
+const saveScroll = () => { positions[current][view] = activeScroll().scrollTop; };
+const restoreScroll = () => { activeScroll().scrollTop = positions[current][view]; };
+
+function renderQueue() {
+  const pending = samples.length - reviewed.size;
+  ui['queue-count'].textContent = pending;
+  ui['queue-summary'].textContent = pending ? pending + ' 条待验收' : '本轮队列已验收';
+  ui['queue-items'].innerHTML = samples.map((item, i) => {
+    const state = reviewed.has(i) ? '已验收' : item.error ? '有错误' : '等你验收';
+    const color = reviewed.has(i) ? 'done' : item.error ? 'error' : '';
+    return '<button type="button" class="queue-row" data-session="' + i + '" aria-current="' + (current === i && !boardOpen) + '"><span class="dot ' + color + '" aria-hidden="true"></span><strong>' + item.title + '</strong><small>' + item.agent + ' · ' + state + '</small></button>';
+  }).join('');
+}
+
+function renderSession() {
+  const item = samples[current];
+  const isReviewed = reviewed.has(current);
+  ui.context.textContent = '本机 / ' + item.space;
+  ui.reader.innerHTML =
+    '<div class="kicker ' + (item.error && !isReviewed ? 'error' : '') + '">' + dot +
+    (isReviewed ? '已验收' : item.error ? '本轮有错误' : '等你验收') + '</div>' +
+    '<h1 id="session-title">' + item.title + '</h1>' +
+    '<div class="meta"><span class="agent">' + item.agent + '</span><span>耗时 ' + item.duration + '</span><span>' + item.time + ' 结束</span></div>' +
+    '<div class="reply" id="reply-text"><p>' + item.summary + '</p>' +
+    (item.error ? '<div class="alert" role="note">' + item.error + '</div>' : '') +
+    '<h2>验证结果</h2><div class="table-wrap"><table><thead><tr><th scope="col">检查项</th><th scope="col">结果</th><th scope="col">说明</th></tr></thead><tbody>' +
+    item.checks.map(([name, result, note]) => '<tr><td>' + name + '</td><td class="' + (result === '已通过' ? 'check' : 'wait') + '">' + result + '</td><td>' + note + '</td></tr>').join('') +
+    '</tbody></table></div><pre class="code" tabindex="0" aria-label="验证命令"><code>' + escapeHtml(item.command) + '</code></pre>' +
+    '<h2>改动与待验</h2><p>' + item.detail + '</p><p>' + item.extra + '</p>' +
+    '<details><summary>本轮执行过程 · ' + item.trace.length + ' 项</summary><ul>' + item.trace.map(step => '<li>' + step + '</li>').join('') +
+    '</ul></details></div>';
+  ui.terminal.innerHTML = '<pre aria-label="终端日志"><strong>' + item.agent + '</strong>  ~/work/' + item.space + '\n\n$ ' +
+    escapeHtml(item.command) + '\n' + escapeHtml(item.terminal.join('\n')) + '\n\n❯ ▍</pre>';
+  ui.task.innerHTML = '<h2>任务进度</h2>' + (item.pr ?
+    '<div class="task-card"><div class="task-top"><strong>' + item.pr + '</strong><span class="pill waiting">' + dot + item.progress + '</span></div>' +
+    '<div class="task-title">' + item.title + '</div><div class="mono">' + item.branch + '</div><ol class="timeline">' +
+    item.steps.map((step, i) => '<li class="' + (step === item.progress || (item.progress === '等 Review' && i === 2) ? 'is-now' : i === 0 || (i === 1 && item.progress === '等 Review') ? 'is-done' : '') + '">' + dot + step + '</li>').join('') +
+    '</ol><p class="task-note">PR 状态随代码交付更新</p></div>' :
+    '<div class="task-card"><p class="quiet">这条会话还没有关联 PR。</p></div>') +
+    '<div class="agent-state"><p class="label">会话状态</p><span class="pill ' + (item.error ? 'error' : '') + '">' + dot + (item.error ? '已结束 · 有错误' : 'Agent 已完成') + '</span></div>';
+}
+
+function renderControls() {
+  ui['review-view'].setAttribute('aria-pressed', String(!boardOpen));
+  ui['board-view'].setAttribute('aria-pressed', String(boardOpen));
+  ui.review.hidden = boardOpen;
+  ui.board.hidden = !boardOpen;
+  ui.content.hidden = view !== 'reply';
+  ui.terminal.hidden = view !== 'terminal';
+  ui.app.classList.toggle('focus', focusMode);
+  ui.expand.hidden = view !== 'reply';
+  ui.expand.setAttribute('aria-pressed', String(focusMode));
+  ui.expand.textContent = focusMode ? '还原阅读' : '放大阅读';
+  ui['toggle-terminal'].setAttribute('aria-pressed', String(view === 'terminal'));
+  ui['toggle-terminal'].textContent = view === 'terminal' ? '阅读本轮回复' : '回到终端';
+  ui.copy.hidden = view !== 'reply';
+  ui.accept.disabled = reviewed.has(current);
+  ui.accept.textContent = reviewed.has(current) ? '已验收' : '标记已验收';
+  ui.next.disabled = !samples.some((_, i) => i !== current && !reviewed.has(i));
+  ui['review-status'].textContent = message || (reviewed.has(current) ? '本轮已验收' : '第 ' + (current + 1) + ' 条 / 共 ' + samples.length + ' 条');
+}
+
+function renderBoard() {
+  const lanes = [
+    ['要你处理', samples.map((item, i) => ({ item, i })).filter(({ i }) => !reviewed.has(i))],
+    ['PR 进行中', samples.map((item, i) => ({ item, i })).filter(({ item }) => item.pr)],
+    ['已验收', samples.map((item, i) => ({ item, i })).filter(({ i }) => reviewed.has(i))]
+  ];
+  ui.lanes.innerHTML = lanes.map(([title, cards]) =>
+    '<section class="lane"><h2>' + title + ' <span class="count">' + cards.length + '</span></h2>' +
+    (cards.length ? cards.map(({ item, i }) =>
+      '<button type="button" class="board-card" data-session="' + i + '"><strong>' + item.title + '</strong><small>' +
+      (title === 'PR 进行中' ? item.pr + ' · ' + item.progress : item.agent) + '</small></button>'
+    ).join('') : '<p class="empty">暂无</p>') + '</section>'
+  ).join('');
+}
+
+function openSession(index) {
+  if (!boardOpen) saveScroll();
+  current = index;
+  view = 'reply';
+  focusMode = false;
+  boardOpen = false;
+  message = '';
+  renderQueue();
+  renderSession();
+  renderControls();
+  restoreScroll();
+}
+
+function setView(nextView) {
+  saveScroll();
+  view = nextView;
+  if (view === 'terminal') focusMode = false;
+  renderControls();
+  restoreScroll();
+}
+
+function setFocus(enabled) {
+  saveScroll();
+  focusMode = enabled;
+  renderControls();
+  restoreScroll();
+}
+
+function toggleQuota(show) {
+  ui.quota.hidden = !show;
+  ui['quota-trigger'].setAttribute('aria-expanded', String(show));
+}
+
+document.addEventListener('click', event => {
+  const row = event.target.closest('[data-session]');
+  if (row) {
+    const fromBoard = boardOpen;
+    openSession(Number(row.dataset.session));
+    const target = fromBoard ? ui['toggle-terminal'] : ui['queue-items'].querySelector('[aria-current="true"]');
+    target?.focus({ preventScroll: true });
+  }
+  if (!ui.quota.hidden && !ui.quota.contains(event.target) && !ui['quota-trigger'].contains(event.target)) toggleQuota(false);
+});
+ui['review-view'].onclick = () => { if (boardOpen) openSession(current); };
+ui['board-view'].onclick = () => {
+  if (!boardOpen) saveScroll();
+  boardOpen = true;
+  renderBoard();
+  renderQueue();
+  renderControls();
+};
+ui.expand.onclick = () => setFocus(!focusMode);
+ui['toggle-terminal'].onclick = () => setView(view === 'reply' ? 'terminal' : 'reply');
+ui['quota-trigger'].onclick = () => toggleQuota(ui.quota.hidden);
+ui.next.onclick = () => {
+  for (let offset = 1; offset < samples.length; offset++) {
+    const candidate = (current + offset) % samples.length;
+    if (!reviewed.has(candidate)) { openSession(candidate); return; }
+  }
+};
+ui.accept.onclick = () => {
+  const scroll = activeScroll().scrollTop;
+  reviewed.add(current);
+  message = '本轮已验收';
+  renderQueue();
+  renderSession();
+  renderControls();
+  activeScroll().scrollTop = scroll;
+  (ui.next.disabled ? ui['board-view'] : ui.next).focus({ preventScroll: true });
+};
+ui.copy.onclick = async () => {
+  const text = document.getElementById('session-title').innerText + '\n\n' + document.getElementById('reply-text').innerText;
+  try {
+    await navigator.clipboard.writeText(text);
+    message = '回复已复制';
+  } catch {
+    const selection = getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(document.getElementById('reply-text'));
+    selection.removeAllRanges();
+    selection.addRange(range);
+    message = document.execCommand('copy') ? '回复已复制' : '已选中回复，可手动复制';
+  }
+  renderControls();
+};
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  if (!ui.quota.hidden) {
+    toggleQuota(false);
+    ui['quota-trigger'].focus();
+  } else if (boardOpen) {
+    openSession(current);
+    ui['review-view'].focus();
+  } else if (focusMode) {
+    setFocus(false);
+    ui.expand.focus({ preventScroll: true });
+  } else if (view === 'reply') {
+    setView('terminal');
+    ui['toggle-terminal'].focus({ preventScroll: true });
+  }
+});
+openSession(0);
+</script>
+</body>
+</html>
