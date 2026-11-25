@@ -398,28 +398,6 @@ pub(super) fn automation_hidden_in<'a>(w: &'a Workspace, s: &AgentSession) -> Op
     }
 }
 
-/// A running turn that has changed `file` since it was asked, for 在跑's tests.
-#[cfg(test)]
-pub(super) fn running_turn(file: &str) -> fibo_core::content::Content {
-    use fibo_core::content::{Content, Evidence, Quote, Turn};
-    Content {
-        turn: Turn::Running,
-        turn_started: 100,
-        asks: vec![Quote {
-            text: "fix the login".into(),
-            ..Default::default()
-        }],
-        evidence: vec![Evidence {
-            kind: "file".into(),
-            summary: file.into(),
-            exit_code: None,
-            at: 120,
-            source: Default::default(),
-        }],
-        ..Default::default()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -471,5 +449,27 @@ mod tests {
             running_line_in(&w, &s).as_deref(),
             Some("正在运行 cargo build -p app")
         );
+    }
+}
+
+/// A running turn that has changed `file` since it was asked, for 在跑's tests.
+#[cfg(test)]
+pub(super) fn running_turn(file: &str) -> fibo_core::content::Content {
+    use fibo_core::content::{Content, Evidence, Quote, Turn};
+    Content {
+        turn: Turn::Running,
+        turn_started: 100,
+        asks: vec![Quote {
+            text: "fix the login".into(),
+            ..Default::default()
+        }],
+        evidence: vec![Evidence {
+            kind: "file".into(),
+            summary: file.into(),
+            exit_code: None,
+            at: 120,
+            source: Default::default(),
+        }],
+        ..Default::default()
     }
 }
