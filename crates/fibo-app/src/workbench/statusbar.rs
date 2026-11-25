@@ -54,7 +54,9 @@ impl Workbench {
                             T::color(T::secondary())
                         })
                         .child(if cut {
-                            t!("后台断开，正在重连").to_owned()
+                            Self::cut_off_words(self.gave_up_reconnecting())
+                                .1
+                                .to_owned()
                         } else if fit.working {
                             t!("{name} · {listed} 个会话", name = self.host.name(), listed)
                         } else {

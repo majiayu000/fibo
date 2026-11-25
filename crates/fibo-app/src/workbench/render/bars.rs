@@ -202,6 +202,18 @@ impl Workbench {
                 )
             })
     }
+    /// A cut-off link in words, as (the strip, the status bar). Once the outage's one host
+    /// start failed and nothing is trying, neither promises a reconnect: only 「重新连接」
+    /// moves it from there.
+    pub(in crate::workbench) fn cut_off_words(gave_up: bool) -> (&'static str, &'static str) {
+        match gave_up {
+            true => (t!("后台连接断开，没能重新连上"), t!("后台断开，没能重连")),
+            false => (t!("后台连接断开，正在重新连接…"), t!("后台断开，正在重连")),
+        }
+    }
+    pub(in crate::workbench) fn gave_up_reconnecting(&self) -> bool {
+        self.store.start_failed() && !self.reconnecting
+    }
     /// The link has been cut off long enough for its strip: this machine's window starts its
     /// host once per outage, the way 「重新连接」 does (`reconnect` leaves a host that still
     /// answers alone; a takeover never refuses the socket). Another machine's forward
@@ -498,5 +510,20 @@ impl Workbench {
             root = root.child(self.settings_overlay(view.clone(), cx));
         }
         self.root_handlers(root, cx)
+    }
+}
+
+#[cfg(test)]
+mod cut_off_tests {
+    use super::Workbench;
+
+    /// The strip stopped promising once starting a host failed (197015bb); the status bar
+    /// under it went on saying 「后台断开，正在重连」.
+    #[test]
+    fn a_failed_host_start_stops_the_strip_and_the_bar_promising() {
+        let (strip, bar) = Workbench::cut_off_words(true);
+        let (trying_strip, trying_bar) = Workbench::cut_off_words(false);
+        assert_ne!(strip, trying_strip);
+        assert_ne!(bar, trying_bar, "the bar still says it is reconnecting");
     }
 }

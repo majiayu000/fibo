@@ -221,6 +221,7 @@
 [statusbar]
 "{name}，{listed} 个会话" = "{name}, {listed} {listed|session|sessions}"
 "后台断开，正在重连" = "Background service lost, reconnecting"
+"后台断开，没能重连" = "Background service lost, couldn't reconnect"
 "{name} · {listed} 个会话" = "{name} · {listed}"
 "和后台 Fibo 的连接断了，侧栏和鸟瞰停在断开那一刻" = "Lost the connection to Fibo's background service; the sidebar and Board show the moment it dropped"
 "后台 Fibo 在运行，按事件更新，不定时轮询" = "The Fibo background service is running; updates come from events, not polling"
