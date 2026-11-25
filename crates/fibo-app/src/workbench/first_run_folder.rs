@@ -89,7 +89,10 @@ impl Workbench {
     /// when that is open.
     pub(super) fn first_run_place(&self, cx: &Context<Self>) -> gpui::Div {
         let space = (self.workspace.spaces.iter()).find(|s| s.id == self.nav.space);
-        let note = match (&self.first_run.repo, space) {
+        // Offered only over a space with no folder of its own, as `first_run_pin` pins:
+        // switched to one with a project, the page says that one.
+        let repo = (self.first_run.repo.as_ref()).filter(|_| self.first_run_space().is_some());
+        let note = match (repo, space) {
             (Some(repo), _) => t!(
                 "在 {place} 打开（最近的 git 目录）",
                 place = home_relative(&self.host, repo)
