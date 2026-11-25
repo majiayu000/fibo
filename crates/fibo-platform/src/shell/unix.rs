@@ -124,9 +124,26 @@ pub fn login_env(vars: Vec<(OsString, OsString)>) -> Vec<(OsString, OsString)> {
                 .is_some_and(|k| PASS.contains(&k) || k.starts_with("LC_"))
         })
         .collect();
+    // Started where no locale is set (from an ssh session, or a shell that has none), the
+    // shells read every byte past ASCII as a character of its own: bash 3 dropped the `é` of
+    // a typed path, zsh showed it as `<0303>`. A terminal app sets one in that case too;
+    // only the character set is set here, so messages and formats stay as they were.
+    let has_locale = env
+        .iter()
+        .any(|(k, _)| ["LANG", "LC_ALL", "LC_CTYPE"].iter().any(|n| k == n));
+    if !has_locale {
+        env.push(("LC_CTYPE".into(), UTF8_CTYPE.into()));
+    }
     env.push(("PATH".into(), SYSTEM_PATH.into()));
     env
 }
+
+/// A locale every system of the kind has: macOS ships `UTF-8`, glibc builds `C.UTF-8` in.
+const UTF8_CTYPE: &str = if cfg!(target_os = "macos") {
+    "UTF-8"
+} else {
+    "C.UTF-8"
+};
 
 #[cfg(test)]
 mod tests {
@@ -223,6 +240,28 @@ mod tests {
             );
         }
         assert!(!env.iter().any(|(k, _)| k == "CLAUDECODE"));
+    }
+
+    /// A host started with no locale (over ssh, or from a shell without one) still gives its
+    /// terminals UTF-8 characters; one the launcher set is passed as it was, never replaced.
+    #[test]
+    fn terminals_get_utf8_characters_when_no_locale_is_set() {
+        let ctype = |env: &[(OsString, OsString)]| {
+            (env.iter().find(|(k, _)| k == "LC_CTYPE")).map(|(_, v)| v.clone())
+        };
+        let bare = login_env(vec![("HOME".into(), "/Users/u".into())]);
+        assert_eq!(ctype(&bare), Some(UTF8_CTYPE.into()), "{bare:?}");
+        assert!(!bare.iter().any(|(k, _)| k == "LANG" || k == "LC_ALL"));
+        for set in [
+            ("LANG", "zh_CN.UTF-8"),
+            ("LC_ALL", "C"),
+            ("LC_CTYPE", "ja_JP.eucJP"),
+        ] {
+            let env = login_env(vec![(set.0.into(), set.1.into())]);
+            assert!(env.contains(&(set.0.into(), set.1.into())), "{env:?}");
+            let added = env.iter().filter(|(k, _)| k == "LC_CTYPE").count();
+            assert_eq!(added, usize::from(set.0 == "LC_CTYPE"), "{set:?}: {env:?}");
+        }
     }
 
     #[test]
