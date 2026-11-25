@@ -374,10 +374,11 @@ impl Workbench {
                     .update(cx, |this, cx| {
                         let crate::connection::StatusLink::Status(status) = link else {
                             this.store.take_link(link);
-                            // Repaint once the outage is long enough to show its strip.
+                            // Once the outage is long enough for its strip, show it and
+                            // start a host if none answers.
                             cx.spawn(async move |this, cx| {
                                 cx.background_executor().timer(CUT_OFF_NOTICE).await;
-                                let _ = this.update(cx, |_, cx| cx.notify());
+                                let _ = this.update(cx, |this, cx| this.start_lost_host(cx));
                             })
                             .detach();
                             cx.notify();

@@ -1,7 +1,7 @@
 use super::*;
 
-// Reconnect: a host killed outright shows the strip after its grace period, and
-// 「重新连接」 starts a host the status link then resubscribes to.
+// Reconnect: a host killed outright shows the strip after its grace period, and the window
+// starts a host the status link then resubscribes to, with no click.
 pub(super) fn start(
     handle: Option<WindowHandle<workbench::Workbench>>,
     evidence: Option<PathBuf>,
@@ -25,18 +25,19 @@ pub(super) fn start(
             assert!(killed.success(), "no host to kill");
             cx.background_executor().timer(Duration::from_secs(1)).await;
             assert!(!handle.update(cx, |view, _, _| view.visual_cut_off()).unwrap(), "strip before the grace period");
-            cx.background_executor().timer(Duration::from_secs(3)).await;
-            assert!(handle.update(cx, |view, _, _| view.visual_cut_off()).unwrap(), "no strip after the host died");
+            let mut cut = false;
+            for _ in 0..50 {
+                cx.background_executor().timer(Duration::from_millis(100)).await;
+                if handle.update(cx, |view, _, _| view.visual_cut_off()).unwrap() { cut = true; break; }
+            }
+            assert!(cut, "no strip after the host died");
             shot("cut-off.png", cx);
-            handle.update(cx, |view, _, cx| view.visual_reconnect(cx)).unwrap();
-            cx.background_executor().timer(Duration::from_millis(200)).await;
-            shot("reconnecting.png", cx);
             let mut back = false;
             for _ in 0..40 {
                 cx.background_executor().timer(Duration::from_millis(500)).await;
                 if !handle.update(cx, |view, _, _| view.visual_cut_off()).unwrap() { back = true; break; }
             }
-            assert!(back, "strip still shown after 重新连接");
+            assert!(back, "no host started on its own");
             cx.background_executor().timer(Duration::from_millis(500)).await;
             shot("reconnected.png", cx);
             eprintln!("reconnect native PASS: no strip within grace, strip after host kill, 重新连接 restarts host, strip clears");

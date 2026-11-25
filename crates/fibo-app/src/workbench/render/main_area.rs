@@ -38,8 +38,12 @@ impl Workbench {
                 .into_iter()
                 .collect();
             details.extend(status);
-            main =
-                main.child(self.notice_strip(t!("后台连接断开，正在重新连接…"), details, true, cx));
+            // Once starting a host failed, nothing reconnects until 「重新连接」 is clicked.
+            let text = match self.store.start_failed() && !self.reconnecting {
+                true => t!("后台连接断开，没能重新连上"),
+                false => t!("后台连接断开，正在重新连接…"),
+            };
+            main = main.child(self.notice_strip(text, details, true, cx));
         } else if let Some(status) = status.filter(|_| {
             // A failed refresh while the link is down for a moment is the same blip.
             !self.store.link_down()
