@@ -92,6 +92,7 @@ impl Workbench {
                     .text_size(px(T::SMALL))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.layout.choosing_dir = None;
+                        this.space_dir_chosen(&pinned.id, &pinned.cwd);
                         this.edit(Edit::UpdateSpace(pinned.clone()), cx);
                     }))
                     .into_any_element(),

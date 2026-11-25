@@ -38,6 +38,9 @@ pub(super) struct FirstRun {
     /// The newest git work tree worked in, offered while the shown space has no folder of
     /// its own; starting from the page makes it the space's (`first_run_folder.rs`).
     pub(super) repo: Option<String>,
+    /// The user picked the space's folder themself: nothing is offered or pinned over it,
+    /// even before the host has answered that edit.
+    pub(super) chosen: bool,
 }
 impl FirstRun {
     pub(super) fn load(w: &Workspace) -> Self {
@@ -47,6 +50,7 @@ impl FirstRun {
             with_hook: true,
             notify: true,
             repo: None,
+            chosen: false,
         }
     }
 }
@@ -118,6 +122,9 @@ impl Workbench {
     pub(super) fn start_first_run(&mut self, cx: &mut Context<Self>) {
         if self.first_run.on {
             self.probe_agents(cx);
+            // From the workspace the window opened with: an unchanged host sends no
+            // snapshot after it, and the page would never offer a folder.
+            self.first_run_suggest();
         }
     }
     /// Over for good. A marker that cannot be written only ends it for this run.

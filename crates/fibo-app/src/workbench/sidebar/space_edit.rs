@@ -124,13 +124,12 @@ impl Workbench {
                 let cwd = dir.to_string_lossy().into_owned();
                 if let Some(target) = target {
                     if let Some(space) = this.workspace.spaces.iter().find(|s| s.id == target) {
-                        this.edit(
-                            Edit::UpdateSpace(Space {
-                                cwd,
-                                ..space.clone()
-                            }),
-                            cx,
-                        );
+                        let space = Space {
+                            cwd,
+                            ..space.clone()
+                        };
+                        this.space_dir_chosen(&space.id, &space.cwd);
+                        this.edit(Edit::UpdateSpace(space), cx);
                     }
                     return;
                 }

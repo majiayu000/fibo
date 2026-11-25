@@ -49,12 +49,25 @@ impl Workbench {
     pub(super) fn first_run_suggest(&mut self) {
         let home = self.host.home();
         self.first_run.repo = match self.first_run_space() {
-            Some(_) => recent_repo(
+            Some(_) if !self.first_run.chosen => recent_repo(
                 &self.workspace.offered_dirs(home.as_deref(), LOOKED),
                 home.as_deref(),
             ),
-            None => None,
+            _ => None,
         };
+    }
+    /// A folder the user picked for `space` (the recent list or the Finder): during the
+    /// welcome page it replaces the offer, so a start before the host's reply neither pins
+    /// the offer over it nor opens in the old folder.
+    pub(super) fn space_dir_chosen(&mut self, space: &str, cwd: &str) {
+        if !self.first_run.on {
+            return;
+        }
+        self.first_run.chosen = true;
+        self.first_run.repo = None;
+        if let Some(own) = (self.workspace.spaces.iter_mut()).find(|s| s.id == space) {
+            own.cwd = cwd.to_owned();
+        }
     }
     /// Starting from the welcome page: the folder it offered becomes the shown space's, so
     /// this Agent and the ones after it start there. The window's copy is set at once, as
