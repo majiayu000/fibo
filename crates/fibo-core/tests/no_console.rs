@@ -22,6 +22,8 @@ const UNIX_ONLY: &[&str] = &[
     "crates/fibo-app/src/workbench/forms.rs",
     // /bin/sh.
     "crates/fibo-platform/src/shell/mod.rs",
+    // /usr/bin/du for the worktree scan; Windows returns Unsupported before any spawn.
+    "crates/fibo-platform/src/fs/mod.rs",
     // Only the plugin-facing test client; the window and host never use it.
     "crates/fibo-remote/src/client.rs",
     // /usr/bin/security, the macOS keychain.
