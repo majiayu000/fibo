@@ -129,11 +129,7 @@ impl Workbench {
         self.workspace.session_updated(s)
     }
     pub(super) fn session_line(&self, s: &AgentSession) -> String {
-        self.workspace
-            .content
-            .get(&s.id)
-            .map(|c| fibo_core::content::short(&c.headline(), 100))
-            .unwrap_or_else(|| t!("内容尚未索引").into())
+        session_line_in(&self.workspace, s)
     }
     pub(super) fn save_session_task(&mut self, session: &AgentSession, cx: &mut Context<Self>) {
         let Some(c) = self.workspace.content.get(&session.id) else {
@@ -377,6 +373,23 @@ pub(super) fn session_open_in(
         .or_else(|| resume_terminal(w, resumed, s))
         .is_some_and(|t| w.terminal_tab(&t.id).is_some())
 }
+/// 在跑's test content, for the board's and the sidebar's tests too.
+#[cfg(test)]
+pub(super) use tests::running_turn;
+pub(super) fn session_line_in(w: &Workspace, s: &AgentSession) -> String {
+    w.content
+        .get(&s.id)
+        .map(|c| fibo_core::content::short(&c.headline(), 100))
+        .unwrap_or_else(|| t!("内容尚未索引").into())
+}
+/// What a running turn is at, for 在跑's board cards and 会话优先's rows (#516): its
+/// latest tool or command this turn in words (`正在改 tabs.rs`), never the ask its title
+/// already says, so a fresh turn shows nothing. It reads the content alone, not the clock:
+/// it changes only when the log does and asks for no frame of its own.
+pub(super) fn running_line_in(w: &Workspace, s: &AgentSession) -> Option<String> {
+    let doing = w.content.get(&s.id)?.doing_recorded()?;
+    Some(t!("正在{d}", d = doing))
+}
 /// Why the window's lists, counts and board leave a session out: it is automation, or its
 /// space is put aside (先不管).
 pub(super) fn session_hidden_in<'a>(w: &'a Workspace, s: &AgentSession) -> Option<&'a str> {
@@ -389,5 +402,80 @@ pub(super) fn automation_hidden_in<'a>(w: &'a Workspace, s: &AgentSession) -> Op
         // A hook can bind a new conversation before its first prompt writes anything.
         None if s.current && s.binding.is_some() => None,
         None => Some(t!("缺少交互入口证据#workbench")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fibo_core::content::{Content, Evidence, Quote, Turn};
+
+    /// 在跑's card and row said nothing of what the Agent was doing (#516). They say its
+    /// latest record this turn, and nothing until it has one: the title is the ask.
+    #[test]
+    fn a_running_turn_says_its_latest_record() {
+        let mut w = super::super::tests::fixture();
+        let s = w.agent_sessions[0].clone();
+        let record = |kind: &str, summary: &str, at| Evidence {
+            kind: kind.into(),
+            summary: summary.into(),
+            exit_code: None,
+            at,
+            source: Default::default(),
+        };
+        let mut c = Content {
+            turn: Turn::Running,
+            turn_started: 100,
+            asks: vec![Quote {
+                text: "修复登录".into(),
+                ..Default::default()
+            }],
+            evidence: vec![record("command", "cargo test -p fibo-core", 50)],
+            ..Default::default()
+        };
+        assert_eq!(running_line_in(&w, &s), None, "no content yet");
+        w.content
+            .insert(s.id.clone(), std::sync::Arc::new(c.clone()));
+        assert_eq!(
+            running_line_in(&w, &s),
+            None,
+            "an earlier turn's record, then the ask"
+        );
+        c.evidence
+            .push(record("file", "文件修改：crates/app/src/tabs.rs", 120));
+        w.content
+            .insert(s.id.clone(), std::sync::Arc::new(c.clone()));
+        assert_eq!(running_line_in(&w, &s).as_deref(), Some("正在改 tabs.rs"));
+        c.evidence.push(record(
+            "command",
+            "cd /x && cargo build -p app 2>&1 | tail",
+            130,
+        ));
+        w.content.insert(s.id.clone(), std::sync::Arc::new(c));
+        assert_eq!(
+            running_line_in(&w, &s).as_deref(),
+            Some("正在运行 cargo build -p app")
+        );
+    }
+
+    /// A running turn that has changed `file` since it was asked, for 在跑's tests.
+    pub(in crate::workbench) fn running_turn(file: &str) -> fibo_core::content::Content {
+        use fibo_core::content::{Content, Evidence, Quote, Turn};
+        Content {
+            turn: Turn::Running,
+            turn_started: 100,
+            asks: vec![Quote {
+                text: "fix the login".into(),
+                ..Default::default()
+            }],
+            evidence: vec![Evidence {
+                kind: "file".into(),
+                summary: file.into(),
+                exit_code: None,
+                at: 120,
+                source: Default::default(),
+            }],
+            ..Default::default()
+        }
     }
 }

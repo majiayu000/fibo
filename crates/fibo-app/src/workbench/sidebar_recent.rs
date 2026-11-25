@@ -96,17 +96,9 @@ impl Workbench {
                     .map(RowDetail::Text)
             })
         };
-        // Only what asks you or failed gets a second line: the question is what you
-        // act on. A finished turn or a running one reads from its state mark alone,
-        // so 要你处理 and 在跑 fit one screen even with dozens of sessions.
-        for (key, title, rows, lines) in [
-            (
-                "recent:need",
-                fibo_core::status::needs_you_word(),
-                need,
-                true,
-            ),
-            ("recent:running", Status::Running.label(), running, false),
+        for (key, title, rows) in [
+            ("recent:need", fibo_core::status::needs_you_word(), need),
+            ("recent:running", Status::Running.label(), running),
         ] {
             if rows.is_empty() {
                 continue;
@@ -133,19 +125,13 @@ impl Workbench {
                         || l.1 == Status::Background
                         || fibo_core::status::left_behind_detail(&from.workspace, l.0).is_some()
                 };
+                let detail = |from: &Workbench, l: &Listed| {
+                    let ask = || asks(from, l).then(|| second(from, l)).flatten();
+                    recent_detail_in(&from.workspace, l.0, key, ask)
+                };
                 match item {
-                    Item::Here(l) => {
-                        let d = if lines && asks(self, &l) {
-                            second(self, &l)
-                        } else {
-                            None
-                        };
-                        push(out, l, d, End::State);
-                    }
-                    Item::There(r) => {
-                        let d = (lines && asks(r.from, &r.l)).then(|| second(r.from, &r.l));
-                        out.push(self.machine_row(r, d.flatten(), cx));
-                    }
+                    Item::Here(l) => push(out, l, detail(self, &l), End::State),
+                    Item::There(r) => out.push(self.machine_row(r, detail(r.from, &r.l), cx)),
                 }
             }
             self.sidebar.reveal(key, start, &keep, out);
@@ -187,6 +173,23 @@ impl Workbench {
     }
 }
 
+/// A row's second line in 要你处理 or 在跑. What asks you or failed gets one (`ask`): the
+/// question is what you act on. A running one gets one only once its log names a tool or
+/// command this turn (`正在改 tabs.rs`), never the ask its title already says, so a list of
+/// fresh turns still reads one line each (#516). A finished turn reads from its mark.
+fn recent_detail_in(
+    w: &Workspace,
+    s: &AgentSession,
+    section: &str,
+    ask: impl FnOnce() -> Option<RowDetail>,
+) -> Option<RowDetail> {
+    match section {
+        "recent:need" => ask(),
+        "recent:running" => super::sessions::running_line_in(w, s).map(RowDetail::Text),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     /// 「这个排列位置有很大的问题」: 更早 drawn as a quiet indented line hung under a folded
@@ -197,5 +200,30 @@ mod tests {
         let body = &src[..src.find("#[cfg(test)]").unwrap()];
         assert!(body.contains("self.flat_fold(\"recent:older\""));
         assert!(body.contains("self.flat_fold(\"recent:today\""));
+    }
+
+    /// 在跑's rows said nothing of what the Agent was doing (#516). Here and on another
+    /// machine they say its latest record this turn; 要你处理 still says only what it asks.
+    #[test]
+    fn a_running_row_says_what_its_turn_is_at() {
+        use super::super::sidebar_list::RowDetail;
+        let mut w = super::super::tests::fixture();
+        let s = w.agent_sessions[0].clone();
+        w.content.insert(
+            s.id.clone(),
+            std::sync::Arc::new(super::super::sessions::running_turn(
+                "crates/app/src/tabs.rs",
+            )),
+        );
+        let running = super::recent_detail_in(&w, &s, "recent:running", || {
+            panic!("a running row has no question to show")
+        });
+        assert!(matches!(running, Some(RowDetail::Text(t)) if t == "正在改 tabs.rs"));
+        assert!(super::recent_detail_in(&w, &s, "recent:need", || None).is_none());
+        // Both kinds of row take their second line from it.
+        let src = include_str!("sidebar_recent.rs");
+        let body = &src[..src.find("#[cfg(test)]").unwrap()];
+        assert!(body.contains("Item::Here(l) => push(out, l, detail(self, &l), End::State)"));
+        assert!(body.contains("self.machine_row(r, detail(r.from, &r.l), cx)"));
     }
 }
