@@ -164,6 +164,7 @@ fn hermes_rewrites_replay_without_stale_answers_or_invented_children() {
     )
     .unwrap();
     assert_eq!(first["cwd"], "");
+    drop((index, db)); // Windows 不删还开着的文件.
     fs::remove_dir_all(root).unwrap();
 }
 

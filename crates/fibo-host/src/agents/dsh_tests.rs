@@ -116,6 +116,7 @@ fn compressed_generations_and_partial_frames_preserve_child_lifecycle() {
     // A newer unsupported generation must not silently fall back to stale v4 data.
     fs::write(child.with_file_name("session.v5.jsonl"), b"{}\n").unwrap();
     assert!(store.poll(&source, &out).is_err());
+    drop((index, store)); // Windows 不删还开着的文件.
     fs::remove_dir_all(root).unwrap();
 }
 

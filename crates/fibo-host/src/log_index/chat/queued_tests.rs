@@ -51,6 +51,7 @@ fn calls_before_a_queued_message_count_on_the_reply() {
     // The list behind the line holds the same call.
     let (tools, rows, _) = i.tool_calls("p", Some(reply), None, 50).unwrap();
     assert_eq!((rows.len(), tools.unwrap().commands), (1, 1));
+    drop(i); // Windows 不删还开着的文件.
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -79,6 +80,7 @@ fn a_stopped_turn_does_not_count_on_the_next_reply() {
     assert_eq!((t.commands, t.took), (0, 20));
     let (_, rows, _) = i.tool_calls("p", Some(reply.seq), None, 50).unwrap();
     assert_eq!(rows.len(), 1);
+    drop(i); // Windows 不删还开着的文件.
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -112,5 +114,6 @@ fn an_interruption_ends_the_stretch_even_without_an_assistant_reply() {
     assert!(rows.is_empty());
     let last = all.last().unwrap().tools.as_ref().unwrap();
     assert_eq!((last.commands, last.took), (1, 5));
+    drop(i); // Windows 不删还开着的文件.
     std::fs::remove_dir_all(dir).unwrap();
 }

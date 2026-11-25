@@ -439,6 +439,7 @@ mod tests {
     /// Through the real runner: plugin a's hooks all sleep, plugin b's still fires at once,
     /// and a's overflow shows in its runs.
     #[test]
+    #[cfg_attr(windows, ignore = "hook 命令是 sh 语法（sleep），Windows 上没有 sh")]
     fn a_slow_plugins_hooks_leave_room_for_others_and_overflow_is_reported() {
         let root = std::env::temp_dir().join(format!("kl-fair-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
@@ -513,6 +514,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(windows, ignore = "hook 命令是 sh 语法，Windows 上没有 sh")]
     fn a_command_hook_gets_the_event_on_stdin_and_in_its_environment() {
         let out = std::env::temp_dir().join(format!("kl-hook-out-{}", std::process::id()));
         let cmd = format!(
@@ -636,8 +638,10 @@ mod tests {
         assert!(err.contains("bad") || err.contains("exit"), "{err}");
     }
 
-    /// A timed-out hook's children are stopped with it.
+    /// A timed-out hook's children are stopped with it. Unix only: it asks whether the
+    /// child lives with kill(pid, 0), and the hook is sh.
     #[test]
+    #[cfg(unix)]
     fn a_timed_out_hook_stops_its_children() {
         let f = std::env::temp_dir().join(format!("kl-hook-child-{}", std::process::id()));
         let _ = std::fs::remove_file(&f);
@@ -656,6 +660,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "notify-macos 只给 macOS；测试把带反斜杠的 Windows 路径原样拼进 JSON"
+    )]
     fn the_shipped_notifier_stays_quiet_except_on_errors_when_set_so() {
         // The real notify-macos plugin, with osascript swapped for a file the test reads.
         let root = std::env::temp_dir().join(format!("kl-notify-{}", std::process::id()));

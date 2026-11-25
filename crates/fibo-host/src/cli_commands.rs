@@ -69,6 +69,7 @@ mod tests {
     }
     /// Found as a child of a process with this name; with a stdin pipe it is a helper.
     #[test]
+    #[cfg_attr(windows, ignore = "测试直接起 /bin/sh，Windows 上没有")]
     fn a_cli_commands_are_its_children_with_stdin_closed() {
         use std::process::{Command, Stdio};
         let me = inspect::name(std::process::id()).unwrap();
@@ -115,6 +116,7 @@ mod tests {
     }
     /// A command's stdin is not a channel; an MCP server's is.
     #[test]
+    #[cfg_attr(windows, ignore = "测试直接起 /bin/sh，Windows 上没有")]
     fn only_a_helper_talks_over_stdin() {
         use std::process::{Command, Stdio};
         let mut helper = Command::new("/bin/sleep")

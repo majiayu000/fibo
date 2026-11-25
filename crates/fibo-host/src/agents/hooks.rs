@@ -459,6 +459,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(windows, ignore = "测试直接起 /bin/sh，Windows 上没有")]
     fn the_command_is_a_no_op_outside_a_mooring_terminal() {
         let out = std::process::Command::new("/bin/sh")
             .args(["-c", &command(Agent::Claude)])
@@ -471,7 +472,9 @@ mod tests {
         assert!(out.stdout.is_empty() && out.stderr.is_empty());
     }
 
+    /// Unix only: the hook command and the fake host are sh.
     #[test]
+    #[cfg(unix)]
     fn a_terminal_from_before_the_rename_still_reports() {
         use std::os::unix::fs::PermissionsExt;
         let dir = std::env::temp_dir().join(format!("kl-hookcall-{}", uuid::Uuid::new_v4()));

@@ -26,6 +26,7 @@ mod tests {
     use fibo_core::model::Space;
 
     #[test]
+    #[cfg_attr(windows, ignore = "测试拿 / 当空间目录，Windows 上 / 不是绝对路径")]
     fn a_gone_folder_starts_in_its_space_then_home() {
         let tmp = std::env::temp_dir();
         let here = tmp.to_string_lossy().into_owned();
