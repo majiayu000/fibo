@@ -41,6 +41,30 @@ fn keys_the_search_field_leaves_alone_never_reach_the_terminal(cx: &mut TestAppC
 }
 
 #[gpui::test]
+fn up_and_down_in_the_search_field_step_through_the_matches(cx: &mut TestAppContext) {
+    let (pane, cx) = pane(cx);
+    pane.update(cx, |p, _| {
+        p.search.matches = (0..3)
+            .map(|row| fibo_core::terminal::SearchMatch {
+                row,
+                col: 0,
+                cols: 1,
+                line: "needle".into(),
+            })
+            .collect();
+        p.search.current_match = Some(1);
+    });
+    // The panel's own words: ↑ 上一个, ↓ 下一个; and they wrap as its buttons do.
+    for (key, at) in [("up", 0), ("up", 2), ("down", 0), ("down", 1)] {
+        cx.simulate_keystrokes(key);
+        pane.read_with(cx, |p, _| {
+            assert_eq!(p.search.current_match, Some(at), "after {key}");
+            assert_eq!(p.local_error, None, "{key} was sent on to the terminal");
+        });
+    }
+}
+
+#[gpui::test]
 fn enter_in_the_search_field_finds_rather_than_typing_a_new_line(cx: &mut TestAppContext) {
     let (pane, cx) = pane(cx);
     let field = pane.read_with(cx, |p, _| p.search.field.clone().unwrap());
