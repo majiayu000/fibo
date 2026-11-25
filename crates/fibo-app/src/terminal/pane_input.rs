@@ -204,8 +204,17 @@ impl Pane {
             return;
         }
         // The search field has the keyboard: what it left alone (arrows, Tab, Ctrl-C)
-        // bubbles here, and is not the program's.
+        // bubbles here, and is not the program's. ↑ ↓ are the panel's 上一个 / 下一个.
         if self.search_has_keys(window, cx) {
+            let step = match k.key.as_str() {
+                "up" => -1,
+                "down" => 1,
+                _ => return,
+            };
+            if !k.modifiers.modified() {
+                self.step_match(step, cx);
+                cx.stop_propagation();
+            }
             return;
         }
         if !self.marked.is_empty() {
