@@ -47,7 +47,7 @@
 | 2026-11-06 | [看改动从会话记录取，合成净改动，盖在终端上](2026-11-06-turn-changes-from-the-log.md) | 采用 |
 | 2026-11-06 | [手机聊天页显示 Claude 的下一句建议，用两周再定去留](2026-11-06-phone-input-suggestion.md) | 采用 |
 | 2026-11-06 | [Agent 身份先于聊天记录](2026-11-06-agent-identity-before-transcript.md) | 采用 |
-| 2026-11-03 | [鸟瞰看板拖起卡片时倾斜](2026-11-03-tilt-board-cards-while-dragging.md) | 否定 |
+| 2026-11-03 | [鸟瞰看板拖起卡片时倾斜](2026-11-03-tilt-board-cards-while-dragging.md) | 否定，11-18 复查 |
 | 2026-11-03 | [后台 shell 一律算等后台](2026-11-03-count-background-shells-as-waiting.md) | 被取代 |
 | 2026-11-03 | [后台 shell 按监听端口分任务和服务](2026-11-03-split-background-shells-by-listening-port.md) | 采用 |
 | 2026-11-04 | [后台 shell：脚本自己连的端口不算服务，规则和真实案例记在这一处](2026-11-04-background-shell-own-client.md) | 采用 |
