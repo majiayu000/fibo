@@ -10,27 +10,40 @@ concurrency:
   group: fibo-pages
   cancel-in-progress: false
 jobs:
-  deploy:
+  build:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      PAGES_ARTIFACT_NAME: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+    outputs:
+      artifact_name: ${{ steps.artifact.outputs.name }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - name: Stage only public website files
         run: |
           mkdir -p _site
           cp docs/site/index.html docs/site/sitemap.xml docs/site/robots.txt docs/site/CNAME _site/
           cp docs/site/polish.css docs/site/extra.css docs/site/extra.js docs/site/i18n.js _site/
           cp -R docs/site/assets docs/site/agents docs/site/art-b docs/site/blog docs/site/brand docs/site/fonts docs/site/media docs/site/shots _site/
-      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
+          name: ${{ env.PAGES_ARTIFACT_NAME }}
           path: _site
-      - uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+      - id: artifact
+        run: printf 'name=%s\n' "$PAGES_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
         id: deployment
+        with:
+          artifact_name: ${{ needs.build.outputs.artifact_name }}
