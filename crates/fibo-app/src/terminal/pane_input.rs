@@ -203,6 +203,11 @@ impl Pane {
             cx.stop_propagation();
             return;
         }
+        // The search field has the keyboard: what it left alone (arrows, Tab, Ctrl-C)
+        // bubbles here, and is not the program's.
+        if self.search_has_keys(window, cx) {
+            return;
+        }
         if !self.marked.is_empty() {
             return;
         }
