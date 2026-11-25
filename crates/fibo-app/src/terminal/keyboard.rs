@@ -129,13 +129,17 @@ pub fn option_types(setting: OptionKey, name: &str, composed: Option<&str>) -> b
         }),
     }
 }
-pub fn encode(vt: &Vt, physical: Key, name: &str, mods: Mods) -> Result<Vec<u8>, String> {
+/// Without `vt` (no screen yet, while the link is coming back) the keys take the
+/// terminal's default modes: Backspace, Enter and Ctrl keys read the same in any of them.
+pub fn encode(vt: Option<&Vt>, physical: Key, name: &str, mods: Mods) -> Result<Vec<u8>, String> {
     let mut mods = mods;
     if unshifted(name) != name {
         mods |= Mods::SHIFT;
     }
     let mut encoder = key::Encoder::new().map_err(|e| e.to_string())?;
-    encoder.set_options_from_terminal(vt.terminal());
+    if let Some(vt) = vt {
+        encoder.set_options_from_terminal(vt.terminal());
+    }
     encoder.set_macos_option_as_alt(key::OptionAsAlt::True);
     let mut event = key::Event::new().map_err(|e| e.to_string())?;
     event.set_key(physical).set_mods(mods);
@@ -175,19 +179,19 @@ mod tests {
             ("space", 0),
         ] {
             assert_eq!(
-                encode(&vt, physical_key(name).unwrap(), name, Mods::CTRL).unwrap(),
+                encode(Some(&vt), physical_key(name).unwrap(), name, Mods::CTRL).unwrap(),
                 [byte],
                 "{name}"
             );
         }
         // Ghostty deliberately uses fixterms CSI-u for Ctrl-[ (even without Kitty).
         assert_eq!(
-            encode(&vt, Key::BracketLeft, "[", Mods::CTRL).unwrap(),
+            encode(Some(&vt), Key::BracketLeft, "[", Mods::CTRL).unwrap(),
             b"\x1b[91;5u"
         );
         for name in ["a", "c", "z", "1", "/"] {
             assert_eq!(
-                encode(&vt, physical_key(name).unwrap(), name, Mods::ALT).unwrap(),
+                encode(Some(&vt), physical_key(name).unwrap(), name, Mods::ALT).unwrap(),
                 format!("\x1b{name}").as_bytes()
             );
         }
@@ -231,7 +235,7 @@ mod tests {
             let key = physical_key(name).unwrap();
             assert!(!is_text_key(name), "{name}");
             assert_eq!(
-                encode(&vt, key, name, Mods::empty()).unwrap(),
+                encode(Some(&vt), key, name, Mods::empty()).unwrap(),
                 bytes,
                 "{name}"
             );
@@ -250,12 +254,15 @@ mod tests {
             ("\\", 92),
         ] {
             assert_eq!(
-                encode(&vt, physical_key(name).unwrap(), name, Mods::CTRL).unwrap(),
+                encode(Some(&vt), physical_key(name).unwrap(), name, Mods::CTRL).unwrap(),
                 format!("\x1b[{code};5u").as_bytes()
             );
         }
-        assert_eq!(encode(&vt, Key::A, "a", Mods::ALT).unwrap(), b"\x1b[97;3u");
+        assert_eq!(
+            encode(Some(&vt), Key::A, "a", Mods::ALT).unwrap(),
+            b"\x1b[97;3u"
+        );
         vt.feed(b"\x1b[<u");
-        assert_eq!(encode(&vt, Key::C, "c", Mods::CTRL).unwrap(), [3]);
+        assert_eq!(encode(Some(&vt), Key::C, "c", Mods::CTRL).unwrap(), [3]);
     }
 }

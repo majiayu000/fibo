@@ -411,7 +411,7 @@ impl Pane {
             };
             match result {
                 // Arrow keys for a full-screen program: keep the selection.
-                Ok(Some(b)) => self.send_input(b, false, cx),
+                Ok(Some(b)) => self.send_input(b, super::input::Origin::Made, cx),
                 Err(e) => self.local_error = Some(e),
                 _ => (),
             }

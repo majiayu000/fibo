@@ -16,6 +16,8 @@ mod links;
 mod mouse;
 #[path = "pane_notes.rs"]
 mod notes;
+#[path = "pane_offline.rs"]
+mod offline;
 #[path = "pane_overlays.rs"]
 mod overlays;
 #[path = "pane_paste.rs"]
@@ -89,6 +91,8 @@ pub struct Pane {
     /// Typed into a look at another machine's terminal while its input was being taken
     /// over: sent once the new link has the screen.
     held: Vec<u8>,
+    /// Typed while the link to the host was down, offered once it is back (#517).
+    offline: offline::OfflineInput,
     handoff: Option<Handoff>,
     select: Selection,
     /// Backing scale of the last paint, for drags reported outside the pane.
@@ -271,6 +275,7 @@ impl Pane {
             requested_cell: (0, 0),
             local_error: None,
             held: Vec::new(),
+            offline: Default::default(),
             handoff: None,
             select: Selection::new(),
             scale: 1.,
@@ -404,7 +409,7 @@ impl Pane {
         };
         match bytes {
             // A focus report is not typing; it leaves the scrollback where it is.
-            Some(Ok(b)) if !b.is_empty() => self.send_input(b, false, cx),
+            Some(Ok(b)) if !b.is_empty() => self.send_input(b, input::Origin::Made, cx),
             Some(Err(e)) => {
                 self.local_error = Some(e.to_string());
                 cx.notify();
