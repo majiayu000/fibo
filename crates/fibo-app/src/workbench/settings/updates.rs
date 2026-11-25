@@ -79,6 +79,14 @@ impl SettingsView {
                     (t!("重试"), true)
                 }),
             ),
+            Phase::Page(r) => (
+                t!(
+                    "有新版本 {version}（当前 {current}），从发布页下载新的安装包",
+                    version = r.version,
+                    current
+                ),
+                Some((t!("打开发布页"), true)),
+            ),
             Phase::Homebrew(r) => (
                 t!(
                     "有新版本 {version}；这份由 Homebrew 安装，请运行 {v2}",

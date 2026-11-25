@@ -6,6 +6,7 @@ use std::process::{Command, Output, Stdio};
 
 pub const SUPPORTED: bool = true;
 pub const INSTALLER: bool = true;
+pub const PAGE_ONLY: bool = false;
 const NO: &str = "Windows 上由安装程序更新";
 /// No console window flashes up from the window's process.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
 pub const INSTALLER: bool = false;
+pub const PAGE_ONLY: bool = false;
 pub const SUPPORTED: bool = true;
 
 pub fn cache_dir() -> Option<PathBuf> {

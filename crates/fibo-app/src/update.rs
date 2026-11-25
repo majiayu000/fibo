@@ -6,8 +6,9 @@
 //! has the new host take every terminal over (`spawn_host(root, true)`), exactly as when a
 //! bundle is swapped by hand and the app reopened. On Windows (`core::INSTALLER`) the
 //! release's installer runs over the install once this process has quit, after stopping
-//! the host (its terminals cannot pass on there), and starts the new window.
-use fibo_core::update::{self as core, Found, Release, Tools, Version};
+//! the host (its terminals cannot pass on there), and starts the new window. On Linux
+//! (`core::PAGE_ONLY`) dpkg owns the install: a newer release is only offered as its page.
+use fibo_core::update::{self as core, Offer, Release, Tools, Version};
 use gpui::{App, AppContext, Global};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -29,12 +30,15 @@ pub enum Phase {
     },
     /// Homebrew installed this copy; `brew upgrade --cask fibo` updates it.
     Homebrew(Release),
+    /// A newer release this copy cannot install itself (the Linux `.deb`); its page has the
+    /// package.
+    Page(Release),
 }
 
 #[derive(Clone, Debug)]
 pub struct Updates {
-    /// The bundle this app runs from, or on Windows the folder it is installed in; none for a
-    /// development build, which never updates.
+    /// The bundle this app runs from, or on Windows and Linux the folder it is installed in;
+    /// none for a development build, which never updates.
     pub bundle: Option<PathBuf>,
     pub current: Version,
     pub auto: bool,
@@ -56,10 +60,12 @@ impl Updates {
             patch: 0,
             pre: None,
         });
-        let exe = core::SUPPORTED
-            .then(|| std::env::current_exe().ok())
-            .flatten();
+        let exe = core::CHECKS.then(|| std::env::current_exe().ok()).flatten();
         let packaged = exe.and_then(|exe| {
+            if core::PAGE_ONLY {
+                // dpkg installed the version this program was built as.
+                return core::deb_install_dir(&exe).map(|dir| (dir, built.to_string()));
+            }
             if core::INSTALLER {
                 // What the installer put there is the version this program was built as.
                 return core::install_dir(&exe).map(|dir| (dir, built.to_string()));
@@ -85,7 +91,9 @@ impl Updates {
     /// Homebrew or the release page can install.
     pub fn offered(&self) -> Option<&Release> {
         match &self.phase {
-            Phase::Available(r) | Phase::Installing(r) | Phase::Homebrew(r) => Some(r),
+            Phase::Available(r) | Phase::Installing(r) | Phase::Homebrew(r) | Phase::Page(r) => {
+                Some(r)
+            }
             Phase::Failed { release, .. } => Some(release),
             _ => None,
         }
@@ -164,15 +172,13 @@ pub fn check(manual: bool, cx: &mut App) {
             .await;
         cx.update(|cx| {
             let bundle = updates(cx).and_then(|u| u.bundle.clone());
-            let phase = match found {
-                Ok(Found::Latest(v)) => Phase::Latest(v),
-                Ok(Found::Newer(r))
-                    if bundle
-                        .is_some_and(|b| core::homebrew_managed(&b, &core::brew_prefixes())) =>
-                {
-                    Phase::Homebrew(r)
-                }
-                Ok(Found::Newer(r)) => Phase::Available(r),
+            let homebrew =
+                || bundle.is_some_and(|b| core::homebrew_managed(&b, &core::brew_prefixes()));
+            let phase = match found.map(|f| core::offer(f, core::PAGE_ONLY, homebrew)) {
+                Ok(Offer::Latest(v)) => Phase::Latest(v),
+                Ok(Offer::Page(r)) => Phase::Page(r),
+                Ok(Offer::Homebrew(r)) => Phase::Homebrew(r),
+                Ok(Offer::Install(r)) => Phase::Available(r),
                 Err(e) if manual => Phase::CheckFailed(e),
                 Err(_) => match before {
                     Phase::Checking => Phase::Idle,
@@ -210,7 +216,8 @@ pub fn set_auto(on: bool, cx: &mut App) -> Result<(), String> {
 }
 
 /// 立即更新: installs the offered release and restarts into it. Where this copy cannot be
-/// replaced, or Homebrew owns it, the release page or the brew command is the answer instead.
+/// replaced (the Linux `.deb`, no permission), or Homebrew owns it, the release page or the
+/// brew command is the answer instead.
 pub fn install(cx: &mut App) {
     let Some(u) = updates(cx) else { return };
     let (Some(bundle), Some(release)) = (u.bundle.clone(), u.offered().cloned()) else {
@@ -218,7 +225,7 @@ pub fn install(cx: &mut App) {
     };
     match &u.phase {
         Phase::Available(_) => {}
-        Phase::Failed { page: true, .. } => return cx.open_url(&release.page),
+        Phase::Page(_) | Phase::Failed { page: true, .. } => return cx.open_url(&release.page),
         Phase::Failed { .. } => {}
         _ => return,
     }

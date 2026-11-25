@@ -74,8 +74,9 @@ StartupWMClass=fibo
     dependencies = subprocess.check_output(
         ['dpkg-shlibdeps', '-O', *[f'-e{binaries / n}' for n in ('fibo', 'fibo-app')]],
         cwd=stage, text=True).strip().removeprefix('shlibs:Depends=')
-    # These are loaded at runtime rather than linked into the executable.
-    dependencies += ', libvulkan1, libwayland-client0, libxkbcommon-x11-0, xdg-utils, libnotify-bin'
+    # These are loaded or run at runtime rather than linked into the executable; curl asks
+    # GitHub for the latest version (the daily update check).
+    dependencies += ', libvulkan1, libwayland-client0, libxkbcommon-x11-0, xdg-utils, libnotify-bin, curl'
     shutil.rmtree(debian)
     control = stage / 'DEBIAN'
     control.mkdir()
