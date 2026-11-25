@@ -11,31 +11,48 @@ pub(super) const LIMIT: usize = 4 * 1024;
 const PREVIEW_CHARS: usize = 60;
 
 #[derive(Default)]
-pub(super) struct OfflineInput(Vec<u8>);
+pub(super) struct OfflineInput {
+    kept: Vec<u8>,
+    /// Some input was refused for room: the offer says so, since the warning made at
+    /// the time is gone with the link it was shown on.
+    overflowed: bool,
+}
 
 impl OfflineInput {
     /// Keeps `bytes` after what is already kept. Past `LIMIT` none of them are kept, so
     /// what is offered later is never a line with a hole in it.
     pub(super) fn keep(&mut self, bytes: &[u8]) -> bool {
-        if self.0.len() + bytes.len() > LIMIT {
+        if self.kept.len() + bytes.len() > LIMIT {
+            self.overflowed = true;
             return false;
         }
-        self.0.extend_from_slice(bytes);
+        self.kept.extend_from_slice(bytes);
         true
     }
     pub(super) fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.kept.is_empty()
+    }
+    pub(super) fn overflowed(&self) -> bool {
+        self.overflowed
     }
     pub(super) fn take(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.0)
+        self.overflowed = false;
+        std::mem::take(&mut self.kept)
+    }
+    /// What `take` gave out and the link refused, back in front of anything kept since.
+    pub(super) fn give_back(&mut self, mut bytes: Vec<u8>, overflowed: bool) {
+        bytes.append(&mut self.kept);
+        self.kept = bytes;
+        self.overflowed |= overflowed;
     }
     pub(super) fn clear(&mut self) {
-        self.0.clear();
+        self.kept.clear();
+        self.overflowed = false;
     }
     /// The end of what was kept as the offer shows it: Enter as ⏎, a backspace as ⌫, Tab
     /// as ⇥, and key sequences (arrows and the like) left out, since they draw nothing.
     pub(super) fn preview(&self) -> String {
-        let text = String::from_utf8_lossy(&self.0);
+        let text = String::from_utf8_lossy(&self.kept);
         let mut out = Vec::new();
         let mut chars = text.chars().peekable();
         while let Some(c) = chars.next() {
@@ -135,15 +152,18 @@ impl Pane {
         cx.notify();
         true
     }
-    /// What was kept, for the offer, once the link is back.
-    pub(super) fn offline_offer(&self) -> Option<String> {
+    /// What was kept, for the offer, once the link is back, and whether some was not.
+    pub(super) fn offline_offer(&self) -> Option<(String, bool)> {
         let state = self.connection.state.lock().ok()?;
-        self.offline.offer(&state)
+        let text = self.offline.offer(&state)?;
+        Some((text, self.offline.overflowed()))
     }
+    /// Sends what was kept; refused by the link (its outbox full), it stays on offer.
     pub(super) fn send_offline(&mut self, cx: &mut Context<Self>) {
+        let overflowed = self.offline.overflowed();
         let bytes = self.offline.take();
-        if !bytes.is_empty() {
-            self.input(bytes, cx);
+        if !bytes.is_empty() && !self.input_sent(bytes.clone(), cx) {
+            self.offline.give_back(bytes, overflowed);
         }
         cx.notify();
     }

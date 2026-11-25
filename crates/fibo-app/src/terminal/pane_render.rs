@@ -411,7 +411,7 @@ impl Render for Pane {
                     .child(div().id("paste-cancel").cursor_pointer().child(t!("取消"))
                         .on_click(cx.listener(|this,_,_,cx|{this.paste_confirm=None;cx.notify();}))))
             })
-            .when_some(self.offline_offer(), |d, text| {
+            .when_some(self.offline_offer(), |d, (text, overflowed)| {
                 d.child(
                     div()
                         .px(px(T::S12))
@@ -425,7 +425,11 @@ impl Render for Pane {
                             div()
                                 .flex_1()
                                 .text_color(T::color(T::secondary()))
-                                .child(t!("断线时输入的还没发：{text}", text)),
+                                .child(if overflowed {
+                                    t!("断线时输入的还没发（超出 4 KiB 的没留）：{text}", text)
+                                } else {
+                                    t!("断线时输入的还没发：{text}", text)
+                                }),
                         )
                         .child(
                             div()

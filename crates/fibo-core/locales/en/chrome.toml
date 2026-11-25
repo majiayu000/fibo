@@ -54,6 +54,7 @@
 "连接断开 · 正在重连…" = "Disconnected · reconnecting…"
 "连接断开 · 正在重连… 刚才输入的先留着，连上后问你发不发" = "Disconnected · reconnecting… What you typed is kept; once back you choose whether to send it"
 "断线时输入的还没发：{text}" = "Typed while disconnected, not sent yet: {text}"
+"断线时输入的还没发（超出 4 KiB 的没留）：{text}" = "Typed while disconnected, not sent yet (past 4 KiB was not kept): {text}"
 "发送" = "Send"
 "丢弃" = "Discard"
 "正在载入画面…" = "Loading the screen…"

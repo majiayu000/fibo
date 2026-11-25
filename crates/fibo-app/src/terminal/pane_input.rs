@@ -25,13 +25,19 @@ impl Pane {
     }
     /// Like Ghostty, typing also drops the selection.
     pub(super) fn input(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) {
+        self.input_sent(bytes, cx);
+    }
+    /// `input`, false when the link refused it (the pane says why): nothing was sent,
+    /// kept or held.
+    pub(super) fn input_sent(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) -> bool {
         // Clear a painted highlight even when the program sends no output.
         if self.clear_selection() && self.screen.selection.iter().any(Option::is_some) {
             cx.notify();
         }
         self.follow_input(cx);
-        self.send_input(bytes, Origin::Typed, cx);
+        let sent = self.deliver(bytes, Origin::Typed, cx);
         cx.emit(super::PaneEvent::Typed);
+        sent
     }
     pub fn terminal_id(&self) -> &str {
         &self.terminal
@@ -121,6 +127,9 @@ impl Pane {
         }
     }
     pub(super) fn send_input(&mut self, bytes: Vec<u8>, origin: Origin, cx: &mut Context<Self>) {
+        self.deliver(bytes, origin, cx);
+    }
+    fn deliver(&mut self, bytes: Vec<u8>, origin: Origin, cx: &mut Context<Self>) -> bool {
         let lossy = origin == Origin::Pointer;
         self.take_size(cx);
         self.typed = Some(Instant::now());
@@ -128,26 +137,31 @@ impl Pane {
         // Behind what is still waiting for the taken link, in order.
         if !self.held.is_empty() {
             self.held.extend(bytes);
-            return;
+            return true;
         }
         // Typed while the link is down: kept for the user to send once it is back.
         if self.keep_offline(&bytes, origin == Origin::Typed, cx) {
-            return;
+            return true;
         }
         let ready = self.connection.state.lock().is_ok_and(|s| s.vt.is_some());
         if !ready && self.host().attached() {
             self.held = bytes;
-            return;
+            return true;
         }
         match self.connection.send(Request::Input { bytes, lossy }) {
             Err(error) => {
                 self.local_error = Some(error);
                 cx.notify();
+                false
             }
             // A refusal is about that one input: once typing gets through again, the
             // line stops claiming the pane is broken.
-            Ok(()) if !lossy && self.local_error.take().is_some() => cx.notify(),
-            Ok(()) => (),
+            Ok(()) => {
+                if !lossy && self.local_error.take().is_some() {
+                    cx.notify();
+                }
+                true
+            }
         }
     }
     /// The terminal's own keymap actions (查找、清屏、字号、滚动), from a key or the menu bar.
@@ -250,13 +264,21 @@ impl Pane {
         {
             return;
         }
+        let recovering = self.reconnecting || self.reconnect_delay > 0;
         let result = (|| -> Result<Vec<u8>, String> {
             let state = self
                 .connection
                 .state
                 .lock()
                 .map_err(|_| "terminal state unavailable")?;
-            let vt = state.vt.as_ref().ok_or(t!("终端尚未恢复"))?;
+            // Before the new screen arrives Backspace and Enter are kept with the text
+            // typed around them, or the line offered later is not the one typed (#517).
+            let vt = match state.vt.as_ref() {
+                None if !super::offline::link_down(&state, recovering) => {
+                    return Err(t!("终端尚未恢复").into());
+                }
+                vt => vt,
+            };
             let mut mods = Mods::empty();
             if k.modifiers.control {
                 mods |= Mods::CTRL;

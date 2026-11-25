@@ -224,3 +224,49 @@ fn typed_while_disconnected_reaches_the_program_after_reconnecting() {
     drop((first, second));
     let _ = std::fs::remove_file(path);
 }
+
+/// Refused for room while the link was down, the warning went with that link; the
+/// offer still says some was not kept, until what was kept is sent or dropped.
+#[test]
+fn the_offer_remembers_input_refused_for_room() {
+    let mut kept = OfflineInput::default();
+    assert!(kept.keep(&[b'a'; LIMIT]));
+    assert!(!kept.overflowed());
+    assert!(!kept.keep(b"b"));
+    assert!(kept.overflowed());
+    kept.clear();
+    assert!(!kept.overflowed());
+}
+
+/// 发送 with the link's outbox full sent nothing: what was kept is offered again, in
+/// front of anything typed since, and still says what was not kept.
+#[test]
+fn what_the_link_refused_is_given_back() {
+    let mut kept = OfflineInput::default();
+    kept.keep(&[b'a'; LIMIT]);
+    kept.keep(b"b");
+    let overflowed = kept.overflowed();
+    let bytes = kept.take();
+    assert!(!kept.overflowed());
+    kept.keep(b"x");
+    kept.give_back(bytes, overflowed);
+    assert!(kept.overflowed());
+    let back = kept.take();
+    assert_eq!(back.len(), LIMIT + 1);
+    assert_eq!(back.last(), Some(&b'x'));
+}
+
+/// Before the new screen arrives there is no terminal to ask for its modes; Backspace
+/// and Enter are kept all the same, or `ab⌫c` would be offered as `abc`.
+#[test]
+fn keys_typed_before_the_screen_is_back_are_encoded() {
+    use crate::terminal::keyboard::encode;
+    use fibo_core::terminal::libghostty_vt::key::{Key, Mods};
+    let none = Mods::empty();
+    assert_eq!(
+        encode(None, Key::Backspace, "backspace", none).unwrap(),
+        b"\x7f"
+    );
+    assert_eq!(encode(None, Key::Enter, "enter", none).unwrap(), b"\r");
+    assert_eq!(encode(None, Key::C, "c", Mods::CTRL).unwrap(), [3]);
+}
