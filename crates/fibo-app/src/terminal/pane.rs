@@ -24,6 +24,9 @@ mod paste;
 mod render;
 #[path = "pane_search.rs"]
 mod search;
+#[cfg(all(test, debug_assertions, feature = "visual-test"))]
+#[path = "pane_search_tests.rs"]
+mod search_tests;
 #[path = "pane_state.rs"]
 mod state;
 #[cfg(feature = "visual-test")]
