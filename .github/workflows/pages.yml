@@ -29,8 +29,8 @@ jobs:
           cp docs/site/index.html docs/site/sitemap.xml docs/site/robots.txt docs/site/CNAME _site/
           cp docs/site/polish.css docs/site/extra.css docs/site/extra.js docs/site/i18n.js _site/
           cp -R docs/site/assets docs/site/agents docs/site/art-b docs/site/blog docs/site/brand docs/site/fonts docs/site/media docs/site/shots _site/
-      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: _site
-      - uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
         id: deployment
