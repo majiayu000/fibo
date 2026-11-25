@@ -347,7 +347,6 @@ export default function Chat() {
   );
   // What it does since its last message, in the flow where that work's folded line will stand,
   // above the words sent meanwhile: they wait for it, as in the CLI.
-  const lastAt = messages.at(-1)?.at ?? 0;
   const lastAgentAt = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'agent') return messages[i].at;
     return 0;
@@ -362,7 +361,8 @@ export default function Chat() {
             machine,
             session,
             running: !!running,
-            since: Math.max(card?.running_since ?? 0, lastAt),
+            // A word sent mid-turn does not restart the stretch the command count covers.
+            since: Math.max(card?.running_since ?? 0, lastAgentAt),
             after: lastAgentAt,
             doing: card?.doing,
             workflows: workflowLines ? workflowLines.split('\n') : undefined,
@@ -371,7 +371,7 @@ export default function Chat() {
             onOpen: canList ? () => toTools() : undefined,
           }
         : null,
-    [session, workflowLines, running, card?.doing, card?.running_since, lastAt, lastAgentAt, machine, focused, toTools, canList, canLast],
+    [session, workflowLines, running, card?.doing, card?.running_since, lastAgentAt, machine, focused, toTools, canList, canLast],
   );
 
   // Inverted list: index 0 sits at the bottom.
