@@ -49,7 +49,6 @@ struct Worktree {
 }
 
 struct Repository {
-    root: PathBuf,
     upstream: String,
     linked: Vec<Worktree>,
 }
@@ -212,7 +211,6 @@ fn repositories(stream: &local::Stream, dirs: &WorkspaceDirs) -> io::Result<Vec<
             })
             .collect();
         repos.push(Repository {
-            root,
             upstream: upstream.trim().to_owned(),
             linked,
         });
@@ -371,7 +369,9 @@ fn reclaim(
         if entire && eligible.entire && dirs.space(path).is_none() {
             // This action has already been confirmed. Do not kill git halfway through
             // unlinking files if the user closes the surface.
-            let output = git_command(&repo.root)
+            // Run from the worktree itself: a bare main repository refuses commands run
+            // inside it under safe.bareRepository=explicit.
+            let output = git_command(path)
                 .args(["worktree", "remove", "--"])
                 .arg(path)
                 .stderr(std::process::Stdio::piped())

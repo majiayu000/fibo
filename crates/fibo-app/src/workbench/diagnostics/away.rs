@@ -11,6 +11,7 @@ impl Workbench {
         if let Some(view) = self.diagnostics.take() {
             let retain = view.update(cx, |view, _| {
                 view.close_worktree_scan();
+                view.resample_on_open = view.sampling.is_none();
                 view.sampling.is_some() || view.has_worktree_result_or_cleanup()
             });
             if retain {
@@ -24,7 +25,12 @@ impl Workbench {
     /// The status bar's 本机诊断 cell: the plain entry, or the state of a closed run.
     pub(crate) fn diagnose_item(&self, cx: &Context<Self>) -> gpui::AnyElement {
         let open = cx.listener(|this, _, window, cx| this.show_diagnostics(window, cx));
-        let Some(view) = &self.diagnostics_away else {
+        // Kept only for the disk scan, there is no run to report: the plain entry.
+        let Some(view) = self
+            .diagnostics_away
+            .as_ref()
+            .filter(|view| !view.read(cx).resample_on_open)
+        else {
             return item("diagnose-host", false)
                 .aria_label(t!("本机诊断"))
                 .child(t!("本机诊断"))

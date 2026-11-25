@@ -196,3 +196,99 @@ fn worktree_cleanup_rechecks_merge_dirty_in_use_ignored_data_and_space_folders()
     })
     .unwrap();
 }
+
+/// A bare main repository (`git clone --bare` plus worktrees): git refuses to run inside
+/// it under `safe.bareRepository=explicit`, so removal must run from the worktree.
+#[test]
+fn worktree_cleanup_removes_a_worktree_of_a_bare_repository() {
+    use std::path::Path;
+
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let output = fibo_core::git::command(dir)
+            .args(args)
+            .stderr(Stdio::piped())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap().trim_end().into()
+    }
+
+    let h = Host::start();
+    h.setup();
+    let root = h.root.canonicalize().unwrap();
+    let source = root.join("source");
+    fs::create_dir(&source).unwrap();
+    git(&source, &["init", "-b", "main"]);
+    git(
+        &source,
+        &[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "--no-gpg-sign",
+            "--allow-empty",
+            "-m",
+            "fixture",
+        ],
+    );
+    let merged = git(&source, &["rev-parse", "HEAD"]);
+    let bare = root.join("bare.git");
+    git(
+        &root,
+        &[
+            "clone",
+            "--bare",
+            "-q",
+            source.to_str().unwrap(),
+            "bare.git",
+        ],
+    );
+    let in_bare = |args: &[&str]| {
+        let mut all = vec!["--git-dir", bare.to_str().unwrap()];
+        all.extend_from_slice(args);
+        git(&root, &all)
+    };
+    in_bare(&["update-ref", "refs/remotes/origin/main", &merged]);
+    in_bare(&[
+        "symbolic-ref",
+        "refs/remotes/origin/HEAD",
+        "refs/remotes/origin/main",
+    ]);
+    let tree = root.join("feature");
+    in_bare(&["worktree", "add", "-b", "feature", tree.to_str().unwrap()]);
+    // The scan finds the repository through a space on another of its worktrees.
+    let anchor = root.join("anchor");
+    in_bare(&["worktree", "add", "-b", "anchor", anchor.to_str().unwrap()]);
+    h.call(Request::Edit {
+        request: None,
+        edit: Edit::AddSpace(Space {
+            id: "anchor".into(),
+            name: "anchor".into(),
+            cwd: anchor.to_str().unwrap().into(),
+        }),
+    })
+    .unwrap();
+
+    let Reply::ReclaimableWorktrees(rows) = h.call(Request::ScanWorktrees).unwrap() else {
+        panic!("missing worktree list")
+    };
+    let row = rows
+        .iter()
+        .find(|w| Path::new(&w.path) == tree)
+        .unwrap_or_else(|| panic!("bare repository's worktree not listed: {rows:?}"));
+    assert!(row.can_remove);
+    let reply = h.call(Request::ReclaimWorktree {
+        path: tree.to_str().unwrap().into(),
+        head: merged.clone(),
+        entire: true,
+    });
+    assert!(matches!(reply, Ok(Reply::Ok)), "{reply:?}");
+    assert!(!tree.exists());
+    assert!(!in_bare(&["worktree", "list", "--porcelain"]).contains(tree.to_str().unwrap()));
+}

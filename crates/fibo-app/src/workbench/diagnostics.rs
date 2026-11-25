@@ -158,6 +158,9 @@ pub(super) struct DiagnosticView {
     memory_folded: HashSet<String>,
     all_memory_rows: bool,
     notes_open: bool,
+    /// Kept after closing only for the disk scan's results: its measurement was already
+    /// seen, so the next open samples afresh instead of showing old numbers.
+    resample_on_open: bool,
     worktrees: Option<worktrees::WorktreePanel>,
     unplaced_open: bool,
     unplaced_confirm: Option<String>,
@@ -326,6 +329,7 @@ impl DiagnosticView {
             memory_folded: HashSet::new(),
             all_memory_rows: false,
             notes_open: false,
+            resample_on_open: false,
             worktrees: (fibo_platform::fs::DISK_USAGE_SUPPORTED && local)
                 .then(worktrees::WorktreePanel::default),
             unplaced_open: false,
@@ -542,19 +546,7 @@ impl Workbench {
                 Some((t.id.clone(), (space.name.clone(), space.id.clone())))
             })
             .collect();
-        // A run closed mid-way or a cached disk scan comes back without restarting.
-        if let Some(view) = self.diagnostics_away.take() {
-            let focus = view.update(cx, |view, cx| {
-                view.terminal_spaces = terminal_spaces;
-                cx.notify();
-                view.focus.clone()
-            });
-            window.focus(&focus, cx);
-            self.diagnostics = Some(view);
-            cx.notify();
-            return;
-        }
-        let terminals = self
+        let terminals: HashMap<String, String> = self
             .workspace
             .terminals
             .iter()
@@ -568,6 +560,23 @@ impl Workbench {
                 (t.id.clone(), title)
             })
             .collect();
+        // A run closed mid-way comes back as it is. One kept only for its disk scan
+        // keeps the scan but measures again: its numbers were already seen.
+        if let Some(view) = self.diagnostics_away.take() {
+            let focus = view.update(cx, |view, cx| {
+                view.terminal_spaces = terminal_spaces;
+                if std::mem::take(&mut view.resample_on_open) {
+                    view.terminals = terminals;
+                    view.start(cx);
+                }
+                cx.notify();
+                view.focus.clone()
+            });
+            window.focus(&focus, cx);
+            self.diagnostics = Some(view);
+            cx.notify();
+            return;
+        }
         let view = cx.new(|cx| {
             DiagnosticView::new(
                 self.store.socket().to_owned(),
