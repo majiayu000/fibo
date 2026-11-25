@@ -310,13 +310,13 @@ impl Store {
 }
 
 /// A launched terminal whose placing failed runs with no pane to show or close it, and
-/// trying again starts another: it is stopped, unless the host shows it placed after all
-/// (an edit whose reply was lost). `Stop` is as old as `Launch`, so any host takes it.
+/// trying again starts another: it is stopped once the host shows it unplaced. When the
+/// host shows it placed after all (an edit whose reply was lost), or cannot be asked (a
+/// slow attached host), it keeps running. `Stop` is as old as `Launch`, so any host takes it.
 fn stop_unplaced(socket: &Path, terminal: String) {
-    if let Ok(Reply::Workspace(w)) = rpc(socket, &Request::Workspace)
-        && w.terminal_tab(&terminal).is_some()
-    {
-        return;
+    match rpc(socket, &Request::Workspace) {
+        Ok(Reply::Workspace(w)) if w.terminal_tab(&terminal).is_none() => {}
+        _ => return,
     }
     if let Err(e) = rpc(socket, &Request::Stop { id: terminal }) {
         eprintln!("停下没放进画面的终端失败: {e}");

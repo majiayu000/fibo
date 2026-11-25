@@ -6,8 +6,8 @@ use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-/// A host that launches anything, refuses the edits `refuse` names (`"pending"`,
-/// `"place"`), and shows the terminal placed when `shown` says so.
+/// A host that launches anything, refuses what `refuse` names (`"pending"`, `"place"`,
+/// `"workspace"`), and shows the terminal placed when `shown` says so.
 struct Fake {
     asked: Mutex<Vec<Request>>,
     refuse: &'static [&'static str],
@@ -54,6 +54,7 @@ fn serve(name: &str, refuse: &'static [&'static str], shown: bool) -> (PathBuf, 
                     ..
                 } if refused("place") => Reply::Error("画面不存在".into()),
                 Request::Edit { .. } => Reply::Workspace(Workspace::default()),
+                Request::Workspace if refused("workspace") => Reply::Error("超时".into()),
                 Request::Workspace => Reply::Workspace(placed(host.shown)),
                 Request::Stop { .. } => Reply::Ok,
                 other => panic!("not asked by a launch: {other:?}"),
@@ -138,6 +139,15 @@ fn a_terminal_whose_task_could_not_be_recorded_is_stopped() {
 #[test]
 fn a_terminal_the_host_shows_placed_is_not_stopped() {
     let (socket, fake) = serve("launch-shown-after-all", &["place"], true);
+    assert!(launch(socket, None).is_err());
+    assert_eq!(asked(&fake), ["launch", "place", "workspace"]);
+}
+
+/// One whose placement cannot be checked (the host did not answer) may be in a pane:
+/// it keeps running rather than being stopped on a guess.
+#[test]
+fn a_terminal_whose_placement_is_unknown_is_not_stopped() {
+    let (socket, fake) = serve("launch-unknown", &["place", "workspace"], false);
     assert!(launch(socket, None).is_err());
     assert_eq!(asked(&fake), ["launch", "place", "workspace"]);
 }
