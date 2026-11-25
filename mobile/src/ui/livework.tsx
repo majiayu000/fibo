@@ -1,60 +1,60 @@
-// What a running turn is doing, under its messages: its last few calls by default, or the
-// computer's screen as it is now. Between its messages a turn can work for minutes, and one
-// line saying 「看它到现在做了什么」 read as nothing happening (2026-11-09). Asked every two
-// seconds, only while it runs and this screen is open.
+// What a running turn has done since its last message, drawn where that work's folded line
+// will stand once it answers: the same 「干了 · 跑了」 line, turning, with its last few calls
+// under it, as a CLI draws its calls in place. Before 2026-11-25 this was a box beside the
+// messages with 步骤 / 终端 tabs: the calls sat somewhere else while running than once done,
+// and the screen's last lines were the CLI's own input box. The screen is the 终端 button.
+// Asked every two seconds, only while it runs and this screen is open.
 import { memo, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { remote } from '@/remote/hub';
-import { Icon } from './icons';
 import { mono } from './kit';
+import { type Tools, Worked } from './message';
 import { useTheme } from './theme';
-import { lastLines, took, type ToolCall } from './toolview';
+import { took, type ToolCall } from './toolview';
 import { tr } from '@/i18n';
 
 const POLL_MS = 2000;
 const STEPS = 3;
-const LINES = 8;
-
-type Mode = 'steps' | 'screen';
-/** The last choice, for the next conversation opened while the app runs. */
-let chosen: Mode = 'steps';
 
 /** The steps' words: what the Agent said a call does, else what it ran. */
 const words = (c: ToolCall) => c.about || c.label || c.name;
 
-export const LiveWork = memo(function LiveWork({
-  machine,
-  terminal,
-  session,
-  doing,
-  workflows,
-  steps: canSteps,
-  screen: canScreen,
-  focused,
-  onOpen,
-}: {
+export type LiveProps = {
   machine: string;
-  terminal: string;
   session: string;
+  running: boolean;
+  /** Where this stretch of work began, Unix seconds: the turn's start or its last message. */
+  since: number;
+  /** The Agent's last message, Unix seconds: calls before it are folded above it already. */
+  after: number;
   /** The card's phrase for it (`运行 cargo build`); none when it has said nothing yet. */
   doing?: string | null;
   workflows?: string[];
   /** The computer answers `toolcalls` with `last`. */
   steps: boolean;
-  /** The computer answers `read`. */
-  screen: boolean;
   focused: boolean;
   /** Every call so far, on its own page; undefined when the computer cannot list them. */
   onOpen?: () => void;
-}) {
+};
+
+export const LiveWork = memo(function LiveWork({ machine, session, running, since, after, doing, workflows, steps, focused, onOpen }: LiveProps) {
   const t = useTheme();
-  const [mode, setMode] = useState<Mode>(canSteps ? chosen : 'screen');
   const [calls, setCalls] = useState<ToolCall[]>([]);
-  const [lines, setLines] = useState<string[]>([]);
-  const shown: Mode | null = mode === 'steps' && canSteps ? 'steps' : canScreen && mode === 'screen' ? 'screen' : null;
+  const [sum, setSum] = useState<Tools>({});
+  const [now, setNow] = useState(() => Date.now() / 1000);
+  const ticking = running && focused;
 
   useEffect(() => {
-    if (!focused || !shown) return;
+    if (!ticking) return;
+    const tick = setInterval(() => setNow(Date.now() / 1000), 1000);
+    return () => clearInterval(tick);
+  }, [ticking]);
+
+  useEffect(() => {
+    // A new message starts a new stretch: what was listed is folded above it now.
+    setCalls([]);
+    setSum({});
+    if (!ticking || !steps) return;
     let live = true;
     let asking = false;
     const ask = async () => {
@@ -62,17 +62,12 @@ export const LiveWork = memo(function LiveWork({
       if (!r || asking) return;
       asking = true;
       try {
-        // The steps name what it does on the line above, so they are read under the screen too.
-        if (canSteps) {
-          const page = await r.request('toolcalls', { session, last: STEPS });
-          if (live) setCalls(page.calls ?? []);
-        }
-        if (shown === 'screen') {
-          const read = await r.request('read', { terminal, lines: LINES + 16 });
-          if (live) setLines(lastLines(String(read.text ?? ''), LINES));
-        }
+        const page = await r.request('toolcalls', { session, last: STEPS });
+        if (!live) return;
+        setCalls(page.calls ?? []);
+        setSum(page.tools ?? {});
       } catch {
-        // The next tick tries again; the line above still says what it does.
+        // The next tick tries again; the line still says what it does.
       } finally {
         asking = false;
       }
@@ -83,53 +78,26 @@ export const LiveWork = memo(function LiveWork({
       live = false;
       clearInterval(timer);
     };
-  }, [machine, terminal, session, shown, focused, canSteps]);
+  }, [machine, session, ticking, steps, after]);
 
-  const latest = calls[calls.length - 1];
-  const head = doing ? tr('正在{doing}', { doing }) : latest ? words(latest) : tr('看它到现在做了什么');
-  const pick = (m: Mode) => {
-    chosen = m;
-    setMode(m);
-  };
+  const shown = calls.filter((c) => !c.at || c.at >= after);
+  const head = doing ? tr('正在{doing}', { doing }) : tr('看它到现在做了什么');
 
   return (
-    <View style={[s.box, { borderColor: t.sep }]}>
-      {(canSteps || canScreen || doing) && <View style={s.head}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={tr('{head}，看它到现在做了什么', { head })}
-          disabled={!onOpen}
+    <View style={{ gap: 4 }}>
+      {running && (
+        <Worked
+          tools={{ ...sum, took: since > 0 ? Math.max(0, now - since) : 0 }}
+          live={head}
+          label={tr('{head}，看它到现在做了什么', { head })}
           onPress={onOpen}
-          style={s.now}
-        >
-          <ActivityIndicator size="small" color={t.dim} />
-          <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: t.text }}>
-            {head}
-          </Text>
-          {!!onOpen && <Icon name="right" size={14} width={2} color={t.dim} />}
-        </Pressable>
-        {canSteps && canScreen && (
-          <View accessibilityRole="tablist" style={[s.seg, { backgroundColor: t.well }]}>
-            {(['steps', 'screen'] as const).map((m) => (
-              <Pressable
-                key={m}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: mode === m }}
-                hitSlop={6}
-                onPress={() => pick(m)}
-                style={[s.segOne, mode === m && { backgroundColor: t.card }]}
-              >
-                <Text style={{ fontSize: 12, color: mode === m ? t.text : t.dim }}>{m === 'steps' ? tr('步骤') : tr('终端')}</Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
-      </View>}
+        />
+      )}
       {workflows?.map((line, i) => (
         <Text key={i} numberOfLines={1} style={{ fontSize: 12.5, color: t.text }}>◇ {line}</Text>
       ))}
-      {shown === 'steps' &&
-        calls.map((c) => (
+      {running &&
+        shown.map((c) => (
           <View key={c.id} style={s.step}>
             <Text style={{ width: 14, textAlign: 'center', fontSize: 12, color: c.failed ? t.err : c.open ? t.run : t.ok }}>
               {c.failed ? '✗' : c.open ? '·' : '✓'}
@@ -140,25 +108,10 @@ export const LiveWork = memo(function LiveWork({
             <Text style={{ fontSize: 12, color: t.dim }}>{c.open ? tr('还没结束') : took(c.took_ms)}</Text>
           </View>
         ))}
-      {shown === 'screen' && lines.length > 0 && (
-        <View style={[s.screen, { backgroundColor: t.well }]}>
-          {lines.map((l, i) => (
-            <Text key={i} numberOfLines={1} ellipsizeMode="clip" style={{ fontFamily: mono, fontSize: 11.5, lineHeight: 16, color: t.text }}>
-              {l || ' '}
-            </Text>
-          ))}
-        </View>
-      )}
     </View>
   );
 });
 
 const s = StyleSheet.create({
-  box: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 8, gap: 4 },
-  head: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  now: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 28 },
-  seg: { flexDirection: 'row', borderRadius: 8, padding: 2 },
-  segOne: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 6 },
   step: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 22 },
-  screen: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, marginTop: 2 },
 });

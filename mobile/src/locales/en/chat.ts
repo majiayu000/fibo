@@ -95,7 +95,6 @@ export const chat: Record<string, Entry> = {
   '正在{doing}': 'Now: {doing}',
   看它到现在做了什么: 'See what it has done so far',
   '{head}，看它到现在做了什么': '{head}. See what it has done so far',
-  步骤: 'Steps',
   还没结束: 'Not finished',
   终端最后几行: 'Terminal’s last lines',
   画面是空的: 'The screen is empty',
