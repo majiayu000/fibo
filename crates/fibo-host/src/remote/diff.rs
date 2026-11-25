@@ -5,7 +5,6 @@
 //! monitor nor rewrites the index, and no textconv driver runs. Patches are capped per file
 //! and in all; a file past the cap still lists, with its counts and `truncated`.
 use fibo_core::model::Workspace;
-use fibo_core::protocol::*;
 use fibo_remote::protocol as rp;
 use serde_json::{json, Value};
 use std::io::{self, BufRead, BufReader, Read};
@@ -29,14 +28,12 @@ pub(super) fn diff(socket: &Path, request: &Value, role: super::Role) -> io::Res
     }
     let (cwd, checks) = match (request["cwd"].as_str(), request["terminal"].as_str()) {
         (Some(cwd), _) => (super::dirs::expand(cwd)?, Vec::new()),
-        (None, Some(t)) => match rpc(socket, &Request::Workspace)? {
-            Reply::Workspace(w) => {
-                let term = (w.terminals.iter().find(|x| x.id == t))
-                    .ok_or_else(|| io::Error::other(t!("终端不存在")))?;
-                (PathBuf::from(w.terminal_cwd(term)), checks(&w, t))
-            }
-            other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
-        },
+        (None, Some(t)) => {
+            let w = super::held::workspace(socket)?;
+            let term = (w.terminals.iter().find(|x| x.id == t))
+                .ok_or_else(|| io::Error::other(t!("终端不存在")))?;
+            (PathBuf::from(w.terminal_cwd(term)), checks(&w, t))
+        }
         (None, None) => return Err(io::Error::other(t!("diff 需要 terminal 或 cwd"))),
     };
     let mut diff = read(&cwd)?;

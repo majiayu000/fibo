@@ -1,7 +1,7 @@
 //! `lastsession`: which conversation 「接着上次的对话」 would pick up. `open` with `resume`
 //! then runs it the way the window does (`writes::open`).
 use fibo_core::agent::Agent;
-use fibo_core::{model::*, protocol::*, status};
+use fibo_core::{model::*, status};
 use fibo_remote::protocol as rp;
 use serde_json::{json, Value};
 use std::io;
@@ -31,10 +31,7 @@ pub(super) fn last(w: &Workspace, cwd: &str, agent: Agent) -> Option<rp::LastSes
 pub(super) fn last_session(socket: &Path, request: &Value) -> io::Result<Value> {
     let cwd = super::dirs::expand(super::text(request, "cwd")?)?;
     let agent = super::writes::agent_named(super::text(request, "agent")?)?;
-    let w = match rpc(socket, &Request::Workspace)? {
-        Reply::Workspace(w) => w,
-        other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
-    };
+    let w = super::held::workspace(socket)?;
     let session = last(&w, &cwd.to_string_lossy(), agent);
     Ok(json!(rp::Last { session }))
 }

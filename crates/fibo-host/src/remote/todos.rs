@@ -1,7 +1,7 @@
 //! Todos from a phone: note one down, and close or reopen one. Closing is the user's call
 //! (`fibo todo` refuses it to Agents); a phone is the user's own hand, so it may.
 use super::{text, writes::edit_once};
-use fibo_core::{model::*, protocol::*};
+use fibo_core::model::*;
 use serde_json::Value;
 use std::io;
 use std::path::Path;
@@ -65,8 +65,5 @@ pub(super) fn outcome(socket: &Path, request: &Value, client: Option<&str>) -> i
 }
 
 pub(super) fn workspace(socket: &Path) -> io::Result<Workspace> {
-    match rpc(socket, &Request::Workspace)? {
-        Reply::Workspace(w) => Ok(w),
-        other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
-    }
+    super::held::workspace(socket)
 }

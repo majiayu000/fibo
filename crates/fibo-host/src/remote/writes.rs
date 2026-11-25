@@ -230,10 +230,7 @@ pub(super) fn add_space(socket: &Path, request: &Value, client: Option<&str>) ->
         return Err(io::Error::other(t!("目录不存在")));
     }
     let cwd = path.to_string_lossy().trim_end_matches('/').to_owned();
-    let w = match rpc(socket, &Request::Workspace)? {
-        Reply::Workspace(w) => w,
-        other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
-    };
+    let w = super::held::workspace(socket)?;
     let space = match (w.spaces.iter()).find(|s| s.cwd.trim_end_matches('/') == cwd) {
         Some(space) => space.clone(),
         None => {
@@ -333,10 +330,7 @@ pub(super) fn outcome(socket: &Path, request: &Value, client: Option<&str>) -> i
     let seen = match request["turn"].as_str() {
         None => None,
         Some(turn) => {
-            let w = match rpc(socket, &Request::Workspace)? {
-                Reply::Workspace(w) => w,
-                other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
-            };
+            let w = super::held::workspace(socket)?;
             let now = (w.agent_sessions.iter().find(|s| s.id == id))
                 .ok_or_else(|| io::Error::other(t!("会话不存在")))?;
             // The turn is what the client saw; who else changed the outcome it cannot say.

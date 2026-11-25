@@ -17,10 +17,7 @@ pub(super) fn diff(socket: &Path, request: &Value) -> io::Result<Value> {
     let (Some(terminal), None) = (request["terminal"].as_str(), request["cwd"].as_str()) else {
         return Err(io::Error::other(fibo_core::i18n::text(BY_TERMINAL_ONLY)));
     };
-    let w = match rpc(socket, &Request::Workspace)? {
-        Reply::Workspace(w) => w,
-        other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
-    };
+    let w = super::held::workspace(socket)?;
     let term = (w.terminals.iter().find(|x| x.id == terminal))
         .ok_or_else(|| io::Error::other(t!("终端不存在")))?;
     let cwd = w.terminal_cwd(term);

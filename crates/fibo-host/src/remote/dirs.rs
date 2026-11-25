@@ -3,7 +3,7 @@
 //! says whether it is a git repository (branch, changed files, linked work tree), how
 //! many live conversations work in it, and whether a terminal is in it now. Full role
 //! only: it shows the machine's layout.
-use fibo_core::{model::*, protocol::*};
+use fibo_core::model::*;
 use fibo_remote::protocol as rp;
 use serde_json::{json, Value};
 use std::collections::{HashMap, VecDeque};
@@ -44,10 +44,7 @@ pub(super) fn expand_exact(path: &str) -> io::Result<PathBuf> {
 }
 
 pub(super) fn dirs(socket: &Path, request: &Value) -> io::Result<Value> {
-    let w = match rpc(socket, &Request::Workspace)? {
-        Reply::Workspace(w) => w,
-        other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
-    };
+    let w = super::held::workspace(socket)?;
     let home = home()?;
     let live = Live::of(&w);
     let query = request["query"]

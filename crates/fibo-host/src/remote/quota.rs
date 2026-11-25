@@ -1,6 +1,5 @@
 //! `quota`: the account limits each Agent last reported, as the window's quota button
 //! shows them (`fibo_core::quota::latest`: readings at most a week old).
-use fibo_core::protocol::*;
 use fibo_core::quota;
 use fibo_remote::protocol as rp;
 use serde_json::{json, Value};
@@ -8,10 +7,7 @@ use std::io;
 use std::path::Path;
 
 pub(super) fn quota(socket: &Path) -> io::Result<Value> {
-    let w = match rpc(socket, &Request::Workspace)? {
-        Reply::Workspace(w) => w,
-        other => return Err(io::Error::other(format!("unexpected reply: {other:?}"))),
-    };
+    let w = super::held::workspace(socket)?;
     // Plugins were found at start (`agent::install`); their quota sources load once here.
     quota::install();
     let plugins = quota::from_plugins();
