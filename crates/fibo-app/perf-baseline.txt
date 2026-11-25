@@ -4,11 +4,11 @@ frames-cardplay 10.54
 frames-cardrest 35.26
 frames-changes 6.36
 frames-changesdraw 15.39
-frames-main 55.35
+frames-main 41.32
 frames-motion 49.47
 frames-pane 4.52
 frames-rail 45.24
-frames-railrest 60.43
+frames-railrest 43.94
 frames-scroll 40.75
 frames-settings-pane-appearance 6.14
 frames-settings-pane-general 5.77
