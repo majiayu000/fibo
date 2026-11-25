@@ -49,7 +49,11 @@ LOCK = PAGES / ".phone-walk-lock"
 STALE_S = 600
 ADB = os.environ.get("ADB", str(Path.home() / "Library/Android/sdk/platform-tools/adb"))
 SERIAL = os.environ.get("ANDROID_SERIAL", "")
-RUNTIME = Path.home() / ".local/share/keepline-workbench"
+# The host's runtime as core picks it (`legacy::runtime_dir`): fibo-workbench, else an
+# existing mooring- or keepline-workbench.
+_share = Path.home() / ".local/share"
+RUNTIME = next((d for d in (_share / "fibo-workbench", _share / "mooring-workbench",
+                            _share / "keepline-workbench") if d.is_dir()), _share / "fibo-workbench")
 MARKER = "phone-walk"
 PACKAGE = "dev.mooring.mobile"
 # Buttons that change something. They are only pressed while the screen shows the marker,
