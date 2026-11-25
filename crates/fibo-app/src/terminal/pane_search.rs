@@ -38,6 +38,13 @@ impl Pane {
         window.focus(&self.focus, cx);
         cx.notify();
     }
+    /// Whether typing goes to the search field rather than the terminal.
+    pub(super) fn search_has_keys(&self, window: &Window, cx: &App) -> bool {
+        self.search
+            .field
+            .as_ref()
+            .is_some_and(|f| f.focus_handle(cx).is_focused(window))
+    }
     fn search_query(&self, cx: &App) -> Option<String> {
         self.search
             .field
