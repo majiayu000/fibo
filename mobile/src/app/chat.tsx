@@ -12,6 +12,7 @@ import { UNSURE } from '@/remote/named';
 import { useAsk } from '@/remote/useAsk';
 import { useSuggestion } from '@/remote/useSuggestion';
 import { cacheChat, cachedChat } from '@/store/chatCache';
+import { type ChatDraft, chatDraft, keepChatDraft } from '@/store/chatDraft';
 import { drop, enqueue, retry, useOutbox } from '@/store/outbox';
 import { type Pending, updatePending, usePending } from '@/store/pending';
 import { rememberSent, useSentPictures } from '@/store/sentPictures';
@@ -27,6 +28,7 @@ import { QueuedSheet } from '@/ui/queuedsheet';
 import type { Picture } from '@/ui/pictures';
 import { cardTitle } from '@/ui/format';
 import { Icon } from '@/ui/icons';
+import { asksElsewhere, asksElsewhereLine } from '@/ui/inbox';
 import { Btn, Nav, Notice, Pill, mono } from '@/ui/kit';
 import { type Message, Mine, Theirs } from '@/ui/message';
 import { partialWords, readBackWords } from '@/ui/parse';
@@ -80,6 +82,9 @@ export default function Chat() {
   // Kept per terminal, not in this screen: a deep link to another conversation reuses it.
   const pending = usePending(machine, terminal);
   const setPending = useCallback((change: (p: Pending[]) => Pending[]) => updatePending(machine, terminal, change), [machine, terminal]);
+  const keepDraft = useCallback((d: ChatDraft) => keepChatDraft(machine, terminal, d), [machine, terminal]);
+  // What asks you in another conversation: said here, or it waits until you go back home.
+  const elsewhere = useMemo(() => asksElsewhereLine(asksElsewhere(machines, machine, terminal)), [machines, machine, terminal]);
   const [term, setTerm] = useState(false);
   const [queuedOpen, setQueuedOpen] = useState(false);
   // The box keeps its focus under the sheet, and Android hands it back when the sheet closes:
@@ -412,6 +417,17 @@ export default function Chat() {
           />
         }
       />
+      {!!elsewhere && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${elsewhere.text} · ${elsewhere.go}`}
+          onPress={() => (elsewhere.one ? router.push({ pathname: '/chat', params: { machine: elsewhere.one.m.id, terminal: elsewhere.one.c.id } }) : router.dismissTo('/'))}
+          style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 18, borderBottomWidth: 1, borderColor: t.sep }, pressed && { backgroundColor: t.well }]}
+        >
+          <Text numberOfLines={1} style={{ fontSize: 14, flex: 1, color: t.wait }}>{elsewhere.text}</Text>
+          <Text style={{ fontSize: 13, color: t.dim }}>{elsewhere.go}</Text>
+        </Pressable>
+      )}
       {!online && (
         <Notice
           text={
@@ -505,6 +521,10 @@ export default function Chat() {
         <Notice text={m.role === 'view' ? tr('这台手机的权限是「只看」，不能发消息') : tr('这台手机的权限是「能答审批」，不能发消息')} />
       ) : (
         <Composer
+          // Its own box per conversation: a link to another one must not bring these words along.
+          key={`${machine}\n${terminal}`}
+          kept={chatDraft(machine, terminal)}
+          onKeep={keepDraft}
           agent={agent}
           model={card?.model}
           permission={card?.permission}

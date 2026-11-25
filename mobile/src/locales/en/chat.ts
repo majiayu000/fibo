@@ -185,4 +185,8 @@ export const chat: Record<string, Entry> = {
   '审批框还没有退出，说明未发送；请稍后在对话里发送': 'The approval is still open. Your explanation was not sent; send it in the conversation once the menu closes.',
   '手机和电脑的 Fibo 协议不一致，请把两端更新到同一版本': 'The phone and computer use different Fibo protocols. Update both to the same version.',
   '连接长时间没有传输进展，正在重连': 'No transfer progress for too long. Reconnecting…',
+  '其他会话还有 {n} 件等你': (a) => `${a.n} more waiting for you in other sessions`,
+  '另一个会话{word}：{title}': 'Another session · {word} · {title}',
+  回首页: 'Go home',
+  去看: 'Open',
 };

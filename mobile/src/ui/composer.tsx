@@ -14,6 +14,7 @@ import { MAX_PICTURES, type Picture, pick } from './pictures';
 import { useTheme } from './theme';
 import { tr } from '../i18n';
 import type { AgentControls } from '../remote/hub';
+import type { ChatDraft } from '../store/chatDraft';
 
 export function Composer({
   agent,
@@ -33,6 +34,8 @@ export function Composer({
   canAttach,
   canSteer,
   onError,
+  kept,
+  onKeep,
 }: {
   agent: string;
   /** What the computer says is on. */
@@ -56,11 +59,18 @@ export function Composer({
   onError?: (why: string) => void;
   onStop: () => void;
   onUseSuggestion?: () => void;
+  /** What this conversation's box held last time, read once; `onKeep` hears every change to it. */
+  kept?: ChatDraft;
+  onKeep?: (draft: ChatDraft) => void;
 }) {
   const t = useTheme();
   const bottom = useBottomOverKeyboard();
-  const [draft, setDraft] = useState('');
-  const [pictures, setPictures] = useState<Picture[]>([]);
+  const [draft, setDraft] = useState(kept?.text ?? '');
+  const [pictures, setPictures] = useState<Picture[]>(kept?.pictures ?? []);
+  // The box goes with the screen; what is written in it must not.
+  useEffect(() => {
+    onKeep?.({ text: draft, pictures });
+  }, [draft, pictures, onKeep]);
   const [choosing, setChoosing] = useState(false);
   const [picking, setPicking] = useState(false);
   const input = useRef<ComponentRef<typeof TextInput>>(null);
@@ -90,6 +100,8 @@ export function Composer({
       if (!(await onSend(text.trim(), with_, how))) {
         setDraft(text);
         setPictures(with_);
+        // Left while it was on its way: this box is gone, the words are back for the next one.
+        onKeep?.({ text, pictures: with_ });
       }
     } finally {
       sending.current = false;
