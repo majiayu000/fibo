@@ -1,12 +1,17 @@
 //! Replacing the installed app with a downloaded release: fetching, unpacking, reading and
 //! checking a bundle with the tools the system ships. macOS replaces its own bundle; Windows
 //! downloads the release's installer and runs it over the install once the window has quit
-//! (`INSTALLER`); elsewhere `SUPPORTED` is false and every call says so.
+//! (`INSTALLER`); Linux only checks for a newer version and points at the release page
+//! (`PAGE_ONLY`); elsewhere `SUPPORTED` is false and every call says so.
 use std::path::{Path, PathBuf};
 
 #[cfg_attr(target_os = "macos", path = "macos.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
-#[cfg_attr(not(any(target_os = "macos", windows)), path = "other.rs")]
+#[cfg_attr(target_os = "linux", path = "linux.rs")]
+#[cfg_attr(
+    not(any(target_os = "macos", windows, target_os = "linux")),
+    path = "other.rs"
+)]
 mod imp;
 
 /// Whether an app here can update itself in place.
@@ -14,6 +19,9 @@ pub const SUPPORTED: bool = imp::SUPPORTED;
 /// Whether an update here is the release's installer run over the install
 /// (`install_after_exit`) rather than a bundle swapped in place.
 pub const INSTALLER: bool = imp::INSTALLER;
+/// Whether this app cannot install an update at all but can still check for one (`fetch`)
+/// and send the user to the release page: a system package manager owns the install.
+pub const PAGE_ONLY: bool = imp::PAGE_ONLY;
 
 /// Where downloads wait to be checked.
 pub fn cache_dir() -> Option<PathBuf> {

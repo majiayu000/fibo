@@ -16,14 +16,18 @@
 //!   Any failed check removes what was extracted and leaves the installed app untouched.
 //! - **Where not.** A bundle Homebrew manages is left to `brew upgrade --cask fibo`, and one
 //!   this user cannot replace (owned by root, a read-only volume) gets the release page.
+//! - **Linux.** The `.deb` in `/usr/lib/fibo` belongs to dpkg: the check runs as above, and a
+//!   newer release is offered as its page (`notice`), never installed from here.
 mod install;
 mod installer;
+mod notice;
 mod release;
 mod system;
 mod version;
 
 pub use install::*;
 pub use installer::*;
+pub use notice::*;
 pub use release::*;
 pub use system::System;
 pub use version::Version;

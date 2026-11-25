@@ -54,7 +54,7 @@ brew install --cask majiayu000/tap/fibo
 
 **Windows（预览版）：** 运行 `Fibo-Setup-<版本>.exe`，只装给当前用户，不用管理员权限。安装程序还没有代码签名，SmartScreen 会提示「未知发布者」：点「更多信息」，再点「仍要运行」。Windows 版不会自己更新，要更新就运行新版安装程序；更新前先结束 Fibo 里的终端：Windows 上的后台还不能把终端交给新版本。0.1.2 在 Windows 11 x64 上试过，0.1.3 目前只在 CI 上试过。
 
-**Linux（预览版）：** Ubuntu 24.04，x64 或 arm64：`sudo apt install ./fibo_<版本>_amd64.deb`（或 `fibo_<版本>_arm64.deb`）。不会自己更新，要更新就装新版的包。目前在 CI 和全新容器里装过、跑过，还没在真桌面上试。
+**Linux（预览版）：** Ubuntu 24.04，x64 或 arm64：`sudo apt install ./fibo_<版本>_amd64.deb`（或 `fibo_<版本>_arm64.deb`）。不会自己更新：和 Mac 版一样每天向 GitHub 查一次，有新版本时状态栏显示并给出发布页链接；要更新就装新版的包。目前在 CI 和全新容器里装过、跑过，还没在真桌面上试。
 
 ### 从源码构建
 
@@ -124,7 +124,7 @@ tmux 能让终端在窗口关掉后继续跑，Fibo 的后台也一样。tmux �
 退出或更新 App，终端都继续跑（Windows 预览版更新前要先结束终端）。重启电脑会结束它们，被打断的会话会提示在原目录接着聊。
 
 **有 Windows 或 Linux 版吗？**
-Apple silicon 或 Intel 的 Mac，macOS 14 及以上。Windows x64 和 Ubuntu 24.04（x64、arm64）在发布页有预览版安装包：都不会自动更新，Windows 安装程序还没有代码签名。0.1.3 的预览版目前只在 CI 上试过（Linux 还在全新容器里装过），还没在真桌面上试。
+Apple silicon 或 Intel 的 Mac，macOS 14 及以上。Windows x64 和 Ubuntu 24.04（x64、arm64）在发布页有预览版安装包：Windows 靠运行新版安装程序更新，Linux 只提示并给发布页链接，Windows 安装程序还没有代码签名。0.1.3 的预览版目前只在 CI 上试过（Linux 还在全新容器里装过），还没在真桌面上试。
 
 **数据放在哪，会不会传出去？**
 终端和会话索引在 `~/.local/share/fibo-workbench`，设置和插件在 `~/.config/fibo`。Fibo 只读 Agent 自己的对话记录，不上传。手机中继要你自己开启，内容端到端加密。

@@ -2,6 +2,7 @@
 use std::path::{Path, PathBuf};
 
 pub const INSTALLER: bool = false;
+pub const PAGE_ONLY: bool = false;
 pub const SUPPORTED: bool = false;
 const NO: &str = "这个系统上不能自动更新";
 

@@ -403,6 +403,7 @@ mod tests {
             saved,
             "nothing new, nothing saved"
         );
+        drop((mirror, db, writer)); // Windows 不删还开着的文件，cli.db 的写连接也要关.
         std::fs::remove_dir_all(&root).unwrap();
     }
 

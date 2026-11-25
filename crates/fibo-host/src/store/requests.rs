@@ -110,6 +110,7 @@ mod tests {
         store.started(&id("waiting")).unwrap();
         store.forgotten(&id("waiting")).unwrap();
         assert_eq!(store.settled(&id("waiting")).unwrap(), None);
+        drop(store); // Windows 不删还开着的文件.
         std::fs::remove_dir_all(root).unwrap();
     }
 }

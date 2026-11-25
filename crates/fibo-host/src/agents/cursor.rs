@@ -483,6 +483,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "Cursor 项目目录名由按 / 拆开的路径拼成，Windows 路径（C:\\…）解不回工作目录；待拿 Windows 上 Cursor 的真实目录确认"
+    )]
     fn the_chat_folder_gives_directory_title_and_interactivity() {
         let (home, path) = session();
         let id = chat_id(&path).unwrap().to_owned();

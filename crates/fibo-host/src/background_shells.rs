@@ -449,6 +449,7 @@ mod tests {
     }
     /// `exec` leaves no trace of the command in the shell: found by what it ran.
     #[test]
+    #[cfg_attr(windows, ignore = "测试直接起 /bin/sh，Windows 上没有")]
     fn a_real_process_an_exec_became_is_found() {
         let command = "cd /tmp && exec /bin/sleep 31.7";
         let mut child = std::process::Command::new(a_login_shell())
@@ -497,6 +498,7 @@ mod tests {
     }
     /// The whole chain on a real process: a shell quoting that way is found and is a job.
     #[test]
+    #[cfg_attr(windows, ignore = "测试直接起 /bin/sh，Windows 上没有")]
     fn a_real_shell_quoting_a_quote_the_new_way_is_found() {
         let command = "perl -e 'sleep 30' # quote-9b2e";
         let quoted = command.replace('\'', r#"'"'"'"#);
@@ -518,6 +520,7 @@ mod tests {
         assert!(seen.contains_key("q"), "{seen:?}");
     }
     #[test]
+    #[cfg_attr(windows, ignore = "测试直接起 /bin/sh，Windows 上没有")]
     fn real_children_are_found_by_command_and_only_a_chosen_port_reads_as_a_server() {
         let job = "sleep 30; echo job-7f3a";
         // Bound to 0: the system picks an ephemeral port, as a renderer does for its browser.
@@ -572,6 +575,7 @@ s.listen(); time.sleep(30)' # srv-7f3a"#;
     /// A real script with its own fixed-port server and client, beside a server whose
     /// client is outside its tree. Undoing the own-client check fails this.
     #[test]
+    #[cfg_attr(windows, ignore = "测试直接起 /bin/sh，Windows 上没有")]
     fn a_real_script_using_its_own_port_differs_from_a_server_with_an_outside_client() {
         let bind = "import socket,subprocess,sys,time
 for p in range({from}, {to}):

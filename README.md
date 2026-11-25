@@ -54,7 +54,7 @@ Open Fibo, run `claude` or `codex` in its terminal, and the session shows up in 
 
 **Windows (preview):** run `Fibo-Setup-<version>.exe`; it installs for your user only, no admin needed. The installer is not code-signed yet, so SmartScreen warns about an unknown publisher: choose *More info*, then *Run anyway*. The Windows build does not update itself; run the newer installer to update, after ending the terminals in Fibo first: on Windows the host cannot yet hand its terminals to the new version. 0.1.2 was tried on Windows 11 x64; 0.1.3 so far only on a CI runner.
 
-**Linux (preview):** on Ubuntu 24.04, x64 or arm64, run `sudo apt install ./fibo_<version>_amd64.deb` (or `fibo_<version>_arm64.deb`). It does not update itself; install the newer package to update. It has been installed and run on CI runners and in a fresh container, not yet on a real desktop.
+**Linux (preview):** on Ubuntu 24.04, x64 or arm64, run `sudo apt install ./fibo_<version>_amd64.deb` (or `fibo_<version>_arm64.deb`). It does not update itself: it checks GitHub once a day like the Mac build and shows a newer version in the status bar with a link to the release page; install the newer package to update. It has been installed and run on CI runners and in a fresh container, not yet on a real desktop.
 
 ### Build from source
 
@@ -124,7 +124,7 @@ Nothing to redo. On first start Fibo moves `~/.config/mooring` to `~/.config/fib
 Quitting or updating the app leaves every terminal running (the Windows preview needs them ended before an update). Restarting the machine ends them; each interrupted session then offers to resume its conversation in the same directory.
 
 **Windows or Linux?**
-Macs with Apple silicon or Intel, macOS 14 or later. Windows x64 and Ubuntu 24.04 (x64, arm64) have preview packages on the release page; neither updates itself, and the Windows installer is not code-signed yet. The 0.1.3 previews have been tried on CI runners (Linux also in a fresh container), not yet on a real desktop.
+Macs with Apple silicon or Intel, macOS 14 or later. Windows x64 and Ubuntu 24.04 (x64, arm64) have preview packages on the release page; Windows updates by running the newer installer, Linux only points at the release page, and the Windows installer is not code-signed yet. The 0.1.3 previews have been tried on CI runners (Linux also in a fresh container), not yet on a real desktop.
 
 **Where is my data, and does anything leave my machine?**
 Terminals and the session index live in `~/.local/share/fibo-workbench`, settings and plugins in `~/.config/fibo`. Fibo reads the agents' own transcripts and never uploads them. The phone relay is opt-in and end-to-end encrypted.

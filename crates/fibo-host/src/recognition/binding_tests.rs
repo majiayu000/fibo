@@ -611,6 +611,7 @@ fn only_a_screen_tied_thread_can_leave_its_pane_and_only_for_an_open_one() {
 }
 
 #[test]
+#[cfg_attr(windows, ignore = "按进程打开的文件认转录，Windows 上还没有这条路")]
 fn an_open_file_binding_follows_a_new_transcript_in_the_same_process() {
     let dir = std::env::temp_dir().join(format!("mooring-open-switch-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&dir).unwrap();

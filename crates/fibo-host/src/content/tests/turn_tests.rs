@@ -675,6 +675,10 @@ fn claude_empty_plan_call_reads_the_cli_plan_on_its_first_approval() {
 }
 
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "期望值是 Unix 路径 /config/plans/…，Windows 的 Path::join 用反斜杠"
+)]
 fn plan_file_identity_is_from_the_cli_record_not_tool_arguments() {
     let source = Source {
         path: "/config/projects/project/session.jsonl".into(),

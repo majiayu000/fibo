@@ -3,6 +3,7 @@ use super::*;
 
 mod bars;
 mod client_frame;
+mod close_key;
 mod keys;
 mod launch;
 mod layer_keys;

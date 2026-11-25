@@ -55,6 +55,7 @@ fn an_archived_conversation_comes_back_as_itself() {
     let (_, loaded) = Store::open(&root).unwrap();
     assert_eq!(loaded.agent_sessions.len(), 1);
     assert_eq!(loaded.agent_sessions[0].name, "我起的名");
+    drop(host); // Windows 不删还开着的文件.
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -66,5 +67,6 @@ fn archiving_writes_no_row_away() {
     let (_, loaded) = Store::open(&root).unwrap();
     assert_eq!(loaded.agent_sessions.len(), 1);
     assert_eq!(loaded.terminals.len(), 1);
+    drop(host); // Windows 不删还开着的文件.
     fs::remove_dir_all(root).unwrap();
 }

@@ -26,6 +26,8 @@ const UNIX_ONLY: &[&str] = &[
     "crates/fibo-platform/src/fs/mod.rs",
     // Only the plugin-facing test client; the window and host never use it.
     "crates/fibo-remote/src/client.rs",
+    // curl for the Linux update check (app_bundle::PAGE_ONLY).
+    "crates/fibo-platform/src/app_bundle/linux.rs",
     // /usr/bin/security, the macOS keychain.
     "crates/fibo-core/src/secret.rs",
     // screencapture, in the macOS screenshot harness.

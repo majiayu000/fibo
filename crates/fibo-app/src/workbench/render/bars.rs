@@ -202,6 +202,19 @@ impl Workbench {
                 )
             })
     }
+    /// The link has been cut off long enough for its strip: this machine's window starts its
+    /// host once per outage, the way 「重新连接」 does (`reconnect` leaves a host that still
+    /// answers alone; a takeover never refuses the socket). Another machine's forward
+    /// reconnects by itself, and a restart under way starts its own host.
+    pub(in crate::workbench) fn start_lost_host(&mut self, cx: &mut Context<Self>) {
+        cx.notify();
+        if self.restarting || crate::attach::Host::of(self.store.socket()).attached() {
+            return;
+        }
+        if self.store.start_host_once() {
+            self.reconnect(cx);
+        }
+    }
     /// Starts a host when none answers; the status link then resubscribes on its own.
     pub(in crate::workbench) fn reconnect(&mut self, cx: &mut Context<Self>) {
         if self.reconnecting {
@@ -225,6 +238,7 @@ impl Workbench {
             let _ = this.update(cx, |this, cx| {
                 this.reconnecting = false;
                 if let Err(e) = result {
+                    this.store.note_start_failed();
                     this.error = Some(t!("没能启动后台：{e}", e));
                 }
                 cx.notify();

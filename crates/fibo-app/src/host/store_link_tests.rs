@@ -1,6 +1,41 @@
-use super::store::Store;
+use super::store::{CUT_OFF_NOTICE, Store};
 use crate::connection::StatusLink;
 use fibo_core::protocol::{RecognitionPhase, RecognitionStatus};
+use std::time::Instant;
+
+/// A host that died stayed gone behind 「后台连接断开，正在重新连接…」: the status link only
+/// retried the old socket, and a new host came only from the small 「重新连接」 (11-25). Once
+/// cut off the window starts one, once per outage; a failed start stops the strip promising.
+#[test]
+fn a_cut_off_link_starts_the_host_once_per_outage() {
+    let (tx, _rx) = futures::channel::mpsc::unbounded();
+    let mut store = Store::new("/nonexistent/mooring.sock".into(), tx);
+    store.take_link(StatusLink::Lost(
+        "识别状态连接中断：connection refused".into(),
+    ));
+    assert!(!store.start_host_once(), "a blip within the grace period");
+
+    store.take_link(StatusLink::Status(Box::default()));
+    let long_ago = Instant::now() - CUT_OFF_NOTICE;
+    store.lost_at("识别状态连接中断：connection refused".into(), long_ago);
+    assert!(store.start_host_once(), "cut off, and no host was started");
+    assert!(
+        !store.start_host_once(),
+        "a second start in the same outage"
+    );
+    assert!(!store.start_failed());
+    store.note_start_failed();
+    assert!(
+        store.start_failed(),
+        "the strip still says it is reconnecting"
+    );
+
+    // The host answers again: the next outage gets its own start.
+    store.take_link(StatusLink::Status(Box::default()));
+    assert!(!store.start_failed());
+    store.lost_at("识别状态连接中断：broken pipe".into(), long_ago);
+    assert!(store.start_host_once(), "a later outage started no host");
+}
 
 /// Woken from sleep, the host found a deleted log folder and said recognition was
 /// Interrupted; every connection still worked, yet the window showed 「后台连接断开」 for
