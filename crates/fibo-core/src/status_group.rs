@@ -103,13 +103,20 @@ const NEEDS_ORDER: [Status; 4] = [
     Status::Review,
     Status::Background,
 ];
+/// Where a state stands inside 要你处理 (`NEEDS_ORDER`): what blocks the Agent before a
+/// finished turn to check. One that is not there goes last.
+pub fn needs_order(g: Status) -> usize {
+    NEEDS_ORDER
+        .iter()
+        .position(|o| *o == g)
+        .unwrap_or(NEEDS_ORDER.len())
+}
 /// Sidebar row tiers by the shown state: what needs you (`attention`, in `NEEDS_ORDER`),
 /// then live work, then the rest, then sessions opened but not yet spoken to, then what
 /// has gone quiet. Inside a tier the newest comes first.
 pub fn rank(g: Status, attention: bool) -> (u8, usize) {
     if attention {
-        let at = NEEDS_ORDER.iter().position(|o| *o == g);
-        return (0, at.unwrap_or(NEEDS_ORDER.len()));
+        return (0, needs_order(g));
     }
     match bucket(g) {
         Bucket::Running => (1, 0),

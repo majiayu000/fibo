@@ -291,26 +291,38 @@ impl Workbench {
             Trust(String),
             There(usize, Box<Card>, String),
         }
-        let mut all: Vec<(String, Next)> = self
+        // What blocks an Agent comes up before a finished turn to check (`needs_order`).
+        let tier = |g: Option<Status>| g.map_or(usize::MAX, fibo_core::status_group::needs_order);
+        let mut all: Vec<(usize, String, Next)> = self
             .needs_you()
             .into_iter()
-            .map(|s| (s.id.clone(), Next::Here(s.clone())))
+            .map(|s| {
+                let g = status_of(&self.workspace, s);
+                (tier(Some(g)), s.id.clone(), Next::Here(s.clone()))
+            })
             .collect();
+        // A folder to trust holds the Agent back as a question does.
         all.extend(
             self.trust_asks()
                 .into_iter()
-                .map(|t| (t.clone(), Next::Trust(t))),
+                .map(|t| (tier(Some(Status::Waiting)), t.clone(), Next::Trust(t))),
         );
         for index in 0..self.machines.len() {
             for r in self.remote_rows_of(index) {
                 if r.online && !r.quiet && r.card.needs_you {
-                    all.push((r.key, Next::There(index, Box::new(r.card), r.host_name)));
+                    let g = r.card.status.as_deref().and_then(Status::from_key);
+                    all.push((
+                        tier(g),
+                        r.key,
+                        Next::There(index, Box::new(r.card), r.host_name),
+                    ));
                 }
             }
         }
         if all.is_empty() {
             return;
         }
+        all.sort_by_key(|(tier, _, _)| *tier);
         let current = match self.peek.as_ref().filter(|p| p.remote.is_some()) {
             Some(peek) => Some(peek.terminal.clone()),
             None if self.hosted_view().is_some() => self.hosted_focus(cx),
@@ -327,9 +339,9 @@ impl Workbench {
         };
         let at = all
             .iter()
-            .position(|(key, _)| Some(key) == current.as_ref());
+            .position(|(_, key, _)| Some(key) == current.as_ref());
         let index = next_index(all.len(), at);
-        match all.swap_remove(index).1 {
+        match all.swap_remove(index).2 {
             Next::Here(session) => {
                 if self.peek.as_ref().is_some_and(|p| p.remote.is_some()) {
                     self.close_peek(cx);
