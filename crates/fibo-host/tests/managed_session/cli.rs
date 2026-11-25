@@ -377,8 +377,11 @@ fn command_line_splits_a_pane_beside_a_terminal_and_closes_it() {
 /// screen cannot say which conversation that is when the task ran in this folder before
 /// (v0.1.4 RC2 walk, 2026-11-25: the old conversation, its newest prompt the same task, took
 /// the new pane for good; `recognition::tests::a_task_run_again_binds_its_new_thread…`).
+/// Only once it hands the task over: a run that gave up on an update page started nothing,
+/// and a start kept from its launch made its pane a twin of the retry, which then bound
+/// neither (v0.1.4 RC3 walk, 2026-11-25).
 #[test]
-fn running_an_agent_keeps_the_task_it_hands_over_as_the_panes_start() {
+fn running_an_agent_keeps_the_task_as_the_panes_start_once_it_hands_it_over() {
     let h = Host::start();
     h.setup();
     // Stands in for the shell and the Codex it starts: an input box to hand the task to.
@@ -410,20 +413,46 @@ fn running_an_agent_keeps_the_task_it_hands_over_as_the_panes_start() {
             .any(|t| t.id == "base" && t.state == ProcessState::Running)
     });
     let task = "把发布脚本里的回滚步骤整理成清单";
-    let out = Command::new(env!("CARGO_BIN_EXE_fibo"))
-        .args(["run", "--runtime", &h.root.to_string_lossy()])
-        .args([
-            "codex",
-            task,
-            "--from",
-            "base",
-            "--no-report",
-            "--timeout",
-            "20",
-        ])
-        .env("SHELL", &fake)
-        .output()
-        .unwrap();
+    let run = |shell: &std::path::Path, timeout: &str| {
+        Command::new(env!("CARGO_BIN_EXE_fibo"))
+            .args(["run", "--runtime", &h.root.to_string_lossy()])
+            .args([
+                "codex",
+                task,
+                "--from",
+                "base",
+                "--no-report",
+                "--timeout",
+                timeout,
+            ])
+            .env("SHELL", shell)
+            .output()
+            .unwrap()
+    };
+    // Stands in for a Codex stuck on its update page: no input box ever shows.
+    let stuck_shell = h.root.join("fake-codex-update");
+    fs::write(
+        &stuck_shell,
+        "#!/bin/sh\nprintf '✨ Update available!\\n'\nexec cat >/dev/null\n",
+    )
+    .unwrap();
+    fs::set_permissions(&stuck_shell, fs::Permissions::from_mode(0o755)).unwrap();
+    let out = run(&stuck_shell, "3");
+    assert!(
+        !out.status.success(),
+        "a run with no input box handed its task over"
+    );
+    let stuck: Vec<String> = (h.workspace().terminals.iter())
+        .filter(|t| t.id != "base")
+        .map(|t| t.id.clone())
+        .collect();
+    assert_eq!(stuck.len(), 1, "{stuck:?}");
+    assert_eq!(
+        h.workspace().agent_starts.get(&stuck[0]),
+        None,
+        "a run that never handed its task over keeps a start for its pane"
+    );
+    let out = run(&fake, "20");
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "{err}");
     let id = String::from_utf8_lossy(&out.stdout).trim().to_owned();

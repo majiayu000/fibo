@@ -148,3 +148,27 @@ pub(super) fn cli_exited(host: &mut Host, pid: u32) -> io::Result<()> {
     next.agent_starts.remove(&terminal);
     host.commit(next)
 }
+
+/// `Request::HandingOver`: `fibo run` types its task into `terminal` now, so that is the
+/// message its Agent starts with, from this second on. Kept only then: a run that gave up on
+/// an update page or a login never handed one over, and a start kept from its launch made
+/// that terminal a twin of every later run of the same task, which then bound neither
+/// (v0.1.4 RC3 walk, 2026-11-25). Looked for as a launch's start is.
+pub(super) fn handing_over(shared: &Shared, terminal: &str, start: AgentStart) -> io::Result<()> {
+    {
+        let mut host = lock(shared)?;
+        if !host.terminals.contains_key(terminal) {
+            return Err(io::Error::other(t!("终端 {id} 不存在", id = terminal)));
+        }
+        if host.workspace.current_agent(terminal).is_some() {
+            return Ok(());
+        }
+        let mut next = host.workspace.clone();
+        let at = fibo_core::content::now();
+        next.agent_starts
+            .insert(terminal.to_owned(), AgentStart { at, ..start });
+        host.commit(next)?;
+    }
+    look_for_started(shared, terminal);
+    Ok(())
+}
