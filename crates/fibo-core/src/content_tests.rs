@@ -33,6 +33,24 @@ fn a_running_turn_reads_as_words_not_a_raw_command() {
         command_gist("echo ---; git status --short").as_deref(),
         Some("git status --short")
     );
+    // An echo that writes a file is what the command does, not the `cat` after it.
+    assert_eq!(
+        command_gist("echo \"phone-walk plan line\" >> notes.txt && cat notes.txt").as_deref(),
+        Some("echo phone-walk plan line >> notes.txt")
+    );
+    assert_eq!(
+        command_gist("cat > /Users/me/Desktop/code/project/src/config.toml <<'EOF'\na = 1\nEOF")
+            .as_deref(),
+        Some("cat > config.toml")
+    );
+    // Printing to the screen, stderr or nowhere still names nothing.
+    for printed in [
+        "echo done >&2; make",
+        "echo x > /dev/null; make",
+        "printf '%s' x 2>err.log; make",
+    ] {
+        assert_eq!(command_gist(printed).as_deref(), Some("make"), "{printed}");
+    }
     let record = |kind: &str, summary: &str, at| Evidence {
         kind: kind.into(),
         summary: summary.into(),

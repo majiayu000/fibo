@@ -1,5 +1,6 @@
 //! Small, sourced projections. The transcript and mechanical receipts remain distinct.
 mod event;
+mod gist;
 mod left_behind;
 mod plain;
 mod waited;
@@ -7,6 +8,7 @@ use crate::model::AgentSession;
 #[cfg(test)]
 use crate::model::Workspace;
 pub use crate::subagents::{Subagent, Workflow, WorkflowRun, WorkflowStep};
+pub use gist::command_gist;
 pub use left_behind::LeftBehind;
 pub use plain::plain_line;
 use serde::{Deserialize, Serialize};
@@ -693,74 +695,7 @@ impl Content {
     }
 }
 /// How long a `doing` phrase's command or ask may run before it is cut.
-const DOING_CHARS: usize = 40;
-/// A shell command as a short readable phrase: its program and first few words, with
-/// the noise around it gone. `S=/tmp/x; cd "$S" && FOO=1 cargo build -p app 2>&1 | tail`
-/// reads `cargo build -p app`. Variable assignments, `cd`, `export`, `echo` and wrappers
-/// such as `env` or `time` name nothing; long paths read as their last segment.
-pub fn command_gist(command: &str) -> Option<String> {
-    const WRAPPERS: [&str; 7] = [
-        "env",
-        "time",
-        "nice",
-        "caffeinate",
-        "sudo",
-        "command",
-        "exec",
-    ];
-    const NOISE: [&str; 12] = [
-        "cd", "export", "set", "unset", "source", ".", "echo", "printf", "true", ":", "sleep",
-        "pushd",
-    ];
-    let assignment = |w: &str| {
-        w.split_once('=').is_some_and(|(name, _)| {
-            !name.is_empty()
-                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-                && !name.starts_with(|c: char| c.is_ascii_digit())
-        })
-    };
-    let clean = |w: &str| {
-        w.trim_matches(|c| matches!(c, '"' | '\'' | '(' | ')' | '{' | '}'))
-            .trim_end_matches('…')
-            .to_owned()
-    };
-    let segments = command
-        .split(['\n', ';', '|', '&'])
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
-    for segment in segments {
-        let mut words = segment
-            .split_whitespace()
-            .map(clean)
-            .filter(|w| !w.is_empty())
-            .skip_while(|w| assignment(w) || WRAPPERS.contains(&w.rsplit('/').next().unwrap_or(w)))
-            .peekable();
-        let Some(program) = words.next() else {
-            continue;
-        };
-        let program = program.rsplit('/').next().unwrap_or(&program).to_owned();
-        if program.is_empty()
-            || NOISE.contains(&program.as_str())
-            || program.starts_with('$')
-            || program.chars().all(|c| c.is_ascii_digit())
-        {
-            continue;
-        }
-        let mut gist = vec![program];
-        // Redirections and heredoc markers end what the command says.
-        for w in words
-            .take_while(|w| !w.starts_with(['>', '<']) && !w.starts_with("2>"))
-            .take(3)
-        {
-            gist.push(match w.rsplit_once('/') {
-                Some((_, last)) if w.chars().count() > 24 && !last.is_empty() => last.to_owned(),
-                _ => w,
-            });
-        }
-        return Some(short(&gist.join(" "), DOING_CHARS));
-    }
-    None
-}
+pub(crate) const DOING_CHARS: usize = 40;
 #[cfg(test)]
 #[path = "content_tests.rs"]
 mod tests;
