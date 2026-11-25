@@ -40,13 +40,7 @@ pub(super) fn run_agent(a: Args) -> io::Result<()> {
         })?,
     };
     let parent = resolve(&workspace(&a.socket)?, &from)?;
-    let opened = open(
-        &a,
-        &parent,
-        &[agent.command()],
-        !a.has("split"),
-        Some(start(agent, &task)),
-    )?;
+    let opened = open(&a, &parent, &[agent.command()], !a.has("split"))?;
     let report = !a.has("no-report");
     if report {
         expect_ok(rpc(
@@ -104,15 +98,6 @@ pub(super) fn run_agent(a: Args) -> io::Result<()> {
     }
     Ok(())
 }
-/// What the host keeps of the Agent `fibo run` starts: the task it hands over is the first
-/// message, though typed in once the input shows rather than on the command line. A screen
-/// cannot say which conversation that is: Codex 0.172 logs a first prompt seconds after Enter,
-/// and the same task run again where a pane just ran it draws the old conversation's very
-/// prompt on the new pane first, which then kept the old one for good (v0.1.4 RC2 walk,
-/// 2026-11-25). The start ties the conversation beginning with this task after it started.
-fn start(agent: fibo_core::agent::Agent, task: &str) -> fibo_core::model::AgentStart {
-    fibo_core::model::AgentStart::new(agent, Some(task.to_owned()))
-}
 /// Types `text` into the Agent starting in `id` once its input box shows and the screen
 /// has held still, as the workbench does with a todo's text.
 fn hand_over(
@@ -148,6 +133,20 @@ fn hand_over(
             still = 0;
         }
         if still >= 2 && agent.input_ready(&last) {
+            // What the host keeps of it from now on (`Request::HandingOver`): this task is the
+            // first message, though typed in rather than on the command line. A screen cannot
+            // say which conversation that is: Codex 0.172 logs a first prompt seconds after
+            // Enter, and the same task run again where a pane just ran it draws the old
+            // conversation's very prompt first (v0.1.4 RC2 walk, 2026-11-25). A host before
+            // it refuses it; the task still goes in.
+            let _ = rpc(
+                socket,
+                &Request::HandingOver {
+                    id: id.into(),
+                    start: fibo_core::model::AgentStart::new(agent, Some(text.to_owned())),
+                },
+            )
+            .and_then(expect_ok);
             return expect_ok(rpc(
                 socket,
                 &Request::SendText {

@@ -213,6 +213,14 @@ pub enum Request {
     InputSuggestion {
         id: String,
     },
+    /// `fibo run`, just before it types its task in: `start`'s first message is the one the
+    /// terminal's Agent gets now, kept as `Workspace::agent_starts` the way a `Launch`'s start
+    /// is. Not at launch: a run that never hands its task over has started nothing. Ignored
+    /// once the terminal runs a conversation; hosts before it refuse it.
+    HandingOver {
+        id: String,
+        start: crate::model::AgentStart,
+    },
     /// Scripts and other Agents: text placed in a terminal as a paste, then Enter when
     /// `submit`. Goes in beside whoever is typing there.
     SendText {

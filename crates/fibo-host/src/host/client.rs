@@ -352,6 +352,9 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
         Request::InputSuggestion { id } => suggestion::read(shared, &id),
         Request::Modes(ask) => modes::run(shared, ask),
         Request::AssociateScreen { id } => super::screen_match::associate_pane(shared, &id),
+        Request::HandingOver { id, start } => {
+            super::launch_probe::handing_over(shared, &id, start).map(|()| Reply::Ok)
+        }
         Request::SendText {
             id,
             text,
