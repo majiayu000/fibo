@@ -72,9 +72,7 @@ pub(super) fn not_cycling(socket: &Path, request: &Value) -> io::Result<()> {
         return Ok(());
     }
     let terminal = text(request, "terminal")?;
-    let Reply::Workspace(w) = rpc(socket, &Request::Workspace)? else {
-        return Err(io::Error::other("unexpected reply"));
-    };
+    let w = super::held::workspace(socket)?;
     let Reply::Recognition(seen) = rpc(socket, &Request::RecognitionStatus)? else {
         return Err(io::Error::other("unexpected reply"));
     };

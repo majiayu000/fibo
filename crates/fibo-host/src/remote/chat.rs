@@ -14,13 +14,10 @@ mod tests;
 pub(super) fn session_of(socket: &Path, request: &Value) -> io::Result<String> {
     match (request["session"].as_str(), request["terminal"].as_str()) {
         (Some(s), _) => Ok(s.to_owned()),
-        (None, Some(t)) => match rpc(socket, &Request::Workspace)? {
-            Reply::Workspace(w) => w
-                .current_agent(t)
-                .map(|s| s.id.clone())
-                .ok_or_else(|| io::Error::other(t!("这个终端里没有 Agent 对话"))),
-            other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
-        },
+        (None, Some(t)) => super::held::workspace(socket)?
+            .current_agent(t)
+            .map(|s| s.id.clone())
+            .ok_or_else(|| io::Error::other(t!("这个终端里没有 Agent 对话"))),
         (None, None) => Err(io::Error::other(t!(
             "{v1} 需要 terminal 或 session",
             v1 = request["op"].as_str().unwrap_or("chat")

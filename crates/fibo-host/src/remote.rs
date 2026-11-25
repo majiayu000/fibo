@@ -24,6 +24,7 @@ mod chat;
 mod diff;
 mod diff_summary;
 mod dirs;
+mod held;
 mod image_wait;
 mod images;
 mod list;
@@ -410,21 +411,18 @@ fn follow_plugins(revision: u64) {
 }
 /// The whole of `list`, read from the host.
 fn full_list(socket: &Path) -> io::Result<Value> {
-    match rpc(socket, &Request::Workspace)? {
-        Reply::Workspace(w) => {
-            // Which terminals run an Agent no conversation is tied to; without it they
-            // still list, as shells.
-            let seen = match rpc(socket, &Request::RecognitionStatus) {
-                Ok(Reply::Recognition(r)) => {
-                    follow_plugins(r.plugins_revision);
-                    r
-                }
-                _ => Default::default(),
-            };
-            list::list(&w, &seen, socket)
+    let w = held::workspace(socket)?;
+    // Which terminals run an Agent no conversation is tied to; without it they still
+    // list, as shells.
+    let seen = match rpc(socket, &Request::RecognitionStatus) {
+        Ok(Reply::Recognition(r)) => {
+            follow_plugins(r.plugins_revision);
+            held::note(&r);
+            r
         }
-        other => Err(io::Error::other(format!("unexpected reply: {other:?}"))),
-    }
+        _ => Default::default(),
+    };
+    list::list(&w, &seen, socket)
 }
 fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io::Result<Value> {
     let terminal = || text(request, "terminal").map(str::to_owned);
