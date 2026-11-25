@@ -369,6 +369,9 @@ pub(super) fn session_open_in(
         .or_else(|| resume_terminal(w, resumed, s))
         .is_some_and(|t| w.terminal_tab(&t.id).is_some())
 }
+/// 在跑's test content, for the board's and the sidebar's tests too.
+#[cfg(test)]
+pub(super) use tests::running_turn;
 pub(super) fn session_line_in(w: &Workspace, s: &AgentSession) -> String {
     w.content
         .get(&s.id)
@@ -450,26 +453,25 @@ mod tests {
             Some("正在运行 cargo build -p app")
         );
     }
-}
 
-/// A running turn that has changed `file` since it was asked, for 在跑's tests.
-#[cfg(test)]
-pub(super) fn running_turn(file: &str) -> fibo_core::content::Content {
-    use fibo_core::content::{Content, Evidence, Quote, Turn};
-    Content {
-        turn: Turn::Running,
-        turn_started: 100,
-        asks: vec![Quote {
-            text: "fix the login".into(),
+    /// A running turn that has changed `file` since it was asked, for 在跑's tests.
+    pub(in crate::workbench) fn running_turn(file: &str) -> fibo_core::content::Content {
+        use fibo_core::content::{Content, Evidence, Quote, Turn};
+        Content {
+            turn: Turn::Running,
+            turn_started: 100,
+            asks: vec![Quote {
+                text: "fix the login".into(),
+                ..Default::default()
+            }],
+            evidence: vec![Evidence {
+                kind: "file".into(),
+                summary: file.into(),
+                exit_code: None,
+                at: 120,
+                source: Default::default(),
+            }],
             ..Default::default()
-        }],
-        evidence: vec![Evidence {
-            kind: "file".into(),
-            summary: file.into(),
-            exit_code: None,
-            at: 120,
-            source: Default::default(),
-        }],
-        ..Default::default()
+        }
     }
 }
