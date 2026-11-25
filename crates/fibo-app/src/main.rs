@@ -159,6 +159,8 @@ fn main() {
         std::env::set_var("GPUI_PAUSE_IDLE_DISPLAY_LINK", "1");
         std::env::set_var("GPUI_RETAINED_BACKBUFFER", "1");
     }
+    #[cfg(feature = "visual-test")]
+    harness::mark_main();
     record_panics();
     ui::language::apply();
     if let Err(error) = run() {

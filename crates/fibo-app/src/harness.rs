@@ -75,11 +75,17 @@ mod wheel_evidence;
 mod why_evidence;
 
 /// Runs the evidence script the environment asks for against the opened workbench.
+/// The first line of main, where the CPU probe's `startup` counts from.
+pub fn mark_main() {
+    cpu_probe_evidence::mark_main();
+}
 pub fn start(
     handle: Option<WindowHandle<workbench::Workbench>>,
     evidence: Option<PathBuf>,
     cx: &mut App,
 ) {
+    // Called right after open_window, which draws the window once before it returns.
+    cpu_probe_evidence::mark_first_frame();
     if input_owner_evidence::start(handle, evidence.clone(), cx)
         || agent_picker_evidence::start(handle, evidence.clone(), cx)
         || first_run_evidence::start(handle, evidence.clone(), cx)

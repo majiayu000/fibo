@@ -18,6 +18,8 @@
 //! - `frames-plugins`: 设置 › 插件 and the themes with a picture or a see-through window, in
 //!   `cpu_probe_evidence/plugins.rs`.
 //! - `frames-settings-terminal`: scroll 设置 › 终端 in both directions.
+//! - `startup`: from the first line of main to the window's first frame (`open_window`
+//!   draws once before it returns), with the workspace loaded and the host connected.
 //! - `redraw-check`: not a cost but a check that caching hides nothing: after each of a
 //!   few clicks and a host change, a plain frame must match a refreshed one pixel for
 //!   pixel (run with `MOORING_NO_CATCH_UP=1`), and the sidebar's catch-up must not
@@ -72,6 +74,18 @@ pub(super) fn instructions() -> u64 {
     let ok =
         unsafe { libc::proc_pid_rusage(std::process::id() as i32, libc::RUSAGE_INFO_V4, buffer) };
     if ok == 0 { info.ri_instructions } else { 0 }
+}
+
+/// When main began and the instructions retired by then; and from there to the first frame.
+static MAIN: std::sync::OnceLock<(Instant, u64)> = std::sync::OnceLock::new();
+static FIRST_FRAME: std::sync::OnceLock<(Duration, u64)> = std::sync::OnceLock::new();
+pub(super) fn mark_main() {
+    let _ = MAIN.set((Instant::now(), instructions()));
+}
+pub(super) fn mark_first_frame() {
+    if let Some((at, ins)) = MAIN.get() {
+        let _ = FIRST_FRAME.set((at.elapsed(), instructions().saturating_sub(*ins)));
+    }
 }
 
 /// One click's motion, frame by frame: the clock held midway, so every frame draws all of
@@ -313,6 +327,13 @@ pub(super) fn start(
                 typing::typing_check(handle, cx)
             } else if name == "history-check" {
                 history::run(handle, &directory, cx).await
+            } else if name == "startup" {
+                let (wall, ins) = FIRST_FRAME.get().copied().expect("the first frame was marked");
+                format!(
+                    "{name}: {:.1} ms wall, {:.2} M instructions from main to the first frame",
+                    wall.as_secs_f64() * 1000.,
+                    ins as f64 / 1e6
+                )
             } else if name == "frames-pane" {
                 wait(500).await;
                 let mut strip = 0;
