@@ -314,7 +314,7 @@ fn quiet_agent_screen_with_an_approval_waits_on_the_user_until_they_answer() {
     assert_eq!(waiting(&h.workspace()), None);
     let check = card(&h.workspace()).screen_check.clone();
     assert!(
-        check.starts_with("没认出提问框（底部没有审批或选择题的提示"),
+        check.starts_with("没认出提问框（底部没有审批或选择题"),
         "{check}"
     );
     let logged = wait_log();

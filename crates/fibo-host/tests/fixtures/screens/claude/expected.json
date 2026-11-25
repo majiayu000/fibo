@@ -200,5 +200,17 @@
     },
     "always": "2",
     "always_label": "允许，这个项目以后都能访问 /Users/x/src/projects/sandbox/narrow-panes/aa/fibo-wrapped-ask-20261117/target/cln-UHSo"
+  },
+  "plan-wide-real.txt": {
+    "state": "waiting",
+    "rule": "plan",
+    "question": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "note": "真实 Claude Code 2.1.332 计划菜单，100 列，没装 hook（11-26）：问句前面是一句陈述，菜单只露出 1–3 项，下面是「↑ 3 more lines」和折行的「ctrl+g to edit in VS Code · 计划文件」"
+  },
+  "plan-narrow-real.txt": {
+    "state": "waiting",
+    "rule": "plan",
+    "question": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "note": "真实 Claude Code 2.1.326 计划菜单，65 列，11-26 真机走查 card.plan：问句和第 1 项、计划文件路径都折行"
   }
 }

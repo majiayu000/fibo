@@ -167,7 +167,7 @@ impl Rules {
         }
         Ok(rules)
     }
-    /// "claude 内置 2026.11.06.1", or the override file it came from.
+    /// "claude 内置 2026.11.26.1", or the override file it came from.
     pub fn origin(&self) -> String {
         match &self.source {
             Source::Bundled => t!("{id} 内置 {version}", id = self.id, version = self.version),
@@ -637,7 +637,7 @@ mod tests {
         // A valid override that also refuses screens showing a transcript viewer.
         let text = crate::agents::DEFAULT_SCREEN_RULES
             .replace("\"id\": \"claude\"", &format!("\"id\": \"{stem}\""))
-            .replace("\"version\": \"2026.11.06.1\"", "\"version\": \"test.1\"")
+            .replace("\"version\": \"2026.11.26.1\"", "\"version\": \"test.1\"")
             .replace(
                 "\"ask\": \"anchor\"",
                 "\"ask\": \"anchor\", \"not\": [{ \"contains\": [\"Showing detailed transcript\"] }]",
@@ -669,12 +669,12 @@ mod tests {
         );
         assert_eq!(
             e.detail(),
-            "规则：approval 审批（claude 内置 2026.11.06.1）\n看到：Do you want to proceed? / ❯ 1. Yes / 2. No"
+            "规则：approval 审批（claude 内置 2026.11.26.1）\n看到：Do you want to proceed? / ❯ 1. Yes / 2. No"
         );
         let idle = explain(rules, "$ ls\nsrc\n$ ");
         assert_eq!(
             idle.fallback(),
-            "没认出提问框（底部没有审批或选择题的提示；规则 claude 内置 2026.11.06.1）"
+            "没认出提问框（底部没有审批或选择题或计划的提示；规则 claude 内置 2026.11.26.1）"
         );
         let answered = explain(
             rules,

@@ -1,0 +1,30 @@
+ phone-walk test file
+ line 2
+ phone-walk diff line
+
+ Steps
+
+ 1. Read notes.txt to confirm its current contents.
+ 2. Append walk-plan as a new last line with the Edit tool.
+    Leave the other lines unchanged.
+ 3. Read the file back and check that the last line is
+    walk-plan.
+
+ Verification
+
+ tail -1 notes.txt prints walk-plan, and the first three lines
+ are unchanged.
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+
+─────────────────────────────────────────────────────────────────
+ Claude has written up a plan and is ready to execute. Would you
+ like to proceed?
+
+ ❯ 1. Yes, and switch to BYPASS PERMISSIONS (no further prompts)
+      for this session
+   2. Yes, manually approve edits
+   3. Tell Claude what to change
+      shift+tab to approve with this feedback
+ ↑ 2 more lines
+ ctrl+g to edit in VS Code · ~/.claude/plans/phone-walk-plan-mak
+ e-a-unified-trinket-of-000c9b9c-0140-4ece-b628-b0565ca174ac.md
