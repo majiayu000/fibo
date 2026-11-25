@@ -2,6 +2,7 @@
 use super::*;
 
 mod bars;
+mod close_key;
 mod keys;
 mod launch;
 mod layer_keys;
