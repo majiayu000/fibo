@@ -115,12 +115,10 @@ pub fn paint_selected_text(
                 fg: color,
                 ..run.clone()
             };
-            let (line, offset) = shape_cell(&part, run_font(&part, f), metrics, window);
-            let _ = line.paint(
-                point(origin.x + offset, oy),
+            shape_cell(&part, run_font(&part, f), metrics, window).paint(
+                point(origin.x, oy),
                 metrics.height,
-                TextAlign::Left,
-                None,
+                text_color(&part),
                 window,
                 cx,
             );

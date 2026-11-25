@@ -89,16 +89,18 @@ pub fn face_of(
         attrs,
     };
     let shaped_font = run_font(&run, font);
-    let (line, offset) = shape_cell(&run, shaped_font, metrics, window);
+    let shape = shape_cell(&run, shaped_font, metrics, window);
+    let (line, scale) = (&shape.line, shape.scale);
     let first = line.runs.first()?;
     let glyph = first.glyphs.first()?;
+    let (ascent, descent) = (line.ascent * scale, line.descent * scale);
     Some(Face {
         font: first.font_id,
         glyph: glyph.id,
-        size: line.font_size,
+        size: line.font_size * scale,
         emoji: glyph.is_emoji,
-        baseline: (metrics.height - line.ascent - line.descent) / 2. + line.ascent,
-        offset,
+        baseline: (metrics.height - ascent - descent) / 2. + ascent,
+        offset: shape.offset,
     })
 }
 

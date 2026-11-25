@@ -29,7 +29,7 @@ pub fn verify_native_geometry(window: &Window, cx: &App) {
                 bg: None,
                 attrs: Attrs::default(),
             };
-            let (line, _) = shape_cell(&run, face.clone(), metrics, window);
+            let line = shape_cell(&run, face.clone(), metrics, window).line;
             assert_eq!(
                 cached.baseline,
                 (metrics.height - line.ascent - line.descent) / 2. + line.ascent
@@ -58,7 +58,8 @@ pub fn verify_native_geometry(window: &Window, cx: &App) {
             bg: None,
             attrs: Attrs::default(),
         };
-        let (line, offset) = shape_cell(&run, font.clone(), metrics, window);
+        let shape = shape_cell(&run, font.clone(), metrics, window);
+        let (line, offset) = (&shape.line, shape.offset);
         assert!(
             line.runs.iter().any(|r| !r.glyphs.is_empty())
                 && line
@@ -69,7 +70,7 @@ pub fn verify_native_geometry(window: &Window, cx: &App) {
             "missing symbol {ch}"
         );
         assert!(
-            (f32::from(line.width() + offset * 2. - metrics.width)).abs() < 0.1,
+            (f32::from(shape.width() + offset * 2. - metrics.width)).abs() < 0.1,
             "symbol not aligned: {ch}"
         );
     }
@@ -129,20 +130,53 @@ pub fn verify_native_geometry(window: &Window, cx: &App) {
             bg: None,
             attrs: Attrs::default(),
         };
-        let (line, offset) = shape_cell(&run, font.clone(), metrics, window);
+        let shape = shape_cell(&run, font.clone(), metrics, window);
+        let (width, offset) = (shape.width(), shape.offset);
         let target = metrics.width * run.cols as f32;
         assert!(
-            (f32::from(line.width() + offset * 2. - target)).abs() < 0.1,
-            "wide cell {text}: advance={:?} inset={offset:?} two-columns={target:?}",
-            line.width()
+            (f32::from(width + offset * 2. - target)).abs() < 0.1,
+            "wide cell {text}: advance={width:?} inset={offset:?} two-columns={target:?}"
         );
-        assert!(
-            line.width() <= target + px(0.1),
-            "wide glyph overflow {text}"
-        );
+        assert!(width <= target + px(0.1), "wide glyph overflow {text}");
+        if shape.scale != 1. {
+            // Drawn scaled instead of shaped again: what CoreText gives at that size.
+            let again = window.text_system().shape_line(
+                SharedString::from(text.to_owned()),
+                px(font_size()) * shape.scale,
+                &[TextRun {
+                    len: text.len(),
+                    font: font.clone(),
+                    color: text_color(&run),
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+                None,
+            );
+            let near = |a: Pixels, b: Pixels| f32::from(a - b).abs() < 1e-3;
+            let glyphs = |l: &ShapedLine| {
+                l.runs
+                    .iter()
+                    .flat_map(|r| r.glyphs.iter().map(move |g| (r.font_id, g.id, g.position)))
+                    .collect::<Vec<_>>()
+            };
+            let (scaled, shaped) = (glyphs(&shape.line), glyphs(&again));
+            assert!(
+                near(width, again.width())
+                    && near(shape.line.ascent * shape.scale, again.ascent)
+                    && near(shape.line.descent * shape.scale, again.descent)
+                    && scaled.len() == shaped.len()
+                    && scaled.iter().zip(&shaped).all(|(a, b)| a.0 == b.0
+                        && a.1 == b.1
+                        && near(a.2.x * shape.scale, b.2.x)
+                        && near(a.2.y * shape.scale, b.2.y)),
+                "{text} drawn at {} differs from shaping at that size",
+                shape.scale
+            );
+        }
         eprintln!(
-            "wide-cell {text}: advance={:?}, two-columns={target:?}, inset={offset:?}",
-            line.width()
+            "wide-cell {text}: advance={width:?}, two-columns={target:?}, inset={offset:?}, scale={}",
+            shape.scale
         );
     }
     eprintln!("native IME geometry: overlay/ranges/UTF16 agree; measured cell={metrics:?}");
