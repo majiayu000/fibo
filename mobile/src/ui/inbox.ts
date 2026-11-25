@@ -172,6 +172,21 @@ export function elsewhereLine(s: Shelf): { asks: string; runs: string } | null {
   return runs ? { asks: '', runs: tr('其他空间 {what}', { what: runs }) } : null;
 }
 
+/** What asks you in the conversations other than the open one, as the home screen pins them. */
+export const asksElsewhere = (machines: Machine[], machine: string, terminal: string): Item[] =>
+  arrange(machines, []).pinned.filter((i) => i.m.id !== machine || i.c.id !== terminal);
+
+/**
+ * The line an open conversation shows for them, or they wait unseen until you go back to the
+ * home screen. One is named and a tap opens it (`one`); several are counted and a tap goes home.
+ */
+export function asksElsewhereLine(items: Item[]): { text: string; go: string; one: Item | null } | null {
+  const [one] = items;
+  if (!one) return null;
+  if (items.length > 1) return { text: tr('其他会话还有 {n} 件等你', { n: items.length }), go: tr('回首页'), one: null };
+  return { text: tr('另一个会话{word}：{title}', { word: statusWord(one.c), title: cardTitle(one.c) }), go: tr('去看'), one };
+}
+
 /** How long after a card appears or changes a tap on its buttons does nothing. */
 export const SETTLE_MS = 600;
 /** How long the list must be still after scrolling before it may move again. */

@@ -2,7 +2,7 @@
 // And it reads 要你处理 off the host, so what the host brings back shows here too.
 import { describe, expect, test } from 'bun:test';
 import type { Card, Machine } from '../src/remote/hub';
-import { HOLD_NONE, RUNNING_PREVIEW, connectionLine, elsewhereLine, namesComputer, pulse, offlineRows, runningShown, searchCards, undoTo, SCROLL_QUIET_MS, SETTLE_MS, TOUCH_LIMIT_MS, arrange, foldLabel, holdLeft, restLabel, settleLeft, settleNext, shelve, sort } from '../src/ui/inbox';
+import { HOLD_NONE, RUNNING_PREVIEW, asksElsewhere, asksElsewhereLine, connectionLine, elsewhereLine, namesComputer, pulse, offlineRows, runningShown, searchCards, undoTo, SCROLL_QUIET_MS, SETTLE_MS, TOUCH_LIMIT_MS, arrange, foldLabel, holdLeft, restLabel, settleLeft, settleNext, shelve, sort } from '../src/ui/inbox';
 import { spaceName } from '../src/ui/status';
 
 const card = (id: string, status: string, updated = 0, more: Partial<Card> = {}) =>
@@ -402,5 +402,29 @@ describe('the home screen', () => {
     const space = spaceName(m, m.cards[0]);
     expect(searchCards(a, '', space).every((i) => spaceName(i.m, i.c) === space)).toBe(true);
     expect(searchCards(a, '', '不存在的空间')).toEqual([]);
+  });
+});
+
+describe('an open conversation says what asks you in the others', () => {
+  const open = (machines: Machine[]) => asksElsewhere(machines, 'm', 'here');
+  test('its own approval is not elsewhere; what only runs or waits to be checked is not asking', () => {
+    const m = machine([approval('here'), card('run', 'running'), card('r', 'review', 0, { needs_you: true })]);
+    expect(open([m])).toEqual([]);
+    expect(asksElsewhereLine(open([m]))).toBeNull();
+  });
+  test('one is named, and a tap opens it', () => {
+    const items = open([machine([card('here', 'running'), approval('b', 1)])]);
+    expect(ids(items)).toEqual(['b']);
+    const line = asksElsewhereLine(items);
+    expect(line?.text).toBe('另一个会话等你批准：b');
+    expect(line?.one?.c.id).toBe('b');
+  });
+  test('several are counted, and a tap goes home; the same terminal id on another computer is another conversation', () => {
+    const items = open([machine([card('here', 'running'), card('q', 'waiting', 2)]), machine([approval('here', 1)], 'n')]);
+    expect(items.map((i) => `${i.m.id}/${i.c.id}`)).toEqual(['n/here', 'm/q']);
+    expect(asksElsewhereLine(items)).toMatchObject({ text: '其他会话还有 2 件等你', one: null });
+  });
+  test('a computer that cannot hear you has nothing to answer now', () => {
+    expect(open([machine([card('here', 'running')]), machine([approval('b')], 'n', 'offline')])).toEqual([]);
   });
 });
