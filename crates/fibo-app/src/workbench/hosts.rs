@@ -299,7 +299,8 @@ impl Workbench {
             .relative()
             .child(row)
             .children(self.turning_view(cx));
-        self.window_layers(root, window, cx)
+        let root = self.window_layers(root, window, cx);
+        super::render::resize_edges(root, window)
     }
     /// `host`'s spaces and cards in this sidebar, made from its own workspace by the rules
     /// its host lists them with for phones (`remote_cards`), and whether its link holds;

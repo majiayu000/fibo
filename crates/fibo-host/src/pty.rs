@@ -312,10 +312,8 @@ mod env_tests {
         }
         let _ = child.kill();
         assert!(text.contains("TERM=xterm-256color"), "{text}");
-        assert!(
-            text.contains("PATH=/usr/bin:/bin:/usr/sbin:/sbin"),
-            "{text}"
-        );
+        let path = format!("PATH={}", fibo_platform::shell::SYSTEM_PATH);
+        assert!(text.contains(&path), "{text}");
         assert!(!text.contains("CLAUDE_CODE_CHILD_SESSION"), "{text}");
     }
 }

@@ -2,6 +2,7 @@
 use super::*;
 
 mod bars;
+mod client_frame;
 mod close_key;
 mod keys;
 mod launch;
@@ -10,6 +11,7 @@ mod main_area;
 mod strip;
 mod tabs;
 pub(super) use bars::marked_button;
+pub(super) use client_frame::resize_edges;
 pub(super) use tabs::TextTip;
 #[cfg(feature = "visual-test")]
 pub(super) use tabs::hidden_tabs;
@@ -268,6 +270,9 @@ impl Render for Workbench {
             .children(tail)
             .when(fibo_platform::desktop::DRAWS_WINDOW_BUTTONS, |d| {
                 d.pr_0().child(bars::window_buttons(window))
+            })
+            .when(client_frame::draws_frame(window), |d| {
+                d.pr_0().child(client_frame::buttons(window))
             });
         let mut main = self.main_area(terminal_style, header, page, current, window, cx);
         main = main.children(bottom_tabs.flatten());
@@ -295,6 +300,13 @@ impl Render for Workbench {
             )
             .when(!beside, |d| d.child(self.statusbar_view(width, cx)))
             .children(self.turning_view(cx));
-        self.window_layers(root, window, cx)
+        let root = self.window_layers(root, window, cx);
+        // Embedded, this is another machine's main area beside the window's sidebar: the
+        // window's own frame (`hosted_frame`) holds the edges.
+        if self.hosts.embedded {
+            root
+        } else {
+            client_frame::resize_edges(root, window)
+        }
     }
 }
