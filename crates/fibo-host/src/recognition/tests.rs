@@ -349,3 +349,63 @@ fn enter_at_the_logged_moment_binds_short_and_pasted_prompts() {
     elsewhere.cwd = Some("/other".into());
     assert!(bound(&[thread(&t0, 1000)], &[elsewhere]).is_empty());
 }
+
+/// v0.1.4 RC2 walk, 2026-11-25 (bg2): `fibo run codex` with the long task a Codex pane closed
+/// 4 s earlier had run, in the same folder. The new pane drew that task at once; the new
+/// thread logged it only 5 s after Enter. Meanwhile the old thread, its newest prompt that
+/// very task, was the one candidate shown there, and kept the pane for good. The start
+/// `fibo run` now keeps (`control::run_agent::start`) is what tells them apart.
+#[test]
+fn a_task_run_again_binds_its_new_thread_not_the_old_one_with_the_same_words() {
+    let task = "用你的后台终端功能启动两个长期运行的进程，启动后不要等它们结束，直接回复 started";
+    let log = |i: usize, updated| Transcript {
+        runtime: Agent::Codex,
+        cli_id: format!("t{i}"),
+        path: format!("/logs/t{i}.jsonl"),
+        cwd: "/same".into(),
+        updated,
+    };
+    let (old, new) = (log(0, 1032), log(1, 1076));
+    // The old one ran in the pane that closed; the new one has run nowhere yet.
+    let thread = |transcript, began: u64, at, ran| ScreenThread {
+        transcript,
+        key: screen_key(task),
+        at: Some(at),
+        began: Some(began),
+        cwd: "/same".into(),
+        first: Some(launched::First::logged(task, at, true, ran)),
+    };
+    // Started at 1060, the task typed in and Enter pressed at 1064.
+    let pane = |start: bool| ScreenTerminal {
+        terminal: "pty".into(),
+        runtime: Agent::Codex,
+        cwd: Some("/same".into()),
+        screen: screen_text(&format!("› {task}\n\n• Working (2s • esc to interrupt)")),
+        current: None,
+        submits: vec![1064],
+        launched: start.then(|| launched::Launched {
+            text: launched::words(task),
+            at: 1060,
+            cwd: "/same".into(),
+        }),
+    };
+    let bound = |threads: &[ScreenThread], start| {
+        (screen_bindings(threads, &[pane(start)]).into_iter())
+            .map(|(pane, t)| (pane, t.cli_id.clone()))
+            .collect::<Vec<_>>()
+    };
+    let before = || [thread(&old, 996, 1000, true)];
+    let after = || {
+        [
+            thread(&old, 996, 1000, true),
+            thread(&new, 1064, 1070, false),
+        ]
+    };
+    // As before `fibo run` kept its start: the old thread took the pane.
+    assert_eq!(bound(&before(), false), vec![("pty".into(), "t0".into())]);
+    assert!(
+        bound(&before(), true).is_empty(),
+        "the old thread took the pane its task was started in again"
+    );
+    assert_eq!(bound(&after(), true), vec![("pty".into(), "t1".into())]);
+}
