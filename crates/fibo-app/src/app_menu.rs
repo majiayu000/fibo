@@ -120,6 +120,7 @@ fn bar(looks: Vec<MenuItem>) -> Vec<Menu> {
         Menu::new(t!("转到")).items([
             key(Key::Search),
             key(Key::NextWaiting),
+            key(Key::Back),
             key(Key::Overview),
             MenuItem::separator(),
             key(Key::PrevTab),

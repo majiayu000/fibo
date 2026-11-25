@@ -160,6 +160,17 @@ pub(super) fn start(
         let went = state(cx).focused.expect("⌘J focused a pane");
         expect("next-waiting", &went, None, cx).await;
 
+        // 2b. 回到刚才 (#515): back to p1 where ⌘J left from, and pressed again, back to
+        // the one it went to.
+        handle
+            .update(cx, |v, w, cx| v.visual_go_back(w, cx))
+            .unwrap();
+        expect("back", &p1, tab, cx).await;
+        handle
+            .update(cx, |v, w, cx| v.visual_go_back(w, cx))
+            .unwrap();
+        expect("back-again", &went, None, cx).await;
+
         // 3. From another tab of the same space.
         handle
             .update(cx, |v, _, cx| v.visual_show_tab("start", cx))

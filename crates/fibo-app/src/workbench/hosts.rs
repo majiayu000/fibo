@@ -10,11 +10,11 @@ use crate::machines::Link;
 #[derive(Default)]
 pub(super) struct Hosts {
     /// A workbench for each machine opened here, by its host in machines.json.
-    views: Vec<(String, Entity<Workbench>)>,
+    pub(super) views: Vec<(String, Entity<Workbench>)>,
     pub(super) outcomes: Vec<(RequestId, String)>,
     pub(super) closing: Option<(RequestId, String)>,
     /// The one drawn in this window's place; None draws this workbench.
-    showing: Option<String>,
+    pub(super) showing: Option<String>,
     /// Being reached: their forwards and first workspaces come in the background.
     pub(super) opening: Vec<String>,
     /// The machine last picked before it was reached, and where to go there: drawn once
@@ -79,6 +79,8 @@ pub(super) enum HostEvent {
     ToggleSidebar,
     /// 下一个要你的 (⌘J or its chip): the next on any machine, as the window finds it.
     NextWaiting,
+    /// 回到刚才 (⌘⇧J): back to where the window's last jump left from.
+    Back,
     /// 鸟瞰: the window's board, every machine's sessions on it.
     Overview,
 }
@@ -215,6 +217,7 @@ impl Workbench {
                             HostEvent::Home => this.show_home(window, cx),
                             HostEvent::ToggleSidebar => this.toggle_sidebar(cx),
                             HostEvent::NextWaiting => this.next_waiting(window, cx),
+                            HostEvent::Back => this.go_back(window, cx),
                             HostEvent::Overview => {
                                 this.leave_host(cx);
                                 this.show_overview(cx);
