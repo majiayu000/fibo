@@ -52,6 +52,18 @@ pub enum Request {
     WatchRecognition,
     /// A fifteen-second measurement stream, cancelled by disconnecting this socket.
     Diagnose,
+    /// Scan only repositories reached from the local host's workspace.
+    ScanWorktrees,
+    /// Act only if this terminal is still alive and outside every layout.
+    RecoverTerminal {
+        id: String,
+        place: bool,
+    },
+    ReclaimWorktree {
+        path: String,
+        head: String,
+        entire: bool,
+    },
     Hook {
         runtime: crate::model::Agent,
         pid: u32,

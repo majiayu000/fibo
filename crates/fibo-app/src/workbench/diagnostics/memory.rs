@@ -164,6 +164,36 @@ pub(super) fn memory_panel(memory: Option<Memory>) -> gpui::Div {
 impl DiagnosticView {
     /// Where memory went, app by app. Widths split the apps' total, which counts compressed
     /// pages at their original size, so it is a share of the apps, not of physical memory.
+    pub(super) fn memory_owners(&self, report: &Diagnostics) -> Option<gpui::Div> {
+        let segments = [t!("Fibo 窗口"), t!("Fibo 后台"), "Agent", t!("普通终端")]
+            .into_iter()
+            .zip(report.memory_by_owner()?)
+            .enumerate()
+            .map(|(i, (name, usage))| {
+                Segment::new(
+                    name.to_owned(),
+                    usage.memory_bytes as f64 / GB,
+                    T::series(i),
+                )
+                .detail(t!("{count} 个进程", count = usage.processes))
+            })
+            .collect();
+        let (stack, legend) = stack_chart("diag-owner", segments, |value| {
+            let memory = mib((value * GB) as u64);
+            (memory.clone(), memory)
+        });
+        Some(
+            div()
+                .px(px(T::S20))
+                .py(px(T::S16))
+                .border_b(px(T::BORDER_WIDTH))
+                .border_color(T::color(T::border()))
+                .child(heading(t!("Fibo 和终端的内存"), t!("悬停看进程数")))
+                .child(stack)
+                .child(legend),
+        )
+    }
+
     pub(super) fn memory_stack(&self, report: &Diagnostics) -> Option<gpui::Div> {
         let total = report.apps_memory();
         if total == 0 {
@@ -243,6 +273,84 @@ impl DiagnosticView {
                     ),
                 )),
         )
+    }
+    pub(super) fn terminal_resources(&self, report: &Diagnostics, cx: &Context<Self>) -> gpui::Div {
+        let mut section = div()
+            .px(px(T::S20))
+            .py(px(T::S12))
+            .border_b(px(T::BORDER_WIDTH))
+            .border_color(T::color(T::border()))
+            .child(
+                button(
+                    "diagnostic-terminal-groups",
+                    t!(
+                        "按空间查看终端 {arrow}",
+                        arrow = if self.terminal_resources_open {
+                            "▴"
+                        } else {
+                            "▾"
+                        }
+                    ),
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.terminal_resources_open = !this.terminal_resources_open;
+                    cx.notify();
+                })),
+            );
+        if !self.terminal_resources_open {
+            return section;
+        }
+        let mut groups = std::collections::BTreeMap::<_, Vec<_>>::new();
+        for terminal in &report.terminals {
+            if let Some(space) = self.terminal_spaces.get(&terminal.id) {
+                groups.entry(space).or_default().push(terminal);
+            }
+        }
+        if groups.is_empty() {
+            return section.child(label(t!("没有可显示的空间终端")));
+        }
+        for ((space, _), mut terminals) in groups {
+            terminals.sort_by(|a, b| {
+                b.cpu_percent
+                    .unwrap_or(-1.)
+                    .total_cmp(&a.cpu_percent.unwrap_or(-1.))
+                    .then_with(|| b.memory_bytes.cmp(&a.memory_bytes))
+            });
+            section = section.child(
+                div()
+                    .mt(px(T::S8))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .child(space.clone()),
+            );
+            for terminal in terminals {
+                let id = terminal.id.clone();
+                let name = self.terminals.get(&id).unwrap_or(&id).clone();
+                let cpu = terminal
+                    .cpu_percent
+                    .map_or_else(|| "—".into(), |p| format!("{p:.1}%"));
+                section = section.child(
+                    div()
+                        .flex()
+                        .gap(px(T::S12))
+                        .items_center()
+                        .child(
+                            button(
+                                gpui::SharedString::from(format!("diagnostic-space-{id}")),
+                                name,
+                            )
+                            .on_click(cx.listener(
+                                move |_, _, _, cx| cx.emit(DiagnosticAction::Terminal(id.clone())),
+                            )),
+                        )
+                        .child(label(t!(
+                            "CPU {cpu} · 内存 {memory}",
+                            cpu,
+                            memory = mib(terminal.memory_bytes)
+                        ))),
+                );
+            }
+        }
+        section
     }
     pub(super) fn memory_ranking(&self, report: &Diagnostics, cx: &Context<Self>) -> gpui::Div {
         let ranked = report.memory_ranked();

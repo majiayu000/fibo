@@ -8,11 +8,13 @@ mod last_dir;
 mod launch;
 mod modes;
 mod once;
+mod recover_terminal;
 mod stop;
 mod suggestion;
 mod tool_rows;
 mod turn_changes;
 mod typing;
+mod worktrees;
 pub(super) use typing::*;
 
 /// How long writing a reply may go without a byte taken before that client is given up. A
@@ -68,18 +70,32 @@ pub(super) fn serve_client(
             return super::events::subscribe(stream, host, connection);
         }
         if matches!(request, Request::Diagnose) {
-            let terminals = lock(&host)?
-                .workspace
-                .terminals
-                .iter()
-                .filter(|t| t.state == ProcessState::Running)
-                .cloned()
-                .collect::<Vec<_>>();
-            // No workspace/terminal lock is held during process enumeration or waiting.
-            if let Err(error) = crate::diagnostics::serve(&mut stream, &terminals) {
+            let window = crate::diagnostics::window_pid(&stream);
+            // Copy only the live terminal facts. Sampling never holds the workspace lock.
+            if let Err(error) = crate::diagnostics::serve(&mut stream, window, || {
+                let host = lock(&host)?;
+                Ok(crate::diagnostics::terminal_facts(
+                    &host.workspace,
+                    &host.recognition.terminal_agents,
+                ))
+            }) {
                 send(&mut stream, CONTROL, &Reply::Error(error.to_string()))?;
             }
             return Ok(());
+        }
+        if matches!(
+            request,
+            Request::ScanWorktrees | Request::ReclaimWorktree { .. }
+        ) {
+            let result = worktrees::run(&stream, &host, request);
+            if !stream.is_open() {
+                return Ok(());
+            }
+            return send(
+                &mut stream,
+                CONTROL,
+                &result.unwrap_or_else(|e| Reply::Error(e.to_string())),
+            );
         }
         if matches!(request, Request::Handoff) {
             return hand_over(stream, &host);
@@ -499,6 +515,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             fibo_platform::process::terminate(pid as i32)?;
             Ok(Reply::Ok)
         }
+        Request::RecoverTerminal { id, place } => recover_terminal::run(shared, &id, place),
         Request::Stop { id } => {
             let terminal = lock(shared)?
                 .terminals

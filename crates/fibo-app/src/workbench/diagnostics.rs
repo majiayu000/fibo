@@ -20,7 +20,9 @@ mod charts;
 mod cpu;
 mod memory;
 mod scatter;
+mod unplaced;
 mod view;
+mod worktrees;
 
 /// The host reports its first interval this long after it is asked (its INTERVAL is 7.5 s,
 /// plus the first snapshot).
@@ -35,56 +37,74 @@ static SPINNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::
 pub(super) enum DiagnosticAction {
     Close,
     Terminal(String),
+    Recovered(Box<Workspace>, String),
 }
 
-/// Dropping a view (or pressing Stop) shuts its socket, including a pending connect.
-struct Sampling {
-    socket: Arc<Mutex<Option<local::Stream>>>,
-    cancelled: Arc<AtomicBool>,
-    /// The host answered the handshake and was asked to sample.
-    requested: Arc<AtomicBool>,
-    started: Instant,
+/// Dropping a diagnostic operation shuts its socket, including a pending connect.
+#[derive(Default)]
+struct DiagnosticConnection {
+    state: Arc<ConnectionState>,
 }
-impl Drop for Sampling {
+
+#[derive(Default)]
+struct ConnectionState {
+    socket: Mutex<Option<local::Stream>>,
+    cancelled: AtomicBool,
+}
+
+impl Drop for DiagnosticConnection {
     fn drop(&mut self) {
-        self.cancelled.store(true, Ordering::Release);
-        if let Some(stream) = self.socket.lock().unwrap().take() {
+        self.state.cancelled.store(true, Ordering::Release);
+        if let Some(stream) = self.state.socket.lock().unwrap().take() {
             let _ = stream.shutdown(std::net::Shutdown::Both);
         }
     }
 }
+
+impl ConnectionState {
+    fn connect(&self, path: PathBuf, timeout: Option<Duration>) -> io::Result<local::Stream> {
+        let mut stream = local::Stream::connect(path)?;
+        {
+            let mut slot = self.socket.lock().unwrap();
+            if self.cancelled.load(Ordering::Acquire) {
+                return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"));
+            }
+            *slot = Some(stream.try_clone()?);
+        }
+        stream.set_read_timeout(Some(REPLY_WAIT))?;
+        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+        send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
+        if !matches!(
+            receive::<Reply>(&mut stream)?,
+            Reply::Hello { major: MAJOR, .. }
+        ) {
+            return Err(io::Error::other(t!("诊断连接握手失败")));
+        }
+        stream.set_read_timeout(timeout)?;
+        Ok(stream)
+    }
+}
+
+struct Sampling {
+    connection: DiagnosticConnection,
+    /// The host answered the handshake and was asked to sample.
+    requested: Arc<AtomicBool>,
+    started: Instant,
+}
 impl Sampling {
     fn start(path: PathBuf, tx: UnboundedSender<io::Result<Diagnostics>>) -> Self {
         let result = Self {
-            socket: Arc::new(Mutex::new(None)),
-            cancelled: Arc::new(AtomicBool::new(false)),
+            connection: DiagnosticConnection::default(),
             requested: Arc::new(AtomicBool::new(false)),
             started: Instant::now(),
         };
-        let socket = result.socket.clone();
-        let cancelled = result.cancelled.clone();
+        let connection = result.connection.state.clone();
         let requested = result.requested.clone();
         std::thread::spawn(move || {
             let read = || -> io::Result<()> {
-                let mut stream = local::Stream::connect(path)?;
-                {
-                    let mut slot = socket.lock().unwrap();
-                    if cancelled.load(Ordering::Acquire) {
-                        return Ok(());
-                    }
-                    *slot = Some(stream.try_clone()?);
-                }
                 // Reports come about 8 s apart, later when the machine is busy: a loaded
                 // Mac is when this is opened, so a tight limit failed exactly then.
-                stream.set_read_timeout(Some(REPLY_WAIT))?;
-                stream.set_write_timeout(Some(Duration::from_secs(5)))?;
-                send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
-                if !matches!(
-                    receive::<Reply>(&mut stream)?,
-                    Reply::Hello { major: MAJOR, .. }
-                ) {
-                    return Err(io::Error::other(t!("诊断连接握手失败")));
-                }
+                let mut stream = connection.connect(path, Some(REPLY_WAIT))?;
                 send(&mut stream, CONTROL, &Request::Diagnose)?;
                 requested.store(true, Ordering::Release);
                 loop {
@@ -100,7 +120,7 @@ impl Sampling {
                 }
             };
             if let Err(error) = read()
-                && !cancelled.load(Ordering::Acquire)
+                && !connection.cancelled.load(Ordering::Acquire)
             {
                 let error = if matches!(
                     error.kind(),
@@ -128,6 +148,9 @@ pub(super) struct DiagnosticView {
     copied: bool,
     /// Workbench terminal id → the title the summary and the chips show.
     terminals: HashMap<String, String>,
+    /// Terminal id → space identity and label, taken from the current tab layout.
+    terminal_spaces: HashMap<String, (String, String)>,
+    terminal_resources_open: bool,
     /// The app whose terminal chips are expanded.
     open: Option<String>,
     all_rows: bool,
@@ -135,6 +158,14 @@ pub(super) struct DiagnosticView {
     memory_folded: HashSet<String>,
     all_memory_rows: bool,
     notes_open: bool,
+    /// Kept after closing only for the disk scan's results: its measurement was already
+    /// seen, so the next open samples afresh instead of showing old numbers.
+    resample_on_open: bool,
+    worktrees: Option<worktrees::WorktreePanel>,
+    unplaced_open: bool,
+    unplaced_confirm: Option<String>,
+    unplaced_busy: bool,
+    unplaced_error: Option<String>,
     focus: gpui::FocusHandle,
 }
 impl gpui::EventEmitter<DiagnosticAction> for DiagnosticView {}
@@ -277,7 +308,13 @@ fn app_colors(report: &Diagnostics) -> HashMap<String, u32> {
 }
 
 impl DiagnosticView {
-    fn new(socket: PathBuf, terminals: HashMap<String, String>, cx: &mut Context<Self>) -> Self {
+    fn new(
+        socket: PathBuf,
+        terminals: HashMap<String, String>,
+        terminal_spaces: HashMap<String, (String, String)>,
+        local: bool,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let mut view = Self {
             socket,
             sampling: None,
@@ -285,11 +322,20 @@ impl DiagnosticView {
             error: None,
             copied: false,
             terminals,
+            terminal_spaces,
+            terminal_resources_open: false,
             open: None,
             all_rows: false,
             memory_folded: HashSet::new(),
             all_memory_rows: false,
             notes_open: false,
+            resample_on_open: false,
+            worktrees: (fibo_platform::fs::DISK_USAGE_SUPPORTED && local)
+                .then(worktrees::WorktreePanel::default),
+            unplaced_open: false,
+            unplaced_confirm: None,
+            unplaced_busy: false,
+            unplaced_error: None,
             focus: cx.focus_handle(),
         };
         view.start(cx);
@@ -301,12 +347,12 @@ impl DiagnosticView {
         self.copied = false;
         let (tx, mut rx) = unbounded();
         let sampling = Sampling::start(self.socket.clone(), tx);
-        let cancelled = sampling.cancelled.clone();
+        let connection = sampling.connection.state.clone();
         self.sampling = Some(sampling);
         cx.spawn(async move |this, cx| {
             while let Some(result) = rx.next().await {
                 // A buffered result from a stopped run must not replace a newer run.
-                if cancelled.load(Ordering::Acquire) {
+                if connection.cancelled.load(Ordering::Acquire) {
                     break;
                 }
                 if this
@@ -490,31 +536,56 @@ impl Workbench {
 
     pub(crate) fn show_diagnostics(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.search.hide();
-        // A run closed mid-way comes back as it is, not restarted.
-        if let Some(view) = self.diagnostics_away.take() {
-            let focus = view.read(cx).focus.clone();
-            window.focus(&focus, cx);
-            self.diagnostics = Some(view);
-            cx.notify();
-            return;
-        }
-        let terminals = self
+        let terminal_spaces = self
+            .workspace
+            .terminals
+            .iter()
+            .filter_map(|t| {
+                let tab = self.workspace.terminal_tab(&t.id)?;
+                let space = self.workspace.spaces.iter().find(|s| s.id == tab.space)?;
+                Some((t.id.clone(), (space.name.clone(), space.id.clone())))
+            })
+            .collect();
+        let terminals: HashMap<String, String> = self
             .workspace
             .terminals
             .iter()
             .map(|t| {
                 let title = self
                     .workspace
-                    .tabs
-                    .iter()
-                    .find(|tab| tab.layout.as_ref().is_some_and(|l| l.contains(&t.id)))
+                    .terminal_tab(&t.id)
                     .map(|tab| tab.title.clone())
-                    .filter(|t| !t.is_empty())
-                    .unwrap_or_else(|| home_relative(&self.host, &t.cwd));
+                    .filter(|title| !title.is_empty())
+                    .unwrap_or_else(|| home_relative(&self.host, &self.workspace.terminal_cwd(t)));
                 (t.id.clone(), title)
             })
             .collect();
-        let view = cx.new(|cx| DiagnosticView::new(self.store.socket().to_owned(), terminals, cx));
+        // A run closed mid-way comes back as it is. One kept only for its disk scan
+        // keeps the scan but measures again: its numbers were already seen.
+        if let Some(view) = self.diagnostics_away.take() {
+            let focus = view.update(cx, |view, cx| {
+                view.terminal_spaces = terminal_spaces;
+                if std::mem::take(&mut view.resample_on_open) {
+                    view.terminals = terminals;
+                    view.start(cx);
+                }
+                cx.notify();
+                view.focus.clone()
+            });
+            window.focus(&focus, cx);
+            self.diagnostics = Some(view);
+            cx.notify();
+            return;
+        }
+        let view = cx.new(|cx| {
+            DiagnosticView::new(
+                self.store.socket().to_owned(),
+                terminals,
+                terminal_spaces,
+                !self.host.attached(),
+                cx,
+            )
+        });
         // Only a run in the background redraws the window (its status bar cell); the open
         // sheet's spinner would otherwise redraw the whole window ten times a second.
         cx.observe(&view, |this, view, cx| {
@@ -525,7 +596,15 @@ impl Workbench {
         .detach();
         cx.subscribe(&view, |this, _, action, cx| {
             this.hide_diagnostics(cx);
-            if let DiagnosticAction::Terminal(id) = action
+            let terminal = match action {
+                DiagnosticAction::Close => None,
+                DiagnosticAction::Terminal(id) => Some(id),
+                DiagnosticAction::Recovered(workspace, id) => {
+                    this.apply_workspace((**workspace).clone(), cx);
+                    Some(id)
+                }
+            };
+            if let Some(id) = terminal
                 && let Some(tab) = this
                     .workspace
                     .tabs

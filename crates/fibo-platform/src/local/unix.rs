@@ -65,6 +65,28 @@ impl Stream {
     pub fn peer_is_this_account(&self) -> io::Result<bool> {
         Ok(peer_uid(&self.0)? == unsafe { libc::geteuid() })
     }
+    #[cfg(target_os = "macos")]
+    pub fn peer_pid(&self) -> Option<u32> {
+        let mut pid: libc::pid_t = 0;
+        let mut len = std::mem::size_of_val(&pid) as libc::socklen_t;
+        // SAFETY: the output buffer has the size of a pid_t.
+        let result = unsafe {
+            libc::getsockopt(
+                self.0.as_raw_fd(),
+                libc::SOL_LOCAL,
+                libc::LOCAL_PEERPID,
+                (&raw mut pid).cast(),
+                &mut len,
+            )
+        };
+        (result == 0 && pid > 0).then_some(pid as u32)
+    }
+    #[cfg(not(target_os = "macos"))]
+    pub fn peer_pid(&self) -> Option<u32> {
+        u32::try_from(peer_credentials(&self.0).ok()?.pid)
+            .ok()
+            .filter(|pid| *pid != 0)
+    }
     pub fn send_buffer(&self) -> io::Result<usize> {
         let mut bytes: libc::c_int = 0;
         let mut len = std::mem::size_of::<libc::c_int>() as libc::socklen_t;
@@ -127,6 +149,11 @@ fn peer_uid(stream: &UnixStream) -> io::Result<libc::uid_t> {
 
 #[cfg(not(target_os = "macos"))]
 fn peer_uid(stream: &UnixStream) -> io::Result<libc::uid_t> {
+    Ok(peer_credentials(stream)?.uid)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn peer_credentials(stream: &UnixStream) -> io::Result<libc::ucred> {
     let mut cred: libc::ucred = unsafe { std::mem::zeroed() };
     let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
     // SAFETY: `len` says how much `cred` holds.
@@ -142,7 +169,7 @@ fn peer_uid(stream: &UnixStream) -> io::Result<libc::uid_t> {
     if result != 0 {
         return Err(io::Error::last_os_error());
     }
-    Ok(cred.uid)
+    Ok(cred)
 }
 
 pub struct Listener(UnixListener);

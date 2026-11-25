@@ -5,13 +5,18 @@ use super::*;
 use crate::workbench::statusbar::item;
 
 impl Workbench {
-    /// Closes the sheet. A run still sampling goes on in the background; anything else
-    /// is dropped, and the next open samples afresh.
+    /// A measurement can continue in the background. A disk scan stops on close,
+    /// while its last completed results remain available on reopen.
     pub(crate) fn hide_diagnostics(&mut self, cx: &mut Context<Self>) {
-        if let Some(view) = self.diagnostics.take()
-            && view.read(cx).sampling.is_some()
-        {
-            self.diagnostics_away = Some(view);
+        if let Some(view) = self.diagnostics.take() {
+            let retain = view.update(cx, |view, _| {
+                view.close_worktree_scan();
+                view.resample_on_open = view.sampling.is_none();
+                view.sampling.is_some() || view.has_worktree_result_or_cleanup()
+            });
+            if retain {
+                self.diagnostics_away = Some(view);
+            }
         }
         self.nav.pending_focus = true;
         cx.notify();
@@ -20,7 +25,12 @@ impl Workbench {
     /// The status bar's 本机诊断 cell: the plain entry, or the state of a closed run.
     pub(crate) fn diagnose_item(&self, cx: &Context<Self>) -> gpui::AnyElement {
         let open = cx.listener(|this, _, window, cx| this.show_diagnostics(window, cx));
-        let Some(view) = &self.diagnostics_away else {
+        // Kept only for the disk scan, there is no run to report: the plain entry.
+        let Some(view) = self
+            .diagnostics_away
+            .as_ref()
+            .filter(|view| !view.read(cx).resample_on_open)
+        else {
             return item("diagnose-host", false)
                 .aria_label(t!("本机诊断"))
                 .child(t!("本机诊断"))

@@ -50,6 +50,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             if !host.workspace.spaces.iter().any(|s| s.id == space) {
                 return Err(io::Error::other("space not found"));
             }
+            super::worktrees::check_launch(Path::new(&cwd))?;
             let mut vt = Vt::new(cols, rows)?;
             vt.set_colors(colors)?;
             let replies = Arc::new(Mutex::new(Vec::new()));

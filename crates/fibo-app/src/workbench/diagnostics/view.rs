@@ -157,9 +157,13 @@ impl Render for DiagnosticView {
             if let Some(stack) = self.core_stack(report) {
                 body = body.child(stack);
             }
+            if let Some(stack) = self.memory_owners(report) {
+                body = body.child(stack);
+            }
             if let Some(stack) = self.memory_stack(report) {
                 body = body.child(stack);
             }
+            body = body.child(self.terminal_resources(report, cx));
             let pair = |left: gpui::Div, right: gpui::Div| {
                 div()
                     .flex()
@@ -203,6 +207,12 @@ impl Render for DiagnosticView {
                     .p(px(T::S20))
                     .child(t!("采样已停止，尚无可比较的数据。")),
             });
+        }
+        if let Some(unplaced) = self.unplaced_view(cx) {
+            body = body.child(unplaced);
+        }
+        if let Some(worktrees) = self.worktree_view(cx) {
+            body = body.child(worktrees);
         }
         if let Some(error) = &self.error {
             body = body.child(

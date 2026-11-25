@@ -60,6 +60,9 @@ mod terminal_io;
 #[path = "managed_session/todo.rs"]
 mod todo;
 
+#[path = "managed_session/worktrees.rs"]
+mod worktrees;
+
 use codex_fixture::*;
 use common::*;
 use phone_fixture::*;
