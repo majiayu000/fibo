@@ -51,10 +51,14 @@ impl Workbench {
         self.layout.panes.retain(|id, _| ids.contains(id));
         self.prune_pins(cx);
         let split = ids.len() > 1;
+        // A pane made here takes the terminal's input from whoever had it, but only while
+        // this window is the one in use. A window left open on another machine, showing this
+        // tab, makes a pane for a split opened here too; taking it would hand the terminal
+        // to a screen nobody is at. That pane only looks, and takes over on a click.
+        let takeover = !self.hosts.window_away;
         for id in ids {
-            // A pane made here takes the terminal's input from whoever had it.
             if !undrawn && !self.layout.panes.contains_key(&id) {
-                let pane = cx.new(|cx| Pane::new(self.store.socket(), &id, true, cx));
+                let pane = cx.new(|cx| Pane::new(self.store.socket(), &id, takeover, cx));
                 Self::adopt_pane(&pane, cx);
                 self.layout.panes.insert(id, pane);
             }

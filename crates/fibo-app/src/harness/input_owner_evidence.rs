@@ -84,7 +84,31 @@ pub(super) fn start(
         assert_eq!(text.matches("TAKEN-ONCE").count(), 1, "{text}");
         assert_eq!(text.matches("PROMOTED-ONCE").count(), 1, "{text}");
         shot("3-promoted-native.png", cx);
-        std::fs::write(directory.join("result.txt"), format!("PASS: refused input never reached PTY; native takeover click and disconnect promotion each delivered once; subsequent input cleared refusal.\nRefusal: {error}\nScreen:\n{text}\n")).unwrap();
+        // A split opened on another machine reaches this window while nobody is at it: the
+        // pane made for it only looks, and the one who opened it keeps typing.
+        let other = competitor();
+        until!(pane.read_with(cx, |p, _| p.has_other_owner()));
+        handle.update(cx, |v, _, a| {
+            v.visual_set_window_away(true);
+            v.visual_remake_shown_pane(a);
+        }).unwrap();
+        pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
+        until!(pane.read_with(cx, |p, _| p.visual_vt_ready()));
+        wait(500).await;
+        assert!(other.state.lock().unwrap().writable, "a window not in use took the input");
+        assert!(pane.read_with(cx, |p, _| p.has_other_owner()));
+        shot("4-away-window-only-looks.png", cx);
+        // In use again, a pane it makes takes over as before.
+        handle.update(cx, |v, _, a| {
+            v.visual_set_window_away(false);
+            v.visual_remake_shown_pane(a);
+        }).unwrap();
+        until!(!other.state.lock().unwrap().writable);
+        pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
+        until!(pane.read_with(cx, |p, _| p.visual_vt_ready() && !p.has_other_owner()));
+        shot("5-in-use-window-takes-over.png", cx);
+        drop(other);
+        std::fs::write(directory.join("result.txt"), format!("PASS: refused input never reached PTY; native takeover click and disconnect promotion each delivered once; subsequent input cleared refusal; a pane made while the window was away only looked, one made in use took over.\nRefusal: {error}\nScreen:\n{text}\n")).unwrap();
         cx.update(|cx| cx.quit());
     }).detach();
     true
