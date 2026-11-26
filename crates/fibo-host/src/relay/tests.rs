@@ -130,7 +130,7 @@ async fn a_frame_id_that_does_not_fit_is_refused_and_one_that_just_fits_works() 
     std::fs::create_dir_all(&root).unwrap();
     let socket = root.join("workbench.sock");
     let (phone, _) =
-        devices::pair_link(&socket, "https://relay.test", "phone", Role::Full).unwrap();
+        devices::pair_link(&socket, "https://relay.test", &[], "phone", Role::Full).unwrap();
     let key = phone.key().unwrap();
     let path = format!("{}?d={}", wire::MOORING_PATH, phone.id);
     let connection = {

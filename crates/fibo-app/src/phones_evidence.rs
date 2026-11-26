@@ -71,7 +71,7 @@ pub(super) fn start(
         std::io::BufReader::new(relay.stdout.take().unwrap()).read_line(&mut line).unwrap();
         let addr = line.split_whitespace().nth(3).unwrap().to_owned();
         let base = format!("http://{addr}");
-        call(Request::RemoteConfigure { enabled: true, relay: base.clone(), key: None });
+        call(Request::RemoteConfigure { enabled: true, relay: base.clone(), key: None, also: None });
         let pair = |name: &str, role: &str| match call(Request::RemotePair { name: name.into(), role: role.into() }) {
             Reply::Text(link) => link,
             x => panic!("{x:?}"),
@@ -153,7 +153,7 @@ pub(super) fn start(
         both("5-after-kick", cx).await;
         let _ = phone.kill();
         let _ = phone.wait();
-        call(Request::RemoteConfigure { enabled: false, relay: base, key: None });
+        call(Request::RemoteConfigure { enabled: false, relay: base, key: None, also: None });
         let _ = relay.kill();
         let _ = relay.wait();
         eprintln!("phones evidence: ok");

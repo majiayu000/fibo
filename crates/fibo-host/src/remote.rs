@@ -363,7 +363,15 @@ fn hello(socket: &Path, role: Role) -> io::Result<Value> {
             .into()
         ),
         app_version: Some(env!("CARGO_PKG_VERSION").into()),
+        relays: relays(socket),
     }))
+}
+
+/// The relays phones may dial this machine through, as the host's setting names them.
+fn relays(socket: &Path) -> Vec<String> {
+    let c = fibo_host::remote_config(socket.parent().unwrap_or(Path::new(".")));
+    let all = std::iter::once(c.relay).chain(c.also.into_iter().map(|a| a.relay));
+    all.filter(|r| c.enabled && !r.is_empty()).collect()
 }
 
 /// A write its client named: it runs once however often it comes (`Request::Once`).

@@ -313,6 +313,10 @@ pub enum Request {
         relay: String,
         /// The relay's registration key: None keeps the one saved, empty clears it.
         key: Option<String>,
+        /// More relays the machine stays on beside `relay`: None keeps the saved list.
+        /// A relay listed without a key keeps the key saved for it.
+        #[serde(default)]
+        also: Option<Vec<RemoteRelay>>,
     },
     /// Pairs one more phone; replies `Text`, its pairing link.
     RemotePair {

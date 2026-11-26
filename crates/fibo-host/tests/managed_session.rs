@@ -59,6 +59,8 @@ mod status;
 mod terminal_io;
 #[path = "managed_session/todo.rs"]
 mod todo;
+#[path = "managed_session/two_relays.rs"]
+mod two_relays;
 
 #[path = "managed_session/worktrees.rs"]
 mod worktrees;

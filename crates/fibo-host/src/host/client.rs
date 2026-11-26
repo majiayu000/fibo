@@ -416,6 +416,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             enabled,
             relay,
             key,
+            also,
         } => {
             let relay = relay.trim().to_owned();
             let remote = supervisor(shared)?;
@@ -423,10 +424,12 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 None => remote.key(),
                 Some(k) => Some(k.trim().to_owned()).filter(|k| !k.is_empty()),
             };
+            let also = super::remote::merge_also(remote.also(), also, &relay);
             remote.configure(super::remote::Config {
                 enabled,
                 relay,
                 key,
+                also,
             })?;
             Ok(Reply::Ok)
         }
@@ -440,7 +443,8 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             let name = Some(name.trim())
                 .filter(|n| !n.is_empty())
                 .unwrap_or(t!("手机"));
-            let (_, link) = crate::devices::pair_link(&remote.socket(), &relay, name, role)?;
+            let alts: Vec<String> = remote.also().into_iter().map(|a| a.relay).collect();
+            let (_, link) = crate::devices::pair_link(&remote.socket(), &relay, &alts, name, role)?;
             remote.refresh();
             Ok(Reply::Text(link))
         }

@@ -119,7 +119,7 @@ type State = { loaded: boolean; machines: Machine[] };
 let state: State = { loaded: false, machines: [] };
 
 type Dial = (link: Link) => Promise<Remote>;
-let dial: Dial = (link) => Remote.connect(link);
+let dial: Dial = (link) => Remote.connectAny(link);
 let staged: Link[] | null = null;
 
 /**
@@ -310,6 +310,7 @@ async function connect(id: string) {
     }, HEARTBEAT_MS);
     r.onEnded(() => clearInterval(beat));
     retry.delete(id);
+    learnRelays(id, hello.relays);
     set(id, {
       status: 'online',
       role: hello.role,
@@ -329,6 +330,17 @@ async function connect(id: string) {
     if (!r.ended) refusal = tr('电脑上的 Fibo 没接受这台手机：{why}', { why: (e as Error).message });
     r.close();
   }
+}
+
+/** The relays the machine says it is on, kept with its pairing for the next dial. */
+function learnRelays(id: string, relays: unknown) {
+  const m = get(id);
+  if (!m || !Array.isArray(relays)) return;
+  const alts = relays.filter((r): r is string => typeof r === 'string' && !!r && r !== m.link.relay);
+  if (JSON.stringify(alts) === JSON.stringify(m.link.alts ?? [])) return;
+  const link = { ...m.link, alts };
+  set(id, { link });
+  void saveMachine(link).catch(() => undefined);
 }
 
 /** The heartbeat, timed: the phone's own measure of the link's latency. */

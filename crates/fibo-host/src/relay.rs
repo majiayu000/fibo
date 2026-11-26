@@ -10,8 +10,10 @@
 //! resent as `Frame::Routes` on pair and unpair); unpairing drops their open sessions.
 //! `--pair --relay <url>` pairs a phone and prints its link and QR code; `--devices`
 //! lists them, `--revoke` unpairs one, `--new-code` replaces the code and unpairs all.
+//! With more relays in `MOORING_RELAY_ALSO` it stays on each of them at once, one
+//! connection per relay, and phones dial them all (docs/decisions/2026-11-26-two-relays.md).
 use crate::control::Args;
-use fibo_core::protocol::{rpc, RemoteChange, RemoteState, Reply, Request};
+use fibo_core::protocol::{rpc, RemoteChange, RemoteRelay, RemoteState, Reply, Request};
 use fibo_host::devices::{self, Role};
 use fibo_remote::link::Link;
 use std::io::{self, Write};
@@ -50,6 +52,13 @@ pub fn run(a: &Args) -> io::Result<()> {
         let kept = fibo_host::remote_config(root);
         let relay = a.value("relay").map_or(kept.relay, str::to_owned);
         let key = a.value("relay-key").map(str::to_owned).or(kept.key);
+        // `--also ""` clears the other relays; without `--also` they stay as saved.
+        let also = a.value("also").map(|relay| {
+            vec![RemoteRelay {
+                relay: relay.to_owned(),
+                key: a.value("also-key").map(str::to_owned),
+            }]
+        });
         let enabled = a.has("enable");
         if enabled && relay.is_empty() {
             return Err(io::Error::other(t!("--enable 需要 --relay <中继地址>")));
@@ -60,6 +69,7 @@ pub fn run(a: &Args) -> io::Result<()> {
                 enabled,
                 relay: relay.clone(),
                 key,
+                also,
             },
         )?;
         println!(
@@ -155,6 +165,12 @@ pub fn run(a: &Args) -> io::Result<()> {
         return pair(
             &a.socket,
             relay,
+            // The other relays the host's setting keeps this machine on.
+            &fibo_host::remote_config(root)
+                .also
+                .into_iter()
+                .map(|r| r.relay)
+                .collect::<Vec<_>>(),
             a.value("name").unwrap_or_else(|| t!("手机")),
             role,
         );
@@ -164,17 +180,43 @@ pub fn run(a: &Args) -> io::Result<()> {
         .map(str::to_owned)
         .or_else(|| std::env::var("MOORING_RELAY_KEY").ok())
         .filter(|k| !k.is_empty());
+    let mut relays = vec![(base, key)];
+    for r in also_relays()? {
+        let base = Link::websocket_base(&r.relay).map_err(io::Error::other)?;
+        if relays.iter().all(|(b, _)| *b != base) {
+            relays.push((base, r.key.filter(|k| !k.is_empty())));
+        }
+    }
     let name = devices::machine(&a.socket)?.name;
     let live = Live::new(a.has("report").then(|| a.socket.clone()));
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    let ended = runtime.block_on(stay_connected(&base, &code, key, name, &a.socket, &live));
-    if let Err(e) = &ended {
-        live.state(RemoteState::Failed, e.to_string());
-        live.flush();
+    // Each relay keeps its own connection; one that refuses this machine stops alone, and
+    // this ends only once every relay has.
+    let runs = relays.iter().map(|(base, key)| {
+        let (live, name) = (live.scoped(base), name.clone());
+        let (code, socket) = (&code, &a.socket);
+        async move {
+            let ended = stay_connected(base, code, key.clone(), name, socket, &live).await;
+            if let Err(e) = &ended {
+                live.state(RemoteState::Failed, e.to_string());
+            }
+            ended
+        }
+    });
+    let ended = runtime.block_on(futures_util::future::join_all(runs));
+    live.flush();
+    ended.into_iter().find(Result::is_err).unwrap_or(Ok(()))
+}
+
+/// The other relays the host's setting names, handed over in `MOORING_RELAY_ALSO`.
+fn also_relays() -> io::Result<Vec<RemoteRelay>> {
+    match std::env::var(fibo_host::REMOTE_ALSO_ENV) {
+        Ok(text) if !text.trim().is_empty() => serde_json::from_str(&text)
+            .map_err(|e| io::Error::other(format!("{}: {e}", fibo_host::REMOTE_ALSO_ENV))),
+        _ => Ok(vec![]),
     }
-    ended
 }
 
 /// Lets a running host show the app the devices as they are now; none running is fine.
@@ -196,8 +238,8 @@ fn host(a: &Args, request: Request) -> io::Result<Reply> {
     }
 }
 
-fn pair(socket: &Path, relay: &str, name: &str, role: Role) -> io::Result<()> {
-    let (device, link) = devices::pair_link(socket, relay, name, role)?;
+fn pair(socket: &Path, relay: &str, alts: &[String], name: &str, role: Role) -> io::Result<()> {
+    let (device, link) = devices::pair_link(socket, relay, alts, name, role)?;
     let qr = qrcode::QrCode::new(link.as_bytes())
         .map_err(|e| io::Error::other(e.to_string()))?
         .render::<qrcode::render::unicode::Dense1x2>()

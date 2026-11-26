@@ -29,6 +29,13 @@ pub(super) fn render(s: &RemoteStatus, now: u64) -> String {
             t!("中继：连不上 {relay}{key}", relay = s.relay, key)
         ),
     };
+    if !s.also.is_empty() {
+        let also = s.also.join("、");
+        out.push_str(&format!(
+            "  {}\n",
+            t!("同时挂在 {also}，手机走先连通的那台", also)
+        ));
+    }
     if !s.live.detail.is_empty() {
         out.push_str(&format!("  {}\n", s.live.detail));
     }

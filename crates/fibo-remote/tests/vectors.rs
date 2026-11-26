@@ -37,6 +37,7 @@ fn vectors() -> Value {
 
     let link = Link {
         relay: "https://relay.example.com".into(),
+        alts: vec![],
         code: code.clone(),
         device: "a1b2c3d4e5f6".into(),
         key: key.clone(),

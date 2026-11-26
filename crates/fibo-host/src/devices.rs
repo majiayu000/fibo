@@ -506,10 +506,12 @@ fn retire(socket: &Path, old: &Code) -> io::Result<()> {
     )
 }
 
-/// Pairs one more phone: its device entry, and the link its QR code carries.
+/// Pairs one more phone: its device entry, and the link its QR code carries, naming
+/// `relay` and the other relays (`alts`) this machine is on.
 pub fn pair_link(
     socket: &Path,
     relay: &str,
+    alts: &[String],
     name: &str,
     role: Role,
 ) -> io::Result<(Device, String)> {
@@ -520,6 +522,7 @@ pub fn pair_link(
     let (device, key) = add(socket, name, role)?;
     let link = Link {
         relay: relay.to_owned(),
+        alts: alts.to_vec(),
         code: device.route().expect("a new device has a route"),
         device: device.id.clone(),
         key,

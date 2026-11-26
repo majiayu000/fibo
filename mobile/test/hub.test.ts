@@ -17,9 +17,10 @@ mock.module('react-native', () =>
   }),
 );
 let forgetFailure = false;
+const saved: any[] = [];
 mock.module('../src/store/machines', () => ({
   loadMachines: async () => [],
-  saveMachine: async () => undefined,
+  saveMachine: async (l: any) => { saved.push(l); },
   forgetMachine: async () => { if (forgetFailure) throw new Error('Keychain delete failed'); },
   machineId: (l: any) => l.machine,
 }));
@@ -30,6 +31,7 @@ const hub = await import('../src/remote/hub');
 
 /** A connection a fake relay hands out; `end` is its socket closing. */
 let protocolVersion = 2;
+let helloRelays: string[] | undefined;
 class Fake {
   ended: any = null;
   closed = false;
@@ -37,7 +39,7 @@ class Fake {
   lists = 0;
   async request(op: string) {
     if (this.ended) throw new Error('gone');
-    if (op === 'hello') return { version: protocolVersion, role: 'full', ops: ['send'], machine: { name: 'mac' }, os: 'macos' };
+    if (op === 'hello') return { version: protocolVersion, role: 'full', ops: ['send'], machine: { name: 'mac' }, os: 'macos', relays: helloRelays };
     if (op === 'list') { this.lists++; return { terminals: [], spaces: [] }; }
     return {};
   }
@@ -300,3 +302,20 @@ test('a heartbeat updates latency without replacing the machine used by every pa
   expect(hub.getMachine('m1')).toBe(before);
   expect(hub.getMachine('m1')?.status).toBe('online');
 }, 20_000);
+
+test('the relays hello names are kept with the pairing for the next dial', async () => {
+  helloRelays = ['ws://x', 'ws://y'];
+  saved.length = 0;
+  dials[dials.length - 1].socket!.end({ code: 1012, reason: '' });
+  hub.reconnect('m1');
+  await answerAll();
+  expect(hub.getMachine('m1')?.link.alts).toEqual(['ws://y']);
+  expect(saved.map((l) => l.alts)).toEqual([['ws://y']]);
+  // The next dial is handed both; the same list again is not saved again.
+  dials[dials.length - 1].socket!.end({ code: 1012, reason: '' });
+  hub.reconnect('m1');
+  expect(dials[dials.length - 1].link.alts).toEqual(['ws://y']);
+  await answerAll();
+  expect(saved.length).toBe(1);
+  helloRelays = undefined;
+});

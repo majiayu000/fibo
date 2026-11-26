@@ -63,6 +63,21 @@ location / {
 
 状态变成「中继已连上」后，点配对，用手机扫二维码。命令行也可以：`fibo remote --enable --relay https://relay.example.com --relay-key <密钥>`。
 
+## 两台中继（国内外各一台）
+
+电脑可以同时挂在两台中继上，手机拨号时两台一起拨，先握完手的那台留下；一台挂了，另一台照常能用。做法见 [2026-11-26 的决定](../decisions/2026-11-26-two-relays.md)。
+
+```sh
+fibo remote --enable --relay https://<国内中继> --relay-key <密钥> \
+  --also https://<海外中继> --also-key <它的密钥>
+fibo remote --status        # 第二行「同时挂在 …」；哪台没连上会写出来
+fibo remote --enable --relay https://<国内中继> --also ""   # 去掉第二台
+```
+
+- 之后配对的手机，二维码里会带上第二台中继；已经配对的手机，下次连上时会从电脑那里学到。
+- 两台中继各用各的注册密钥。一台拒绝了这台电脑，只停那一台。
+- 设置页暂时只有一台中继的输入框，第二台用上面的命令行配。
+
 ## 升级
 
 ```sh

@@ -3,11 +3,12 @@
 //! reports of who is on are passed to the app with the rest of the host's status.
 //!
 //! The setting lives in `remote-relay.json` next to the socket (0600: it may hold the
-//! relay's key). A child that exits on its own was refused (a bad key, a newer child on
+//! relays' keys). `also` lists more relays the child stays on beside `relay`
+//! (docs/decisions/2026-11-26-two-relays.md); files from before 11-26 have none. A child that exits on its own was refused (a bad key, a newer child on
 //! this machine) and is not restarted until the setting changes; one killed by a signal it
 //! did not get from here is restarted after a pause. Pushed off its code from elsewhere,
 //! the child itself waits and takes it back (#69).
-use fibo_core::protocol::{RemoteLive, RemoteState, RemoteStatus};
+use fibo_core::protocol::{RemoteLive, RemoteRelay, RemoteState, RemoteStatus};
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -15,13 +16,21 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+mod also;
+pub(crate) use also::merge_also;
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     pub enabled: bool,
     pub relay: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub also: Vec<RemoteRelay>,
 }
+
+/// The child reads the other relays and their keys here, out of its command line.
+pub const ALSO_ENV: &str = "MOORING_RELAY_ALSO";
 
 fn file(root: &Path) -> PathBuf {
     root.join("remote-relay.json")
@@ -96,7 +105,10 @@ impl Supervisor {
 
     pub(crate) fn configure(&self, config: Config) -> io::Result<()> {
         if config.enabled {
-            fibo_remote::link::Link::websocket_base(&config.relay).map_err(io::Error::other)?;
+            for relay in std::iter::once(&config.relay).chain(config.also.iter().map(|a| &a.relay))
+            {
+                fibo_remote::link::Link::websocket_base(relay).map_err(io::Error::other)?;
+            }
         }
         save(&self.root, &config)?;
         let mut inner = self.lock();
@@ -137,6 +149,7 @@ impl Supervisor {
             enabled: inner.config.enabled,
             relay: inner.config.relay.clone(),
             keyed: inner.config.key.is_some(),
+            also: inner.config.also.iter().map(|a| a.relay.clone()).collect(),
             devices: crate::devices::load(&socket)
                 .into_iter()
                 .map(|d| fibo_core::protocol::RemoteDevice {
@@ -169,6 +182,10 @@ impl Supervisor {
 
     pub(crate) fn relay(&self) -> String {
         self.lock().config.relay.clone()
+    }
+
+    pub(crate) fn also(&self) -> Vec<RemoteRelay> {
+        self.lock().config.also.clone()
     }
 
     fn set(&self, generation: u64, live: RemoteLive) {
@@ -209,6 +226,10 @@ impl Supervisor {
             match &config.key {
                 Some(key) => command.env("MOORING_RELAY_KEY", key),
                 None => command.env_remove("MOORING_RELAY_KEY"),
+            };
+            match serde_json::to_string(&config.also) {
+                Ok(also) if !config.also.is_empty() => command.env(ALSO_ENV, also),
+                _ => command.env_remove(ALSO_ENV),
             };
             let mut child = match command.spawn() {
                 Ok(child) => child,

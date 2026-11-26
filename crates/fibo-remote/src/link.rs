@@ -1,6 +1,7 @@
 //! The pairing link a QR code carries:
 //! `mooring://pair?v=2&relay=…&code=…&device=…&key=…&machine=…&name=…`.
 //! `code` is the machine's, shared by its phones; `device` and `key` are this phone's own.
+//! `alt=…`, repeatable, names more relays the machine is on; readers before 11-26 skip it.
 use crate::secure::Code;
 
 pub const VERSION: u32 = 2;
@@ -9,6 +10,8 @@ pub const VERSION: u32 = 2;
 pub struct Link {
     /// The relay, as given: `https://relay.example.com`.
     pub relay: String,
+    /// Other relays the same machine is on; the phone dials them all and keeps the first.
+    pub alts: Vec<String>,
     pub code: Code,
     pub device: String,
     pub key: Code,
@@ -38,8 +41,16 @@ impl Link {
                 .and_then(|c| Code::parse(&c))
                 .ok_or(format!("bad {name}"))
         };
+        let relay = field("relay").ok_or("no relay")?;
+        let alts = query
+            .split('&')
+            .filter_map(|kv| kv.strip_prefix("alt="))
+            .map(unescape)
+            .filter(|a| !a.is_empty() && *a != relay)
+            .collect();
         Ok(Self {
-            relay: field("relay").ok_or("no relay")?,
+            relay,
+            alts,
             code: code("code")?,
             device: field("device")
                 .filter(|d| !d.is_empty())
@@ -51,8 +62,13 @@ impl Link {
     }
 
     pub fn text(&self) -> String {
+        let alts: String = self
+            .alts
+            .iter()
+            .map(|a| format!("&alt={}", escape(a)))
+            .collect();
         format!(
-            "mooring://pair?v={VERSION}&relay={}&code={}&device={}&key={}&machine={}&name={}",
+            "mooring://pair?v={VERSION}&relay={}{alts}&code={}&device={}&key={}&machine={}&name={}",
             escape(&self.relay),
             self.code.text(),
             escape(&self.device),
@@ -132,6 +148,7 @@ mod tests {
     fn links_round_trip_and_name_their_url() {
         let link = Link {
             relay: "https://relay.example.com".into(),
+            alts: vec![],
             code: Code::generate().unwrap(),
             device: "a1b2c3d4e5f6".into(),
             key: Code::generate().unwrap(),
@@ -146,6 +163,35 @@ mod tests {
         assert!(url.ends_with("/keepline?d=a1b2c3d4e5f6"));
         assert!(Link::parse(&text.replace("v=2", "v=1")).is_err());
         assert!(Link::parse("https://x").is_err());
+    }
+
+    #[test]
+    fn more_relays_ride_along_and_older_readers_skip_them() {
+        let link = Link {
+            relay: "https://a.example.com".into(),
+            alts: vec![
+                "https://b.example.com".into(),
+                "https://c.example.com".into(),
+            ],
+            code: Code::generate().unwrap(),
+            device: "d1".into(),
+            key: Code::generate().unwrap(),
+            machine: "m".into(),
+            name: "n".into(),
+        };
+        let text = link.text();
+        assert_eq!(Link::parse(&text).unwrap(), link);
+        // Read as a build before 11-26 did: by name, first match; `alt` is not `relay`.
+        let relay = text
+            .split('&')
+            .find_map(|kv| kv.strip_prefix("relay")?.strip_prefix('='));
+        assert_eq!(relay, Some("https%3A%2F%2Fa.example.com"));
+        // The main relay named again as an alt is not dialed twice.
+        let twice = text.replace(
+            "&alt=https%3A%2F%2Fb",
+            "&alt=https%3A%2F%2Fa.example.com&alt=https%3A%2F%2Fb",
+        );
+        assert_eq!(Link::parse(&twice).unwrap().alts.len(), 2);
     }
 
     #[test]

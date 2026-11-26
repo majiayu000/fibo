@@ -19,6 +19,7 @@ async fn fixture() -> (
     let (phone, _) = devices::pair_link(
         &socket,
         "https://relay.test",
+        &[],
         "phone\x1b]2;title\x07\nforged",
         Role::Full,
     )
