@@ -41,6 +41,14 @@ export function took(ms: number | undefined): string {
   return s % 60 ? tr('{m} 分 {s} 秒', { m, s: s % 60 }) : tr('{m} 分钟', { m });
 }
 
+/** A step's words while it runs: what the Agent said a call does, else what it ran. */
+export const stepWords = (c: ToolCall) => c.about || c.label || c.name;
+
+/** Where a step's words give way when they do not fit. A command keeps both ends (its program
+ *  and the file it ends on); a sentence keeps its start: cut in the middle, 「Ping localhost 120
+ *  times, show summary」 read 「Ping localhost 1…s, show summary」 on 2026-11-26's walk. */
+export const stepCut = (c: ToolCall): 'tail' | 'middle' => (c.about ? 'tail' : 'middle');
+
 /** The tool's own name, an MCP tool's as `server · tool`. */
 export function toolName(name: string): string {
   const short = name.startsWith('mcp__') ? name.slice(5).replace('__', ' · ') : name;

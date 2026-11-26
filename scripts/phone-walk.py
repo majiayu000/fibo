@@ -144,6 +144,10 @@ def unfinished():
 
 
 def start():
+    # The phone first: on 2026-11-26 a start with no phone plugged in had already taken the lock
+    # and made the run's directory, and the next start had to clear them by hand.
+    if not SERIAL:
+        device()
     other = holder()
     if other and "--force" not in sys.argv:
         die(f"终端 {other[0]} 正在走查这台手机（{other[1]}，{STALE_S // 60} 分钟内有动静）。"
@@ -237,8 +241,28 @@ def open_chat(terminal=None):
     adb("shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", f"'{url}'", PACKAGE)
 
 
-def nodes():
-    xml = adb("exec-out", "uiautomator", "dump", "/dev/tty", out=True).decode("utf-8", "replace")
+# Android's dump waits for a second in which nothing on screen changes, and fails after ten
+# with "could not get idle state". A turn's first minute changes every second (「干了 12 秒」
+# counts up), so on 2026-11-26 every read during it came back empty and taps by text found
+# nothing. Past a minute the count moves once a minute and the dump goes through.
+SETTLE_S = 80
+
+
+def nodes(wait=True):
+    """The screen's texts with their centers. While it will not settle, try again for up to
+    SETTLE_S; with wait=False (a screenshot's dump, kept beside the picture) give up at once."""
+    deadline = time.time() + (SETTLE_S if wait else 0)
+    told = False
+    while True:
+        xml = adb("exec-out", "uiautomator", "dump", "/dev/tty", out=True).decode("utf-8", "replace")
+        if "<hierarchy" in xml or time.time() >= deadline:
+            break
+        if not told:
+            print("屏幕一直在变（在跑的第一分钟每秒都在数秒），等它静下来再读…", file=sys.stderr)
+            told = True
+        time.sleep(2)
+    if "<hierarchy" not in xml and wait:
+        die(f"{SETTLE_S} 秒里屏幕一直在变，读不到上面的字；用 shot 截图看，或等这一轮跑过一分钟")
     out = []
     for m in re.finditer(r'<node [^>]*?text="([^"]*)"[^>]*?content-desc="([^"]*)"[^>]*?bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', xml):
         text = html.unescape(m.group(1) or m.group(2))
@@ -293,7 +317,7 @@ def shot(item, note=""):
     shots = s["items"].setdefault(item, {}).setdefault("shots", [])
     name = f"{item}-{len(shots) + 1}"
     (run_dir() / f"{name}.png").write_bytes(adb("exec-out", "screencap", "-p", out=True))
-    xml, _ = nodes()
+    xml, _ = nodes(wait=False)
     (run_dir() / f"{name}.xml").write_text(xml)
     shots.append({"file": f"{name}.png", "note": note, "at": time.strftime("%T")})
     save(s)
