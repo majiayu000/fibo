@@ -2,7 +2,7 @@
 // Agent's flat across the width, and the work between them folded into one line.
 import * as Clipboard from 'expo-clipboard';
 import { memo, useEffect, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from './icons';
 import { mono } from './kit';
 import { Markdown } from './markdown';
@@ -101,22 +101,25 @@ export const Mine = memo(function Mine({ text, at, note, tone, copyable, onPress
 const LONG_S = 60;
 
 /** 「干了 2 分钟 · 跑了 3 个命令 · 改了 chat.tsx +6 −2」, opening what it did call by call. */
-export const Worked = memo(function Worked({ tools, onPress }: { tools: Tools; onPress?: () => void }) {
+/** `live`: the turn is still at it; the line turns and says this when it has nothing to count yet. */
+export const Worked = memo(function Worked({ tools, onPress, live, label }: { tools: Tools; onPress?: () => void; live?: string; label?: string }) {
   const t = useTheme();
   const files = tools.files ?? [];
   const commands = tools.commands ?? 0;
   const took = tools.took ?? 0;
   // A stretch of reading has no command and no edit, but calls to look at all the same.
   const calls = !commands && !files.length ? (tools.calls ?? 0) : 0;
-  if (!commands && !files.length && !calls && took < LONG_S) return null;
+  if (live === undefined && !commands && !files.length && !calls && took < LONG_S) return null;
   const added = files.reduce((n, f) => n + f.added, 0);
   const removed = files.reduce((n, f) => n + f.removed, 0);
+  const counted = [took > 0 ? tr('干了 {time}', { time: span(took) }) : '', commands > 0 ? tr('跑了 {n} 个命令', { n: commands }) : '', calls > 0 ? tr('用了 {n} 个工具', { n: calls }) : ''].filter(Boolean).join(' · ');
   const name = files.length === 1 ? files[0].path.split('/').pop() : tr('{n} 个文件', { n: files.length });
   return (
-    <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? 'button' : undefined} style={[s.worked, { borderColor: t.sep }]}>
+    <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? 'button' : undefined} accessibilityLabel={label} style={[s.worked, { borderColor: t.sep }]}>
+      {live !== undefined && <ActivityIndicator size="small" color={t.dim} />}
       <Text numberOfLines={1} style={{ color: t.dim, fontSize: 13, flex: 1 }}>
-        {[took > 0 ? tr('干了 {time}', { time: span(took) }) : '', commands > 0 ? tr('跑了 {n} 个命令', { n: commands }) : '', calls > 0 ? tr('用了 {n} 个工具', { n: calls }) : ''].filter(Boolean).join(' · ')}
-        {(took > 0 || commands > 0) && files.length > 0 && ' · '}
+        {counted || (files.length ? '' : live)}
+        {!!counted && files.length > 0 && ' · '}
         {files.length > 0 && `${tr('改了')} `}
         {files.length > 0 && (
           <Text style={{ fontFamily: mono, color: t.ok }}>

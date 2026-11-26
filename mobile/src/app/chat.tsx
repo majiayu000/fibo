@@ -23,7 +23,7 @@ import { CmdPreview } from '@/ui/cmdpreview';
 import { HOW_NOTE, type How, QUEUED_TAP, SENT_NOW, sendsNow, steerable, whileBusy } from '@/ui/busy';
 import { Composer } from '@/ui/composer';
 import { KeyboardSafe } from '@/ui/keyboard';
-import { LiveWork } from '@/ui/livework';
+import { LiveWork, type LiveProps } from '@/ui/livework';
 import { QueuedSheet } from '@/ui/queuedsheet';
 import type { Picture } from '@/ui/pictures';
 import { cardTitle } from '@/ui/format';
@@ -50,7 +50,7 @@ const POLL_MS = 2000;
 /** A message on its way, as its bubble shows it. */
 const pendingText = (p: Pending) => (p.pictures ? `${tr('[{n} 张图片]', { n: p.pictures })} ${p.text}`.trim() : p.text);
 
-type Line = { kind: 'msg'; m: Message } | { kind: 'pending'; p: Pending } | { kind: 'unsent'; id: string; text: string; error?: string };
+type Line = { kind: 'msg'; m: Message } | { kind: 'pending'; p: Pending } | { kind: 'unsent'; id: string; text: string; error?: string } | { kind: 'live'; p: LiveProps };
 
 export default function Chat() {
   const t = useTheme();
@@ -323,16 +323,6 @@ export default function Chat() {
     }
   }
 
-  // Inverted list: index 0 sits at the bottom.
-  const rows: Line[] = useMemo(
-    () => [
-      ...outbox.map((u) => ({ kind: 'unsent' as const, id: u.id, text: u.text, error: u.error })).reverse(),
-      ...pending.map((p) => ({ kind: 'pending' as const, p })).reverse(),
-      ...[...messages].reverse().map((m) => ({ kind: 'msg' as const, m })),
-    ],
-    [messages, pending, outbox],
-  );
-
   const ask = useAsk(machine, card, online);
   const [askLines, setAskLines] = useState<number | null>(null);
   const answerButtons = rowAnswers(ask, askLines, supports(m, 'answer'));
@@ -360,10 +350,52 @@ export default function Chat() {
     (seq?: number) => router.push({ pathname: '/tools', params: { machine, terminal, session: shown.current ?? '', ...(seq ? { seq: String(seq) } : {}) } }),
     [machine, terminal],
   );
+  // What it does since its last message, in the flow where that work's folded line will stand,
+  // above the words sent meanwhile: they wait for it, as in the CLI.
+  const lastAgentAt = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'agent') return messages[i].at;
+    return 0;
+  }, [messages]);
+  const canList = supports(m, 'toolcalls');
+  const canLast = supports(m, 'toolslast');
+  const workflowLines = card?.workflows?.join('\n') ?? '';
+  const live: LiveProps | null = useMemo(
+    () =>
+      session && (workflowLines || (running && (card?.doing || canList)))
+        ? {
+            machine,
+            session,
+            running: !!running,
+            // A word sent mid-turn does not restart the stretch the command count covers.
+            since: Math.max(card?.running_since ?? 0, lastAgentAt),
+            after: lastAgentAt,
+            doing: card?.doing,
+            workflows: workflowLines ? workflowLines.split('\n') : undefined,
+            steps: !!running && canLast,
+            focused,
+            onOpen: canList ? () => toTools() : undefined,
+          }
+        : null,
+    [session, workflowLines, running, card?.doing, card?.running_since, lastAgentAt, machine, focused, toTools, canList, canLast],
+  );
+
+  // Inverted list: index 0 sits at the bottom.
+  const rows: Line[] = useMemo(
+    () => [
+      ...outbox.map((u) => ({ kind: 'unsent' as const, id: u.id, text: u.text, error: u.error })).reverse(),
+      ...pending.map((p) => ({ kind: 'pending' as const, p })).reverse(),
+      ...(live ? [{ kind: 'live' as const, p: live }] : []),
+      ...[...messages].reverse().map((m) => ({ kind: 'msg' as const, m })),
+    ],
+    [messages, pending, outbox, live],
+  );
+
   // The hub's heartbeat redraws this screen; a row redraws only when its own message changes.
   const renderItem = useCallback(
     ({ item: l }: { item: Line }) =>
-      l.kind === 'msg' ? (
+      l.kind === 'live' ? (
+        <LiveWork {...l.p} />
+      ) : l.kind === 'msg' ? (
         l.m.role === 'user' ? (
           <UserLine m={l.m} files={picturesFor(sentPictures, machine, terminal, l.m.text, l.m.at)} />
         ) : (
@@ -445,7 +477,7 @@ export default function Chat() {
         <FlatList
           inverted
           data={rows}
-          keyExtractor={(l) => (l.kind === 'msg' ? `m${l.m.seq}` : l.kind === 'pending' ? `p${l.p.at}${l.p.text}` : `u${l.id}`)}
+          keyExtractor={(l) => (l.kind === 'live' ? 'live' : l.kind === 'msg' ? `m${l.m.seq}` : l.kind === 'pending' ? `p${l.p.at}${l.p.text}` : `u${l.id}`)}
           renderItem={renderItem}
           initialNumToRender={8}
           maxToRenderPerBatch={6}
@@ -453,21 +485,6 @@ export default function Chat() {
           onEndReached={older}
           onEndReachedThreshold={0.3}
           contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14, gap: 10 }}
-          ListHeaderComponent={
-            session && ((card?.workflows?.length ?? 0) > 0 || running && (card?.doing || supports(m, 'toolcalls') || supports(m, 'read'))) ? (
-              <LiveWork
-                machine={machine}
-                terminal={terminal}
-                session={session}
-                doing={card?.doing}
-                workflows={card?.workflows}
-                steps={running && supports(m, 'toolslast')}
-                screen={running && supports(m, 'read')}
-                focused={focused}
-                onOpen={supports(m, 'toolcalls') ? () => toTools() : undefined}
-              />
-            ) : undefined
-          }
           ListFooterComponent={
             canReadBack && messages.length > 0 ? (
               <Pressable accessibilityRole="button" disabled={readingBack} onPress={older} style={{ paddingVertical: 8 }}>
