@@ -100,7 +100,7 @@ impl Pane {
         .detach();
     }
     /// A peek that is used, not just looked at, sizes the terminal to itself. A look at
-    /// another machine's terminal also takes its input over, as 点击接管输入 does.
+    /// another machine's terminal also takes its input over, as typing in a pane does.
     pub(super) fn take_size(&mut self, cx: &mut Context<Self>) {
         if !self.peek {
             return;
@@ -112,11 +112,32 @@ impl Pane {
         }
         cx.notify();
     }
-    /// What was typed while input was being taken over, once the link has the screen.
+    /// Typed into a pane another window or machine holds: typing is wanting it, so the pane
+    /// attaches again as the writer and what was typed waits for the new link's screen.
+    /// Showing a pane never takes it (`sync_panes`); only this and 点击接管输入 do.
+    fn take_input(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) {
+        let wake = self.wake.clone();
+        self.connection = Connection::new(&self.socket, &self.terminal, true, wake);
+        self.bells_seen = 0;
+        self.local_error = None;
+        self.held = bytes;
+        cx.notify();
+    }
+    /// What was typed while input was being taken over, once the link has the screen. The
+    /// pane's size goes first, so the keys land on the terminal sized as the pane shows it.
     pub(super) fn send_held(&mut self) {
         let ready = self.connection.state.lock().is_ok_and(|s| s.vt.is_some());
         if self.held.is_empty() || !ready {
             return;
+        }
+        let ((cols, rows), (cell_width, cell_height)) = (self.requested_size, self.requested_cell);
+        if cols > 0 && rows > 0 {
+            let _ = self.connection.send(Request::Resize {
+                cols,
+                rows,
+                cell_width,
+                cell_height,
+            });
         }
         let bytes = std::mem::take(&mut self.held);
         if let Err(error) = self.connection.send(Request::Input {
@@ -137,6 +158,12 @@ impl Pane {
         // Behind what is still waiting for the taken link, in order.
         if !self.held.is_empty() {
             self.held.extend(bytes);
+            return true;
+        }
+        // Mouse reports and focus reports are not wanting the terminal: moving the pointer
+        // over a pane must not take it from whoever is typing there.
+        if origin == Origin::Typed && self.has_other_owner() {
+            self.take_input(bytes, cx);
             return true;
         }
         // Typed while the link is down: kept for the user to send once it is back.

@@ -1,4 +1,5 @@
-//! Two real connections to one PTY: refusal, native takeover click and owner disconnect.
+//! Two real connections to one PTY: a pane shown again only looks, typing takes the input,
+//! and the takeover click and the writer leaving still hand it over.
 use super::*;
 use crate::connection::Connection;
 
@@ -51,64 +52,58 @@ pub(super) fn start(
                 w.render_to_image().unwrap().save(directory.join(name)).unwrap();
             }).unwrap();
         };
+        let shown = |cx: &mut gpui::AsyncApp| handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
+        let writable = |c: &Connection| c.state.lock().unwrap().writable;
+        // Another window or machine takes the terminal: this pane only looks.
         let other = competitor();
         until!(pane.read_with(cx, |p, _| p.has_other_owner()));
-        pane.update(cx, |p, a| p.visual_type("BLOCKED-ONE\r", a));
-        let error = pane.read_with(cx, |p, _| p.visual_error()).unwrap();
-        eprintln!("read-only refusal: {error}");
-        assert!(!pane.read_with(cx, |p, _| p.visual_text()).contains("BLOCKED-ONE"));
         shot("1-read-only-native.png", cx);
-        // Click the real footer button rather than calling a test-only takeover method.
+        // Made again, as a tab switch or a split synced from another machine makes it, the
+        // pane still only looks: showing a terminal is not wanting its input.
+        handle.update(cx, |v, _, a| v.visual_remake_shown_pane(a)).unwrap();
+        pane = shown(cx);
+        until!(pane.read_with(cx, |p, _| p.visual_vt_ready()));
+        wait(500).await;
+        assert!(writable(&other), "showing a pane took the input");
+        assert!(pane.read_with(cx, |p, _| p.has_other_owner()));
+        shot("2-shown-pane-only-looks.png", cx);
+        // Typing in it is wanting it: it takes over and what was typed arrives once.
+        pane.update(cx, |p, a| p.visual_type("TYPED-TAKES\r", a));
+        until!(!writable(&other));
+        until!(pane.read_with(cx, |p, _| p.visual_text().contains("TYPED-TAKES")));
+        pane.update(cx, |p, a| p.visual_type("AFTER-TAKE\r", a));
+        until!(pane.read_with(cx, |p, _| p.visual_text().contains("AFTER-TAKE")));
+        assert!(pane.read_with(cx, |p, _| p.visual_error()).is_none());
+        shot("3-typing-took-over.png", cx);
+        drop(other);
+        // The footer button still takes it, for a program used only with the mouse. Click
+        // the real button rather than calling a test-only takeover method.
+        let other = competitor();
+        until!(pane.read_with(cx, |p, _| p.has_other_owner()));
         cx.update_window(handle.into(), |_, w, a| {
             let viewport = w.viewport_size();
             native_click(w, a, point(viewport.width - px(80.), viewport.height - px(theme::Theme::STATUSBAR + theme::Theme::FOOTER / 2. + 2.)), gpui::MouseButton::Left);
         }).unwrap();
-        until!(!other.state.lock().unwrap().writable);
-        pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
+        until!(!writable(&other));
+        pane = shown(cx);
         until!(pane.read_with(cx, |p, _| p.visual_vt_ready() && !p.has_other_owner()));
-        pane.update(cx, |p, a| p.visual_type("TAKEN-ONCE\r", a));
-        until!(pane.read_with(cx, |p, _| p.visual_text().contains("TAKEN-ONCE")));
-        assert!(pane.read_with(cx, |p, _| p.visual_error()).is_none());
-        shot("2-taken-native.png", cx);
+        pane.update(cx, |p, a| p.visual_type("CLICKED-ONCE\r", a));
+        until!(pane.read_with(cx, |p, _| p.visual_text().contains("CLICKED-ONCE")));
         drop(other);
+        // The writer leaving hands the input to the one still looking.
         let other = competitor();
         until!(pane.read_with(cx, |p, _| p.has_other_owner()));
-        pane.update(cx, |p, a| p.visual_type("BLOCKED-TWO\r", a));
         drop(other);
         until!(!pane.read_with(cx, |p, _| p.has_other_owner()));
         pane.update(cx, |p, a| p.visual_type("PROMOTED-ONCE\r", a));
         until!(pane.read_with(cx, |p, _| p.visual_text().contains("PROMOTED-ONCE")));
         assert!(pane.read_with(cx, |p, _| p.visual_error()).is_none());
         let text = pane.read_with(cx, |p, _| p.visual_text());
-        assert!(!text.contains("BLOCKED-"), "refused input was replayed: {text}");
-        assert_eq!(text.matches("TAKEN-ONCE").count(), 1, "{text}");
-        assert_eq!(text.matches("PROMOTED-ONCE").count(), 1, "{text}");
-        shot("3-promoted-native.png", cx);
-        // A split opened on another machine reaches this window while nobody is at it: the
-        // pane made for it only looks, and the one who opened it keeps typing.
-        let other = competitor();
-        until!(pane.read_with(cx, |p, _| p.has_other_owner()));
-        handle.update(cx, |v, _, a| {
-            v.visual_set_window_away(true);
-            v.visual_remake_shown_pane(a);
-        }).unwrap();
-        pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
-        until!(pane.read_with(cx, |p, _| p.visual_vt_ready()));
-        wait(500).await;
-        assert!(other.state.lock().unwrap().writable, "a window not in use took the input");
-        assert!(pane.read_with(cx, |p, _| p.has_other_owner()));
-        shot("4-away-window-only-looks.png", cx);
-        // In use again, a pane it makes takes over as before.
-        handle.update(cx, |v, _, a| {
-            v.visual_set_window_away(false);
-            v.visual_remake_shown_pane(a);
-        }).unwrap();
-        until!(!other.state.lock().unwrap().writable);
-        pane = handle.update(cx, |v, _, _| v.visual_shown_pane()).unwrap();
-        until!(pane.read_with(cx, |p, _| p.visual_vt_ready() && !p.has_other_owner()));
-        shot("5-in-use-window-takes-over.png", cx);
-        drop(other);
-        std::fs::write(directory.join("result.txt"), format!("PASS: refused input never reached PTY; native takeover click and disconnect promotion each delivered once; subsequent input cleared refusal; a pane made while the window was away only looked, one made in use took over.\nRefusal: {error}\nScreen:\n{text}\n")).unwrap();
+        for word in ["TYPED-TAKES", "AFTER-TAKE", "CLICKED-ONCE", "PROMOTED-ONCE"] {
+            assert_eq!(text.matches(word).count(), 1, "{word}: {text}");
+        }
+        shot("4-promoted-native.png", cx);
+        std::fs::write(directory.join("result.txt"), format!("PASS: a pane made again only looked; typing took the input and the typed line arrived once; the footer click and the writer leaving each handed it over.\nScreen:\n{text}\n")).unwrap();
         cx.update(|cx| cx.quit());
     }).detach();
     true

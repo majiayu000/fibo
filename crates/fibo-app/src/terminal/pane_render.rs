@@ -131,12 +131,12 @@ impl Render for Pane {
             String::new()
         } else if let Some((cols, rows)) = grid {
             t!(
-                "只读 · 尺寸跟另一个窗口（{cols}×{rows}）· 可明确接管",
+                "只读 · 尺寸跟另一个窗口（{cols}×{rows}）· 打字就接管",
                 cols,
                 rows
             )
         } else {
-            t!("只读 · 可明确接管").into()
+            t!("只读 · 打字就接管").into()
         };
         let writable = state.writable;
         drop(state);

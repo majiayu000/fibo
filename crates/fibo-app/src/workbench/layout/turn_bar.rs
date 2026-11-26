@@ -335,7 +335,8 @@ impl Workbench {
             });
         ask.into_iter().chain(at).collect()
     }
-    /// Shown while another connection holds this pane's input: the way to take it back.
+    /// Shown while another connection holds this pane's input: typing takes it back, and so
+    /// does the button, for a program used only with the mouse.
     pub(super) fn pane_footer(&self, id: &str, takeover: String, cx: &Context<Self>) -> gpui::Div {
         div()
             .h(px(T::FOOTER))
@@ -347,7 +348,11 @@ impl Workbench {
             .border_color(T::color(T::border()))
             .text_size(px(T::PANE_FOOTER_SIZE))
             .text_color(T::color(T::muted()))
-            .child(div().flex_1().child(t!("输入权由另一个连接持有")))
+            .child(
+                div()
+                    .flex_1()
+                    .child(t!("另一个窗口在输入 · 在这里打字就接管")),
+            )
             .child(
                 button(
                     gpui::SharedString::from(format!("takeover-{id}")),
