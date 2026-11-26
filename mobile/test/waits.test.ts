@@ -4,7 +4,7 @@
 // phone could not read left 「等你回答」 and Esc, and the conversation stuck).
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { sendBlocked, stillBlocks, waitView } from '../src/ui/waits';
+import { sendBlocked, stillBlocks, waitView, longWait } from '../src/ui/waits';
 
 type Rule = { id: string; kind: string; match: string };
 const rules: Rule[] = JSON.parse(readFileSync(new URL('../../crates/fibo-core/assets/reasons.json', import.meta.url), 'utf8')).rules ?? [];
@@ -87,4 +87,12 @@ describe('the line that stopped a send', () => {
     expect(stillBlocks(false, null, null)).toBe(false);
     expect(stillBlocks(false, waitView(SAMPLES['generic-input']), SAMPLES['generic-input'])).toBe(false);
   });
+});
+
+test('a plan longer than the panel offers 看全文, a short question does not', () => {
+  // 2026-11-26 walk: a plan's steps were cut at six lines with only 「看终端」 to read them by.
+  const plan = '【计划】按这个计划开始做吗？\nPlan: add a line\n\nContext\nA marker line for the walk.\n\nSteps\n1、Append\n2、Diff';
+  expect(longWait(plan)).toBe(true);
+  expect(longWait('x'.repeat(300))).toBe(true);
+  expect(longWait('Which color do you want?')).toBe(false);
 });

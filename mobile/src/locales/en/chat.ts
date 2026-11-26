@@ -7,6 +7,7 @@ export const chat: Record<string, Entry> = {
   // Waits and the strip above the composer
   '先点「看终端」看清楚，再用 ↑ ↓ 移到要的那项、按回车': 'Tap “View terminal” to see it, then use ↑ ↓ to move to the one you want and press Return',
   看终端: 'View terminal',
+  收起: 'Show less',
   回车: 'Return',
   '要在电脑的浏览器里完成，手机上做不了': 'This has to be done in the browser on the computer, not on the phone',
   '这个表单要在电脑上填，手机上还填不了': 'This form has to be filled in on the computer for now',
@@ -96,6 +97,7 @@ export const chat: Record<string, Entry> = {
   看它到现在做了什么: 'See what it has done so far',
   '{head}，看它到现在做了什么': '{head}. See what it has done so far',
   还没结束: 'Not finished',
+  停在这里: 'Stopped here',
   终端最后几行: 'Terminal’s last lines',
   画面是空的: 'The screen is empty',
   关上: 'Close',

@@ -20,6 +20,8 @@ export type LiveProps = {
   machine: string;
   session: string;
   running: boolean;
+  /** Stopped before it answered: asked once, drawn still, with nothing turning. */
+  stopped?: boolean;
   /** Where this stretch of work began, Unix seconds: the turn's start or its last message. */
   since: number;
   /** The Agent's last message, Unix seconds: calls before it are folded above it already. */
@@ -34,7 +36,7 @@ export type LiveProps = {
   onOpen?: () => void;
 };
 
-export const LiveWork = memo(function LiveWork({ machine, session, running, since, after, doing, workflows, steps, focused, onOpen }: LiveProps) {
+export const LiveWork = memo(function LiveWork({ machine, session, running, stopped, since, after, doing, workflows, steps, focused, onOpen }: LiveProps) {
   const t = useTheme();
   const [calls, setCalls] = useState<ToolCall[]>([]);
   const [sum, setSum] = useState<Tools>({});
@@ -51,7 +53,8 @@ export const LiveWork = memo(function LiveWork({ machine, session, running, sinc
     // A new message starts a new stretch: what was listed is folded above it now.
     setCalls([]);
     setSum({});
-    if (!ticking || !steps) return;
+    const once = stopped && focused;
+    if (!(ticking || once) || !steps) return;
     let live = true;
     let asking = false;
     const ask = async () => {
@@ -70,12 +73,12 @@ export const LiveWork = memo(function LiveWork({ machine, session, running, sinc
       }
     };
     ask();
-    const timer = setInterval(ask, POLL_MS);
+    const timer = once ? undefined : setInterval(ask, POLL_MS);
     return () => {
       live = false;
       clearInterval(timer);
     };
-  }, [machine, session, ticking, steps, after]);
+  }, [machine, session, ticking, stopped, focused, steps, after]);
 
   const shown = calls.filter((c) => !c.at || c.at >= after);
   const head = doing ? tr('正在{doing}', { doing }) : tr('看它到现在做了什么');
@@ -90,10 +93,11 @@ export const LiveWork = memo(function LiveWork({ machine, session, running, sinc
           onPress={onOpen}
         />
       )}
+      {stopped && !running && <Worked tools={sum} onPress={onOpen} />}
       {workflows?.map((line, i) => (
         <Text key={i} numberOfLines={1} style={{ fontSize: 12.5, color: t.text }}>◇ {line}</Text>
       ))}
-      {running &&
+      {(running || stopped) &&
         shown.map((c) => (
           <View key={c.id} style={s.step}>
             <Text style={{ width: 14, textAlign: 'center', fontSize: 12, color: c.failed ? t.err : c.open ? t.run : t.ok }}>
@@ -102,7 +106,7 @@ export const LiveWork = memo(function LiveWork({ machine, session, running, sinc
             <Text numberOfLines={1} ellipsizeMode={stepCut(c)} style={{ flex: 1, fontFamily: mono, fontSize: 12.5, color: c.failed ? t.err : t.text }}>
               {stepWords(c)}
             </Text>
-            <Text style={{ fontSize: 12, color: t.dim }}>{c.open ? tr('还没结束') : took(c.took_ms)}</Text>
+            <Text style={{ fontSize: 12, color: t.dim }}>{c.open ? (running ? tr('还没结束') : tr('停在这里')) : took(c.took_ms)}</Text>
           </View>
         ))}
     </View>

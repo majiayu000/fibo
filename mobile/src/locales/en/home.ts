@@ -50,8 +50,8 @@ export const home: Record<string, Entry> = {
   全部: 'All',
   '{name}，{n} 个': '{name}, {n}',
   '先不管的空间 · {n}': 'Quiet spaces · {n}',
-  '在电脑上点了「先不管」，这些空间的对话不会出现在手机上。':
-    'These spaces were set to Quiet on the computer, so their conversations stay off the phone.',
+  '在电脑上点了「先不管」，开在这些空间标签页里的对话不会出现在手机上；开在别处的照常显示。':
+    'These spaces were set to Quiet on the computer: conversations open in their tabs stay off the phone; ones open elsewhere still show.',
   '接着管 {name}': 'Resume {name}',
   '断开前：{state}': 'Before disconnect: {state}',
 
