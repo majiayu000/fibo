@@ -406,7 +406,6 @@ impl Workbench {
         cx.observe_window_appearance(window, |_, _, cx| crate::ui::appearance::apply(cx))
             .detach();
         cx.observe_window_activation(window, |this, window, cx| {
-            this.hosts.window_away = !window.is_window_active();
             if this.hosts.embedded {
                 if window.is_window_active() && !this.undrawn() {
                     this.read_hooks(cx);

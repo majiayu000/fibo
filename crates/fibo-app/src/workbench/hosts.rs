@@ -33,9 +33,6 @@ pub(super) struct Hosts {
     go: Option<Go>,
     /// The machines list changed: reach those new to it on the next frame.
     pub(super) reach_again: bool,
-    /// The window this is drawn in is not the one in use. A pane made then only looks: its
-    /// terminal showed up because someone opened it elsewhere (`sync_panes`).
-    pub(super) window_away: bool,
 }
 
 /// How long a machine that could not be reached waits before it is tried again.
