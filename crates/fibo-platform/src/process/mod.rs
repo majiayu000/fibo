@@ -47,6 +47,12 @@ pub fn no_console(command: &mut std::process::Command) {
     imp::no_console(command)
 }
 
+/// The curl the system ships, by its full path so `PATH` cannot put another in its place:
+/// `/usr/bin` on macOS and Linux, System32 on Windows 10 1803 and later.
+pub fn curl() -> std::path::PathBuf {
+    imp::curl()
+}
+
 /// Lets `command` outlive this process and whatever session it runs in; TERM still stops it
 /// (`takes_term`).
 pub fn detach(command: &mut std::process::Command) {

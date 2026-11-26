@@ -75,6 +75,10 @@ pub fn was_signalled(status: &std::process::ExitStatus) -> bool {
 
 pub fn no_console(_command: &mut std::process::Command) {}
 
+pub fn curl() -> std::path::PathBuf {
+    "/usr/bin/curl".into()
+}
+
 pub fn detach(command: &mut std::process::Command) {
     use std::os::unix::process::CommandExt;
     // SAFETY: setsid and signal are async-signal-safe.

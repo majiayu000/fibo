@@ -294,7 +294,8 @@ pub fn command_for<'a>(h: &Hook, p: &Payload) -> Result<Run<'a>, String> {
             run
         }
         (None, Some(url)) => {
-            // curl ships with macOS; its own limit backs up ours.
+            // The curl the system ships (Windows has one too, not at /usr/bin); its own limit
+            // backs up ours.
             let secs = h.timeout_ms.div_ceil(1000).to_string();
             let mut args: Vec<std::ffi::OsString> = Vec::new();
             for a in [
@@ -313,7 +314,7 @@ pub fn command_for<'a>(h: &Hook, p: &Payload) -> Result<Run<'a>, String> {
                 args.push(a.into());
             }
             Run {
-                program: "/usr/bin/curl".into(),
+                program: fibo_platform::process::curl().into(),
                 args,
                 ..Run::shell("", timeout, Leftovers::Keep)
             }
@@ -352,6 +353,31 @@ mod tests {
         }
     }
     use super::*;
+
+    /// A webhook posts with a curl that is there: it was /usr/bin/curl on every system,
+    /// which Windows does not have, so every webhook failed there.
+    #[test]
+    fn a_webhook_runs_a_curl_this_system_has() {
+        let hook = Hook {
+            id: "post".into(),
+            on: vec![],
+            command: None,
+            webhook: Some("https://example.invalid/hook".into()),
+            timeout_ms: 1_000,
+            min_ms: 0,
+            file: std::path::PathBuf::new(),
+            skipped: vec![],
+        };
+        let w = fibo_core::sample::every_state();
+        let payload = Hooks::current(&w).into_iter().next().unwrap();
+        let run = command_for(&hook, &payload).unwrap();
+        assert_eq!(run.program, fibo_platform::process::curl().into_os_string());
+        assert!(
+            std::path::Path::new(&run.program).is_file(),
+            "{:?} is not there",
+            run.program
+        );
+    }
 
     /// A notifying plugin keeps 先不管's promise: nothing while aside, no burst on the way
     /// back, and the next new fact is told.
