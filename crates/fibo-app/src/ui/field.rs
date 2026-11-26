@@ -234,6 +234,22 @@ impl Field {
             .find(|&i| self.text.is_char_boundary(i))
             .unwrap_or(0)
     }
+    /// The UTF-16 range `r` as last drawn, on the line it starts on: at least a caret wide,
+    /// a line high.
+    fn drawn_bounds(&self, r: Range<usize>) -> Option<Bounds<Pixels>> {
+        let layout = self.drawn.as_ref()?;
+        let from = layout.position_for_index(self.byte(r.start))?;
+        let to = (layout.position_for_index(self.byte(r.end)))
+            .filter(|to| to.y == from.y)
+            .map_or(from.x, |to| to.x);
+        Some(Bounds::from_corners(
+            from,
+            gpui::point(
+                to.max(from.x + px(T::CARET_WIDTH)),
+                from.y + layout.line_height(),
+            ),
+        ))
+    }
     /// Keeps the caret of a one-line field inside its box, and the text against
     /// its right edge once there is no more to the right.
     fn follow_caret(&mut self, layout: &gpui::TextLayout, visible: Pixels) -> bool {
@@ -663,21 +679,26 @@ impl EntityInputHandler for Field {
         }
         cx.notify();
     }
+    /// Where the input method puts its candidates: under the text being composed, where the
+    /// caret is drawn, not under the whole box (the third line of a description included).
     fn bounds_for_range(
         &mut self,
-        _: Range<usize>,
+        r: Range<usize>,
         bounds: Bounds<Pixels>,
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
-        Some(bounds)
+        Some(self.drawn_bounds(r).unwrap_or(bounds))
     }
     fn character_index_for_point(
         &mut self,
-        _: Point<Pixels>,
+        at: Point<Pixels>,
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<usize> {
-        Some(self.utf16(self.selection.end))
+        Some(self.utf16(self.index_at(at)))
     }
 }
+#[cfg(all(test, debug_assertions, feature = "visual-test"))]
+#[path = "field_ime_tests.rs"]
+mod ime_tests;
