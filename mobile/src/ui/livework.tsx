@@ -10,14 +10,11 @@ import { remote } from '@/remote/hub';
 import { mono } from './kit';
 import { type Tools, Worked } from './message';
 import { useTheme } from './theme';
-import { took, type ToolCall } from './toolview';
+import { stepCut, stepWords, took, type ToolCall } from './toolview';
 import { tr } from '@/i18n';
 
 const POLL_MS = 2000;
 const STEPS = 3;
-
-/** The steps' words: what the Agent said a call does, else what it ran. */
-const words = (c: ToolCall) => c.about || c.label || c.name;
 
 export type LiveProps = {
   machine: string;
@@ -102,8 +99,8 @@ export const LiveWork = memo(function LiveWork({ machine, session, running, sinc
             <Text style={{ width: 14, textAlign: 'center', fontSize: 12, color: c.failed ? t.err : c.open ? t.run : t.ok }}>
               {c.failed ? '✗' : c.open ? '·' : '✓'}
             </Text>
-            <Text numberOfLines={1} ellipsizeMode="middle" style={{ flex: 1, fontFamily: mono, fontSize: 12.5, color: c.failed ? t.err : t.text }}>
-              {words(c)}
+            <Text numberOfLines={1} ellipsizeMode={stepCut(c)} style={{ flex: 1, fontFamily: mono, fontSize: 12.5, color: c.failed ? t.err : t.text }}>
+              {stepWords(c)}
             </Text>
             <Text style={{ fontSize: 12, color: t.dim }}>{c.open ? tr('还没结束') : took(c.took_ms)}</Text>
           </View>

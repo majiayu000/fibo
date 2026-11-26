@@ -21,6 +21,8 @@ type Fake = { name: string; closed: boolean; close(): void };
 const fake = (name: string): Fake => ({ name, closed: false, close() { this.closed = true; } });
 const after = <T,>(ms: number, v: T, fail = false) =>
   new Promise<T>((res, rej) => setTimeout(() => (fail ? rej(v) : res(v)), ms));
+/** A relay that refuses after `ms`: typed as the relay it would have been, as `firstThrough` takes. */
+const down = (ms: number, why: string) => new Promise<Fake>((_, rej) => setTimeout(() => rej(new Error(why)), ms));
 
 test('the first relay through wins and the later one is closed', async () => {
   const slow = fake('slow');
@@ -31,8 +33,8 @@ test('the first relay through wins and the later one is closed', async () => {
 });
 
 test('one relay down does not matter; all down fails with the first relay\'s reason', async () => {
-  const won = await firstThrough([() => after(1, new Error('a down'), true), () => after(10, fake('b'))]);
+  const won = await firstThrough([() => down(1, 'a down'), () => after(10, fake('b'))]);
   expect(won.name).toBe('b');
-  const failed = await firstThrough([() => after(10, new Error('a down'), true), () => after(1, new Error('b down'), true)]).catch((e) => e);
+  const failed = await firstThrough([() => down(10, 'a down'), () => down(1, 'b down')]).catch((e) => e);
   expect((failed as Error).message).toBe('a down');
 });

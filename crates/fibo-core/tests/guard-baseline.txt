@@ -11,7 +11,7 @@ field background	crates/fibo-host/src/host/shell_watch.rs	4
 field background	crates/fibo-host/src/host/snapshot.rs	1
 field content-name	crates/fibo-host/src/control.rs	1
 field content-name	crates/fibo-host/src/plugins_cmd.rs	1
-field content-name	mobile/src/ui/livework.tsx	1
+field content-name	mobile/src/ui/toolview.ts	1
 field content-title	crates/fibo-app/src/native.m	1
 field content-title	crates/fibo-app/src/workbench/board/remote.rs	2
 field content-title	crates/fibo-app/src/workbench/board_drawer.rs	3
