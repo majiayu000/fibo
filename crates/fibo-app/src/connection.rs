@@ -35,11 +35,18 @@ pub struct Connection {
     /// Separate from `state`: the callback runs while the reader holds that lock.
     pub clipboard: Arc<Mutex<Option<String>>>,
     outbox: Arc<Outbox>,
+    /// Set under `state`'s lock when the pane lets go, as `RecognitionConnection` does: a
+    /// thread still connecting then never attaches for it.
+    closed: Arc<AtomicBool>,
 }
 impl Drop for Connection {
     fn drop(&mut self) {
         self.outbox.abandon();
-        if let Ok(s) = self.state.lock()
+        // The lock the connecting thread stores its socket under: either it sees `closed`
+        // and leaves, or its socket is here to shut.
+        let state = self.state.lock();
+        self.closed.store(true, Ordering::Release);
+        if let Ok(s) = &state
             && let Some(socket) = &s.socket
         {
             let _ = socket.shutdown(std::net::Shutdown::Both);
@@ -66,12 +73,14 @@ impl Connection {
         let outbox = Arc::new(Outbox::new(OUTBOX_LIMIT));
         let receiver = Arc::clone(&outbox);
         let unsent = Arc::clone(&outbox);
+        let closed = Arc::new(AtomicBool::new(false));
         let result = Self {
             state: Arc::clone(&state),
             dirty: Arc::clone(&dirty),
             bells: Arc::clone(&bells),
             clipboard: Arc::clone(&clipboard),
             outbox,
+            closed: Arc::clone(&closed),
         };
         let socket = socket.to_owned();
         let id = id.to_owned();
@@ -79,7 +88,15 @@ impl Connection {
             let work = (|| -> io::Result<()> {
                 let mut stream = local::Stream::connect(socket)?;
                 stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
-                state.lock().unwrap().socket = Some(stream.try_clone()?);
+                {
+                    let mut slot = state.lock().unwrap();
+                    // Its pane went before there was a socket to shut: attaching now, with
+                    // takeover, would take the terminal's input from the pane on screen.
+                    if closed.load(Ordering::Acquire) {
+                        return Ok(());
+                    }
+                    slot.socket = Some(stream.try_clone()?);
+                }
                 send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
                 match receive::<Reply>(&mut stream)? {
                     Reply::Hello { major: MAJOR, .. } => (),
@@ -401,6 +418,7 @@ mod tests {
             bells: Arc::new(AtomicU64::new(0)),
             clipboard: Arc::new(Mutex::new(None)),
             outbox: Arc::new(Outbox::new(OUTBOX_LIMIT)),
+            closed: Arc::new(AtomicBool::new(false)),
         };
         let input = || Request::Input {
             bytes: b"blocked".to_vec(),
@@ -561,6 +579,52 @@ mod tests {
         drop(connection);
         peer.join().unwrap();
         let _ = std::fs::remove_file(path);
+    }
+
+    /// A pane can go before its connection reached the host (a tab shown for one frame).
+    /// What it started must not attach afterwards, with takeover, for no one. Whether the
+    /// pane goes before or after the socket is stored is a race, so it is run many times.
+    #[test]
+    fn a_connection_dropped_before_it_reaches_the_host_does_not_stay_attached() {
+        let path = std::env::temp_dir().join(format!("fibo-gone-{}.sock", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let listener = local::Listener::bind(&path).unwrap();
+        for round in 0..20 {
+            let (tx, _wake) = futures::channel::mpsc::unbounded();
+            drop(Connection::new(&path, "terminal", true, tx));
+            let mut stream = listener.accept().unwrap();
+            // The host as it is: it answers whatever comes until the line closes. macOS
+            // refuses the timeout itself on a line the other end already closed.
+            let ended = (|| -> io::Result<()> {
+                stream.set_read_timeout(Some(std::time::Duration::from_secs(2)))?;
+                let _: Request = receive(&mut stream)?;
+                let hello = Reply::Hello {
+                    major: MAJOR,
+                    instance: "test".into(),
+                    build: Build::default(),
+                };
+                send(&mut stream, CONTROL, &hello)?;
+                let _: Request = receive(&mut stream)?;
+                let attached = Reply::Attached {
+                    writable: true,
+                    cols: 80,
+                    rows: 24,
+                };
+                send(&mut stream, CONTROL, &attached)?;
+                loop {
+                    read_frame(&mut stream)?;
+                }
+            })();
+            let error = ended.unwrap_err();
+            assert!(
+                !matches!(
+                    error.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ),
+                "round {round}: still attached after its pane went: {error}"
+            );
+        }
+        let _ = std::fs::remove_file(&path);
     }
 
     /// Plays one host lifetime: greets a single subscriber, reports `phase`, then exits.
