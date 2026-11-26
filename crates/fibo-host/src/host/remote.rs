@@ -10,7 +10,7 @@
 //! the child itself waits and takes it back (#69).
 use fibo_core::protocol::{RemoteLive, RemoteRelay, RemoteState, RemoteStatus};
 use serde::{Deserialize, Serialize};
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
@@ -43,17 +43,14 @@ pub fn load(root: &Path) -> Config {
         .unwrap_or_default()
 }
 
+/// For a setting that is written back: one that cannot be understood is an error, never
+/// 「off, no key」, since saving over it would drop the relays' keys.
+fn load_for_update(root: &Path) -> io::Result<Config> {
+    fibo_core::state_file::read_for_update(&file(root))
+}
+
 fn save(root: &Path, config: &Config) -> io::Result<()> {
-    let path = file(root);
-    let tmp = path.with_extension("tmp");
-    let _ = std::fs::remove_file(&tmp);
-    let mut f = fibo_platform::fs::private_file()
-        .write(true)
-        .create_new(true)
-        .open(&tmp)?;
-    f.write_all(&serde_json::to_vec_pretty(config)?)?;
-    f.sync_all()?;
-    std::fs::rename(&tmp, &path)
+    fibo_platform::fs::write_private(&file(root), &serde_json::to_vec_pretty(config)?)
 }
 
 pub(crate) struct Supervisor {
@@ -74,14 +71,27 @@ struct Inner {
 
 impl Supervisor {
     pub(crate) fn start(root: &Path, on_change: impl Fn() + Send + Sync + 'static) -> Arc<Self> {
-        let config = load(root);
-        let live = RemoteLive {
-            state: if config.enabled {
-                RemoteState::Connecting
-            } else {
-                RemoteState::Off
-            },
-            ..Default::default()
+        let (config, live) = match load_for_update(root) {
+            Ok(config) => {
+                let live = RemoteLive {
+                    state: if config.enabled {
+                        RemoteState::Connecting
+                    } else {
+                        RemoteState::Off
+                    },
+                    ..Default::default()
+                };
+                (config, live)
+            }
+            // Stays off and says why until the file is fixed or removed.
+            Err(e) => (
+                Config::default(),
+                RemoteLive {
+                    state: RemoteState::Failed,
+                    detail: e.to_string(),
+                    online: vec![],
+                },
+            ),
         };
         let s = Arc::new(Self {
             root: root.to_owned(),
@@ -110,6 +120,7 @@ impl Supervisor {
                 fibo_remote::link::Link::websocket_base(relay).map_err(io::Error::other)?;
             }
         }
+        load_for_update(&self.root)?;
         save(&self.root, &config)?;
         let mut inner = self.lock();
         inner.config = config;
