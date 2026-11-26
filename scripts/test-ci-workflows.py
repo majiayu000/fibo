@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -130,6 +131,22 @@ class WorkflowPrograms(unittest.TestCase):
         self.assertEqual(workflow.count("if: always() && needs.changes.outputs.native != 'false'"), 2)
         self.assertIn("if: needs.changes.result != 'success'", workflow)
         self.assertIn("Workflow regressions or path selection failed", workflow)
+
+
+class ActionPins(unittest.TestCase):
+    # ff360fb pinned every action to a verified commit; workflows added after it went back
+    # to moving tags, and nothing noticed. A tag can be moved to other code under the same name.
+    def test_every_action_is_pinned_to_a_commit_with_its_version(self):
+        pinned = re.compile(r"^[^@\s]+@[0-9a-f]{40} # v\S+$")
+        loose = []
+        for workflow in sorted((ROOT / ".github/workflows").glob("*.yml")):
+            for number, line in enumerate(workflow.read_text().splitlines(), 1):
+                found = re.match(r"^\s*(?:-\s+)?uses:\s*(.+?)\s*$", line)
+                if not found or found[1].startswith(("./", "docker://")):
+                    continue
+                if not pinned.match(found[1]):
+                    loose.append(f"{workflow.name}:{number}: {found[1]}")
+        self.assertEqual(loose, [], "use <action>@<40-hex commit> # <version>")
 
 
 if __name__ == "__main__":
