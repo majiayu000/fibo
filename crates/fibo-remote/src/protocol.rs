@@ -437,6 +437,9 @@ pub struct Hello {
     /// The Fibo build answering, e.g. `0.1.0`; `version` above is the protocol's.
     #[serde(default)]
     pub app_version: Option<String>,
+    /// Every relay the machine is on; a phone dials them all. Absent before 11-26.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relays: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

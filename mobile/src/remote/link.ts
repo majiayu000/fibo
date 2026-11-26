@@ -9,6 +9,8 @@ export const LINK_VERSION = 2;
 
 export type Link = {
   relay: string;
+  /** Other relays the same machine is on (`alt=`, repeatable): every one is dialed, the first through wins. */
+  alts?: string[];
   /** The machine's code, shared by every phone it paired: gives the route token. */
   code: Uint8Array;
   device: string;
@@ -70,15 +72,19 @@ export function parseLink(text: string): Link {
   const prefix = 'mooring://pair?';
   if (!text.startsWith(prefix)) throw new LinkError('foreign', 'not a mooring://pair link');
   const fields: Record<string, string> = {};
+  const alts: string[] = [];
   for (const kv of text.slice(prefix.length).split('&')) {
     const at = kv.indexOf('=');
-    if (at > 0 && !(kv.slice(0, at) in fields)) fields[kv.slice(0, at)] = unescape(kv.slice(at + 1));
+    if (at > 0 && kv.slice(0, at) === 'alt') alts.push(unescape(kv.slice(at + 1)));
+    else if (at > 0 && !(kv.slice(0, at) in fields)) fields[kv.slice(0, at)] = unescape(kv.slice(at + 1));
   }
   if (Number(fields.v) !== LINK_VERSION) throw new LinkError('version', `unsupported link version ${fields.v}`);
   if (!fields.relay) throw new LinkError('broken', 'no relay');
   if (!fields.device) throw new LinkError('broken', 'no device');
+  const others = [...new Set(alts)].filter((a) => a && a !== fields.relay);
   return {
     relay: fields.relay,
+    ...(others.length && { alts: others }),
     code: code(fields.code, 'code'),
     device: fields.device,
     key: code(fields.key, 'key'),
@@ -88,7 +94,8 @@ export function parseLink(text: string): Link {
 }
 
 export function linkText(l: Link): string {
-  return `mooring://pair?v=${LINK_VERSION}&relay=${escape(l.relay)}&code=${b64url(l.code)}&device=${escape(l.device)}&key=${b64url(l.key)}&machine=${escape(l.machine)}&name=${escape(l.name)}`;
+  const alts = (l.alts ?? []).map((a) => `&alt=${escape(a)}`).join('');
+  return `mooring://pair?v=${LINK_VERSION}&relay=${escape(l.relay)}${alts}&code=${b64url(l.code)}&device=${escape(l.device)}&key=${b64url(l.key)}&machine=${escape(l.machine)}&name=${escape(l.name)}`;
 }
 
 /** The route token the relay knows this machine by. */
@@ -108,6 +115,9 @@ export function websocketBase(relay: string): string {
 
 /** The relay's own web address, where it answers `/healthz`. */
 export const relayHttpBase = (relay: string): string => websocketBase(relay).replace(/^ws(s?):\/\//, 'http$1://');
+
+/** Every relay to dial the machine through, the link's own first. */
+export const relaysOf = (l: Link): string[] => [...new Set([l.relay, ...(l.alts ?? [])])];
 
 /** Where this phone opens its WebSocket. */
 export const linkUrl = (l: Link): string =>

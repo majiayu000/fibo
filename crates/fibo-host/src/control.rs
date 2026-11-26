@@ -142,6 +142,8 @@ fibo todo note <文字|-> [--task <待办>]      写进展：做了什么、剩�
         valued: &[
             "relay",
             "relay-key",
+            "also",
+            "also-key",
             "name",
             "role",
             "revoke",
@@ -162,8 +164,9 @@ fibo remote --relay <中继地址> [--relay-key <密钥>] [--report]
 fibo remote pair --relay <中继地址> [--name 名字] [--role view|answer|full] [--new-code]
                                              配对一台新手机，打印它的二维码和链接；权限分只看 / 能答审批 / 完全控制（默认）。
                                              加 --new-code 换掉机器码，已配对的手机全部失效
-fibo remote enable --relay <中继地址> [--relay-key <密钥>]
-                                             让后台一直挂在中继上（重启后也会自动连回去）；配对保留
+fibo remote enable --relay <中继地址> [--relay-key <密钥>] [--also <另一台中继> [--also-key <密钥>]]
+                                             让后台一直挂在中继上（重启后也会自动连回去）；配对保留。
+                                             --also 让它同时挂在另一台中继上，手机走先连通的那台；--also \"\" 去掉
 fibo remote disable                        断开中继，重启后也不再连；配对保留
 fibo remote status [--json]                中继连接状态、配对的手机、现在谁在线、在看哪个终端
 fibo remote kick <设备>                    立刻断开这台手机正连着的会话，配对保留

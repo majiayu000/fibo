@@ -29,8 +29,19 @@ pub struct RemoteStatus {
     pub keyed: bool,
     #[serde(default)]
     pub devices: Vec<RemoteDevice>,
+    /// The other relays the machine is on beside `relay`; their keys stay with the host.
+    #[serde(default)]
+    pub also: Vec<String>,
     #[serde(flatten)]
     pub live: RemoteLive,
+}
+
+/// One more relay a machine stays on, and the key it registers there with.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteRelay {
+    pub relay: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -7,24 +7,26 @@ use std::sync::{mpsc as std_mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-/// The connection's state, why it is not connected, and the phones on by session.
-type Now = (RemoteState, String, BTreeMap<String, RemotePhone>);
+/// Each relay's state and why it is not connected, and the phones on by relay and session.
+#[derive(Default)]
+struct Now {
+    relays: BTreeMap<String, (RemoteState, String)>,
+    phones: BTreeMap<(String, String), RemotePhone>,
+}
 
 /// Who is on now. With `--report` every change goes to the host, a burst at a time,
-/// and the host shows it in the app.
+/// and the host shows it in the app. Each relay's connection writes through its own
+/// [`Live::scoped`] copy: session ids are the relay's, so two relays may hand out the same.
 #[derive(Clone)]
 pub(super) struct Live {
     inner: Arc<Mutex<Now>>,
     report: Option<(PathBuf, std_mpsc::Sender<()>)>,
+    scope: String,
 }
 
 impl Live {
     pub(super) fn new(socket: Option<PathBuf>) -> Self {
-        let inner = Arc::new(Mutex::new((
-            RemoteState::Connecting,
-            String::new(),
-            BTreeMap::new(),
-        )));
+        let inner = Arc::new(Mutex::new(Now::default()));
         let report = socket.map(|socket| {
             let (wake, woken) = std_mpsc::channel::<()>();
             let (inner, at) = (inner.clone(), socket.clone());
@@ -38,11 +40,22 @@ impl Live {
             });
             (socket, wake)
         });
-        Self { inner, report }
+        Self {
+            inner,
+            report,
+            scope: String::new(),
+        }
+    }
+    /// The same, for the connection to `relay`.
+    pub(super) fn scoped(&self, relay: &str) -> Self {
+        Self {
+            scope: relay.to_owned(),
+            ..self.clone()
+        }
     }
     #[cfg(test)]
     pub(super) fn connected(&self) -> bool {
-        self.inner.lock().unwrap().0 == RemoteState::Connected
+        snapshot(&self.inner).state == RemoteState::Connected
     }
     fn change(&self, f: impl FnOnce(&mut Now)) {
         if let Ok(mut i) = self.inner.lock() {
@@ -53,12 +66,12 @@ impl Live {
         }
     }
     pub(super) fn state(&self, state: RemoteState, detail: String) {
+        let scope = self.scope.clone();
         self.change(|i| {
-            i.0 = state;
-            i.1 = detail;
             if state != RemoteState::Connected {
-                i.2.clear();
+                i.phones.retain(|(relay, _), _| *relay != scope);
             }
+            i.relays.insert(scope, (state, detail));
         });
     }
     /// Sends the last state now, before the process ends.
@@ -74,20 +87,22 @@ impl Live {
             watching: vec![],
             last: None,
         };
+        let key = (self.scope.clone(), session.to_owned());
         self.change(|i| {
-            i.2.insert(session.to_owned(), phone);
+            i.phones.insert(key, phone);
         });
     }
     pub(super) fn left(&self, session: &str) {
+        let key = (self.scope.clone(), session.to_owned());
         self.change(|i| {
-            i.2.remove(session);
+            i.phones.remove(&key);
         });
     }
     pub(super) fn observer(&self, session: &str) -> Observer {
-        let (live, session) = (self.clone(), session.to_owned());
+        let (live, key) = (self.clone(), (self.scope.clone(), session.to_owned()));
         Arc::new(move |activity| {
             live.change(|i| {
-                let Some(p) = i.2.get_mut(&session) else {
+                let Some(p) = i.phones.get_mut(&key) else {
                     return;
                 };
                 match activity {
@@ -110,13 +125,73 @@ impl Live {
     }
 }
 
+/// One relay up is enough for phones to reach the machine, so that is the state shown;
+/// with more than one relay, the details name the relays that are not up.
 fn snapshot(inner: &Mutex<Now>) -> RemoteLive {
     let i = inner.lock().unwrap_or_else(|e| e.into_inner());
-    let mut online: Vec<_> = i.2.values().cloned().collect();
+    let mut online: Vec<_> = i.phones.values().cloned().collect();
     online.sort_by_key(|p| p.since);
+    let states = || i.relays.values().map(|(s, _)| *s);
+    let state = [RemoteState::Connected, RemoteState::Connecting]
+        .into_iter()
+        .find(|want| states().any(|s| s == *want))
+        .unwrap_or(if i.relays.is_empty() {
+            RemoteState::Connecting
+        } else {
+            RemoteState::Failed
+        });
+    let many = i.relays.len() > 1;
+    let detail = (i.relays.iter())
+        .filter(|(_, (s, d))| *s != RemoteState::Connected && !d.is_empty())
+        .map(|(relay, (_, d))| match many {
+            true => format!("{}：{d}", host(relay)),
+            false => d.clone(),
+        })
+        .collect::<Vec<_>>()
+        .join("；");
     RemoteLive {
-        state: i.0,
-        detail: i.1.clone(),
+        state,
+        detail,
         online,
+    }
+}
+
+fn host(relay: &str) -> &str {
+    relay.split_once("://").map_or(relay, |(_, rest)| rest)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_relay_up_is_up_and_sessions_of_two_relays_do_not_collide() {
+        let live = Live::new(None);
+        let (a, b) = (live.scoped("wss://a"), live.scoped("wss://b"));
+        assert_eq!(snapshot(&live.inner).state, RemoteState::Connecting);
+        a.state(RemoteState::Connected, String::new());
+        b.state(RemoteState::Connected, String::new());
+        a.joined("1", "phone-a");
+        b.joined("1", "phone-b");
+        assert_eq!(snapshot(&live.inner).online.len(), 2);
+        b.state(RemoteState::Connecting, "超时，2 秒后重连".into());
+        let now = snapshot(&live.inner);
+        assert_eq!(now.state, RemoteState::Connected);
+        assert_eq!(now.online.len(), 1);
+        assert_eq!(now.online[0].device, "phone-a");
+        assert_eq!(now.detail, "b：超时，2 秒后重连");
+        a.state(RemoteState::Failed, "密钥不对".into());
+        let now = snapshot(&live.inner);
+        assert_eq!(now.state, RemoteState::Connecting);
+        assert_eq!(now.detail, "a：密钥不对；b：超时，2 秒后重连");
+        b.state(RemoteState::Failed, "版本太旧".into());
+        assert_eq!(snapshot(&live.inner).state, RemoteState::Failed);
+    }
+
+    #[test]
+    fn a_single_relay_reads_as_before() {
+        let live = Live::new(None).scoped("wss://a");
+        live.state(RemoteState::Connecting, "超时".into());
+        assert_eq!(snapshot(&live.inner).detail, "超时");
     }
 }

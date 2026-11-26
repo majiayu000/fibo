@@ -38,7 +38,9 @@ pub use agents::{
     tool_result_line, unbound_hint, usage_line, usage_marker, Described, Pending, ToolCallLine,
     ToolOutput, TurnKeys, UsageState,
 };
-pub use host::remote::{load as remote_config, Config as RemoteConfig};
+pub use host::remote::{
+    load as remote_config, Config as RemoteConfig, ALSO_ENV as REMOTE_ALSO_ENV,
+};
 pub use host::{serve, serve_taking_over, serve_with_options, serve_with_roots};
 pub const PROTOCOL_MAJOR: u32 = fibo_core::protocol::MAJOR;
 pub const PROTOCOL_MINOR: u32 = 1;

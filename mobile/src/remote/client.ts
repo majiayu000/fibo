@@ -4,7 +4,8 @@
 // the Keepline repo's `specs/extensions/remote-protocol.md` (not moved here).
 import { tk, tr } from '../i18n';
 import { concat, text, utf8 } from './bytes';
-import { type Link, linkUrl } from './link';
+import { type Link, linkUrl, relaysOf } from './link';
+import { firstThrough } from './race';
 import { closeOutcome, unreachedText } from './close';
 import { reachRelay } from './reach';
 import { CHUNK, type Channel, Handshake } from './noise';
@@ -61,6 +62,11 @@ export class Remote {
     ws.onmessage = (ev) => this.receive(new Uint8Array(ev.data as ArrayBuffer));
     ws.onclose = (ev) => this.end({ code: ev.code, reason: ev.reason });
     ws.onerror = () => undefined;
+  }
+
+  /** [`connect`] through every relay the link names at once; the first handshake done wins. */
+  static connectAny(link: Link, timeoutMs = 10_000): Promise<Remote> {
+    return firstThrough(relaysOf(link).map((relay) => () => Remote.connect({ ...link, relay }, timeoutMs)));
   }
 
   /** Opens the WebSocket and finishes the handshake; `hello` is the caller's first request. */

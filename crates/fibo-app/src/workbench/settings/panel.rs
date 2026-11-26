@@ -231,6 +231,7 @@ impl Workbench {
                     enabled: *enabled,
                     relay: relay.clone(),
                     key: key.clone(),
+                    also: None,
                 },
                 cx,
             ),
