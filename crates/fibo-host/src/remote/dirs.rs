@@ -32,15 +32,7 @@ pub(super) fn expand(path: &str) -> io::Result<PathBuf> {
 
 /// As `expand`, for a path that is not typed input: a folder's name may end in a space.
 pub(super) fn expand_exact(path: &str) -> io::Result<PathBuf> {
-    let full = match path.strip_prefix('~') {
-        Some("") => home()?,
-        Some(rest) if rest.starts_with('/') => home()?.join(rest.trim_start_matches('/')),
-        _ => PathBuf::from(path),
-    };
-    if !full.is_absolute() {
-        return Err(io::Error::other(t!("路径要从 / 或 ~ 开始")));
-    }
-    Ok(full)
+    fibo_host::folders::expand_exact(path)
 }
 
 pub(super) fn dirs(socket: &Path, request: &Value) -> io::Result<Value> {

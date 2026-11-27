@@ -66,7 +66,8 @@ impl Workbench {
             .into_any_element()
     }
     /// Opened by 「换目录」: the other recent folders, then 其他目录… for the system
-    /// picker; a press makes it the space's folder.
+    /// picker (on another computer, a path there typed instead); a press makes it the
+    /// space's folder.
     pub(super) fn dir_picker(&self, space: &Space, cx: &Context<Self>) -> Option<gpui::AnyElement> {
         if self.layout.choosing_dir.as_deref() != Some(space.id.as_str()) {
             return None;
@@ -95,6 +96,18 @@ impl Workbench {
                         this.space_dir_chosen(&pinned.id, &pinned.cwd);
                         this.edit(Edit::UpdateSpace(pinned.clone()), cx);
                     }))
+                    .into_any_element(),
+            );
+        }
+        // The Finder shows this machine's folders: on another computer a path there is typed.
+        if self.host.attached() {
+            rows.extend(self.remote_folder_rows(space, cx));
+            return Some(
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .children(rows)
                     .into_any_element(),
             );
         }

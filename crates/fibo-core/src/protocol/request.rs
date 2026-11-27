@@ -243,6 +243,16 @@ pub enum Request {
     SaveImage {
         data: String,
     },
+    /// The folders in `path` on this machine (`~` is its home) for another computer's
+    /// window choosing a space's folder: `Dirs`. Hosts before it refuse it.
+    ListDirs {
+        path: String,
+    },
+    /// One new folder there, in an existing one: `Text`, its full path. Hosts before it
+    /// refuse it.
+    MakeDir {
+        path: String,
+    },
     /// `fibo run`: each time the Agent in `child` ends a turn (done, a question, an
     /// error), its last reply goes into `parent`'s Agent input, wrapped as
     /// `<fibo from=…>`, once that Agent is idle. Ends when either terminal exits.
