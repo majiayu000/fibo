@@ -112,10 +112,27 @@ mod tests {
         }
     }
     #[test]
-    fn esc_closes_a_menu_and_other_keys_still_reach_the_terminal() {
+    fn a_menu_holds_navigation_keys_and_passes_typing_and_shortcuts() {
         assert_eq!(layer_key(false, true, &key("escape")), LayerKey::Dismiss);
-        assert_eq!(layer_key(false, true, &key("a")), LayerKey::Pass);
-        assert_eq!(layer_key(false, true, &key("cmd-w")), LayerKey::Pass);
+        for typed in ["enter", "space", "tab", "up", "down", "left", "right"] {
+            assert_eq!(
+                layer_key(false, true, &key(typed)),
+                LayerKey::Hold,
+                "{typed}"
+            );
+            assert_eq!(
+                layer_key(false, false, &key(typed)),
+                LayerKey::Pass,
+                "{typed}"
+            );
+        }
+        for typed in ["a", "cmd-w", "shift-left", "ctrl-space", "shift-tab"] {
+            assert_eq!(
+                layer_key(false, true, &key(typed)),
+                LayerKey::Pass,
+                "{typed}"
+            );
+        }
     }
     #[test]
     fn with_nothing_open_esc_belongs_to_the_terminal() {

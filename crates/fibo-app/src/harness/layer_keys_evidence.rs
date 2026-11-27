@@ -85,6 +85,12 @@ pub(super) fn start(
             handle.update(cx, |v, _, cx| v.visual_open_tab_menu(cx)).unwrap();
             wait(300).await;
             assert!(layers(cx).1, "the tab menu opens");
+            for keys in ["enter", "space", "tab", "down"] {
+                press(keys, cx);
+                wait(200).await;
+                assert_eq!(typed.get(), 0, "{keys} over the tab menu reaches the terminal");
+                assert!(layers(cx).1, "{keys} leaves the tab menu open");
+            }
             press("escape", cx);
             wait(300).await;
             assert!(!layers(cx).1, "Esc closes the tab menu");
@@ -93,7 +99,7 @@ pub(super) fn start(
             press("escape", cx);
             wait(300).await;
             assert_eq!(typed.get(), 1, "Esc with nothing open reaches the terminal");
-            eprintln!("layer keys native PASS: close question holds Return ⌃C ⌘W, Esc cancels it and the tab menu without reaching the terminal; Esc with nothing open does");
+            eprintln!("layer keys native PASS: close question holds Return ⌃C ⌘W, the tab menu holds Return Space Tab Down, Esc dismisses both layers; Esc with nothing open does");
             cx.update(|cx| cx.quit());
         })
         .detach();
