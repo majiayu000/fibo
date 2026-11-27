@@ -17,6 +17,13 @@ const KEEPLINE_HOOK: &str = "KEEPLINE_HOOK";
 /// is not sent until UserPromptSubmit returns), and the host's reply is never needed.
 /// It tests the product's name first; terminals an older host opened carry only
 /// `MOORING_HOOK`, so that is the fallback: an Agent started there later still reports.
+/// Whether the hook now running belongs to a run nobody is at (`claude -p` a tool started
+/// inside a Fibo terminal, e.g. remem's summaries): it inherits FIBO_TERMINAL and fires the
+/// same hooks, but is not the terminal's conversation, so `fibo hook` does not report it.
+pub fn from_headless_run(agent: Agent) -> bool {
+    super::adapter(agent).headless_hook()
+}
+
 pub fn command(agent: Agent) -> String {
     format!(
         "h=\"${{{BRAND_HOOK}:-${HOOK_ENV}}}\"; [ -n \"$h\" ] || exit 0; p=$(cat); (printf '%s' \"$p\" | \"$h\" hook --agent {} >/dev/null 2>&1 &); exit 0",
