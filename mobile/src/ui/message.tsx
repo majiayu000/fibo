@@ -132,7 +132,7 @@ export const Worked = memo(function Worked({ tools, onPress, live, label }: { to
   );
 });
 
-export const Theirs = memo(function Theirs({ m, agent, onTools }: { m: Message; agent: string; onTools?: (seq: number) => void }) {
+export const Theirs = memo(function Theirs({ m, agent, onTools, onFile }: { m: Message; agent: string; onTools?: (seq: number) => void; onFile?: (path: string) => void }) {
   const t = useTheme();
   const [said, say] = useCopied();
   const [selecting, setSelecting] = useState(false);
@@ -145,7 +145,7 @@ export const Theirs = memo(function Theirs({ m, agent, onTools }: { m: Message; 
           say(COPIED);
         }}
       >
-        <Markdown text={m.text} t={t} color={t.text} onNote={say} />
+        <Markdown text={m.text} t={t} color={t.text} onNote={say} onFile={onFile} />
       </Pressable>
       <Meta text={[clock(m.at), agent].filter(Boolean).join(' · ')} note={said} color={t.dim} onSelect={() => setSelecting(true)} />
       {selecting && <SelectSheet text={readable(m.text)} onClose={() => setSelecting(false)} />}

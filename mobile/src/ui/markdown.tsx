@@ -6,7 +6,8 @@ import type { Code, List, Nodes, Parents, PhrasingContent, Root, RootContent, Ta
 import { type ReactNode, memo, useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { mono } from './mono';
-import { openable, parsed, pathOf } from './md/parse';
+import { tapOf } from './md/filelink';
+import { openable, parsed } from './md/parse';
 import { columnWidths, monoWidth } from './md/table';
 import type { Theme } from './theme';
 import { tr } from '../i18n';
@@ -28,17 +29,18 @@ type Ctx = {
   width: number;
   fold: boolean;
   onNote?: (note: string) => void;
+  onFile?: (path: string) => void;
   defs: Map<string, string>;
 };
 
 function follow(url: string, ctx: Ctx) {
-  if (openable(url)) {
-    Linking.openURL(url).catch(() => undefined);
-    return;
+  const tap = tapOf(url, !!ctx.onFile);
+  if (tap.kind === 'open') Linking.openURL(tap.url).catch(() => undefined);
+  else if (tap.kind === 'preview') ctx.onFile?.(tap.path);
+  else {
+    Clipboard.setStringAsync(tap.path).catch(() => undefined);
+    ctx.onNote?.(tr('已复制路径 {path}', { path: tap.path }));
   }
-  const path = pathOf(url);
-  Clipboard.setStringAsync(path).catch(() => undefined);
-  ctx.onNote?.(tr('已复制路径 {path}', { path }));
 }
 
 function flat(n: Nodes): string {
@@ -304,6 +306,7 @@ export const Markdown = memo(function Markdown({
   t,
   color,
   onNote,
+  onFile,
   fold = true,
 }: {
   text: string;
@@ -311,12 +314,14 @@ export const Markdown = memo(function Markdown({
   color: string;
   /** Says what a tap on a file link just did. */
   onNote?: (note: string) => void;
+  /** Opens a Markdown or plain-text file a link names; without it such a link copies its path. */
+  onFile?: (path: string) => void;
   /** Long code blocks start folded. */
   fold?: boolean;
 }) {
   const { width } = useWindowDimensions();
   const root = parsed(text);
-  const ctx: Ctx = { t, color, width: width - SIDE_PADDING, fold, onNote, defs: hasDefinition(root) ? definitions(root) : NO_DEFS };
+  const ctx: Ctx = { t, color, width: width - SIDE_PADDING, fold, onNote, onFile, defs: hasDefinition(root) ? definitions(root) : NO_DEFS };
   return <View style={s.stack}>{flow(root.children, ctx)}</View>;
 });
 
