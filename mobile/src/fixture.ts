@@ -21,9 +21,9 @@ const link = (machine: string, name: string, relay: string): Link => ({
 // MOORING_PROMO_FAR=1), so the phone shot shows the same sessions as the desktop one.
 const PROMO = process.env.EXPO_PUBLIC_FIXTURE === 'promo';
 const LINKS = PROMO
-  ? [link('agent-os', 'This Mac', 'wss://relay.example.com'), link('dev-linux', 'mac2', 'wss://relay.example.com')]
+  ? [link('mac1', 'This Mac', 'wss://relay.example.com'), link('dev-linux', 'mac2', 'wss://relay.example.com')]
   : [
-      link('agent-os', 'Agent-OS', 'ws://192.168.1.20:8790'),
+      link('mac1', 'Mac1', 'ws://192.168.1.20:8790'),
       link('dev-linux', 'dev-linux', 'wss://relay.example.com'),
       link('air', 'MacBook Air', 'wss://relay.example.com'),
     ];
@@ -48,7 +48,7 @@ function promoCards(machine: string) {
   ];
 }
 const PROMO_SPACES: Record<string, { id: string; name: string; cwd: string }[]> = {
-  'agent-os': [
+  'mac1': [
     { id: 's-fibo', name: 'fibo', cwd: '/Users/demo/projects/fibo' },
     { id: 's-api', name: 'api-server', cwd: '/Users/demo/projects/api-server' },
     { id: 's-web', name: 'web', cwd: '/Users/demo/projects/web' },
@@ -221,7 +221,7 @@ const TODOS = () => {
 /** For a browser driving the fixture: cards it sets show on `refresh`, answers land in `answers`. */
 const driver: { cards?: Record<string, unknown>[]; answers: unknown[]; asks?: Record<string, unknown>; refresh: () => void; card: typeof card } = {
   answers: [],
-  refresh: () => void refresh('agent-os'),
+  refresh: () => void refresh('mac1'),
   card,
 };
 
@@ -229,8 +229,8 @@ function remote(machine: string) {
   const answer = (op: string, f: Record<string, unknown>): unknown => {
     if (op === 'answer' || op === 'trust') driver.answers.push({ op, ...f });
     if (op === 'ask' && driver.asks) return driver.asks;
-    if (op === 'list' && driver.cards && machine === 'agent-os') {
-      return { machine: { id: machine, name: 'Agent-OS' }, spaces: [{ id: 's-mooring', name: 'mooring', cwd: '/Users/demo/code/mooring' }], terminals: driver.cards };
+    if (op === 'list' && driver.cards && machine === 'mac1') {
+      return { machine: { id: machine, name: 'Mac1' }, spaces: [{ id: 's-mooring', name: 'mooring', cwd: '/Users/demo/code/mooring' }], terminals: driver.cards };
     }
     switch (op) {
       case 'hello':
@@ -245,7 +245,7 @@ function remote(machine: string) {
                 { id: 's-blog', name: 'blog', cwd: '/home/demo/blog' },
               ],
           terminals: PROMO ? promoCards(machine) : cards(machine),
-          todos: machine === 'agent-os' && !PROMO ? TODOS() : [],
+          todos: machine === 'mac1' && !PROMO ? TODOS() : [],
         };
       case 'read':
         return { text: SCREEN };

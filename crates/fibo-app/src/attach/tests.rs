@@ -15,7 +15,7 @@ fn a_host_is_one_short_folder_of_its_own() {
     // bytes for a long host under a usual home.
     let root = Path::new("/Users/someone-long/.local/share/mooring-workbench/m")
         .join(dir_name(
-            "lifcc@agent-os.tailc3193d.ts.net.example.internal",
+            "alice@mac-mini.tailnet123.ts.net.example.internal",
         ))
         .join("client/client.sock");
     assert!(root.as_os_str().len() < 104, "{}", root.display());
@@ -114,7 +114,7 @@ fn a_cancelled_discovery_does_not_bind_or_reuse_its_replacement() {
 #[test]
 fn embedded_and_standalone_socket_names_do_not_overlap() {
     let runtime = Path::new("/Users/someone-long/.local/share/mooring-workbench");
-    let host = "lifcc@agent-os.tailc3193d.ts.net.example.internal";
+    let host = "alice@mac-mini.tailnet123.ts.net.example.internal";
     let standalone = machine_root(runtime, host, None);
     assert_eq!(standalone, runtime.join("m").join(dir_name(host)));
     let embedded = machine_root(runtime, host, Some(u32::MAX));
@@ -122,7 +122,7 @@ fn embedded_and_standalone_socket_names_do_not_overlap() {
     assert_ne!(embedded, machine_root(runtime, host, Some(u32::MAX - 1)));
     assert_ne!(
         embedded,
-        machine_root(runtime, "lifcc@another-host", Some(u32::MAX))
+        machine_root(runtime, "alice@another-host", Some(u32::MAX))
     );
     let runtime = PathBuf::from(format!("/{}/fibo-workbench", "x".repeat(54)));
     assert_eq!(runtime.as_os_str().len(), 70);

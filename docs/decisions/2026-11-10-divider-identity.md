@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-11-10
-decision-makers: lifcc
+decision-makers: majiayu000
 ---
 
 # 分隔条按两侧窗格确认身份

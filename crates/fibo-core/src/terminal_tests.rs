@@ -1,18 +1,18 @@
 #[test]
 fn osc7_reports_decode_only_for_this_machine() {
     use super::local_path;
-    let url = "file://Agent-OS.local/tmp/kl%20osc7/%E4%B8%AD%E6%96%87%20dir%23%25";
+    let url = "file://Mac-One.local/tmp/kl%20osc7/%E4%B8%AD%E6%96%87%20dir%23%25";
     assert_eq!(
-        local_path(url, "Agent-OS.local").as_deref(),
+        local_path(url, "Mac-One.local").as_deref(),
         Some("/tmp/kl osc7/中文 dir#%")
     );
     assert_eq!(
-        local_path(url, "agent-os").as_deref(),
+        local_path(url, "mac-one").as_deref(),
         Some("/tmp/kl osc7/中文 dir#%")
     );
     assert_eq!(local_path("file:///a", "x").as_deref(), Some("/a"));
     assert_eq!(local_path("file://localhost/a", "x").as_deref(), Some("/a"));
-    assert_eq!(local_path("file://devbox/home/u", "Agent-OS.local"), None);
+    assert_eq!(local_path("file://devbox/home/u", "Mac-One.local"), None);
     assert_eq!(local_path("file://x/a%2", "x"), None);
     assert_eq!(local_path("kitty-shell-cwd://x/a", "x"), None);
     assert_eq!(local_path("", "x"), None);

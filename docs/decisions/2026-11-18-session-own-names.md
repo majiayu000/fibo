@@ -50,5 +50,5 @@ python3 scripts/visual-check.py shots <sha> <out> --pages Main@1420,Overview@142
 ## More Information
 
 - 取代 721839a9 的命名顺序（防重名保留，判重改成按名字）。
-- 设计页：`~/Documents/claude-pages/fibo/2026-11-18-session-names/index.html`。
+- 设计页：`<本机证据目录>/fibo/2026-11-18-session-names/index.html`。
 - 重开条件：用一周后，如果更常靠「哪个待办」而不是「在干什么」找对话，退回「待办名 · CLI 名」。

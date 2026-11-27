@@ -8,7 +8,7 @@ decision-makers: majiayu000
 
 ## Context
 
-用户两台 Mac：本机的窗口通过 ssh 连到 agentos 的 host 看它的会话。在 agentos 那台窗口里置顶的会话，在本机看 agentos 时不在「置顶」里。原因：置顶只存在各自窗口的 `<config>/sidebar`（按终端 id 记），host 不知道它。
+用户两台 Mac：本机的窗口通过 ssh 连到 mac1 的 host 看它的会话。在 mac1 那台窗口里置顶的会话，在本机看 mac1 时不在「置顶」里。原因：置顶只存在各自窗口的 `<config>/sidebar`（按终端 id 记），host 不知道它。
 
 ## Decision
 

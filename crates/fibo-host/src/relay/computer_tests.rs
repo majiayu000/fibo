@@ -54,7 +54,7 @@ async fn a_computer_reaches_the_native_socket_and_only_with_full_control() {
         }
     });
     let relay = "https://relay.test";
-    let (computer, _) = devices::pair_computer_link(&socket, relay, &[], "agentos").unwrap();
+    let (computer, _) = devices::pair_computer_link(&socket, relay, &[], "mac1").unwrap();
     let (narrowed, _) = devices::pair_computer_link(&socket, relay, &[], "other").unwrap();
     devices::set_role(&socket, &narrowed.id, Role::View).unwrap();
     let (phone, _) = devices::pair_link(&socket, relay, &[], "phone", Role::Full).unwrap();

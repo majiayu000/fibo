@@ -129,7 +129,7 @@ cargo test -p fibo-core --test file_size --test guard
 
 全程在同一台机器上跑，别的编译尽量停掉，屏幕不要锁。基线和终点必须是同一台，换机器就要重测基线。
 
-**用 `apple` 验收，等拆分结束、它的终端释放之后再跑。** 2026-11-05 在两台机器上各跑两遍基线（`eedc95a`）：`SCROLLBACK`、`SELECTION`、`SELECTION_PIXEL`、`FOLLOW_INPUT`、`PEEK`、`PANE_DRAG`、`WHEEL` 这 7 个在本机不稳定，在 `apple` 上两遍都过，当时两边负载相近，所以怀疑是本机有人使用、窗口抢焦点，只有两遍数据，还没证实。`apple` 第二遍大面积失败是 PTY 用尽（`Device not configured`，526 个设备，上限 511），不是代码问题；脚本现在开跑前会检查，剩余不足 100 个就拒绝运行。那边的第一遍基线可用作参考，正式验收要在 PTY 释放后重测。
+**用 `mac2` 验收，等拆分结束、它的终端释放之后再跑。** 2026-11-05 在两台机器上各跑两遍基线（`eedc95a`）：`SCROLLBACK`、`SELECTION`、`SELECTION_PIXEL`、`FOLLOW_INPUT`、`PEEK`、`PANE_DRAG`、`WHEEL` 这 7 个在本机不稳定，在 `mac2` 上两遍都过，当时两边负载相近，所以怀疑是本机有人使用、窗口抢焦点，只有两遍数据，还没证实。`mac2` 第二遍大面积失败是 PTY 用尽（`Device not configured`，526 个设备，上限 511），不是代码问题；脚本现在开跑前会检查，剩余不足 100 个就拒绝运行。那边的第一遍基线可用作参考，正式验收要在 PTY 释放后重测。
 
 没有完整 Xcode 的机器也能跑：脚本发现没有 Xcode 时，只在验收用的 worktree 里给 GPUI 打开 `runtime_shaders`，不用 metal 编译器。这样编出来的着色器加载方式和正式版不同，所以这台机器上 `perf-gate` 对仓库基线的结论不算数，只比基线和终点两边的数字。
 
@@ -183,7 +183,7 @@ python3 scripts/split-check.py report <目录A> <目录B> <目录C>
 
 **决定：采用，留两项给人看。** 没有发现拆分造成的回归。第 6 层由 Claude 代做了能代做的部分（见下）；真手机配对和动效手感只有人能看，还没做。
 
-基线 `25c4cd02`（G1 合入）对比终点 `34ed7c1`，都在 `apple` 上跑。两者之间除 22 个拆分提交外还有 73 个非拆分提交，所以差异不全来自拆分。
+基线 `25c4cd02`（G1 合入）对比终点 `34ed7c1`，都在 `mac2` 上跑。两者之间除 22 个拆分提交外还有 73 个非拆分提交，所以差异不全来自拆分。
 
 | 层 | 结果 |
 |---|---|
@@ -196,7 +196,7 @@ python3 scripts/split-check.py report <目录A> <目录B> <目录C>
 
 ### 第 6 层：Claude 代做的部分
 
-在 `cd6ffa6` 上跑，真 Agent 在本机隔离后台，窗口场景在 `apple` 上以 `.app` 启动（SSH 直接起进程时窗口不是活动窗口，依赖焦点的场景必败）。
+在 `cd6ffa6` 上跑，真 Agent 在本机隔离后台，窗口场景在 `mac2` 上以 `.app` 启动（SSH 直接起进程时窗口不是活动窗口，依赖焦点的场景必败）。
 
 | 走查项 | 结果 | 依据 |
 |---|---|---|
@@ -206,7 +206,7 @@ python3 scripts/split-check.py report <目录A> <目录B> <目录C>
 | 新建空间并启动 Claude | 通过 | `NEW_SPACE`（假 `claude`，要写进 `.zshenv`，登录 shell 会重置 PATH） |
 | 通知点击、链接悬停、子 Agent 分支 | 通过 | `ROUTE`、`LINK`（要有 `~/.claude/skills`）、`SUBAGENT` |
 | 手机连接 | 通过 | 真中继上的 JS 手机客户端聊天 |
-| 另一台电脑 | 通过 | 真 SSH 连 `apple`，读到它的空间和终端 |
+| 另一台电脑 | 通过 | 真 SSH 连 `mac2`，读到它的空间和终端 |
 
 调查中排除的误判：`SHORTCUT`、`KEYMAP` 在 `cd6ffa6` 上 0/12、在 `3dc83de` 上 11/12，并不是回归。按键每次只加一个标签；多出的标签是场景开头那次新建，忙时被 #5 暂存后补跑，以前是被丢弃。场景已改成等它跑完再数。
 
@@ -214,4 +214,4 @@ python3 scripts/split-check.py report <目录A> <目录B> <目录C>
 
 **只有人能做**：真手机扫码配对；看一眼动效和手感。
 
-测量结果在 `apple` 的 `~/Library/Caches/MooringAccept/{accept,aba,pages}`。
+测量结果在 `mac2` 的 `~/Library/Caches/MooringAccept/{accept,aba,pages}`。

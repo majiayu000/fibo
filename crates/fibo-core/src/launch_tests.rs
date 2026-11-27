@@ -20,7 +20,7 @@ fn a_host_the_window_started_has_nothing_off() {
     assert_eq!(issues(&Launch::default(), &window()), vec![]);
 }
 
-/// 11-16: `ssh agentos 'nohup fibo serve --takeover &'` from the other Mac.
+/// 11-16: `ssh mac1 'nohup fibo serve --takeover &'` from the other Mac.
 #[test]
 fn a_host_started_over_ssh_with_a_shells_ampersand_has_all_three() {
     let ssh = Launch {

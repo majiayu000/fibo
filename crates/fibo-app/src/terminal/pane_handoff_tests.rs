@@ -44,7 +44,7 @@ fn bracketed_paste_pages_without_an_input_prompt_are_not_ready() {
 #[test]
 fn a_missing_agent_command_is_reported_not_waited_on() {
     assert!(super::command_missing(
-        "Agent-OS% codex\nzsh: command not found: codex\nAgent-OS% "
+        "mac1% codex\nzsh: command not found: codex\nmac1% "
     ));
     assert!(super::command_missing(
         "$ claude\nbash: claude: command not found\n$ "

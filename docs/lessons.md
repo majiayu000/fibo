@@ -104,4 +104,4 @@
 
 出现 1 天，但一次修复里同类的错犯了两次：
 
-- 11-16 另一台 Mac 远程换包，执行 `ssh agentos 'env -i … nohup fibo serve --takeover &'`，之后新开的 Claude 全部显示 Not logged in。修复时从 Claude 的终端里 `… &` 重起后台，又带进了 nice 5，责任进程也变成了那个终端程序。调研：`~/Documents/claude-pages/mooring/2026-11-16-host-launch-context/`。
+- 11-16 另一台 Mac 远程换包，执行 `ssh mac1 'env -i … nohup fibo serve --takeover &'`，之后新开的 Claude 全部显示 Not logged in。修复时从 Claude 的终端里 `… &` 重起后台，又带进了 nice 5，责任进程也变成了那个终端程序。调研：`<本机证据目录>/mooring/2026-11-16-host-launch-context/`。

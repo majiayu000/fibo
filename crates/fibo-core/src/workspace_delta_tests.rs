@@ -45,7 +45,7 @@ fn only_what_changed_goes_and_the_window_ends_with_the_whole() {
     assert!(same(&applied.workspace, &next));
 }
 
-/// On agentos the rest was 352 KB on every refresh, terminals most of it, and between
+/// On one Mac the rest was 352 KB on every refresh, terminals most of it, and between
 /// refreshes none of it changed.
 #[test]
 fn of_the_rest_only_the_fields_that_changed_go() {

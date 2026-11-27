@@ -8,7 +8,7 @@ decision-makers: majiayu000
 
 ## Context
 
-[11-16 的决定](2026-11-16-claude-quota-http.md) 为修 19% / 10% 回跳，把 Claude 额度改成 HTTP 查 `api.anthropic.com/api/oauth/usage`，凭据从钥匙串里的 `Claude Code-credentials` 读。11-27 在 apple 上新装 claude-quota 时，后台读钥匙串被拒（`-25293`），要用户在那台电脑上手动授权，用户这才知道它在读钥匙串：「啥情况 现在使用钥匙串了吗？？」「我记得原来不是这样设计的啊」。
+[11-16 的决定](2026-11-16-claude-quota-http.md) 为修 19% / 10% 回跳，把 Claude 额度改成 HTTP 查 `api.anthropic.com/api/oauth/usage`，凭据从钥匙串里的 `Claude Code-credentials` 读。11-27 在 mac2 上新装 claude-quota 时，后台读钥匙串被拒（`-25293`），要用户在那台电脑上手动授权，用户这才知道它在读钥匙串：「啥情况 现在使用钥匙串了吗？？」「我记得原来不是这样设计的啊」。
 
 查记录：11-07 的设计（`5f9c0cf8`，[决定](2026-11-07-claude-usage-read.md)）明确否掉过 HTTP：「要碰钥匙串凭据，接口私有」。11-16 由 Codex 会话推翻，提交里写的取代理由是「完整 CLI 查询实测峰值 448 MB」，没有权衡 11-07 的 `/usage` 调度本来就是 5–15 分钟一次、用过才读。用户看了两版：「我记得是这个是最好的 并且我还做了很多的算法优化啊」。
 

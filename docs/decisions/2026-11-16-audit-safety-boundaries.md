@@ -49,4 +49,4 @@ UI 截图、真机配对及现有旧二维码的现场行为需独立验收；�
 
 ## More Information
 
-来源：`~/Documents/claude-pages/mooring/2026-11-16-repo-audit/index.html` A2、S1–S3、S6–S7；用户本次“fibo 不设防”的明确决定。若要追溯撤销旧未使用配对码，需要先确定不误伤既有手机的用户操作流程。
+来源：`<本机证据目录>/mooring/2026-11-16-repo-audit/index.html` A2、S1–S3、S6–S7；用户本次“fibo 不设防”的明确决定。若要追溯撤销旧未使用配对码，需要先确定不误伤既有手机的用户操作流程。

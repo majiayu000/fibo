@@ -458,7 +458,7 @@ pub fn machine(socket: &Path) -> io::Result<Machine> {
 }
 
 /// The name phones show for this machine when its owner gave one: a host name like
-/// `appledeMacBook-Pro.local` is long for a phone, and changing it needs root (2026-11-09).
+/// `someonedeMacBook-Pro.local` is long for a phone, and changing it needs root (2026-11-09).
 fn name_file(socket: &Path) -> PathBuf {
     socket.with_file_name("machine-name")
 }
