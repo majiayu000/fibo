@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fibo 博客</title>
+<meta name="description" content="Fibo 是怎么做出来的：在多台电脑上跑 Coding Agent 时碰到的问题、实测的数字，以及我们的取舍。">
+<link rel="canonical" href="https://fibo.page/blog/zh.html">
+<link rel="alternate" hreflang="en" href="https://fibo.page/blog/">
+<link rel="alternate" hreflang="zh-CN" href="https://fibo.page/blog/zh.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Fibo">
+<meta property="og:title" content="Fibo 博客">
+<meta property="og:description" content="Fibo 是怎么做出来的：在多台电脑上跑 Coding Agent 时碰到的问题、实测的数字，以及我们的取舍。">
+<meta property="og:url" content="https://fibo.page/blog/zh.html">
+<meta property="og:image" content="https://fibo.page/blog/many-machines/images/00-cover.webp">
+<meta name="theme-color" content="#1499ad">
+<link rel="icon" type="image/svg+xml" href="../brand/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../brand/favicon-32.png">
+<link rel="apple-touch-icon" href="../brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="post.css">
+</head>
+<body>
+<header class="top">
+  <div class="bar">
+    <a class="home" href="../">Fibo</a>
+    <span class="crumb">博客</span>
+    <a class="lang" href="./" hreflang="en" lang="en">English</a>
+  </div>
+</header>
+
+<main class="post">
+<h1>博客</h1>
+<p class="lede">Fibo 是怎么做出来的：在多台电脑上跑 Coding Agent 时碰到的问题、实测的数字，以及我们的取舍。</p>
+<ul class="posts">
+  <li><a class="card" href="remote-paste/zh.html">
+    <img src="remote-paste/images/00-cover.webp" alt="" loading="lazy" width="1600" height="840">
+    <div><p class="kicker">工程实践 · 2026 年 11 月</p><h2>Fibo 如何让 ssh 那头的 Claude Code 也能 ⌘V 贴截图</h2><p>Claude Code 读的是它自己那台电脑的剪贴板。实测 20 种粘贴写法后发现：一个单独的图片绝对路径就是一个附件。Fibo 先把图存到那台电脑，再只贴路径。</p></div>
+  </a></li>
+  <li><a class="card" href="many-machines/zh.html">
+    <img src="many-machines/images/00-cover.webp" alt="" loading="lazy" width="1600" height="840">
+    <div><p class="kicker">技术架构 · 2026 年 11 月</p><h2>一个窗口，管多台电脑上的终端：Fibo 跨机终端架构与慢链路同步设计</h2><p>另一台电脑上的终端，像本机一样开标签、分屏、打字：架构选型、边界隔离、视图解耦，以及 54 KB/s 慢链路上从 3.59 MB 到 660 字节的增量协议设计。</p></div>
+  </a></li>
+</ul>
+<footer class="end">
+  <p><a href="../">← fibo.page</a> · <a href="https://github.com/majiayu000/fibo">GitHub</a></p>
+</footer>
+</main>
+</body>
+</html>

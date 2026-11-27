@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fibo 如何让 ssh 那头的 Claude Code 也能 ⌘V 贴截图 · Fibo 博客</title>
+<meta name="description" content="ssh 到另一台电脑后，Claude Code 读的是那台电脑的剪贴板，所以贴不了截图。实测 20 种粘贴写法后发现：一次粘贴里只有一个图片绝对路径，Claude Code 就当它是附件。Fibo 据此先把图存到那台电脑，再只贴那边的路径。附手动做法和实测表。">
+<link rel="canonical" href="https://fibo.page/blog/remote-paste/zh.html">
+<link rel="alternate" hreflang="en" href="https://fibo.page/blog/remote-paste/">
+<link rel="alternate" hreflang="zh-CN" href="https://fibo.page/blog/remote-paste/zh.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Fibo">
+<meta property="og:title" content="Fibo 如何让 ssh 那头的 Claude Code 也能 ⌘V 贴截图">
+<meta property="og:description" content="ssh 到另一台电脑后，Claude Code 读的是那台电脑的剪贴板，所以贴不了截图。实测 20 种粘贴写法后发现：一次粘贴里只有一个图片绝对路径，Claude Code 就当它是附件。Fibo 据此先把图存到那台电脑，再只贴那边的路径。附手动做法和实测表。">
+<meta property="og:url" content="https://fibo.page/blog/remote-paste/zh.html">
+<meta property="og:image" content="https://fibo.page/blog/remote-paste/images/00-cover.webp">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1499ad">
+<link rel="icon" type="image/svg+xml" href="../../brand/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../../brand/favicon-32.png">
+<link rel="apple-touch-icon" href="../../brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../post.css">
+</head>
+<body>
+<header class="top">
+  <div class="bar">
+    <a class="home" href="../../">Fibo</a>
+    <a class="crumb" href="../zh.html">博客</a>
+    <a class="lang" href="./" hreflang="en" lang="en">English</a>
+  </div>
+</header>
+
+<main class="post">
+<p class="kicker">工程实践 · 2026 年 11 月</p>
+<h1>Fibo 如何让 ssh 那头的 Claude Code 也能 ⌘V 贴截图</h1>
+<p class="lede">在本机，截一张图对着 Claude Code 按 <code>⌘V</code>，输入框会出现 <code>[Image #1]</code>。ssh 到另一台电脑后，同一个按键什么都贴不进去，因为 Claude Code 读的是它自己那台电脑的剪贴板。我们把 20 种粘贴写法挨个试了一遍，发现 Claude Code 会把「一次粘贴里只有一个图片的绝对路径」当成附件；<a href="../../">Fibo</a> 就按这条规律，先把图存到那台电脑，再只把那边的路径贴进终端。</p>
+
+<figure>
+  <img class="figure-img" src="images/demo.gif" alt="真实 Claude Code 画面：按 Ctrl+V 时它那台电脑的剪贴板里没有图，什么都没贴进去；按 Fibo 的做法把图存到那台电脑再贴绝对路径，输入框变成 [Image #1]，Claude Code 说出了图里的内容" width="811" height="566">
+  <figcaption>Claude Code v2.1.332 的真实画面，按键和粘贴由脚本发出。为了录屏，「另一台电脑」是本机 tmux 里的 Claude Code，剪贴板里没有图。前半段：Ctrl+V 什么都没贴进去；后半段：图先存好，只贴它的绝对路径。</figcaption>
+</figure>
+
+<blockquote><b>Fibo 是什么</b>：一个给 Claude Code、Codex 这类 Coding Agent 用的原生 Mac 工作台，开源（MIT）。它能通过 SSH 连上另一台装了 Fibo 的电脑，在同一个窗口里开那台电脑的终端，做法见上一篇<a href="../many-machines/zh.html">《一个窗口，管多台电脑上的终端》</a>。安装：<a href="https://github.com/majiayu000/fibo/releases/latest">下载 DMG</a>，或 <code>brew install --cask majiayu000/tap/fibo</code>。两台电脑都要装。</blockquote>
+
+<nav class="toc" aria-label="目录">
+  <a href="#s1">01 问题出在哪：⌘V 只送过去一个 Ctrl+V</a>
+  <a href="#s2">02 关键观察：一个单独的图片路径就是一个附件</a>
+  <a href="#s3">03 设计：图片走终端外面，只有路径进终端</a>
+  <a href="#s4">04 细节与取舍</a>
+  <a href="#s5">05 怎么验证的</a>
+  <a href="#limits">限制：还没测到的</a>
+  <a href="#summary">总结：三条做法</a>
+</nav>
+
+<h2 id="s1">01 问题出在哪：⌘V 只送过去一个 Ctrl+V</h2>
+
+<p>本机的 Claude Code 能收到截图，靠的是它自己去读剪贴板。终端里按 <code>⌘V</code> 时，如果剪贴板里只有图片，终端往程序里写一个字节 <code>0x16</code>，也就是 <code>Ctrl+V</code>。Claude Code 读到这个字节，再调用它所在系统的剪贴板接口把图取出来。终端和程序之间只有一条字节流，没有一种通用的写法能表示「接下来是一张 PNG」。</p>
+
+<p>终端开在另一台电脑上时，这条路就断了。图在你面前这台电脑 A 的剪贴板里，<code>0x16</code> 却被送到电脑 B，B 上的 Claude Code 去读 B 的剪贴板，那里没有这张图。拖文件也一样：终端把文件在 A 上的路径当文字贴过去，B 上没有这个文件。</p>
+
+<p>Fibo 的窗口连另一台电脑，靠的是 <code>ssh -L</code> 把那台电脑 <code>fibo serve</code> 后台的 Unix socket 转发到本机，然后用和本机一样的协议说话（上一篇讲过）。所以 Fibo 原来也有这个问题。<a href="https://github.com/majiayu000/fibo/pull/625">PR #625</a> 之前，对着另一台电脑的终端贴图或拖文件，窗口会拦下来并提示「文件和图片还不能从这里传到另一台电脑」。</p>
+
+<h3>OSC 52 帮不上</h3>
+
+<p>常有人建议用 <code>OSC 52</code>，让远程程序读写本机剪贴板。按 kitty 的文档，<code>OSC 52</code> 只管纯文本；图片要用 kitty 扩展的 <code>OSC 5522</code>，支持它的终端很少。有人给 Claude Code 提过「ssh 下用 OSC 52/5522 贴图」的 <a href="https://github.com/anthropics/claude-code/issues/42712">issue #42712</a>，已关闭；我们测的 <code>v2.1.332</code> 收到 <code>Ctrl+V</code> 时读的仍是它所在电脑的剪贴板。终端图片协议（kitty、iTerm2 的那种）方向相反，管的是程序往终端里画图。</p>
+
+<h2 id="s2">02 关键观察：一个单独的图片路径就是一个附件</h2>
+
+<p>本机用 Claude Code 时，把截图文件拖进终端，输入框同样会变成 <code>[Image #1]</code>。拖放没有用到私有接口：终端只是把文件路径当一次粘贴写进去（Fibo 用 <code>bracketed paste</code>，即 <code>\x1b[200~…\x1b[201~</code> 包起来）。Claude Code 看到一次粘贴里只有一个图片文件的路径，就去磁盘读这个文件，挂成附件。</p>
+
+<p>Fibo 的手机端早就用这条规律给电脑上的 Agent 发图：手机把图传给电脑上的 <code>fibo serve</code>，后台存成文件，再把路径单独贴进终端。动手之前，我们先把边界摸清楚：在 Claude Code <code>v2.1.332</code> 里，每种写法各做一次 <code>bracketed paste</code>，一共 20 次。</p>
+
+<div class="table">
+<table>
+<thead><tr><th>输入框里原来有什么</th><th>这一次粘贴的内容</th><th>结果</th></tr></thead>
+<tbody>
+<tr><td>空</td><td>绝对路径 <code>/tmp/fibo-edge/shot.png</code></td><td><code>[Image #1]</code></td></tr>
+<tr><td>空</td><td>绝对路径后面多一个空格</td><td><code>[Image #1]</code></td></tr>
+<tr><td>空</td><td>路径后面跟文字 <code>/tmp/…/shot.png 看看这个</code></td><td>原样当文字</td></tr>
+<tr><td>空</td><td>文字在前 <code>看看这个 /tmp/…/shot.png</code></td><td>原样当文字</td></tr>
+<tr><td>空</td><td>文件名带空格，转义 <code>my\ shot.png</code></td><td><code>[Image #1]</code></td></tr>
+<tr><td>空</td><td>文件名带空格，不转义 <code>my shot.png</code></td><td><code>[Image #1]</code></td></tr>
+<tr><td>空</td><td>路径外面包单引号或双引号（2 次）</td><td><code>[Image #1]</code></td></tr>
+<tr><td>空</td><td><code>~</code> 开头 <code>~/fibo-edge-shot.png</code></td><td>原样当文字</td></tr>
+<tr><td>空</td><td>相对路径 <code>shot.png</code>（文件就在当前目录）</td><td>原样当文字</td></tr>
+<tr><td>空</td><td>JPEG、GIF、WebP 的绝对路径（3 次）</td><td><code>[Image #1]</code></td></tr>
+<tr><td>空</td><td>TIFF、BMP 的绝对路径（2 次）</td><td>原样当文字</td></tr>
+<tr><td>空</td><td>格式对，但文件不存在</td><td>原样当文字</td></tr>
+<tr><td>空</td><td>两个绝对路径，中间一个空格</td><td><code>[Image #1] [Image #2]</code></td></tr>
+<tr><td>已经打了「看看这个 」</td><td>绝对路径加一个空格</td><td><code>看看这个 [Image #1]</code></td></tr>
+<tr><td>已经打了「看看」</td><td>两个绝对路径，空格隔开</td><td><code>看看[Image #1] [Image #2]</code></td></tr>
+<tr><td>空，贴完再打字</td><td>绝对路径加一个空格，之后打「图里是什么」</td><td><code>[Image #1] 图里是什么</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>判断看的是「这一次粘贴」，跟输入框里已经有什么无关：路径和文字在同一次粘贴里就当文字，路径单独贴、前后另外打字都没问题。这张表定下了 Fibo 要守的四条：</p>
+
+<ul>
+  <li><b>先落盘，再回绝对路径</b>：<code>~</code> 和相对路径都不认，文件不存在也不认。</li>
+  <li><b>路径单独作为一次粘贴</b>：不和别的文字拼在一起。</li>
+  <li><b>TIFF、BMP 先转 PNG</b>：测过的六种格式里只认 PNG、JPEG、GIF、WebP，而有些 App 往剪贴板里只放 TIFF。</li>
+  <li><b>多张图用空格连起来一次贴</b>：路径按 shell 规则转义，带空格的文件名也能认。</li>
+</ul>
+
+<div class="tip">
+<p><b>不用 Fibo，手动也能贴</b>：截图存成文件（macOS 按 <code>⌘⇧4</code> 默认存到桌面），传到那台电脑，再在那边的 Claude Code 里单独粘贴绝对路径。</p>
+<pre><code># 在你面前这台电脑上
+scp ~/Desktop/截图.png 那台电脑:/tmp/shot.png
+# TIFF 先转一下：sips -s format png 截图.tiff --out 截图.png
+
+# 然后在那台电脑的 Claude Code 里，单独粘贴这一行
+/tmp/shot.png</code></pre>
+<p>可以先打字再贴，也可以贴完再打字，只要路径不和文字出现在同一次粘贴里。</p>
+</div>
+
+<h2 id="s3">03 设计：图片走终端外面，只有路径进终端</h2>
+
+<p>Fibo 要做的就是把上面的手动步骤藏进一次 <code>⌘V</code>：窗口把图交给那台电脑的后台存成文件，拿回绝对路径，再把路径贴进终端。</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 360" role="img" aria-label="Fibo 远程贴图流程：窗口把图片经 ssh -L 发给远端后台存成文件，拿回远端路径后单独贴进终端，Claude Code 变成 Image #1">
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tip"/></marker>
+  <marker id="arg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ok-h"/></marker></defs>
+  <rect class="box" x="16" y="16" width="250" height="328" rx="12"/>
+  <text class="h" x="141" y="46">电脑 A · Fibo 窗口</text>
+  <rect class="soft" x="34" y="66" width="214" height="72" rx="8"/>
+  <text class="t" x="141" y="94">① ⌘V：剪贴板里是图片</text>
+  <text class="s" x="141" y="118">TIFF / BMP 先转 PNG</text>
+  <rect class="soft" x="34" y="152" width="214" height="72" rx="8"/>
+  <text class="t" x="141" y="180">② 这块终端在 B 上</text>
+  <text class="s" x="141" y="204">不发 Ctrl+V，改走上传</text>
+  <rect class="soft" x="34" y="238" width="214" height="88" rx="8"/>
+  <text class="t" x="141" y="266">⑤ 只贴这一个路径</text>
+  <text class="s" x="141" y="290">shell 转义 + bracketed paste</text>
+  <text class="s" x="141" y="310">几张里有一张失败就都不贴</text>
+
+  <rect class="box" x="494" y="16" width="250" height="196" rx="12"/>
+  <text class="h" x="619" y="46">电脑 B · fibo serve</text>
+  <rect class="soft" x="512" y="66" width="214" height="128" rx="8"/>
+  <text class="t" x="619" y="94">③ 看文件头认类型</text>
+  <text class="s" x="619" y="118">只收 PNG / JPEG / GIF / WebP</text>
+  <text class="s" x="619" y="142">存进 phone-images/uuid.png</text>
+  <text class="s" x="619" y="166">权限 600，7 天后清理</text>
+
+  <rect class="box accent-box" x="494" y="232" width="250" height="112" rx="12"/>
+  <text class="h" x="619" y="262">电脑 B · Claude Code</text>
+  <rect class="term" x="512" y="278" width="214" height="44" rx="6"/>
+  <text class="tt" x="526" y="305">❯ [Image #1]</text>
+
+  <path class="line" d="M248 100 L492 100" marker-end="url(#ar)"/>
+  <text class="s" x="370" y="88">SaveImage { data: base64 }</text>
+  <text class="s" x="370" y="122">走已有的 ssh -L 连接</text>
+  <path class="line accent" d="M512 176 L250 188" marker-end="url(#arg)"/>
+  <text class="ok-t c" x="380" y="172">④ 回 B 上的绝对路径</text>
+  <path class="line accent" d="M248 282 L510 300" marker-end="url(#arg)"/>
+  <text class="ok-t c" x="380" y="276">⑥ 一个图片路径 = 一个附件</text>
+</svg>
+<figcaption>图片不进终端，只有路径进去。上传和拿路径走窗口本来就连着的那条 <code>ssh -L</code>，和其他请求共用一条连接。</figcaption>
+</figure>
+
+<p>窗口和那台电脑的后台之间本来就有协议，我们只加了一个请求 <code>SaveImage { data }</code>，<code>data</code> 是图片的 base64。按下 <code>⌘V</code> 时，窗口先看这个终端在哪台电脑上：在本机就照旧发 <code>0x16</code>，让 Claude Code 自己读剪贴板；在另一台电脑上，就把图上传。拖图片文件进终端也走同一个上传函数。</p>
+
+<p>那台电脑的后台收到请求后，解码、存文件、回路径（下面是简化过的代码）：</p>
+
+<pre><code>Request::SaveImage { data } =&gt; {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(io::Error::other)?;
+    let path = crate::pictures::save(&amp;supervisor(shared)?.socket(), &amp;bytes)?;
+    Ok(Reply::Text(path.to_string_lossy().into_owned()))
+}</code></pre>
+
+<p><code>pictures::save</code> 和手机发图共用，图存进后台 socket 旁边的 <code>phone-images/</code>。窗口拿到路径，按拖文件的规则做 shell 转义，再贴进终端；终端开着 bracketed paste 模式时会包上 <code>\x1b[200~…\x1b[201~</code>，路径末尾留一个空格。</p>
+
+<p>上传在后台线程里做，每次上传新开一条到转发 socket 的连接。<code>ssh -L</code> 给每条连接单独开一个通道，所以上传不占用终端打字用的那条连接。整个改动是 12 个文件，加 278 行、删 92 行。</p>
+
+<h2 id="s4">04 细节与取舍</h2>
+
+<h3>为什么不用手机那套上传协议</h3>
+<p>手机连电脑走的是另一套协议（<code>ssh 主机 fibo remote --stdio</code>），也能发图。但窗口连那台电脑已经有一条 <code>ssh -L</code> 转发，再开一条手机协议，同一台电脑就挂着两条 SSH 线路，断线和报错各管各的。加一个请求更省事。</p>
+
+<h3>base64 和 11 MB 上限</h3>
+<p>协议是 JSON。直接放 <code>Vec&lt;u8&gt;</code> 会被写成数字数组，每个字节要 3 到 4 个字符；base64 只多三分之一。一帧最大 16 MB，所以单张图上限定在 11 MB（编码后约 14.7 MB）。超过就在本机拦下并提示，不发出去。</p>
+
+<h3>格式：认文件头，不认后缀</h3>
+<p>窗口先看字节的文件头。PNG、JPEG、GIF、WebP 原样发；别的格式能解码成图片的（比如 TIFF、BMP）转成 PNG 再发，剪贴板和拖进来的文件都一样；解不出来的（PDF、源代码）就拒绝，提示先把文件传到那台电脑。那台电脑的后台也只收这四种文件头，别的字节一律不落盘。</p>
+
+<h3>多张图：一张失败就都不贴</h3>
+<p>一次拖进好几张时，窗口按顺序一张张上传，有一张失败，一个路径都不贴，免得输入框里只进去一半。已经传上去的几张留在那台电脑，按下面的规则 7 天后清掉。</p>
+
+<h3>存储：只有自己能读，留 7 天</h3>
+<p><code>phone-images/</code> 目录只有本人能进，文件权限 <code>600</code>，文件名是随机 UUID。每次存新图时顺手删掉 7 天前的。留 7 天，是因为恢复几天前的会话时，Agent 可能还要再读一次历史消息里的图。</p>
+
+<h3>旧版后台：不升协议主版本</h3>
+<p>常见情况是手上的 Fibo 更新了，那台电脑还是旧版。如果因为加 <code>SaveImage</code> 就升协议主版本，新窗口连旧后台时握手会失败，整台电脑的终端都用不了。所以版本不变：v0.1.4 及以后的后台遇到不认识的请求，会回一行 <code>unsupported or invalid request: …</code>，窗口把它换成「那台电脑上的 Fibo 太旧，还收不了图片；更新它之后再试」。v0.1.3 及更早的后台遇到不认识的请求会直接断开，这时窗口显示的是原始报错。</p>
+
+<h2 id="s5">05 怎么验证的</h2>
+
+<ul>
+  <li><b>单元测试</b>：PNG 原样发出；TIFF 转成合法的 PNG；PDF 和源代码的字节被拒绝；旧后台的那行回复会被换掉，不原样显示。</li>
+  <li><b>后台端到端</b>：测试里真的起一个 <code>fibo serve</code>，发 <code>SaveImage</code>，检查回来的是 <code>phone-images/</code> 下的绝对路径、文件字节和发出去的一样；再把一段 shell 脚本当图发过去，后台拒绝。</li>
+  <li><b>两台真 Mac，两个方向</b>：A 经窗口的转发往 B 发一张 487 KB 的 PNG，B 上文件的 sha256 和原图一致，权限 <code>600</code>，贴进 B 上的 Claude Code 变成 <code>[Image #1]</code>，它答出了图里的内容。反过来，人坐在 B 前截图，在 B 的 Fibo 里切到 A 的终端按 <code>⌘V</code>，A 上的 Claude Code 同样收到 <code>[Image #1]</code>。</li>
+</ul>
+
+<h2 id="limits">限制：还没测到的</h2>
+
+<ul>
+  <li><b>拖文件</b>：和 <code>⌘V</code> 走同一个上传函数，但没在两台真机上拖过。</li>
+  <li><b>「那台电脑上的 Fibo 太旧」</b>：只在单元测试里见过，真机两台都是新版。</li>
+  <li><b>慢网络上的大图</b>：每次上传的连接读写各有 10 秒超时，上传时窗口也没有进度提示。几 MB 的图在很慢的链路上会不会超时，没测。</li>
+  <li><b>别的 Agent</b>：上面的表只代表 Claude Code。Codex 启动时先弹出 hook 审核界面，这次没测成；OpenCode 两台电脑都没装。按手机发图的经验它们也认单独的图片路径，但这次没验证。</li>
+  <li><b>对面是 Windows</b>：路径按 Unix shell 规则转义，没试过。</li>
+</ul>
+
+<h2 id="summary">总结：三条做法</h2>
+
+<ul>
+  <li><b>先实测，再设计</b>：20 次粘贴定下了四条约束（绝对路径、单独粘贴、转 PNG、空格连多张），设计按表来，不靠猜。</li>
+  <li><b>用已有的连接和存储</b>：协议只加了 1 个请求，存储和手机发图共用一个函数，整个改动 12 个文件、+278/−92 行。</li>
+  <li><b>新功能不升协议主版本</b>：新窗口照样能连旧后台的终端，只是贴图时报错（v0.1.4 起的后台会提示先更新）。</li>
+</ul>
+
+<footer class="end">
+  <p>Fibo 是开源项目（MIT 许可）。跨机贴图的实现见 <a href="https://github.com/majiayu000/fibo/pull/625">PR #625</a>，全部源码在 <a href="https://github.com/majiayu000/fibo">GitHub</a>。</p>
+  <p><a href="../zh.html">← 全部文章</a> · <a href="../../">回到 fibo.page</a></p>
+</footer>
+</main>
+</body>
+</html>
