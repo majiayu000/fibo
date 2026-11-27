@@ -7,6 +7,15 @@ export const chat: Record<string, Entry> = {
   // Waits and the strip above the composer
   '先点「看终端」看清楚，再用 ↑ ↓ 移到要的那项、按回车': 'Tap “View terminal” to see it, then use ↑ ↓ to move to the one you want and press Return',
   看终端: 'View terminal',
+  // Dictation in the composer and the new task screen
+  说话输入: 'Dictate',
+  说完了: 'Stop dictating',
+  '在听，说完点麦克风': 'Listening. Tap the microphone when you’re done',
+  '没有麦克风权限，到系统设置里给 Fibo 打开': 'No microphone access. Turn it on for Fibo in the phone’s Settings',
+  '语音识别要联网，现在连不上': 'Speech recognition needs the internet and can’t reach it right now',
+  '系统的语音识别不支持这种语言': 'The phone’s speech recognition doesn’t support this language',
+  '系统的语音识别用不了：{m}': (a) => `The phone’s speech recognition isn’t working: ${a.m}`,
+  停止听写: 'Stop dictating',
   收起: 'Show less',
   回车: 'Return',
   '要在电脑的浏览器里完成，手机上做不了': 'This has to be done in the browser on the computer, not on the phone',

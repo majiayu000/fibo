@@ -13,6 +13,7 @@ import { tr } from '@/i18n';
 import { NOT_YET, refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
 import { getDraft, resetDraft, setDraft, useDraft } from '@/store/draft';
 import { rememberSent } from '@/store/sentPictures';
+import { useDictation } from '@/ui/dictation';
 import { Icon } from '@/ui/icons';
 import { Btn, Label, Nav, Notice, Wide, mono, noOutline } from '@/ui/kit';
 import { MAX_PICTURES, type Picture, pick } from '@/ui/pictures';
@@ -31,6 +32,7 @@ export default function NewTask() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [pictures, setPictures] = useState<Picture[]>([]);
+  const dictation = useDictation(draft.prompt, (prompt) => setDraft({ prompt }), oops);
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const typing = useRef(false);
   // The box is the last field: once the keyboard is up and the page has shrunk, bring it
@@ -94,6 +96,7 @@ export default function NewTask() {
 
   async function start() {
     if (!m || !cwd) return;
+    dictation.cancel();
     setBusy(true);
     try {
       const prompt = draft.prompt.trim();
@@ -227,7 +230,10 @@ export default function NewTask() {
           <TextInput
             multiline
             value={draft.prompt}
-            onChangeText={(prompt) => setDraft({ prompt })}
+            onChangeText={(prompt) => {
+              dictation.cancel();
+              setDraft({ prompt });
+            }}
             // Return starts it: on a phone a new line is rarely what is meant, and the
             // keyboard otherwise hides 开始 with no way to put it away.
             returnKeyType={ready ? 'send' : 'done'}
@@ -263,6 +269,7 @@ export default function NewTask() {
         )}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {canPicture && pictures.length < MAX_PICTURES && <Btn label={tr('加图片')} onPress={addPictures} />}
+          {dictation.can && <Btn label={dictation.listening ? tr('停止听写') : tr('说话输入')} icon="mic" primary={dictation.listening} onPress={dictation.toggle} />}
           <Btn
             label={tr('从剪贴板粘贴')}
             onPress={() =>
