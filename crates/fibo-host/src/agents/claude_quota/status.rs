@@ -1,12 +1,16 @@
-//! Claude Code runs this as its status line. It keeps each conversation's context usage,
-//! then hands the same payload to the status line set
-//! before, which prints as ever. A reading it can't save must not cost the user that line.
+//! Claude Code runs this as its status line. It keeps the account's limits when the payload
+//! carries them (API-key sign-ins and the first render of a session have none), merged with
+//! what other conversations said (`limits`), and each conversation's own copy for how full
+//! its context is, then hands the same payload to the status line set before, which prints
+//! as ever. A reading it can't save must not cost the user that line.
 use fibo_platform::fs::{create_private_dir, write_private};
 use serde_json::Value;
 use std::io::{self, Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime};
+
+use super::limits::WINDOWS;
 
 /// A conversation not heard from for this long no longer needs its reading.
 const CONTEXTS_KEPT_FOR: Duration = Duration::from_secs(7 * 86_400);
@@ -22,8 +26,17 @@ pub(super) fn run(data: std::path::PathBuf) -> io::Result<()> {
 }
 
 fn save(data: &Path, payload: &[u8], doc: &Value) -> io::Result<()> {
-    // These rate limits have no account identity or observation time. They cannot
-    // update the account snapshot, even when this status line was rendered just now.
+    let limits = &doc["rate_limits"];
+    if WINDOWS.iter().any(|w| limits.get(w).is_some()) {
+        let file = data.join("statusline.json");
+        let old = std::fs::read(&file)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<Value>(&b).ok());
+        let old = old.as_ref().map(|o| &o["rate_limits"]);
+        let mut kept = doc.clone();
+        kept["rate_limits"] = super::limits::merge(old, limits);
+        write_private(&file, &serde_json::to_vec(&kept)?)?;
+    }
     if let (Some(id), true) = (
         doc["session_id"].as_str().filter(|id| plain_id(id)),
         doc.get("context_window").is_some(),

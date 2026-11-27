@@ -131,15 +131,9 @@ mod tests {
             .join("../../plugins/claude-quota/quota.json");
         let file: serde_json::Value =
             serde_json::from_slice(&std::fs::read(shipped).unwrap()).unwrap();
-        assert_eq!(
-            file["sources"].as_array().unwrap().len(),
-            1,
-            "old statusline files must not be another account quota source"
-        );
-        let source: Source = serde_json::from_value(file["sources"][0].clone()).unwrap();
-        assert!(source.file.is_none());
-        // Native HTTP is bounded; no full Claude Code startup.
-        assert!(source.timeout_ms.is_some_and(|t| t <= 20_000));
+        let source: Source = serde_json::from_value(file["sources"][1].clone()).unwrap();
+        // Six seconds usually, and over 20 on a busy machine: the default would cut it off.
+        assert!(source.timeout_ms.is_some_and(|t| t >= 60_000));
         let doc = serde_json::json!({"at": 500,
             "session": {"used": 2, "resets_at": 900},
             "week": {"used": 19, "resets_at": 901},

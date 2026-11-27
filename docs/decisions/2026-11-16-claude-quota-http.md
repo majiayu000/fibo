@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by 2026-11-27-claude-quota-passive
 date: 2026-11-16
 decision-makers: majiayu000
 ---
@@ -77,3 +77,7 @@ decision-makers: majiayu000
 - 可重放视觉证据：外部证据目录的 `http-visual-compare/compare.html`、`visual-error/`、`visual-reset/`。复制的 harness 只隔离本任务 worktree、STATE 和日志，避免碰其他会话共用目录；`visual-tools/README.md` 记录具体调整。
 - 本机原始回放、原讨论追溯、资源测量：`~/Documents/claude-pages/fibo/2026-11-16-quota-fluctuation/` 的 report.md、history.md、design-draft.md 和 JSON 证据。design-draft.md 中的被动最大值方案是被取代的草案，不是本次实现规范。
 - 原始历史 Claude 会话：669a31c1-c309-4f1c-b75a-0f544e45543d、698ca1a9-b6a7-42e1-a55c-a19a9689b2fb、9452cae9-3552-4df2-ac7c-dbe046b64301。
+
+## 2026-11-27 修订
+
+被 [回到状态栏读数加可选 /usage](2026-11-27-claude-quota-passive.md) 取代：用户不认读钥匙串，回跳改由同一周期取最大值解决。上文保留当时取舍。

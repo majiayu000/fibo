@@ -241,7 +241,7 @@ hooks、decorations、quota 的 command、setup/teardown 都会带上（actions 
 - `name` 可选，也是 JSON 指针：窗口自己的名字，给只算一部分的窗口用（某个模型的周额度，弹层显示成 `Fable 周`）。不带名字的是整个账号的。带名字的平时不占状态栏，到 80% 才出现，也不发给手机。同一个 Agent 有多条来源时显示最新的那条，1 小时内其他来源独有的带名字窗口留在旁边。需要插件级别 8：写了就在 `plugin.json` 写 `"mooring": 8`，并把上一个版本放进 `versions/`，旧 App 读到不认识的字段会让这份文件不生效。
 - `at`、`plan` 可选，也是 JSON 指针：记录时间（Unix 秒，不写就用文件修改时间或命令运行时间）、套餐名。
 - `error` 可选，刷新失败信息的 JSON 指针（插件级别 9）。失败时仍输出 JSON、退出 0：有旧快照就保留原 `at` 和窗口，界面标为过期并显示错误；没有可用快照时输出 `{"at":0,"error":"原因"}`，显示等待读数，不沿用上个账号的值。不要用本次失败时间覆盖采集时间。
-- 要联网查的话写在 `command` 里，并在插件清单声明 `network: true`。Claude 额度现用原生 HTTP、120 秒共享缓存、进程锁和凭据指纹；不再读会话状态栏里的账号额度。详见 `docs/decisions/2026-11-16-claude-quota-http.md`。
+- 要联网查的话写在 `command` 里，并在插件清单声明 `network: true`。Claude 额度读会话状态栏给的账号额度（同一周期取各会话的最大值），可选让 Claude Code 自己跑 `/usage`；不读钥匙串。详见 `docs/decisions/2026-11-27-claude-quota-passive.md`。
 
 ## agent：让 Fibo 认识一个新 CLI（`agent.json` 或 `agents/*.json`）
 
