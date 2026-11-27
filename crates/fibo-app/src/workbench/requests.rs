@@ -155,6 +155,14 @@ impl Workbench {
     }
     /// `edit`, returning the id its receipt will carry.
     pub(super) fn edit_named(&mut self, mut edit: Edit, cx: &mut Context<Self>) -> RequestId {
+        if let Edit::SetOutcome {
+            id,
+            outcome: Outcome::Completed,
+            ..
+        } = &edit
+        {
+            self.offer_session_todos(&id.clone(), cx);
+        }
         self.workspace.stamp(&mut edit);
         let id = RequestId::fresh();
         let request = Some(id.clone());

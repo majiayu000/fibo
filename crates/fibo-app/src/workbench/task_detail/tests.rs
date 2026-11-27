@@ -26,6 +26,8 @@ fn status_follows_outcome_sessions_and_evidence() {
         agent: Agent::Codex,
     };
     w.tasks.push(task.clone());
+    // Noted just now, as `AddTask` stamps it; the fixture's sessions are old.
+    w.task_logs.entry(task.id.clone()).or_default().created = Some(now());
     assert_eq!(task_status(&w, &task), TaskStatus::NotStarted);
     w.agent_sessions[0].task = Some(task.id.clone());
     // Every session it had is marked done, and the todo is not: it says so instead

@@ -88,6 +88,7 @@ pub(super) fn start(
             task: TODO.into(),
             session: None,
             text: "上次查到 crates 下有 6 项，还剩 plugins 没数。".into(),
+            done: false,
         });
         wait(800).await;
         let open = |cx: &mut gpui::AsyncApp| {

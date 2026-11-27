@@ -46,6 +46,7 @@ fn list_carries_every_unfinished_todo_with_its_state_words_and_progress() {
             task: "t1".into(),
             session: None,
             text: "初稿写好了".into(),
+            done: false,
         },
     );
     edit(
@@ -65,10 +66,11 @@ fn list_carries_every_unfinished_todo_with_its_state_words_and_progress() {
         (&t["id"], &t["space"], &t["title"], &t["agent"]),
         (&json!("t1"), &json!("s"), &json!("写周报"), &json!("codex"))
     );
-    assert_eq!(t["state"], "not_started");
+    // No session runs it but it has progress: 有进展, not 未开始.
+    assert_eq!(t["state"], "noted");
     assert_eq!(
         t["state_label"],
-        fibo_core::status::TaskState::NotStarted.label()
+        fibo_core::status::TaskState::Noted.label()
     );
     assert_eq!(t["said"], "这周的，发群里");
     assert_eq!(t["acceptance"], json!(["群里有人回"]));

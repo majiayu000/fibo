@@ -325,6 +325,7 @@ mod visual_unknown;
 mod closing;
 mod launch_slot;
 mod pane_sync;
+mod todo_offer;
 impl Workbench {
     pub fn new(
         socket: PathBuf,
@@ -525,23 +526,7 @@ impl Workbench {
                 #[cfg(feature = "visual-test")]
                 toggle_at: None,
             },
-            tasks: TaskUi {
-                form: None,
-                editing_task: None,
-                start_after_save: None,
-                quick_task: None,
-                board_quick: None,
-                board_draft_space: None,
-                board_draft: String::new(),
-                todos_open: false,
-                picking: None,
-                last_agent: None,
-                chosen_agent: None,
-                found: None,
-                probing: false,
-                expanded: HashSet::new(),
-                attaching: None,
-            },
+            tasks: TaskUi::default(),
             layout: LayoutState {
                 panes: HashMap::new(),
                 landing: None,

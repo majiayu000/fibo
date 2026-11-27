@@ -128,14 +128,15 @@ fibo close <终端>                          关掉这块分屏并结束里面�
     },
     Command {
         name: "todo",
-        valued: &["task", "said", "space"],
-        switches: &["all", "work", "json"],
+        valued: &["task", "said", "space", "done-when"],
+        switches: &["all", "work", "json", "done"],
         usage: tk!("\
 fibo todo list [--all] [--json]            没做完的待办；--all 连已收尾的
 fibo todo show [--task <待办>] [--json]      看一条：用户写的、验收标准、进展
-fibo todo add <标题|-> [--said <原话>] [--space <空间>] [--work] [--json]
-                                           记一件事，默认只记下来自哪个会话；--work 表示这个会话就在做它
-fibo todo note <文字|-> [--task <待办>]      写进展：做了什么、剩什么、要用户定什么；完成由用户标记"),
+fibo todo add <标题|-> [--said <原话>] [--done-when <标准>] [--space <空间>] [--work] [--json]
+                                           记一件事，默认只记下来自哪个会话；--done-when 写什么算做完；--work 表示这个会话就在做它
+fibo todo note <文字|-> [--task <待办>] [--done]
+                                           写进展：做了什么、剩什么、要用户定什么；--done 表示已完成，文字写证据，等用户确认"),
     },
     Command {
         name: "remote",
@@ -457,8 +458,8 @@ pub const PLUGINS_SKILL: &str = include_str!("plugins.md");
 pub const PLUGINS_SKILL_EN: &str = include_str!("plugins_en.md");
 /// What every conversation in a Fibo terminal is told when it starts. It costs every
 /// conversation these words, so it only says when to write something down.
-pub const SESSION_SKILL: &str = "你在 Fibo 终端里。用户说「记一下」，或有这次不处理但之后要跟进的事时：先 fibo todo list 查重，有就 fibo todo note --task <待办> 写进展，没有就 fibo todo add \"标题\" --said \"用户原话\"。当场问完答完的事不记。完成由用户标记，你不能标。\n";
-pub const SESSION_SKILL_EN: &str = "You are in a Fibo terminal. When the user says 'note this down' or out-of-scope follow-up work surfaces: run fibo todo list first to check for duplicates; if tracked, run fibo todo note --task <todo> with progress, else run fibo todo add \"title\" --said \"user's words\". Skip questions answered on the spot. Completion is marked by the user — you cannot mark todos done.\n";
+pub const SESSION_SKILL: &str = "你在 Fibo 终端里。用户说「记一下」，或有这次不处理但之后要跟进的事时：先 fibo todo list 查重，有就 fibo todo note --task <待办> 写进展，没有就 fibo todo add \"标题\" --said \"用户原话\"。当场问完答完的事、决定不做的事不记；记下后当场就做的加 --work。完成后用 fibo todo note --done --task <待办> \"证据\"，由用户确认，你不能标完成。\n";
+pub const SESSION_SKILL_EN: &str = "You are in a Fibo terminal. When the user says 'note this down' or out-of-scope follow-up work surfaces: run fibo todo list first to check for duplicates; if tracked, run fibo todo note --task <todo> with progress, else run fibo todo add \"title\" --said \"user's words\". Skip questions answered on the spot and decisions not to act; pass --work if you start on it now. When it is done, run fibo todo note --done --task <todo> \"evidence\" for the user to confirm — you cannot mark todos done.\n";
 
 pub fn skill() -> &'static str {
     match i18n::lang() {

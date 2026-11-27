@@ -29,6 +29,10 @@ pub struct TaskNote {
     /// The conversation that wrote it, when it was written from one.
     pub session: Option<String>,
     pub text: String,
+    /// The Agent says the todo is done and `text` is its evidence. Only a claim: the todo
+    /// reads 等你确认 until you complete it or a later note takes the claim back.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub done: bool,
 }
 
 /// The short form of a todo's id that commands print and take: its first eight characters,
@@ -60,7 +64,7 @@ impl Workspace {
             parts.push(t!("目前进展：\n{notes}", notes = notes.join("\n")));
         }
         parts.push(t!(
-            "（这是 Fibo 待办。每做完一段就运行 {note} --task {id} \"做了什么、剩什么、要用户定什么\"，一两句就够。完成由用户标记。）",
+            "（这是 Fibo 待办。每做完一段就运行 {note} --task {id} \"做了什么、剩什么、要用户定什么\"，一两句就够。完成后加 --done，文字写证据，由用户确认。）",
             note,
             id = &task.id,
         ));
@@ -78,11 +82,27 @@ impl Workspace {
         };
         self.tasks.iter().find(|t| t.id == id)
     }
+    /// The open todos a conversation is tied to: the ones it works for or was noted in.
+    /// What the window offers to complete with it when you mark it done; nothing guessed.
+    pub fn session_todos(&self, session: &str, now: u64) -> Vec<&Task> {
+        let works = (self.agent_sessions.iter())
+            .find(|s| s.id == session)
+            .and_then(|s| s.task.as_deref());
+        (self.tasks.iter())
+            .filter(|t| {
+                works == Some(t.id.as_str())
+                    || (self.task_logs.get(&t.id)).and_then(|l| l.source.as_deref())
+                        == Some(session)
+            })
+            .filter(|t| !crate::status::task_state(self, t, now).closed())
+            .collect()
+    }
     pub(super) fn add_task_note(
         &mut self,
         task: String,
         session: Option<String>,
         text: String,
+        done: bool,
     ) -> Result<(), String> {
         if !self.tasks.iter().any(|t| t.id == task) {
             return Err(t!("待办不存在").into());
@@ -111,6 +131,7 @@ impl Workspace {
                 at: crate::time::now(),
                 session,
                 text,
+                done,
             });
         Ok(())
     }
@@ -180,6 +201,7 @@ mod tests {
             task: "t1234567890".into(),
             session: None,
             text: "  查清了是容量不够  ".into(),
+            done: false,
         })
         .unwrap();
         let next = w.task_handoff(&w.tasks[0], "fibo todo note");
@@ -206,6 +228,7 @@ mod tests {
                 task: "t".into(),
                 session: None,
                 text,
+                done: false,
             });
             assert!(refused.is_err());
         }
@@ -215,6 +238,7 @@ mod tests {
                 task: "gone".into(),
                 session: None,
                 text: "x".into(),
+                done: false,
             })
             .is_err()
         );
@@ -272,5 +296,94 @@ mod tests {
             after.task, session.task,
             "where it came from, not who works on it"
         );
+    }
+
+    #[test]
+    fn an_agents_done_waits_for_you_and_a_later_note_takes_it_back() {
+        use crate::status::{TaskState, task_state};
+        let mut w = workspace();
+        w.edit(Edit::AddTask(task("t"))).unwrap();
+        let now = crate::time::now();
+        let note = |w: &mut Workspace, text: &str, done| {
+            w.edit(Edit::AddTaskNote {
+                task: "t".into(),
+                session: None,
+                text: text.into(),
+                done,
+            })
+            .unwrap()
+        };
+        assert_eq!(task_state(&w, &w.tasks[0], now), TaskState::NotStarted);
+        note(&mut w, "查清了", false);
+        assert_eq!(
+            task_state(&w, &w.tasks[0], now),
+            TaskState::Noted,
+            "not 未开始"
+        );
+        note(&mut w, "PR #12 已合并", true);
+        assert_eq!(task_state(&w, &w.tasks[0], now), TaskState::Claimed);
+        assert!(!TaskState::Claimed.closed(), "only you close it");
+        note(&mut w, "用户退回：还没做完", false);
+        assert_eq!(task_state(&w, &w.tasks[0], now), TaskState::Noted);
+    }
+
+    #[test]
+    fn a_note_an_older_build_wrote_is_not_a_claim() {
+        let old: TaskNote = serde_json::from_str(r#"{"at":1,"session":null,"text":"x"}"#).unwrap();
+        assert!(!old.done);
+        assert!(!serde_json::to_string(&old).unwrap().contains("done"));
+        let edit: Edit =
+            serde_json::from_str(r#"{"AddTaskNote":{"task":"t","session":null,"text":"x"}}"#)
+                .unwrap();
+        assert!(matches!(edit, Edit::AddTaskNote { done: false, .. }));
+    }
+
+    #[test]
+    fn a_todo_nothing_moved_on_is_idle_but_one_with_no_time_is_not() {
+        use crate::status::{TODO_IDLE_DAYS, TaskState, task_state};
+        let mut w = workspace();
+        w.edit(Edit::AddTask(task("t"))).unwrap();
+        let now = crate::time::now();
+        let later = now + TODO_IDLE_DAYS * 86400 + 1;
+        assert_eq!(task_state(&w, &w.tasks[0], later), TaskState::Idle);
+        assert!(TaskState::Idle.folded() && !TaskState::Idle.closed());
+        w.task_logs.get_mut("t").unwrap().created = None;
+        assert_eq!(
+            task_state(&w, &w.tasks[0], later),
+            TaskState::NotStarted,
+            "written before created was kept: unknown is not old"
+        );
+    }
+
+    #[test]
+    fn a_conversation_offers_the_todos_it_noted_or_works_for_and_no_other() {
+        let mut w = crate::sample::every_state();
+        let session = w.agent_sessions[0].id.clone();
+        let space = w.spaces[0].id.clone();
+        let now = crate::time::now();
+        let before = w.session_todos(&session, now).len();
+        for id in ["noted", "elsewhere", "closed"] {
+            let mut t = task(id);
+            t.space = space.clone();
+            let from = (id != "elsewhere").then(|| session.clone());
+            w.edit(Edit::AddTaskFrom {
+                task: t,
+                session: from,
+            })
+            .unwrap();
+        }
+        w.edit(Edit::SetTaskOutcome {
+            id: "closed".into(),
+            outcome: Outcome::Completed,
+            seen: None,
+        })
+        .unwrap();
+        let ids: Vec<&str> = (w.session_todos(&session, now).into_iter())
+            .map(|t| t.id.as_str())
+            .collect();
+        assert!(ids.contains(&"noted"));
+        assert!(!ids.contains(&"elsewhere"), "noted in another conversation");
+        assert!(!ids.contains(&"closed"), "already closed");
+        assert_eq!(ids.len(), before + 1);
     }
 }

@@ -230,7 +230,15 @@ fn add(a: Args) -> io::Result<()> {
         space,
         title: title.trim().to_owned(),
         description: a.value("said").unwrap_or_default().trim().to_owned(),
-        acceptance: vec![],
+        acceptance: (a.value("done-when").map(str::trim))
+            .filter(|c| !c.is_empty())
+            .map(|c| AcceptanceCriterion {
+                id: uuid::Uuid::new_v4().to_string(),
+                description: c.to_owned(),
+                evidence: vec![],
+            })
+            .into_iter()
+            .collect(),
         agent: w.settings.default_agent,
     };
     let id = task.id.clone();
@@ -295,6 +303,7 @@ fn note(a: Args) -> io::Result<()> {
             task,
             session,
             text,
+            done: a.has("done"),
         },
     )
 }

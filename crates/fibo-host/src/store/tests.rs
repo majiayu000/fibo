@@ -558,6 +558,7 @@ fn a_todos_times_source_and_progress_survive_a_restart() {
             task: "t".into(),
             session: None,
             text: "查清了".into(),
+            done: false,
         })
         .unwrap();
     db.save(&before, &after).unwrap();
@@ -567,6 +568,7 @@ fn a_todos_times_source_and_progress_survive_a_restart() {
             task: "t".into(),
             session: None,
             text: "修好了".into(),
+            done: false,
         })
         .unwrap();
     db.save(&after, &noted).unwrap();

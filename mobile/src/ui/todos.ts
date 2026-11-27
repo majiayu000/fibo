@@ -15,12 +15,12 @@ export const todoSpace = (m: Machine, t: Todo) => m.spaces[t.space] || t.space;
 export const touched = (t: Todo) => t.notes?.at(-1)?.at ?? t.created ?? 0;
 
 /** Waiting on you to judge first, then what is being worked on, then what nobody started. */
-const ORDER: Record<string, number> = { proven: 0, settled: 1, working: 2, not_started: 3, deferred: 4 };
-const order = (t: Todo) => ORDER[t.state ?? ''] ?? 3;
+const ORDER: Record<string, number> = { claimed: 0, proven: 1, settled: 2, working: 3, noted: 4, not_started: 5, idle: 6, deferred: 7 };
+const order = (t: Todo) => ORDER[t.state ?? ''] ?? ORDER.not_started;
 
 /** How a state's words are coloured: yours to judge, being worked on, or quiet. */
 export function todoTone(t: Todo): 'ok' | 'run' | 'dim' {
-  if (t.state === 'proven' || t.state === 'settled') return 'ok';
+  if (t.state === 'claimed' || t.state === 'proven' || t.state === 'settled') return 'ok';
   if (t.state === 'working') return 'run';
   return 'dim';
 }

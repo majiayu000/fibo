@@ -225,6 +225,10 @@ if sys.argv[1] == 'prepare':
     edit(root, {'AddSpace': {'id': 's5', 'name': '新空间', 'cwd': str(root / 'projects/gone')}})
     for n, (title, description, criteria) in enumerate(TASKS):
         edit(root, {'AddTask': {'id': f'task{n}', 'space': 's0', 'title': title, 'description': description, 'acceptance': [{'id': f't{n}-c{i}', 'description': text, 'evidence': []} for i, text in enumerate(criteria)], 'agent': 'Codex'}})
+    if os.environ.get('MOORING_FIXTURE_TODO_CLOSE'):
+        # An Agent said 睡觉 is done; 健身 you already completed.
+        edit(root, {'AddTaskNote': {'task': 'task2', 'session': None, 'text': 'PR #12 已合并，CI 全绿。', 'done': True}})
+        edit(root, {'SetTaskOutcome': {'id': 'task1', 'outcome': 'Completed'}})
     (root / 'codex').symlink_to('/bin/sh')
     for n in range(3):
         lines = ['› ' + titles[n], '', '• 已读取项目上下文', '• 修改标签命名', '', '此处为隔离视觉测试输出，未调用模型。']

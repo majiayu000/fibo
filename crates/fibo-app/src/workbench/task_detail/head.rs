@@ -127,12 +127,15 @@ impl Workbench {
                 )))
                 .child(edit);
         } else {
-            if status == TaskStatus::Proven {
+            if matches!(status, TaskStatus::Proven | TaskStatus::Claimed) {
                 actions = actions.child(solid(outcome_button(
                     "task-complete",
                     t!("标记完成"),
                     Outcome::Completed,
                 )));
+                if status == TaskStatus::Claimed {
+                    actions = actions.child(plain(self.send_back_button(&tid, cx)));
+                }
                 if running {
                     actions = actions.child(plain(back()));
                 }
@@ -161,7 +164,7 @@ impl Workbench {
                     Outcome::Completed,
                 )));
             }
-            if status == TaskStatus::Proven {
+            if matches!(status, TaskStatus::Proven | TaskStatus::Claimed) {
                 actions = actions.child(divider());
             }
             if let Outcome::Deferred { .. } = outcome {

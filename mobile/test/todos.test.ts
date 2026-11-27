@@ -17,19 +17,20 @@ describe('the 待办 tab', () => {
           todo('idle-new', 'a', { state: 'not_started', created: 5 }),
           todo('working', 'a', { state: 'working', created: 2 }),
           todo('judge', 'a', { state: 'settled', created: 0 }),
+          todo('claim', 'a', { state: 'claimed', created: 0 }),
           todo('other', 'b', { state: 'working' }),
         ]),
       ],
       null,
     );
     expect(ids(s)).toEqual([
-      ['alpha', ['judge', 'working', 'idle-new', 'idle-old']],
+      ['alpha', ['claim', 'judge', 'working', 'idle-new', 'idle-old']],
       ['beta', ['other']],
     ]);
-    expect(s.total).toBe(5);
+    expect(s.total).toBe(6);
     expect(s.chips.map((c) => [c.space, c.count])).toEqual([
-      [null, 5],
-      ['alpha', 4],
+      [null, 6],
+      ['alpha', 5],
       ['beta', 1],
     ]);
   });

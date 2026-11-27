@@ -18,6 +18,8 @@ pub(super) struct TaskUi {
     pub(super) board_draft: String,
     /// The sidebar's todo list starts folded; sessions come first.
     pub(super) todos_open: bool,
+    /// The folded part of the todo list (搁着 and closed) is shown.
+    pub(super) todos_folded_open: bool,
     pub(super) editing_task: Option<String>,
     pub(super) start_after_save: Option<String>,
     /// Agent commands the login shell finds; None until asked, or when it cannot tell.

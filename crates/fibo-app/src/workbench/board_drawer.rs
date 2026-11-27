@@ -130,6 +130,8 @@ pub(super) struct Toast {
     pub(super) text: String,
     pub(super) undo: Option<(String, Outcome)>,
     pub(super) refused: bool,
+    /// Todos a 一起完成 button completes: the ones tied to a session just marked done.
+    pub(super) todos: Vec<String>,
 }
 const TOAST_FOR: Duration = Duration::from_millis(4200);
 
@@ -147,6 +149,17 @@ impl Workbench {
         refused: bool,
         cx: &mut Context<Self>,
     ) {
+        self.put_toast(text, undo, refused, Vec::new(), TOAST_FOR, cx);
+    }
+    pub(super) fn put_toast(
+        &mut self,
+        text: String,
+        undo: Option<(String, Outcome)>,
+        refused: bool,
+        todos: Vec<String>,
+        stay: Duration,
+        cx: &mut Context<Self>,
+    ) {
         self.overview.toast_seq += 1;
         let seq = self.overview.toast_seq;
         self.overview.toast = Some(Toast {
@@ -154,10 +167,11 @@ impl Workbench {
             text,
             undo,
             refused,
+            todos,
         });
         cx.notify();
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(TOAST_FOR).await;
+            cx.background_executor().timer(stay).await;
             let _ = this.update(cx, |this, cx| {
                 if this.overview.toast.as_ref().is_some_and(|t| t.seq == seq) {
                     this.overview.toast = None;
@@ -423,6 +437,21 @@ impl Workbench {
                                 },
                                 cx,
                             );
+                        })),
+                )
+            })
+            .when(!toast.todos.is_empty(), |d| {
+                let todos = toast.todos.clone();
+                d.child(
+                    button("toast-complete-todos", t!("一起完成"))
+                        .h(px(T::SEGMENT_HEIGHT))
+                        .bg(T::color(T::button()))
+                        .text_color(T::color(T::primary()))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.overview.toast = None;
+                            for todo in &todos {
+                                this.complete_todo(todo, cx);
+                            }
                         })),
                 )
             })

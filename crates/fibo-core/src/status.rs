@@ -219,6 +219,13 @@ pub fn fresh(c: Option<&Content>) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TaskState {
     NotStarted,
+    /// No session works for it, but an Agent wrote progress: not 未开始.
+    Noted,
+    /// An Agent's latest note says it is done; yours to confirm or send back.
+    Claimed,
+    /// Nothing moved on it for `TODO_IDLE_DAYS` and nothing works on it: folded away,
+    /// still open.
+    Idle,
     /// A session of it is still open.
     Working,
     /// Every session you started for it is marked done, and you have not closed it.
@@ -234,6 +241,9 @@ impl TaskState {
     pub fn key(self) -> &'static str {
         match self {
             Self::NotStarted => "not_started",
+            Self::Noted => "noted",
+            Self::Claimed => "claimed",
+            Self::Idle => "idle",
             Self::Working => "working",
             Self::Settled => "settled",
             Self::Proven => "proven",
@@ -245,6 +255,9 @@ impl TaskState {
     pub fn label(self) -> &'static str {
         match self {
             Self::NotStarted => crate::t!("未开始"),
+            Self::Noted => crate::t!("有进展"),
+            Self::Claimed => crate::t!("等你确认"),
+            Self::Idle => crate::t!("搁着"),
             Self::Working => crate::t!("进行中"),
             Self::Settled => crate::t!("会话都做完了"),
             Self::Proven => crate::t!("验收齐了"),
@@ -257,7 +270,29 @@ impl TaskState {
     pub fn closed(self) -> bool {
         matches!(self, Self::Completed | Self::Abandoned)
     }
+    /// Out of the way in a list: closed, or 搁着. Folded, never hidden for good.
+    pub fn folded(self) -> bool {
+        self.closed() || self == Self::Idle
+    }
+    /// Where it goes in a list: yours to judge first, then work under way, then the rest.
+    pub fn rank(self) -> u8 {
+        match self {
+            Self::Claimed => 0,
+            Self::Proven => 1,
+            Self::Settled => 2,
+            Self::Working => 3,
+            Self::Noted => 4,
+            Self::NotStarted => 5,
+            Self::Idle => 6,
+            Self::Deferred => 7,
+            Self::Completed => 8,
+            Self::Abandoned => 9,
+        }
+    }
 }
+/// A todo nothing moved on for this long, with nothing working on it, reads 搁着.
+pub const TODO_IDLE_DAYS: u64 = 14;
+
 pub fn task_state(w: &Workspace, task: &Task, now: u64) -> TaskState {
     match w.task_outcomes.get(&task.id).unwrap_or(&Outcome::Open) {
         Outcome::Completed => return TaskState::Completed,
@@ -265,21 +300,33 @@ pub fn task_state(w: &Workspace, task: &Task, now: u64) -> TaskState {
         Outcome::Deferred { until, .. } if *until > now => return TaskState::Deferred,
         _ => (),
     }
+    let log = w.task_logs.get(&task.id);
+    let notes = log.map_or(&[][..], |l| l.notes.as_slice());
+    if notes.last().is_some_and(|n| n.done) {
+        return TaskState::Claimed;
+    }
     if !task.acceptance.is_empty() && task.proven() == task.acceptance.len() {
         return TaskState::Proven;
     }
-    let mut sessions = w
-        .agent_sessions
-        .iter()
+    let sessions: Vec<&AgentSession> = (w.agent_sessions.iter())
         .filter(|s| s.task.as_ref() == Some(&task.id))
-        .peekable();
-    if sessions.peek().is_none() {
-        return TaskState::NotStarted;
+        .collect();
+    if sessions.iter().any(|s| of(w, s, now) != Status::Closed) {
+        return TaskState::Working;
     }
-    if sessions.all(|s| of(w, s, now) == Status::Closed) {
-        TaskState::Settled
-    } else {
-        TaskState::Working
+    // When it last moved. A todo written before `created` was kept, with no note and no
+    // session, has no time at all: unknown is not old.
+    let moved = (log.and_then(|l| l.created).into_iter())
+        .chain(notes.iter().map(|n| n.at))
+        .chain(sessions.iter().map(|s| w.session_updated(s)))
+        .max();
+    if moved.is_some_and(|at| now.saturating_sub(at) > TODO_IDLE_DAYS * 86400) {
+        return TaskState::Idle;
+    }
+    match (sessions.is_empty(), notes.is_empty()) {
+        (false, _) => TaskState::Settled,
+        (true, false) => TaskState::Noted,
+        (true, true) => TaskState::NotStarted,
     }
 }
 /// The todo a session works for is one you closed.

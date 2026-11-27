@@ -16,24 +16,11 @@ pub(super) struct Line {
     pub note: String,
 }
 
-/// Yours to look at first, then work under way, then the rest.
-fn rank(s: TaskState) -> u8 {
-    match s {
-        TaskState::Proven => 0,
-        TaskState::Settled => 1,
-        TaskState::Working => 2,
-        TaskState::NotStarted => 3,
-        TaskState::Deferred => 4,
-        TaskState::Completed => 5,
-        TaskState::Abandoned => 6,
-    }
-}
-
 fn tone(s: TaskState) -> &'static str {
     match s {
-        TaskState::Proven | TaskState::Settled => "38;5;79",
+        TaskState::Claimed | TaskState::Proven | TaskState::Settled => "38;5;79",
         TaskState::Working => "38;5;221",
-        TaskState::NotStarted => "",
+        TaskState::NotStarted | TaskState::Noted => "",
         _ => "2",
     }
 }
@@ -43,14 +30,17 @@ fn first_line(s: &str) -> String {
 }
 
 pub(super) fn render(mut lines: Vec<Line>, color: bool) -> String {
-    lines.sort_by_key(|l| rank(l.state));
+    lines.sort_by_key(|l| l.state.rank());
     let count = |s: TaskState| lines.iter().filter(|l| l.state == s).count();
     let mut out = t!("{n} 条待办", n = lines.len());
     for s in [
+        TaskState::Claimed,
         TaskState::Proven,
         TaskState::Settled,
         TaskState::Working,
+        TaskState::Noted,
         TaskState::NotStarted,
+        TaskState::Idle,
     ] {
         let n = count(s);
         if n > 0 {

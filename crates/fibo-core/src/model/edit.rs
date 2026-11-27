@@ -19,6 +19,9 @@ pub enum Edit {
         task: String,
         session: Option<String>,
         text: String,
+        /// The Agent says it is done; `text` is the evidence. Older senders leave it out.
+        #[serde(default)]
+        done: bool,
     },
     SetTaskOutcome {
         id: String,

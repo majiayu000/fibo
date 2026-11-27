@@ -279,6 +279,10 @@ impl Render for Workbench {
         if let Some(peek) = &self.peek {
             main = main.relative().child(self.peek_view(peek, cx));
         }
+        // The board draws its own toasts; elsewhere they sit over the main area.
+        if !self.nav.overview {
+            main = main.relative().children(self.toast_view(cx));
+        }
         // Beside 会话优先's column the status bar belongs to the main column, so the
         // column runs to the window's foot (flat.html); otherwise it spans the window.
         // Drawn embedded, the window's own sidebar takes its share of the width.
