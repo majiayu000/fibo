@@ -22,6 +22,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="alternate" type="application/atom+xml" title="Fibo Blog" href="../feed.xml">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BlogPosting", "headline": "How Fibo lets Claude Code on the other end of ssh take a pasted screenshot", "description": "Over ssh, Claude Code reads the clipboard of the computer it runs on, so a pasted screenshot never arrives. After testing 20 kinds of paste: a paste that is only one absolute image path becomes an attachment. Fibo saves the picture on that computer, then pastes only the path. With a manual recipe and the test table.", "image": "https://fibo.page/blog/remote-paste/images/00-cover-en.webp", "datePublished": "2026-11-27", "dateModified": "2026-11-27", "inLanguage": "en", "mainEntityOfPage": "https://fibo.page/blog/remote-paste/", "author": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/"}, "publisher": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/", "logo": {"@type": "ImageObject", "url": "https://fibo.page/brand/apple-touch-icon.png"}}}</script>
 <link rel="stylesheet" href="../post.css">
 
 <script>(()=>{const r=document.documentElement,k='fibo-landing-theme';try{r.dataset.theme=localStorage.getItem(k)==='dark'?'dark':'light';localStorage.setItem('fibo-landing-lang','en')}catch(e){}
@@ -232,6 +234,7 @@ scp ~/Desktop/screenshot.png other-computer:/tmp/shot.png
   <li><b>Don't bump the major protocol version for a feature</b>: a new window still opens an old host's terminals, and only picture paste errors (hosts from v0.1.4 say to update first).</li>
 </ul>
 
+<nav class="pn" aria-label="More posts"><a class="pn-card" href="../many-machines/"><span class="eyebrow">Previous post</span><b>One Window for Terminals on Every Machine: Fibo’s Multi-Host Architecture and Slow-Link Sync Design</b></a></nav>
 <footer class="end">
   <p>Fibo is open source (MIT). The implementation is in <a href="https://github.com/majiayu000/fibo/pull/625">PR #625</a>; all the code is on <a href="https://github.com/majiayu000/fibo">GitHub</a>.</p>
   <p><a href="../">← All posts</a> · <a href="../../">Back to fibo.page</a></p>

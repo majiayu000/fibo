@@ -315,6 +315,7 @@
         tn[0].nodeValue = lang === 'zh' ? cn.replace(/<[^>]+>/g, '') : el._text;
       }
     });
+    $$('a[href="blog/"],a[href="blog/zh.html"]').forEach(x => x.setAttribute('href', lang === 'zh' ? 'blog/zh.html' : 'blog/'));
     document.title = lang === 'zh' ? 'Fibo：在 Mac 上同时跑很多个 Coding Agent' : title;
     if (langBtn) { langBtn.textContent = lang === 'zh' ? 'EN' : '中文'; langBtn.setAttribute('aria-label', lang === 'zh' ? 'Switch to English' : '切换到中文'); }
     redraw.forEach(f => f());

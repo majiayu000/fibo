@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Fibo Blog</title>
+  <link href="https://fibo.page/blog/"/>
+  <link rel="self" href="https://fibo.page/blog/feed.xml"/>
+  <id>https://fibo.page/blog/</id>
+  <updated>2026-11-27T00:00:00+08:00</updated>
+  <author><name>Fibo</name><uri>https://fibo.page/</uri></author>
+  <entry>
+    <title>How Fibo lets Claude Code on the other end of ssh take a pasted screenshot</title>
+    <link href="https://fibo.page/blog/remote-paste/"/>
+    <id>https://fibo.page/blog/remote-paste/</id>
+    <published>2026-11-27T00:00:00+08:00</published>
+    <updated>2026-11-27T00:00:00+08:00</updated>
+    <summary>Over ssh, Claude Code reads the clipboard of the computer it runs on, so a pasted screenshot never arrives. After testing 20 kinds of paste: a paste that is only one absolute image path becomes an attachment. Fibo saves the picture on that computer, then pastes only the path. With a manual recipe and the test table.</summary>
+  </entry>
+  <entry>
+    <title>One Window for Terminals on Every Machine: Fibo’s Multi-Host Architecture and Slow-Link Sync Design</title>
+    <link href="https://fibo.page/blog/many-machines/"/>
+    <id>https://fibo.page/blog/many-machines/</id>
+    <published>2026-11-16T00:00:00+08:00</published>
+    <updated>2026-11-16T00:00:00+08:00</updated>
+    <summary>How Fibo lets one desktop window operate terminals across multiple machines: why we dropped our separate remote UI, how one ssh -L socket tunnel unified 85 native RPCs, how we decoupled per-window view chrome from per-host state, and how we shrank refreshes from 3.59 MB to 660 bytes on a 54 KB/s link.</summary>
+  </entry>
+</feed>

@@ -22,6 +22,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="alternate" type="application/atom+xml" title="Fibo Blog" href="../feed.xml">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BlogPosting", "headline": "One Window for Terminals on Every Machine: Fibo’s Multi-Host Architecture and Slow-Link Sync Design", "description": "How Fibo lets one desktop window operate terminals across multiple machines: why we dropped our separate remote UI, how one ssh -L socket tunnel unified 85 native RPCs, how we decoupled per-window view chrome from per-host state, and how we shrank refreshes from 3.59 MB to 660 bytes on a 54 KB/s link.", "image": "https://fibo.page/blog/many-machines/images/00-cover-en.webp", "datePublished": "2026-11-16", "dateModified": "2026-11-16", "inLanguage": "en", "mainEntityOfPage": "https://fibo.page/blog/many-machines/", "author": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/"}, "publisher": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/", "logo": {"@type": "ImageObject", "url": "https://fibo.page/brand/apple-touch-icon.png"}}}</script>
 <link rel="stylesheet" href="../post.css">
 
 <script>(()=>{const r=document.documentElement,k='fibo-landing-theme';try{r.dataset.theme=localStorage.getItem(k)==='dark'?'dark':'light';localStorage.setItem('fibo-landing-lang','en')}catch(e){}
@@ -237,6 +239,7 @@ addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('themeb
 
 <p class="next">Still ahead: local predictive echo when typing p95 exceeds 200 ms (similar to WezTerm); opening remote terminal file links in a local editor; and computing context rings and Git ahead/behind counts on the remote daemon. Verified between Macs; as of v0.1.3, Windows x64 and Ubuntu 24.04 have preview packages.</p>
 
+<nav class="pn" aria-label="More posts"><a class="pn-card" href="../remote-paste/"><span class="eyebrow">Next post</span><b>How Fibo lets Claude Code on the other end of ssh take a pasted screenshot</b></a></nav>
 <footer class="end">
   <p>Fibo is open source under the MIT license. The code, decision records, and every PR linked above are on <a href="https://github.com/majiayu000/fibo">GitHub</a>.</p>
   <p><a href="../../">← Back to fibo.page</a></p>

@@ -32,7 +32,7 @@
 [![Qoder CLI](https://img.shields.io/badge/-Qoder%20CLI-2E7D32?style=flat-square)](#03--any-agent-cli)
 [![and more](https://img.shields.io/badge/-%2B%20Hermes%2C%20Droid%2C%20Pi%2C%20OpenCode-777?style=flat-square)](#03--any-agent-cli)
 
-[Website](https://fibo.page) | [Install](#install) | [What it does](#what-it-does) | [FAQ](#faq) | [中文](README_CN.md)
+[Website](https://fibo.page) | [Blog](https://fibo.page/blog/) | [Install](#install) | [What it does](#what-it-does) | [FAQ](#faq) | [中文](README_CN.md)
 
 <img src="docs/site/assets/shot-main.webp" alt="Fibo with three panes: Codex waiting for an answer, Claude Code running, Codex ready for review; the sidebar lists Needs you 3 and Running 2" width="900" />
 

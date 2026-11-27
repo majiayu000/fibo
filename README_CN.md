@@ -32,7 +32,7 @@
 [![Qoder CLI](https://img.shields.io/badge/-Qoder%20CLI-2E7D32?style=flat-square)](#03--什么-agent-都能接)
 [![and more](https://img.shields.io/badge/-%2B%20Hermes%2C%20Droid%2C%20Pi%2C%20OpenCode-777?style=flat-square)](#03--什么-agent-都能接)
 
-[官网](https://fibo.page) | [安装](#安装) | [能做什么](#能做什么) | [常见问题](#常见问题) | [English](README.md)
+[官网](https://fibo.page) | [博客](https://fibo.page/blog/zh.html) | [安装](#安装) | [能做什么](#能做什么) | [常见问题](#常见问题) | [English](README.md)
 
 <img src="docs/site/assets/shot-main.webp" alt="Fibo 三个窗格：Codex 等你回答、Claude Code 在跑、Codex 等你验收；侧栏列出要你处理 3 个、在跑 2 个" width="900" />
 

@@ -22,6 +22,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="alternate" type="application/atom+xml" title="Fibo 博客" href="../feed-zh.xml">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BlogPosting", "headline": "Fibo 如何让 ssh 那头的 Claude Code 也能 ⌘V 贴截图", "description": "ssh 到另一台电脑后，Claude Code 读的是那台电脑的剪贴板，所以贴不了截图。实测 20 种粘贴写法后发现：一次粘贴里只有一个图片绝对路径，Claude Code 就当它是附件。Fibo 据此先把图存到那台电脑，再只贴那边的路径。附手动做法和实测表。", "image": "https://fibo.page/blog/remote-paste/images/00-cover.webp", "datePublished": "2026-11-27", "dateModified": "2026-11-27", "inLanguage": "zh-CN", "mainEntityOfPage": "https://fibo.page/blog/remote-paste/zh.html", "author": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/"}, "publisher": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/", "logo": {"@type": "ImageObject", "url": "https://fibo.page/brand/apple-touch-icon.png"}}}</script>
 <link rel="stylesheet" href="../post.css">
 
 <script>(()=>{const r=document.documentElement,k='fibo-landing-theme';try{r.dataset.theme=localStorage.getItem(k)==='dark'?'dark':'light';localStorage.setItem('fibo-landing-lang','zh')}catch(e){}
@@ -232,6 +234,7 @@ scp ~/Desktop/截图.png 那台电脑:/tmp/shot.png
   <li><b>新功能不升协议主版本</b>：新窗口照样能连旧后台的终端，只是贴图时报错（v0.1.4 起的后台会提示先更新）。</li>
 </ul>
 
+<nav class="pn" aria-label="更多文章"><a class="pn-card" href="../many-machines/zh.html"><span class="eyebrow">上一篇</span><b>一个窗口，管多台电脑上的终端：Fibo 跨机终端架构与慢链路同步设计</b></a></nav>
 <footer class="end">
   <p>Fibo 是开源项目（MIT 许可）。跨机贴图的实现见 <a href="https://github.com/majiayu000/fibo/pull/625">PR #625</a>，全部源码在 <a href="https://github.com/majiayu000/fibo">GitHub</a>。</p>
   <p><a href="../zh.html">← 全部文章</a> · <a href="../../">回到 fibo.page</a></p>

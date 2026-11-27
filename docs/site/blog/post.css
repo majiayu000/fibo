@@ -201,3 +201,11 @@ html[lang=zh-CN] h2{line-height:1.3}
   .diagram{min-width:620px}
 }
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+
+/* previous / next post */
+.pn{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:64px}
+.pn-card{display:flex;flex-direction:column;gap:8px;padding:18px 22px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-card);color:var(--ink);transition:transform .2s}
+.pn-card:hover{text-decoration:none;transform:translateY(-2px)}
+.pn-card b{font-family:var(--display);font-weight:520;font-size:19px;line-height:1.3}
+html[lang=zh-CN] .pn-card b{font-family:"Songti SC","Noto Serif SC",serif;font-weight:700}
+.mast .subscribe{margin-top:26px}
