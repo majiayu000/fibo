@@ -1,8 +1,34 @@
 //! The desktop palette searches saved messages independently of the session cards.
 use super::*;
-use fibo_core::protocol::{MessageMatch, MessagePosition};
+use fibo_core::{
+    protocol::{MessageMatch, MessagePosition},
+    text_search::SearchQuery,
+};
+use rusqlite::functions::FunctionFlags;
 
 const LIMIT: usize = 100;
+
+/// SQLite lowercases ASCII only. Keep its fast path when every possible match
+/// also lowercases to ASCII without using a non-ASCII character.
+fn sqlite_ascii_match(query: &str) -> bool {
+    if !query.is_ascii() || !query.bytes().any(|b| b.is_ascii_alphabetic()) {
+        return false;
+    }
+    static UNICODE_TO_ASCII: std::sync::OnceLock<[bool; 128]> = std::sync::OnceLock::new();
+    let from_unicode = UNICODE_TO_ASCII.get_or_init(|| {
+        let mut target = [false; 128];
+        for c in (128..=u32::from(char::MAX)).filter_map(char::from_u32) {
+            let mut lower = c.to_lowercase();
+            if let (Some(ch), None) = (lower.next().filter(char::is_ascii), lower.next()) {
+                target[ch as usize] = true;
+            }
+        }
+        target
+    });
+    query
+        .bytes()
+        .all(|b| !from_unicode[b.to_ascii_lowercase() as usize])
+}
 
 impl Index {
     pub fn search_messages(
@@ -36,6 +62,19 @@ fn search(
         return Ok((Vec::new(), None));
     }
     let sessions = serde_json::to_string(sessions).map_err(err)?;
+    let needle = SearchQuery::new(query);
+    db.create_scalar_function(
+        "message_search_position",
+        1,
+        FunctionFlags::SQLITE_DETERMINISTIC,
+        move |ctx| {
+            let text = ctx.get_raw(0).as_str()?;
+            Ok(needle
+                .position(text)
+                .map_or(0, |position| position as i64 + 1))
+        },
+    )
+    .map_err(err)?;
     // Match the whole saved message, then only send the passage around the match.
     // A strict bound on the full sort key keeps equal timestamps and new arrivals
     // from repeating or skipping rows on the following page.
@@ -43,7 +82,8 @@ fn search(
         .prepare_cached(
             "WITH matches AS (
                 SELECT s.id, r.path, r.at, r.kind, r.text, r.inode, r.offset, r.ordinal,
-                       instr(lower(r.text), lower(?2)) AS position
+                       CASE WHEN ?9 THEN instr(lower(r.text), lower(?2))
+                            ELSE message_search_position(r.text) END AS position
                 FROM agent_sessions s JOIN session_records r ON r.path = s.transcript
                 WHERE s.id IN (SELECT value FROM json_each(?1))
                   AND r.kind IN ('user','assistant')
@@ -71,7 +111,8 @@ fn search(
                 before.map(|p| p.session.as_str()),
                 before.map(|p| p.inode),
                 before.map(|p| p.offset),
-                before.map(|p| p.ordinal)
+                before.map(|p| p.ordinal),
+                sqlite_ascii_match(query)
             ],
             |row| {
                 Ok(MessageMatch {
@@ -169,6 +210,26 @@ mod tests {
         assert_eq!(hits[0].text, "海鹏，有两个画布的 PR #636");
         let (hits, _) = search(&db, "是什么意思", &["s".into()], None).unwrap();
         assert_eq!(hits[0].text, "昨天 #636 是什么意思");
+    }
+
+    #[test]
+    fn saved_search_and_highlights_share_unicode_case_matching() {
+        let db = fixture();
+        let text = format!("{} Été à 女友 et Kelvin", "旧消息 ".repeat(90));
+        db.execute(
+            "INSERT INTO session_records VALUES ('log',1,10,0,10,'user',?1,'',NULL)",
+            [&text],
+        )
+        .unwrap();
+        for query in ["été", "ÉTÉ À", "女友", "kelvin", "KELVIN"] {
+            let (hits, _) = search(&db, query, &["s".into()], None).unwrap();
+            assert_eq!(hits.len(), 1, "query: {query}");
+            assert!(hits[0].text.starts_with('…'));
+            assert!(
+                !fibo_core::text_search::match_ranges(&hits[0].text, query).is_empty(),
+                "query: {query}"
+            );
+        }
     }
 
     #[test]

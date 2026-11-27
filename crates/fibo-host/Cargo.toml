@@ -24,7 +24,7 @@ shlex = "1"
 jiff = { version = "0.2", default-features = false, features = ["std", "tz-system", "tzdb-bundle-platform", "tzdb-zoneinfo"] }
 fibo-core = { path = "../fibo-core" }
 fibo-platform = { path = "../fibo-platform" }
-rusqlite = { version = "0.41", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled", "functions"] }
 uuid = { version = "1", features = ["v4"] }
 libc.workspace = true
 # `fibo remote` carries terminal bytes inside JSON lines.

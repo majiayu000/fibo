@@ -45,6 +45,7 @@ pub mod status;
 pub mod status_group;
 pub mod subagents;
 pub mod terminal;
+pub mod text_search;
 pub mod theme;
 pub mod time;
 
