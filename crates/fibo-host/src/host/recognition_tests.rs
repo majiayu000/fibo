@@ -578,6 +578,7 @@ fn a_removed_log_clears_the_published_card_but_keeps_the_session_and_outcome() {
 
     db.execute_batch("DROP TRIGGER reject_workspace_commit")
         .unwrap();
+    drop(db);
     // The index checkpoint already includes the deletion. The same index bootstraps
     // after the subscription error, so it must publish the queued removal unaided.
     assert_eq!(index.initialize().unwrap(), checkpoint + 4);
