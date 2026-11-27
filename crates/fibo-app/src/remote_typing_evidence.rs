@@ -32,6 +32,20 @@ pub(super) fn start(
         let executor = cx.background_executor().clone();
         let wait = move |ms| executor.timer(Duration::from_millis(ms));
         std::fs::create_dir_all(&directory).unwrap();
+        let socket = typed.parent().unwrap().join("far/workbench.sock");
+        let local_window = || {
+            let (tx, _) = futures::channel::mpsc::unbounded();
+            crate::connection::Connection::new(&socket, "far", false, tx)
+        };
+        let writable = |c: &crate::connection::Connection| c.state.lock().unwrap().writable;
+        let local = local_window();
+        for _ in 0..60 {
+            if writable(&local) {
+                break;
+            }
+            wait(50).await;
+        }
+        assert!(writable(&local), "the host's local window never received input");
         let mut opened = false;
         for _ in 0..60 {
             wait(250).await;
@@ -54,10 +68,24 @@ pub(super) fn start(
             !read_only,
             "a machine that allows input is still marked 只读"
         );
+        assert!(pane.read_with(cx, |p, _| p.is_read_only()));
+        // Closing the owning local pane must not promote the SSH viewer.
+        drop(local);
+        wait(350).await;
+        assert!(pane.read_with(cx, |p, _| p.is_read_only()), "a passive SSH view inherited input");
+        let local = local_window();
+        for _ in 0..60 {
+            if writable(&local) {
+                break;
+            }
+            wait(50).await;
+        }
+        assert!(writable(&local), "the local pane could not reclaim its terminal");
         pane.update(cx, |p, cx| p.visual_type("hello-far\r", cx));
         wait(1500).await;
         let text = std::fs::read_to_string(&typed).unwrap_or_default();
         assert_eq!(text.matches("hello-far").count(), 1, "{text:?}");
+        assert!(!writable(&local), "typing did not transfer input away from the local pane");
         cx.update_window(handle.into(), |_, window, app| {
             window.refresh();
             window.draw(app).clear(app);
@@ -65,7 +93,7 @@ pub(super) fn start(
             shot.save(directory.join("remote-typing.png")).unwrap();
         })
         .unwrap();
-        eprintln!("remote typing PASS: peek writable, line typed once on the other machine");
+        eprintln!("remote typing PASS: the idle SSH viewer never inherited input, the local pane reopened writable, and explicit typing transferred input and arrived once");
         cx.update(|cx| cx.quit());
     })
     .detach();

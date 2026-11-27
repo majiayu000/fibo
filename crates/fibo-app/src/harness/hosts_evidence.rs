@@ -192,6 +192,27 @@ pub(super) fn start(
             let terminal = far
                 .read_with(cx, |w, _| w.visual_tab_terminal(&opened))
                 .expect("remote terminal");
+            let pane = far.read_with(cx, |w, _| w.visual_shown_pane());
+            assert!(pane.read_with(cx, |p, _| p.visual_vt_ready() && !p.is_read_only()),
+                "new work on an SSH host must be writable in the window that launched it");
+            let socket = far.read_with(cx, |w, _| w.visual_socket()).canonicalize().unwrap();
+            let local_window = |takeover| {
+                let (tx, _) = futures::channel::mpsc::unbounded();
+                crate::connection::Connection::new(&socket, &terminal, takeover, tx)
+            };
+            drop(pane);
+            let local = local_window(true);
+            wait(350).await;
+            far.update(cx, |w, a| w.visual_remake_shown_pane(a));
+            let pane = far.read_with(cx, |w, _| w.visual_shown_pane());
+            wait(500).await;
+            assert!(pane.read_with(cx, |p, _| p.is_read_only()), "reopening the SSH pane took input");
+            drop(local);
+            wait(350).await;
+            assert!(pane.read_with(cx, |p, _| p.is_read_only()), "a passive SSH pane inherited input");
+            let local = local_window(false);
+            wait(350).await;
+            assert!(local.state.lock().unwrap().writable, "the host's local window returned read-only");
             let before = handle.update(cx, |v, _, _| v.visual_wants()).unwrap();
             let (mut original, revision) = far.read_with(cx, |w, _| w.visual_recognition());
             original.workspace_revision = revision;

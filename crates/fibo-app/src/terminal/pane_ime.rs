@@ -87,7 +87,7 @@ impl EntityInputHandler for Pane {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
-        let bounds = self.bounds?;
+        let bounds = self.grid_bounds()?;
         let anchor = self
             .metrics?
             .cursor_bounds(bounds, self.cursor_anchor.get()?);

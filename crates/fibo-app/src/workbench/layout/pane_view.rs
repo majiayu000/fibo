@@ -78,7 +78,7 @@ impl Workbench {
         let focus = pane.focus_handle(cx);
         let focus_id = id.to_owned();
         let menu_id = id.to_owned();
-        let other_owner = pane.read(cx).has_other_owner();
+        let read_only = pane.read(cx).is_read_only();
         let card_id = session.map(|s| s.id.clone());
         let terminal_style = crate::ui::style::current(cx) == crate::ui::style::Style::Terminal;
         let decorated = self.pane_decorations(id, cx);
@@ -333,7 +333,7 @@ impl Workbench {
             .flex_col()
             .child(body)
             .children(self.changes_over(id, session));
-        let footer = other_owner.then(|| self.pane_footer(id, takeover, cx));
+        let footer = read_only.then(|| self.pane_footer(id, takeover, cx));
         let mut pane_box = div()
             .id(gpui::SharedString::from(format!("pane-{id}")))
             .relative()
