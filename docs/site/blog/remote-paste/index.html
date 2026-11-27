@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Fibo lets Claude Code on the other end of ssh take a pasted screenshot · Fibo Blog</title>
+<meta name="description" content="Over ssh, Claude Code reads the clipboard of the computer it runs on, so a pasted screenshot never arrives. After testing 20 kinds of paste: a paste that is only one absolute image path becomes an attachment. Fibo saves the picture on that computer, then pastes only the path. With a manual recipe and the test table.">
+<link rel="canonical" href="https://fibo.page/blog/remote-paste/">
+<link rel="alternate" hreflang="en" href="https://fibo.page/blog/remote-paste/">
+<link rel="alternate" hreflang="zh-CN" href="https://fibo.page/blog/remote-paste/zh.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Fibo">
+<meta property="og:title" content="How Fibo lets Claude Code on the other end of ssh take a pasted screenshot">
+<meta property="og:description" content="Over ssh, Claude Code reads the clipboard of the computer it runs on, so a pasted screenshot never arrives. After testing 20 kinds of paste: a paste that is only one absolute image path becomes an attachment. Fibo saves the picture on that computer, then pastes only the path. With a manual recipe and the test table.">
+<meta property="og:url" content="https://fibo.page/blog/remote-paste/">
+<meta property="og:image" content="https://fibo.page/blog/remote-paste/images/00-cover-en.webp">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1499ad">
+<link rel="icon" type="image/svg+xml" href="../../brand/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../../brand/favicon-32.png">
+<link rel="apple-touch-icon" href="../../brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../post.css">
+</head>
+<body>
+<header class="top">
+  <div class="bar">
+    <a class="home" href="../../">Fibo</a>
+    <a class="crumb" href="../">Blog</a>
+    <a class="lang" href="./zh.html" hreflang="zh-CN" lang="zh-CN">中文</a>
+  </div>
+</header>
+
+<main class="post">
+<p class="kicker">Engineering · November 2026</p>
+<h1>How Fibo lets Claude Code on the other end of ssh take a pasted screenshot</h1>
+<p class="lede">On your own machine, you take a screenshot, press <code>⌘V</code> in Claude Code, and <code>[Image #1]</code> shows up in the prompt. Over ssh, the same key pastes nothing, because Claude Code reads the clipboard of the computer it runs on. We tried 20 kinds of paste and found the rule Claude Code follows: a paste that is nothing but one absolute image path becomes an attachment. <a href="../../">Fibo</a> builds on that rule: it saves the picture on the other computer first, then pastes only the path over there.</p>
+
+<figure>
+  <img class="figure-img" src="images/demo-en.gif" alt="Real Claude Code screens: Ctrl+V finds no picture on that computer's clipboard and pastes nothing; with Fibo's approach the picture is saved there first and its absolute path pasted, the prompt shows [Image #1], and Claude Code describes the picture" width="811" height="566">
+  <figcaption>Real screens from Claude Code v2.1.332; keys and pastes were sent by a script. For the recording, “the other computer” is Claude Code in a local tmux session with no picture on the clipboard. First half: Ctrl+V pastes nothing. Second half: the picture is saved, and only its absolute path is pasted.</figcaption>
+</figure>
+
+<blockquote><b>What Fibo is</b>: a native Mac workbench for coding agents such as Claude Code and Codex, open source under MIT. It can reach another computer running Fibo over SSH and open that computer's terminals in the same window; the previous post, <a href="../many-machines/">One Window for Terminals on Every Machine</a>, explains how. Install: <a href="https://github.com/majiayu000/fibo/releases/latest">download the DMG</a> or <code>brew install --cask majiayu000/tap/fibo</code>. Both computers need it.</blockquote>
+
+<nav class="toc" aria-label="Contents">
+  <a href="#s1">01 The problem: ⌘V sends only a Ctrl+V</a>
+  <a href="#s2">02 The observation: a lone image path is an attachment</a>
+  <a href="#s3">03 The design: the picture goes around the terminal, only the path goes in</a>
+  <a href="#s4">04 Details and trade-offs</a>
+  <a href="#s5">05 How we checked it</a>
+  <a href="#limits">Limits: what we haven't tested</a>
+  <a href="#summary">Summary: three things we did</a>
+</nav>
+
+<h2 id="s1">01 The problem: ⌘V sends only a Ctrl+V</h2>
+
+<p>A local Claude Code gets your screenshot by reading the clipboard itself. When you press <code>⌘V</code> in a terminal and the clipboard holds only a picture, the terminal writes one byte, <code>0x16</code>, which is <code>Ctrl+V</code>. Claude Code reads that byte and asks its own operating system for the clipboard image. Between a terminal and a program there is only a byte stream, and no common way to say “a PNG follows”.</p>
+
+<p>When the terminal runs on another computer, that path breaks. The picture is on the clipboard of computer A in front of you, but <code>0x16</code> goes to computer B, and Claude Code on B reads B's clipboard, which doesn't have it. Dragging a file in fails the same way: the terminal pastes the file's path on A as text, and B has no such file.</p>
+
+<p>Fibo's window reaches another computer through <code>ssh -L</code>, which forwards the Unix socket of that computer's <code>fibo serve</code> host to this one, and then speaks the same protocol as it does locally (the previous post covers this). So Fibo had the same problem. Before <a href="https://github.com/majiayu000/fibo/pull/625">PR #625</a>, pasting a picture or dropping a file on another computer's terminal was refused with a note that files and pictures couldn't be sent to another computer yet.</p>
+
+<h3>Why OSC 52 doesn't help</h3>
+
+<p>People often suggest <code>OSC 52</code>, which lets a remote program read and write your local clipboard. According to kitty's documentation, <code>OSC 52</code> carries plain text only; pictures need kitty's <code>OSC 5522</code> extension, which few terminals support. Someone asked Claude Code for image paste over ssh via OSC 52/5522 in <a href="https://github.com/anthropics/claude-code/issues/42712">issue #42712</a>, which is closed; the <code>v2.1.332</code> we tested still reads its own computer's clipboard on <code>Ctrl+V</code>. Terminal image protocols (kitty's, iTerm2's) go the other way: they let a program draw a picture in the terminal.</p>
+
+<h2 id="s2">02 The observation: a lone image path is an attachment</h2>
+
+<p>Locally, dragging a screenshot file into Claude Code also produces <code>[Image #1]</code>. Nothing private is involved: the terminal just pastes the file's path (Fibo wraps it in a <code>bracketed paste</code>, <code>\x1b[200~…\x1b[201~</code>). When one paste is nothing but the path of an image file, Claude Code reads that file from disk and attaches it.</p>
+
+<p>Fibo's phone app already relied on this to send pictures to agents on a computer: the phone uploads the picture to <code>fibo serve</code> on that computer, the host saves it as a file, and the path is pasted into the terminal on its own. Before writing code, we mapped the edges: in Claude Code <code>v2.1.332</code>, we did one <code>bracketed paste</code> per case, 20 in all. Where text was involved we used <code>看看这个</code> (“look at this”).</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Already in the prompt</th><th>What this one paste contained</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>empty</td><td>absolute path <code>/tmp/fibo-edge/shot.png</code></td><td><code>[Image #1]</code></td></tr>
+<tr><td>empty</td><td>absolute path plus a trailing space</td><td><code>[Image #1]</code></td></tr>
+<tr><td>empty</td><td>path then text <code>/tmp/…/shot.png 看看这个</code></td><td>kept as text</td></tr>
+<tr><td>empty</td><td>text then path <code>看看这个 /tmp/…/shot.png</code></td><td>kept as text</td></tr>
+<tr><td>empty</td><td>space in the file name, escaped <code>my\ shot.png</code></td><td><code>[Image #1]</code></td></tr>
+<tr><td>empty</td><td>space in the file name, not escaped <code>my shot.png</code></td><td><code>[Image #1]</code></td></tr>
+<tr><td>empty</td><td>path in single or double quotes (2 pastes)</td><td><code>[Image #1]</code></td></tr>
+<tr><td>empty</td><td>starting with <code>~</code>: <code>~/fibo-edge-shot.png</code></td><td>kept as text</td></tr>
+<tr><td>empty</td><td>relative path <code>shot.png</code> (file in the current folder)</td><td>kept as text</td></tr>
+<tr><td>empty</td><td>absolute path to a JPEG, GIF or WebP (3 pastes)</td><td><code>[Image #1]</code></td></tr>
+<tr><td>empty</td><td>absolute path to a TIFF or BMP (2 pastes)</td><td>kept as text</td></tr>
+<tr><td>empty</td><td>right format, but no such file</td><td>kept as text</td></tr>
+<tr><td>empty</td><td>two absolute paths, one space between</td><td><code>[Image #1] [Image #2]</code></td></tr>
+<tr><td>typed <code>看看这个 </code></td><td>absolute path plus a space</td><td><code>看看这个 [Image #1]</code></td></tr>
+<tr><td>typed <code>看看</code></td><td>two absolute paths, space between</td><td><code>看看[Image #1] [Image #2]</code></td></tr>
+<tr><td>empty, typing after</td><td>absolute path plus a space, then typed <code>图里是什么</code> (“what's in it”)</td><td><code>[Image #1] 图里是什么</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>What counts is the single paste, not what the prompt already holds: a path and text in the same paste stay text, while a path pasted on its own works with text typed before or after it. The table gave Fibo four rules:</p>
+
+<ul>
+  <li><b>Save the file first, then answer with an absolute path</b>: <code>~</code> and relative paths don't count, and neither does a missing file.</li>
+  <li><b>Paste the path on its own</b>: never in the same paste as other text.</li>
+  <li><b>Turn TIFF and BMP into PNG</b>: of the six formats tested, only PNG, JPEG, GIF and WebP were accepted, and some apps copy pictures as TIFF only.</li>
+  <li><b>Join several pictures with spaces in one paste</b>: paths are escaped by shell rules, so names with spaces still work.</li>
+</ul>
+
+<div class="tip">
+<p><b>Without Fibo, you can do it by hand</b>: save the screenshot as a file (<code>⌘⇧4</code> saves to the Desktop by default), copy it over, then paste its absolute path on its own in Claude Code over there.</p>
+<pre><code># on the computer in front of you
+scp ~/Desktop/screenshot.png other-computer:/tmp/shot.png
+# a TIFF first: sips -s format png shot.tiff --out shot.png
+
+# then, in Claude Code on the other computer, paste just this line
+/tmp/shot.png</code></pre>
+<p>You can type before or after it, as long as the path and your text aren't in the same paste.</p>
+</div>
+
+<h2 id="s3">03 The design: the picture goes around the terminal, only the path goes in</h2>
+
+<p>Fibo's job is to hide those manual steps behind one <code>⌘V</code>: the window hands the picture to the other computer's host, which saves it as a file and answers with its absolute path, and the window pastes that path into the terminal.</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 360" role="img" aria-label="Fibo's remote paste: the window sends the picture over ssh -L to the host there, which saves it; the window pastes the returned path on its own and Claude Code shows Image #1">
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tip"/></marker>
+  <marker id="arg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ok-h"/></marker></defs>
+  <rect class="box" x="16" y="16" width="250" height="328" rx="12"/>
+  <text class="h" x="141" y="46">Computer A · Fibo window</text>
+  <rect class="soft" x="34" y="66" width="214" height="72" rx="8"/>
+  <text class="t" x="141" y="94">① ⌘V: a picture on the clipboard</text>
+  <text class="s" x="141" y="118">TIFF / BMP become PNG</text>
+  <rect class="soft" x="34" y="152" width="214" height="72" rx="8"/>
+  <text class="t" x="141" y="180">② This terminal is on B</text>
+  <text class="s" x="141" y="204">Upload instead of Ctrl+V</text>
+  <rect class="soft" x="34" y="238" width="214" height="88" rx="8"/>
+  <text class="t" x="141" y="266">⑤ Paste just that path</text>
+  <text class="s" x="141" y="290">shell-escaped, bracketed paste</text>
+  <text class="s" x="141" y="310">one fails: none is pasted</text>
+
+  <rect class="box" x="494" y="16" width="250" height="196" rx="12"/>
+  <text class="h" x="619" y="46">Computer B · fibo serve</text>
+  <rect class="soft" x="512" y="66" width="214" height="128" rx="8"/>
+  <text class="t" x="619" y="94">③ Check the file header</text>
+  <text class="s" x="619" y="118">PNG / JPEG / GIF / WebP only</text>
+  <text class="s" x="619" y="142">saved as phone-images/uuid.png</text>
+  <text class="s" x="619" y="166">mode 600, cleared after 7 days</text>
+
+  <rect class="box accent-box" x="494" y="232" width="250" height="112" rx="12"/>
+  <text class="h" x="619" y="262">Computer B · Claude Code</text>
+  <rect class="term" x="512" y="278" width="214" height="44" rx="6"/>
+  <text class="tt" x="526" y="305">❯ [Image #1]</text>
+
+  <path class="line" d="M248 100 L492 100" marker-end="url(#ar)"/>
+  <text class="s" x="370" y="88">SaveImage { data: base64 }</text>
+  <text class="s" x="370" y="122">over the existing ssh -L forward</text>
+  <path class="line accent" d="M512 176 L250 188" marker-end="url(#arg)"/>
+  <text class="ok-t c" x="380" y="172">④ Absolute path on B</text>
+  <path class="line accent" d="M248 282 L510 300" marker-end="url(#arg)"/>
+  <text class="ok-t c" x="380" y="276">⑥ One image path = one attachment</text>
+</svg>
+<figcaption>The picture never enters the terminal; only its path does. Upload and answer travel over the <code>ssh -L</code> forward the window already has.</figcaption>
+</figure>
+
+<p>The window already talks to that host over a protocol, and we added one request, <code>SaveImage { data }</code>, where <code>data</code> is the picture in base64. On <code>⌘V</code>, the window checks which computer the terminal is on: if it's this one, it sends <code>0x16</code> as before and Claude Code reads the clipboard itself; if it's another, the picture is uploaded. Dropping a picture file on the terminal goes through the same upload function.</p>
+
+<p>On the other computer, the host decodes, saves and answers with the path (simplified code):</p>
+
+<pre><code>Request::SaveImage { data } =&gt; {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(io::Error::other)?;
+    let path = crate::pictures::save(&amp;supervisor(shared)?.socket(), &amp;bytes)?;
+    Ok(Reply::Text(path.to_string_lossy().into_owned()))
+}</code></pre>
+
+<p><code>pictures::save</code> is shared with the phone's pictures, which go to <code>phone-images/</code> beside the host's socket. The window escapes the returned path the same way as a dropped file and pastes it; when the terminal has bracketed paste mode on, it is wrapped in <code>\x1b[200~…\x1b[201~</code>, and a space follows the path.</p>
+
+<p>The upload runs on a background thread, over a new connection to the forwarded socket each time. <code>ssh -L</code> gives every connection its own channel, so an upload doesn't sit on the connection your typing goes through. The whole change is 12 files, 278 lines added and 92 removed.</p>
+
+<h2 id="s4">04 Details and trade-offs</h2>
+
+<h3>Why not the phone's upload protocol</h3>
+<p>The phone reaches a computer through a different protocol (<code>ssh host fibo remote --stdio</code>) that can already send pictures. But the window already has an <code>ssh -L</code> forward to that computer; opening the phone protocol as well would mean two SSH links to one computer, each with its own disconnects and errors. One more request was simpler.</p>
+
+<h3>base64 and the 11 MB limit</h3>
+<p>The protocol is JSON. A plain <code>Vec&lt;u8&gt;</code> would be written as an array of numbers, 3 to 4 characters per byte; base64 adds only a third. A frame holds at most 16 MB, so one picture may be at most 11 MB (about 14.7 MB encoded). A bigger one is stopped on this computer with a note and never sent.</p>
+
+<h3>Formats: by header, not by extension</h3>
+<p>The window looks at the bytes' header. PNG, JPEG, GIF and WebP go as they are; another format that decodes as a picture (TIFF, BMP) goes as PNG, whether it came from the clipboard or a dropped file; anything that doesn't decode (a PDF, source code) is refused, with a note to copy the file over first. The host on the other side also keeps only those four headers and writes nothing else to disk.</p>
+
+<h3>Several pictures: one fails, none is pasted</h3>
+<p>When several pictures are dropped at once, the window uploads them one by one, and if one fails, no path is pasted, so the prompt never gets half of them. The ones already uploaded stay on the other computer and are cleared after 7 days, as below.</p>
+
+<h3>Storage: yours only, kept 7 days</h3>
+<p>Only you can enter <code>phone-images/</code>; files are mode <code>600</code> with random UUID names. Each new save deletes pictures older than 7 days. Seven days because resuming a session from a few days ago may have the agent read a picture from its history again.</p>
+
+<h3>Older hosts: no major protocol bump</h3>
+<p>A common case: your Fibo is updated, the other computer's isn't. Had we bumped the protocol's major version for <code>SaveImage</code>, the new window's handshake with the old host would fail and none of that computer's terminals would open. So the version stays: a host from v0.1.4 on answers an unknown request with a line starting <code>unsupported or invalid request: …</code>, and the window shows “Fibo on that computer is too old to receive images. Update it, then try again.” instead. A host from v0.1.3 or earlier closes the connection on an unknown request, and the window shows the raw error.</p>
+
+<h2 id="s5">05 How we checked it</h2>
+
+<ul>
+  <li><b>Unit tests</b>: PNG goes unchanged; TIFF comes out as valid PNG; PDF and source code bytes are refused; an old host's answer is replaced rather than shown as is.</li>
+  <li><b>Host end to end</b>: the test starts a real <code>fibo serve</code>, sends <code>SaveImage</code>, and checks the answer is an absolute path under <code>phone-images/</code> whose bytes match what was sent; a shell script sent as a picture is refused.</li>
+  <li><b>Two real Macs, both directions</b>: A sent a 487 KB PNG to B through the window's forward; the file on B had the same sha256 as the original and mode <code>600</code>, pasting it in Claude Code on B gave <code>[Image #1]</code>, and it described the picture. The other way, sitting at B, we took a screenshot, switched to A's terminal in B's Fibo and pressed <code>⌘V</code>; Claude Code on A got <code>[Image #1]</code> too.</li>
+</ul>
+
+<h2 id="limits">Limits: what we haven't tested</h2>
+
+<ul>
+  <li><b>Dropping files</b>: same upload function as <code>⌘V</code>, but not yet tried between two real machines.</li>
+  <li><b>“Fibo on that computer is too old”</b>: seen only in unit tests; both real machines run the new version.</li>
+  <li><b>Big pictures on slow links</b>: each upload's connection has a 10-second read and write timeout, and the window shows no progress while uploading. Whether a few MB time out on a very slow link is untested.</li>
+  <li><b>Other agents</b>: the table covers Claude Code only. Codex opened with a hook review screen and we didn't get to test it; OpenCode isn't installed on either machine. From the phone's pictures we expect them to take a lone image path too, but we didn't check this time.</li>
+  <li><b>Windows on the other end</b>: paths are escaped by Unix shell rules; not tried.</li>
+</ul>
+
+<h2 id="summary">Summary: three things we did</h2>
+
+<ul>
+  <li><b>Measure first, then design</b>: 20 pastes set four rules (absolute path, its own paste, convert to PNG, spaces between several), and the design follows the table instead of guesses.</li>
+  <li><b>Reuse the connection and storage we had</b>: one new request in the protocol, one save function shared with the phone; the change is 12 files, +278/−92.</li>
+  <li><b>Don't bump the major protocol version for a feature</b>: a new window still opens an old host's terminals, and only picture paste errors (hosts from v0.1.4 say to update first).</li>
+</ul>
+
+<footer class="end">
+  <p>Fibo is open source (MIT). The implementation is in <a href="https://github.com/majiayu000/fibo/pull/625">PR #625</a>; all the code is on <a href="https://github.com/majiayu000/fibo">GitHub</a>.</p>
+  <p><a href="../">← All posts</a> · <a href="../../">Back to fibo.page</a></p>
+</footer>
+</main>
+</body>
+</html>

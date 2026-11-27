@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fibo Blog</title>
+<meta name="description" content="How Fibo is built: the problems we hit running coding agents across machines, what we measured, and what we chose.">
+<link rel="canonical" href="https://fibo.page/blog/">
+<link rel="alternate" hreflang="en" href="https://fibo.page/blog/">
+<link rel="alternate" hreflang="zh-CN" href="https://fibo.page/blog/zh.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Fibo">
+<meta property="og:title" content="Fibo Blog">
+<meta property="og:description" content="How Fibo is built: the problems we hit running coding agents across machines, what we measured, and what we chose.">
+<meta property="og:url" content="https://fibo.page/blog/">
+<meta property="og:image" content="https://fibo.page/blog/many-machines/images/00-cover.webp">
+<meta name="theme-color" content="#1499ad">
+<link rel="icon" type="image/svg+xml" href="../brand/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../brand/favicon-32.png">
+<link rel="apple-touch-icon" href="../brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="post.css">
+</head>
+<body>
+<header class="top">
+  <div class="bar">
+    <a class="home" href="../">Fibo</a>
+    <span class="crumb">Blog</span>
+    <a class="lang" href="./zh.html" hreflang="zh-CN" lang="zh-CN">中文</a>
+  </div>
+</header>
+
+<main class="post">
+<h1>Blog</h1>
+<p class="lede">How Fibo is built: the problems we hit running coding agents across machines, what we measured, and what we chose.</p>
+<ul class="posts">
+  <li><a class="card" href="remote-paste/">
+    <img src="remote-paste/images/00-cover-en.webp" alt="" loading="lazy" width="1600" height="840">
+    <div><p class="kicker">Engineering · November 2026</p><h2>How Fibo lets Claude Code on the other end of ssh take a pasted screenshot</h2><p>Claude Code reads the clipboard of the machine it runs on. After testing 20 kinds of paste, we found one rule: a lone absolute image path is an attachment. Fibo saves the picture on that machine, then pastes only its path.</p></div>
+  </a></li>
+  <li><a class="card" href="many-machines/">
+    <img src="many-machines/images/00-cover.webp" alt="" loading="lazy" width="1600" height="840">
+    <div><p class="kicker">Architecture · November 2026</p><h2>One Window for Terminals on Every Machine: Fibo’s Multi-Host Architecture and Slow-Link Sync Design</h2><p>Protocol unification over ssh -L, isolating localhost assumptions, decoupling view chrome from host state, and shrinking refreshes 5,400× from 3.59 MB to 660 bytes.</p></div>
+  </a></li>
+</ul>
+<footer class="end">
+  <p><a href="../">← fibo.page</a> · <a href="https://github.com/majiayu000/fibo">GitHub</a></p>
+</footer>
+</main>
+</body>
+</html>
