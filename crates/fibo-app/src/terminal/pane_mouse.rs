@@ -158,11 +158,8 @@ impl Pane {
         }
         // A click in the text is someone at this machine wanting the pane, unlike scrollbars, pointer
         // moves and mouse reports; panes only being shown still never take it (`sync_panes`).
-        if self.held_elsewhere() {
-            self.take_input(Vec::new(), cx);
-            cx.stop_propagation();
-            return;
-        }
+        // It takes over on release, so a drag here still selects and copies (`mouse_up`).
+        self.select.take_on_release = self.held_elsewhere();
         if self.report_mouse(
             mouse::Action::Press,
             Some(button),
@@ -205,6 +202,7 @@ impl Pane {
             return;
         }
         self.select.pressed_button = None;
+        let take = std::mem::take(&mut self.select.take_on_release);
         if std::mem::take(&mut self.select.dragging_scrollbar) {
             return;
         }
@@ -237,8 +235,12 @@ impl Pane {
             // Copy on select, as iTerm2 and Ghostty do; a plain click selects nothing.
             if self.selected_text().is_some() {
                 self.copy(cx);
+                return cx.notify();
             }
             cx.notify();
+        }
+        if take {
+            self.take_input(Vec::new(), cx);
         }
     }
     pub(super) fn mouse_move(

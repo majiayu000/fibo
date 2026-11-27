@@ -12,6 +12,9 @@ pub(super) struct Selection {
     pub(super) pressed_button: Option<gpui::MouseButton>,
     /// The scrollbar thumb is being dragged.
     pub(super) dragging_scrollbar: bool,
+    /// Pressed in a pane another window or machine holds: the release takes the input
+    /// over, unless the press dragged out a selection, which is copied instead.
+    pub(super) take_on_release: bool,
 }
 impl Selection {
     pub(super) fn new() -> Self {
@@ -19,6 +22,7 @@ impl Selection {
             selecting: crate::terminal::selection::Selecting::new().ok(),
             pressed_button: None,
             dragging_scrollbar: false,
+            take_on_release: false,
         }
     }
 }
