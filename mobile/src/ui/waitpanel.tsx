@@ -1,6 +1,6 @@
 // The strip above the composer while an Agent waits on you: what it asks and a way to answer
 // it from here (see waits.ts for which way).
-import { Text, View } from 'react-native';
+import { ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { Btn } from './kit';
 import { useTheme } from './theme';
 import type { WaitView } from './waits';
@@ -19,11 +19,16 @@ export function WaitPanel({
   onTerminal: () => void;
 }) {
   const t = useTheme();
+  // A plan is read before it is approved, so all of it shows: a long one scrolls inside a
+  // third of the screen instead of stopping at six lines (2026-11-26 walk: the steps were cut).
+  const { height } = useWindowDimensions();
   return (
     <View style={{ paddingHorizontal: 18, paddingBottom: 10, gap: 8 }}>
-      <Text numberOfLines={6} style={{ color: t.wait, fontSize: 13, lineHeight: 19 }}>
-        {view.text}
-      </Text>
+      <ScrollView style={{ maxHeight: Math.round(height / 3) }} nestedScrollEnabled>
+        <Text selectable style={{ color: t.wait, fontSize: 13, lineHeight: 19 }}>
+          {view.text}
+        </Text>
+      </ScrollView>
       {!!view.computer && <Text style={{ color: t.dim, fontSize: 13, lineHeight: 19 }}>{view.computer}</Text>}
       {!view.options.length && !view.computer && (
         <Text style={{ color: t.dim, fontSize: 12, lineHeight: 17 }}>{tr('先点「看终端」看清楚，再用 ↑ ↓ 移到要的那项、按回车')}</Text>

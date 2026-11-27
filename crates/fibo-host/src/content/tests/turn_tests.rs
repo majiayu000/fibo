@@ -587,6 +587,11 @@ fn a_question_asked_through_the_permission_hook_keeps_its_question_and_choices()
         "{asked}"
     );
     assert!(choices.is_empty());
+    // A real plan opens with a long Context: its last step still reaches the card.
+    let context = "Phone-walk test: exercise the plan-approval flow. ".repeat(40);
+    let long = json!({"tool_name": "ExitPlanMode", "tool_input": {"plan": format!("# Append a line\n## Context\n{context}\n## Steps\n3. Verify with cat notes.txt")}});
+    let (asked, _) = hook_facts(&long).question.unwrap();
+    assert!(asked.ends_with("3、Verify with cat notes.txt"), "{asked}");
 }
 
 #[test]
