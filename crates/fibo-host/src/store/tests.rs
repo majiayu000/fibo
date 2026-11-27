@@ -1,4 +1,14 @@
 use super::*;
+
+impl Store {
+    pub(crate) fn refuse_next_commit(&mut self) {
+        let mut refuse = true;
+        self.0
+            .commit_hook(Some(move || std::mem::take(&mut refuse)))
+            .unwrap();
+    }
+}
+
 #[test]
 fn the_workbench_db_commits_with_synchronous_normal() {
     let dir = std::env::temp_dir().join(format!("kl-sync-{}", uuid::Uuid::new_v4()));
