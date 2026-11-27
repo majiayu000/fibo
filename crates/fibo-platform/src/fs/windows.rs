@@ -1,7 +1,7 @@
 use std::io;
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
-use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, LocalFree};
+use windows_sys::Win32::Foundation::{CloseHandle, ERROR_LOCK_VIOLATION, HANDLE, LocalFree};
 use windows_sys::Win32::Security::Authorization::{
     ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
     SE_FILE_OBJECT, SetNamedSecurityInfoW,
@@ -12,9 +12,29 @@ use windows_sys::Win32::Security::{
 };
 use windows_sys::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_DELETE, FILE_SHARE_READ,
-    FILE_SHARE_WRITE, GetFileInformationByHandle,
+    FILE_SHARE_WRITE, GetFileInformationByHandle, LockFile,
 };
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+pub fn try_lock_with_readable_prefix(
+    file: &std::fs::File,
+    prefix_len: u32,
+) -> Result<(), std::fs::TryLockError> {
+    use std::fs::TryLockError;
+    use std::os::windows::io::AsRawHandle;
+
+    // Windows locks forbid reads from other handles. One byte after the prefix is
+    // enough for exclusion, even if that byte is past the end of the file.
+    // SAFETY: the borrowed file keeps the handle open for the call.
+    if unsafe { LockFile(file.as_raw_handle(), prefix_len, 0, 1, 0) } != 0 {
+        return Ok(());
+    }
+    let error = io::Error::last_os_error();
+    if error.raw_os_error() == Some(ERROR_LOCK_VIOLATION as i32) {
+        return Err(TryLockError::WouldBlock);
+    }
+    Err(TryLockError::Error(error))
+}
 
 /// Needs Developer Mode or the right to make links; without them this reports the error.
 pub fn link_dir(to: &Path, at: &Path) -> io::Result<()> {

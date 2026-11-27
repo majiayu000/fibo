@@ -110,6 +110,15 @@ pub fn private_file() -> std::fs::OpenOptions {
     imp::private_file()
 }
 
+/// Tries to take an exclusive lock while leaving the first `prefix_len` bytes readable by
+/// other handles. Contenders must use the same prefix length. Closing the file releases it.
+pub fn try_lock_with_readable_prefix(
+    file: &std::fs::File,
+    prefix_len: u32,
+) -> Result<(), std::fs::TryLockError> {
+    imp::try_lock_with_readable_prefix(file, prefix_len)
+}
+
 /// A file for taking a lock on with `File::lock`, created if missing. A link at `path` is
 /// refused rather than followed where the system can say.
 pub fn lock_file(path: &Path) -> io::Result<std::fs::File> {
