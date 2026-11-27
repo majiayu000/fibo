@@ -8,8 +8,10 @@ export type Settings = {
   appearance: 'system' | 'light' | 'dark';
   /** 自动 follows the phone's language; a phone saved before this had no field and reads as auto. */
   language: 'auto' | 'zh' | 'en';
-  /** Face ID / fingerprint on opening the app and before every 允许. */
+  /** The lock's check (ui/lockway.ts) on opening the app and before every 允许. */
   lock: boolean;
+  /** How strict that check is on Android; none: strict. */
+  lockWay?: 'strong' | 'weak';
   /** Ask once more before allowing a push, rm, deploy and the like. */
   confirmDanger: boolean;
   notify: { approval: boolean; waiting: boolean; error: boolean; done: boolean; quiet: boolean };
@@ -30,5 +32,6 @@ export async function readSettings() {
   await settings.ready;
   const value = settings.get();
   if (typeof value.lock !== 'boolean' || typeof value.confirmDanger !== 'boolean') throw new Error(notUi('安全设置无法读取'));
+  if (value.lockWay !== undefined && value.lockWay !== 'strong' && value.lockWay !== 'weak') throw new Error(notUi('安全设置无法读取'));
   return value;
 }

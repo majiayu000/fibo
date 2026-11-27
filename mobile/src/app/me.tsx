@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { type Machine, useHub } from '@/remote/hub';
 import { tk, tr } from '@/i18n';
 import { useSettings } from '@/store/settings';
+import { useLockLook } from '@/ui/uselock';
 import { Icon } from '@/ui/icons';
 import { Label, Nav } from '@/ui/kit';
 import { relayPlace } from '@/ui/parse';
@@ -57,6 +58,7 @@ export default function Me() {
   const t = useTheme();
   const { machines } = useHub();
   const v = useSettings();
+  const look = useLockLook();
   const online = machines.filter((m) => m.status === 'online');
   const off = machines.length - online.length;
   return (
@@ -82,7 +84,7 @@ export default function Me() {
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>
           <Line t={t} title={tr('额度明细')} onPress={() => router.push('/quota')} />
           <Line t={t} title={tr('外观')} value={tr(APPEARANCE[v.appearance])} onPress={() => router.push('/settings')} />
-          <Line t={t} title={tr('打开时要 Face ID / 指纹')} value={v.lock ? tr('开') : tr('关')} onPress={() => router.push('/settings')} />
+          <Line t={t} title={tr('打开时要{way}', { way: look.words })} value={v.lock ? tr('开') : tr('关')} onPress={() => router.push('/settings')} />
           <Line t={t} title={tr('通知')} value={tr('推送还没接')} last onPress={() => router.push('/settings')} />
         </View>
       </ScrollView>

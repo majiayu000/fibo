@@ -1,11 +1,12 @@
 // What a tap does when it changes something on the computer, with the checks this phone
-// adds first: a second confirmation for dangerous commands and Face ID / fingerprint when
+// adds first: a second confirmation for dangerous commands and the lock's check when
 // settings ask. The computer checks permissions itself; these only guard the phone.
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Alert, Platform } from 'react-native';
 import { tr } from './i18n';
 import { type Card, getMachine, NOT_YET, refresh, write } from './remote/hub';
 import { readSettings } from './store/settings';
+import { type LockKit, type LockWay, lockWay } from './ui/lockway';
 import { FULL_CONFIRM, type ModeKind, type ModeOption } from './ui/modes';
 import { type Ask, asksTwice } from './ui/parse';
 
@@ -20,17 +21,42 @@ export function confirm(title: string, detail: string, ok: string, destructive =
   );
 }
 
-/** Face ID / fingerprint (or the passcode) when the lock setting is on; true when it is off. */
+/** What this phone can prove you with (see ui/lockway.ts); nothing on the web. A question the
+ *  phone cannot answer reads as nothing: the check then stays strict, never open. */
+export async function lockKit(): Promise<LockKit> {
+  const ios = Platform.OS === 'ios';
+  if (Platform.OS === 'web') return { ios, level: 0, finger: false, face: false };
+  const ask = <T,>(f: () => Promise<T>, none: T) => Promise.resolve().then(f).catch(() => none);
+  const [level, types] = await Promise.all([
+    ask(() => LocalAuthentication.getEnrolledLevelAsync(), 0),
+    ask((): Promise<number[]> => LocalAuthentication.supportedAuthenticationTypesAsync(), []),
+  ]);
+  // AuthenticationType: 1 fingerprint, 2 face, 3 iris.
+  return { ios, level: Number(level) || 0, finger: types.includes(1), face: types.includes(2) };
+}
+
+/** The system's own box, at the strictness the person chose. `error` says why it did not pass. */
+export async function proveIt(reason: string, way?: LockWay): Promise<{ ok: boolean; error?: string }> {
+  const level = way ?? lockWay((await readSettings()).lockWay, await lockKit());
+  const r = await LocalAuthentication.authenticateAsync({ promptMessage: reason, cancelLabel: tr('取消'), biometricsSecurityLevel: level });
+  return r.success ? { ok: true } : { ok: false, error: r.error };
+}
+
+/** The lock's check (or the passcode) when the lock setting is on; true when it is off. */
 export async function verify(reason: string): Promise<boolean> {
+  return (await verifyWhy(reason)).ok;
+}
+
+/** `verify`, saying why a check did not pass: the app returning to the front can cancel it. */
+export async function verifyWhy(reason: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    // Unread or unreadable settings are not 「lock off」, and a phone without Face ID or a
-    // fingerprint does not skip the lock: the system then asks for the passcode.
-    if (!(await readSettings()).lock) return true;
-    if (Platform.OS === 'web') return false;
-    const r = await LocalAuthentication.authenticateAsync({ promptMessage: reason, cancelLabel: tr('取消') });
-    return r.success;
+    // Unread or unreadable settings are not 「lock off」, and a phone without a fingerprint or
+    // face does not skip the lock: the system then asks for the screen lock.
+    if (!(await readSettings()).lock) return { ok: true };
+    if (Platform.OS === 'web') return { ok: false };
+    return await proveIt(reason);
   } catch {
-    return false;
+    return { ok: false };
   }
 }
 
