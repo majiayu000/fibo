@@ -1,15 +1,16 @@
 // Settings kept on this phone: when to be told (switches shown greyed, push is not wired yet),
-// appearance, Face ID / fingerprint, and a second confirmation for dangerous commands.
+// appearance, the lock (as the phone has it: ui/lockway.ts), and a second confirmation for dangerous commands.
 import Constants from 'expo-constants';
-import * as LocalAuthentication from 'expo-local-authentication';
 import type { ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { oops } from '@/actions';
+import { oops, proveIt } from '@/actions';
 import { notUi, tk, tr } from '@/i18n';
 import { type Settings, settings, useSettings } from '@/store/settings';
 import { statsWords } from '@/store/suggestionCounts';
 import { useSuggestionStats } from '@/store/suggestions';
 import { Icon } from '@/ui/icons';
+import { inline, lockWay, wayNote, wayWords } from '@/ui/lockway';
+import { refreshLockKit, useLockLook } from '@/ui/uselock';
 import { Label, Nav, Switch, TITLE_WEIGHT, useBottom } from '@/ui/kit';
 import { type Theme, useTheme } from '@/ui/theme';
 
@@ -51,18 +52,30 @@ export default function SettingsScreen() {
   const save = (patch: Partial<Settings> | ((value: Settings) => Settings)) => settings.set(patch).catch(() => oops(tr('设置没有保存，请重试')));
   const notify = (k: keyof Settings['notify']) => (on: boolean) => save((value) => ({ ...value, notify: { ...value.notify, [k]: on } }));
 
+  const look = useLockLook();
   async function setLock(on: boolean) {
-    // A browser has no Face ID: a lock it could not check would let everything through.
-    if (on && Platform.OS === 'web') return oops(tr('请在手机上设置 Face ID / 指纹锁'));
+    // A browser cannot check anyone: a lock it could not check would let everything through.
+    if (on && Platform.OS === 'web') return oops(tr('请在手机上打开这个锁'));
     try {
       if (on) {
-        const has = await LocalAuthentication.hasHardwareAsync().catch(() => false);
-        const enrolled = has && (await LocalAuthentication.isEnrolledAsync().catch(() => false));
-        if (!enrolled) return oops(tr('这台手机没有设置 Face ID 或指纹'));
-        const r = await LocalAuthentication.authenticateAsync({ promptMessage: tr('打开 Face ID / 指纹锁') });
-        if (!r.success) return;
+        // A screen lock is enough: the system's box falls back to it without a finger or face.
+        const kit = await refreshLockKit();
+        if (kit.level < 1) return oops(tr('这台手机没有设置锁屏密码，先在系统设置里设一个'));
+        const way = lockWay(v.lockWay, kit);
+        if (!(await proveIt(tr('打开{way}锁', { way: inline(wayWords(way, kit)) }), way)).ok) return;
       }
       await save({ lock: on });
+    } catch {
+      oops(tr('无法完成身份验证，请重试'));
+    }
+  }
+  // The other strictness, proved once before it counts: a way the phone will not show locks you out.
+  async function switchWay() {
+    const next = look.choices.find((w) => w !== look.way);
+    if (!next || !look.kit) return;
+    try {
+      if (!(await proveIt(tr('换成{way}', { way: inline(wayWords(next, look.kit)) }), next)).ok) return;
+      await save({ lockWay: next });
     } catch {
       oops(tr('无法完成身份验证，请重试'));
     }
@@ -108,9 +121,15 @@ export default function SettingsScreen() {
             <Text style={{ fontSize: 15, color: t.dim }}>{v.language === 'auto' ? tr(LANGUAGE.auto) : LANGUAGE[v.language]}</Text>
             <Icon name="right" size={14} width={2} color={t.dim} />
           </Item>
-          <Item t={t} title={tr('打开时要 Face ID / 指纹')} sub={tr('别人拿到手机也批不了你的命令')}>
-            <Switch label={tr('打开时要 Face ID / 指纹')} on={v.lock} onChange={setLock} />
+          <Item t={t} title={tr('打开时要{way}', { way: look.inline })} sub={tr('别人拿到手机也批不了你的命令')}>
+            <Switch label={tr('打开时要{way}', { way: look.inline })} on={v.lock} onChange={setLock} />
           </Item>
+          {v.lock && look.kit && look.choices.length > 1 && (
+            <Item t={t} title={tr('验证方式')} sub={wayNote(look.way, look.kit)} onPress={switchWay}>
+              <Text style={{ fontSize: 15, color: t.dim }}>{look.words}</Text>
+              <Icon name="right" size={14} width={2} color={t.dim} />
+            </Item>
+          )}
           <Item t={t} title={tr('允许前再确认一次')} sub={tr('只对 push、rm、部署这类命令')} last>
             <Switch label={tr('允许前再确认一次')} on={v.confirmDanger} onChange={(on) => save({ confirmDanger: on })} />
           </Item>

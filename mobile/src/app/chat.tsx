@@ -25,6 +25,7 @@ import { Composer } from '@/ui/composer';
 import { KeyboardSafe } from '@/ui/keyboard';
 import { LiveWork, type LiveProps } from '@/ui/livework';
 import { cutShort } from '@/ui/toolview';
+import { useAllowIcon } from '@/ui/uselock';
 import { QueuedSheet } from '@/ui/queuedsheet';
 import type { Picture } from '@/ui/pictures';
 import { cardTitle } from '@/ui/format';
@@ -340,6 +341,7 @@ export default function Chat() {
     setError((e) => (e === said ? '' : e));
   }, [blocks]);
   const agent = agentName(card);
+  const allowIcon = useAllowIcon();
   const running = online && card?.phase === 'working';
   const canSendNow = !!running && supports(m, 'sendnow') && sendsNow(card?.controls);
   // Only Claude offers one, only between turns with nothing else being asked. The card names
@@ -518,7 +520,7 @@ export default function Chat() {
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {answerButtons.map((b) =>
               b === 'allow' ? (
-                <Btn key={b} primary icon="face" label={tr('允许')} disabled={!settled.ready} onPress={() => settled.passes() && approve(machine, card, ask).catch((e) => oops(e.message))} />
+                <Btn key={b} primary icon={allowIcon} label={tr('允许')} disabled={!settled.ready} onPress={() => settled.passes() && approve(machine, card, ask).catch((e) => oops(e.message))} />
               ) : b === 'deny' ? (
                 <Btn key={b} label={tr('拒绝')} disabled={!settled.ready} onPress={() => settled.passes() && deny(machine, card, ask).catch((e) => oops(e.message))} />
               ) : (

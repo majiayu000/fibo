@@ -11,6 +11,7 @@ import { approve, deny, oops, settle } from '@/actions';
 import { tk, tr } from '@/i18n';
 import { type Card, type Machine, reconnect, supports, useHub } from '@/remote/hub';
 import { useAsk } from '@/remote/useAsk';
+import { useAllowIcon } from '@/ui/uselock';
 import { setInboxView, useInboxView } from '@/store/inboxView';
 import { drop, useOutbox } from '@/store/outbox';
 import { rowAnswers } from '@/ui/answers';
@@ -46,6 +47,7 @@ function run(p: Promise<unknown>) {
 
 // What the row's buttons answer: a new command, or the row moving, and a tap waits again.
 function ApprovalRow({ m, c, t, place, named }: Item & { t: Theme; place: string; named: boolean }) {
+  const allowIcon = useAllowIcon();
   const online = m.status === 'online';
   const ask = useAsk(m.id, c, online);
   const can = supports(m, 'answer');
@@ -79,7 +81,7 @@ function ApprovalRow({ m, c, t, place, named }: Item & { t: Theme; place: string
       <View style={s.act} onStartShouldSetResponder={() => off}>
         {buttons.map((b) =>
           b === 'allow' ? (
-            <Btn key={b} primary icon="face" label={tr('允许')} disabled={off} onPress={() => answer(() => approve(m.id, c, ask))} />
+            <Btn key={b} primary icon={allowIcon} label={tr('允许')} disabled={off} onPress={() => answer(() => approve(m.id, c, ask))} />
           ) : b === 'deny' ? (
             <Btn key={b} label={tr('拒绝')} disabled={off} onPress={() => answer(() => deny(m.id, c, ask))} />
           ) : (

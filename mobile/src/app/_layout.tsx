@@ -1,8 +1,8 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Modal, Pressable, Text, View } from 'react-native';
-import { verify } from '@/actions';
+import { ActivityIndicator, AppState, Modal, Platform, Pressable, Text, View } from 'react-native';
+import { verifyWhy } from '@/actions';
 import { setLanguage, tr, useLang } from '@/i18n';
 import { keepCardsIn, start } from '@/remote/hub';
 import { Pump } from '@/remote/pump';
@@ -10,12 +10,14 @@ import { cardShelf } from '@/store/cardsCache';
 import { outboxReady, reloadOutbox } from '@/store/outbox';
 import { readSettings, settings } from '@/store/settings';
 import { Icon } from '@/ui/icons';
+import { cancelledUnseen } from '@/ui/lockway';
+import { refreshLockKit, useLockLook } from '@/ui/uselock';
 import { useTheme } from '@/ui/theme';
 
 // A computer away at a cold start still shows the rows it last listed, marked 断开前.
 keepCardsIn(cardShelf);
 
-/** With the lock on, the app opens only after Face ID / fingerprint, and again on return. */
+/** With the lock on, the app opens only after the lock's check (ui/lockway.ts), and again on return. */
 function useLocked() {
   const [locked, setLocked] = useState(true);
   const [ready, setReady] = useState(false);
@@ -28,11 +30,19 @@ function useLocked() {
     let generation = 0;
     let authenticating = false;
     let loaded = false;
-    const open = async () => {
+    let wasBackground = false;
+    const open = async (retryUnseen = false, kit = refreshLockKit()) => {
       if (!loaded || authenticating) return;
       authenticating = true;
       const stamp = generation;
-      const ok = await verify(tr('打开 Fibo'));
+      const asked = Date.now();
+      let r = await verifyWhy(tr('打开 Fibo'), kit);
+      // Android can cancel before showing an automatic foreground prompt.
+      if (retryUnseen && !r.ok && cancelledUnseen(r.error, Date.now() - asked) && live && generation === stamp && AppState.currentState === 'active') {
+        await new Promise((done) => setTimeout(done, 400));
+        if (live && generation === stamp && AppState.currentState === 'active') r = await verifyWhy(tr('打开 Fibo'), kit);
+      }
+      const ok = r.ok;
       try {
         if (ok && live && generation === stamp && AppState.currentState !== 'background') {
           await start();
@@ -64,9 +74,16 @@ function useLocked() {
     }
     void initialize();
     const sub = AppState.addEventListener('change', (s) => {
-      if (s === 'background') generation++;
+      if (s === 'background') {
+        generation++;
+        wasBackground = true;
+      }
       if (s !== 'active' && settings.get().lock) setLocked(true);
-      if (s === 'active') void open();
+      if (s === 'active') {
+        const retryUnseen = Platform.OS === 'android' && wasBackground;
+        wasBackground = false;
+        void open(retryUnseen);
+      }
     });
     return () => {
       live = false;
@@ -84,6 +101,7 @@ function useLocked() {
 export default function Layout() {
   const t = useTheme();
   const { locked, ready, opened, error, unlock, retry } = useLocked();
+  const look = useLockLook();
   // The language setting reaches the words through i18n's own store; the tree is keyed by it, so
   // every screen draws again in the new language (the stack starts over from the home page).
   const lang = useLang();
@@ -134,11 +152,11 @@ export default function Layout() {
         onRequestClose={() => undefined}
       >
         <View style={{ flex: 1, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-          <Icon name="face" size={44} color={t.text} />
+          <Icon name={look.icon} size={44} color={t.text} />
           {!!error && <Text style={{ color: t.err, paddingHorizontal: 24, textAlign: 'center' }}>{error}</Text>}
           {ready || error ? (
             <Pressable accessibilityRole="button" onPress={error ? retry : unlock} style={{ paddingHorizontal: 20, paddingVertical: 12, borderRadius: 14, backgroundColor: t.act }}>
-              <Text style={{ color: t.onAct, fontSize: 16, fontWeight: '600' }}>{error ? tr('重试读取') : tr('解锁')}</Text>
+              <Text style={{ color: t.onAct, fontSize: 16, fontWeight: '600' }}>{error ? tr('重试读取') : look.kit ? tr('用{way}解锁', { way: look.inline }) : tr('解锁')}</Text>
             </Pressable>
           ) : (
             <ActivityIndicator accessibilityLabel={tr('正在读取本机设置')} color={t.text} />

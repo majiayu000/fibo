@@ -13,6 +13,13 @@ test('authentication waits for settings and rejects cancellation and native erro
   const result = JSON.parse(readFileSync(output, 'utf8'));
   rmSync(output);
   expect(result).toEqual({
+    android: [
+      { api: 27, ok: true, level: 'strong', screenLock: true },
+      { api: 28, ok: true, level: 'weak', screenLock: true },
+      { api: 29, ok: true, level: 'weak', screenLock: true },
+      { api: 30, ok: true, level: 'strong', screenLock: true },
+    ],
+    enrollment: { beforePin: 0, afterPin: 1, relocked: true, shared: true, reads: 2 },
     beforeRead: { resolved: false, calls: 0 }, afterRead: true,
     cancelled: false, unavailable: false, approved: false, writes: 0,
     unreadable: false, unlocked: true,

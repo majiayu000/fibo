@@ -17,12 +17,15 @@ import { agentName } from '@/ui/status';
 import { SayDialog } from '@/ui/sheets';
 import { ago, useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
+import { useAllowIcon, useLockLook } from '@/ui/uselock';
 import { tr } from '@/i18n';
 
 export default function Approve() {
   const t = useTheme();
   const bottom = useBottom();
   const { lock } = useSettings();
+  const look = useLockLook();
+  const allowIcon = useAllowIcon();
   const { machine, terminal } = useLocalSearchParams<{ machine: string; terminal: string }>();
   const { machines } = useHub();
   const m = machines.find((x) => x.id === machine);
@@ -122,7 +125,7 @@ export default function Approve() {
                       <Wide
                         label={tr('允许')}
                         kind="allow"
-                        icon="face"
+                        icon={allowIcon}
                         disabled={off}
                         onPress={() => run(() => approve(machine, card, ask))}
                         textStyle={{ fontSize: 17 }}
@@ -135,7 +138,7 @@ export default function Approve() {
               <Notice text={tr('这台手机的权限是「只看」，不能答审批')} />
             )}
             <Text style={{ fontSize: 12, color: t.dim }}>
-              {lock ? tr('允许要 Face ID / 指纹。') : tr('允许不用验证；可以在设置里打开 Face ID。')}
+              {lock ? tr('允许要{way}。', { way: look.inline }) : tr('允许不用验证；可以在设置里打开验证。')}
             </Text>
           </View>
         )}
