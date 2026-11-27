@@ -75,9 +75,10 @@ fn navigation_uses_live_identity_and_path_boundaries() {
     });
     s.cwd = "/tmp/project/sub".into();
     assert_eq!(w.session_space(&s), Some("nested"));
-    // One opened in a Fibo terminal of the broader space follows its project too.
+    // One in a Fibo terminal stays in that terminal's space, where its tab is
+    // (docs/decisions/2026-11-27-session-space-is-its-tab.md).
     s.terminal = Some("t0".into());
-    assert_eq!(w.session_space(&s), Some("nested"));
+    assert_eq!(w.session_space(&s), Some("space"));
     s.cwd = "/tmp/other".into();
     assert_eq!(w.session_space(&s), Some("space"));
     s.terminal = None;
