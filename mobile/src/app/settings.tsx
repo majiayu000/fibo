@@ -9,7 +9,7 @@ import { type Settings, settings, useSettings } from '@/store/settings';
 import { statsWords } from '@/store/suggestionCounts';
 import { useSuggestionStats } from '@/store/suggestions';
 import { Icon } from '@/ui/icons';
-import { wayNote, wayWords } from '@/ui/lockway';
+import { inline, wayNote, wayWords } from '@/ui/lockway';
 import { useLockLook } from '@/ui/uselock';
 import { Label, Nav, Switch, TITLE_WEIGHT, useBottom } from '@/ui/kit';
 import { type Theme, useTheme } from '@/ui/theme';
@@ -60,7 +60,7 @@ export default function SettingsScreen() {
       if (on) {
         // A screen lock is enough: the system's box falls back to it without a finger or face.
         if ((look.kit?.level ?? 0) < 1) return oops(tr('这台手机没有设置锁屏密码，先在系统设置里设一个'));
-        if (!(await proveIt(tr('打开 {way} 锁', { way: look.words }), look.way)).ok) return;
+        if (!(await proveIt(tr('打开{way}锁', { way: look.inline }), look.way)).ok) return;
       }
       await save({ lock: on });
     } catch {
@@ -72,7 +72,7 @@ export default function SettingsScreen() {
     const next = look.choices.find((w) => w !== look.way);
     if (!next || !look.kit) return;
     try {
-      if (!(await proveIt(tr('换成 {way}', { way: wayWords(next, look.kit) }), next)).ok) return;
+      if (!(await proveIt(tr('换成{way}', { way: inline(wayWords(next, look.kit)) }), next)).ok) return;
       await save({ lockWay: next });
     } catch {
       oops(tr('无法完成身份验证，请重试'));
@@ -119,8 +119,8 @@ export default function SettingsScreen() {
             <Text style={{ fontSize: 15, color: t.dim }}>{v.language === 'auto' ? tr(LANGUAGE.auto) : LANGUAGE[v.language]}</Text>
             <Icon name="right" size={14} width={2} color={t.dim} />
           </Item>
-          <Item t={t} title={tr('打开时要{way}', { way: look.words })} sub={tr('别人拿到手机也批不了你的命令')}>
-            <Switch label={tr('打开时要{way}', { way: look.words })} on={v.lock} onChange={setLock} />
+          <Item t={t} title={tr('打开时要{way}', { way: look.inline })} sub={tr('别人拿到手机也批不了你的命令')}>
+            <Switch label={tr('打开时要{way}', { way: look.inline })} on={v.lock} onChange={setLock} />
           </Item>
           {v.lock && look.kit && look.choices.length > 1 && (
             <Item t={t} title={tr('验证方式')} sub={wayNote(look.way, look.kit)} onPress={switchWay}>

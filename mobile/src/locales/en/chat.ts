@@ -158,7 +158,7 @@ export const chat: Record<string, Entry> = {
   '电脑只读到这些，上面还有。打开终端能看全。': 'The computer only read this much; there’s more above. Open the terminal to see it all.',
   '它刚才说：「{said}」': 'It just said: “{said}”',
   '这台手机的权限是「只看」，不能答审批': 'This phone is View only and can’t answer approvals',
-  '允许要{way}。': (a) => `Allowing needs ${a.way}.`,
+  '允许要{way}。': (a) => `Allowing needs ${String(a.way).trim()}.`,
   '允许不用验证；可以在设置里打开验证。': 'Allowing needs no check; you can turn one on in Settings.',
   '拒绝，并告诉它…': 'Deny and tell it…',
   '拒绝，并告诉它': 'Deny and tell it',

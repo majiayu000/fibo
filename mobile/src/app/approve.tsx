@@ -138,7 +138,7 @@ export default function Approve() {
               <Notice text={tr('这台手机的权限是「只看」，不能答审批')} />
             )}
             <Text style={{ fontSize: 12, color: t.dim }}>
-              {lock ? tr('允许要{way}。', { way: look.words }) : tr('允许不用验证；可以在设置里打开验证。')}
+              {lock ? tr('允许要{way}。', { way: look.inline }) : tr('允许不用验证；可以在设置里打开验证。')}
             </Text>
           </View>
         )}

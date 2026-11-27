@@ -84,7 +84,7 @@ export default function Me() {
         <View style={[s.sheet, { backgroundColor: t.card, borderColor: t.line }]}>
           <Line t={t} title={tr('额度明细')} onPress={() => router.push('/quota')} />
           <Line t={t} title={tr('外观')} value={tr(APPEARANCE[v.appearance])} onPress={() => router.push('/settings')} />
-          <Line t={t} title={tr('打开时要{way}', { way: look.words })} value={v.lock ? tr('开') : tr('关')} onPress={() => router.push('/settings')} />
+          <Line t={t} title={tr('打开时要{way}', { way: look.inline })} value={v.lock ? tr('开') : tr('关')} onPress={() => router.push('/settings')} />
           <Line t={t} title={tr('通知')} value={tr('推送还没接')} last onPress={() => router.push('/settings')} />
         </View>
       </ScrollView>

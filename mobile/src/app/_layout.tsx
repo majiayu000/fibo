@@ -148,7 +148,7 @@ export default function Layout() {
           {!!error && <Text style={{ color: t.err, paddingHorizontal: 24, textAlign: 'center' }}>{error}</Text>}
           {ready || error ? (
             <Pressable accessibilityRole="button" onPress={error ? retry : unlock} style={{ paddingHorizontal: 20, paddingVertical: 12, borderRadius: 14, backgroundColor: t.act }}>
-              <Text style={{ color: t.onAct, fontSize: 16, fontWeight: '600' }}>{error ? tr('重试读取') : look.kit ? tr('用{way}解锁', { way: look.words }) : tr('解锁')}</Text>
+              <Text style={{ color: t.onAct, fontSize: 16, fontWeight: '600' }}>{error ? tr('重试读取') : look.kit ? tr('用{way}解锁', { way: look.inline }) : tr('解锁')}</Text>
             </Pressable>
           ) : (
             <ActivityIndicator accessibilityLabel={tr('正在读取本机设置')} color={t.text} />

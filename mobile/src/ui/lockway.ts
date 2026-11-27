@@ -49,3 +49,9 @@ export const UNSEEN_MS = 800;
 export function cancelledUnseen(error: string | undefined, ms: number): boolean {
   return (error === 'user_cancel' || error === 'app_cancel') && ms < UNSEEN_MS;
 }
+
+/** A way's words inside a Chinese sentence: 「打开时要指纹」 but 「打开时要 Face ID」, a space
+ *  only around Latin words (2026-11-27: 「打开 指纹 锁」 read as three words). English trims it. */
+export function inline(words: string): string {
+  return /^[A-Za-z]/.test(words) ? ` ${words} ` : words;
+}

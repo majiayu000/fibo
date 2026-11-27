@@ -1,7 +1,7 @@
 // The lock said as the phone has it (2026-11-27 walk: an OPPO that lets apps use only its
 // fingerprint showed a face and 「Face ID」, then asked for a finger).
 import { expect, test } from 'bun:test';
-import { cancelledUnseen, lockChoices, lockWay, wayIcon, wayWords, type LockKit } from '../src/ui/lockway';
+import { cancelledUnseen, inline, lockChoices, lockWay, wayIcon, wayWords, type LockKit } from '../src/ui/lockway';
 
 const oppo: LockKit = { ios: false, level: 3, finger: true, face: true };
 const pixelNoFace: LockKit = { ios: false, level: 3, finger: true, face: false };
@@ -34,4 +34,9 @@ test('a cancel faster than a finger is the system, asked once more', () => {
   expect(cancelledUnseen('app_cancel', 300)).toBe(true);
   expect(cancelledUnseen('user_cancel', 2500)).toBe(false);
   expect(cancelledUnseen('lockout', 100)).toBe(false);
+});
+
+test('inside a Chinese sentence a Latin name gets spaces, a Chinese one none', () => {
+  expect(`打开${inline('指纹')}锁`).toBe('打开指纹锁');
+  expect(`打开时要${inline('Face ID')}`.trim()).toBe('打开时要 Face ID');
 });
