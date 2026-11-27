@@ -25,7 +25,9 @@ pub fn load(db: &Connection, path: &str) -> io::Result<Parser> {
 }
 pub fn card(db: &Connection, path: &str) -> io::Result<Option<Content>> {
     let value: Option<String> = db
-        .prepare_cached("SELECT projection FROM session_content WHERE path=?1")
+        .prepare_cached(
+            "SELECT projection FROM session_content JOIN log_files USING(path) WHERE path=?1",
+        )
         .map_err(db_err)?
         .query_row([path], |r| r.get(0))
         .optional()

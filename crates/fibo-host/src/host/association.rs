@@ -61,7 +61,10 @@ pub(super) struct Association {
     pub(super) screened: HashMap<(String, String), u8>,
 }
 impl Association {
-    fn apply_removals(shared: &Shared, index: &crate::log_index::Index) -> io::Result<()> {
+    pub(super) fn apply_removals(
+        shared: &Shared,
+        index: &crate::log_index::Index,
+    ) -> io::Result<()> {
         index.publish_removals(|paths| {
             let paths: HashSet<&str> = paths.iter().map(String::as_str).collect();
             let mut host = lock(shared)?;
@@ -94,7 +97,6 @@ impl Association {
         index: &crate::log_index::Index,
         transcripts: &[Transcript],
     ) -> io::Result<()> {
-        Self::apply_removals(shared, index)?;
         if transcripts.is_empty() {
             return Ok(());
         }
@@ -463,6 +465,7 @@ pub(super) fn follow_associated(
             if let Some(t) = changed {
                 found.insert(0, t);
             }
+            Association::apply_removals(shared, index)?;
             association.apply(shared, index, &found)?;
         }
     }
@@ -489,6 +492,7 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                 let mut watch = fibo_platform::file_watch::Watch::start(&roots, checkpoint)?;
                 lock(&shared)?.log_events = Some(watch.notifier());
                 index.bootstrap()?;
+                Association::apply_removals(&shared, &index)?;
                 publish_recognition(&shared, &index, RecognitionPhase::Healthy, "识别正常", &[])?;
                 let mut association = Association::default();
                 association.apply(&shared, &index, &index.cached()?)?;
@@ -555,9 +559,9 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                         lock(&shared)?.log_events = Some(watch.notifier());
                     }
                     if !scopes.is_empty() {
-                        if let Err(error) =
-                            recover_logs(&shared, &mut index, &mut association, &scopes)
-                        {
+                        let repaired = recover_logs(&shared, &mut index, &mut association, &scopes);
+                        Association::apply_removals(&shared, &index)?;
+                        if let Err(error) = repaired {
                             index.fail(&error)?;
                             publish_recognition(
                                 &shared,
@@ -583,6 +587,9 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                         }
                     }
                     let transcripts = index.update_many(paths, event_id)?;
+                    // Unlike metadata association, a failed removal must wake the
+                    // existing subscription retry even if no more events arrive.
+                    Association::apply_removals(&shared, &index)?;
                     if let Err(error) = association.apply(&shared, &index, &transcripts) {
                         eprintln!("Agent association deferred: {error}");
                     }
@@ -590,9 +597,10 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                     // Only a real event drives retries of an earlier incomplete subtree.
                     let pending = index.recovery_scopes()?;
                     if !pending.is_empty() {
-                        if let Err(error) =
-                            recover_logs(&shared, &mut index, &mut association, &pending)
-                        {
+                        let repaired =
+                            recover_logs(&shared, &mut index, &mut association, &pending);
+                        Association::apply_removals(&shared, &index)?;
+                        if let Err(error) = repaired {
                             index.fail(&error)?;
                             publish_recognition(
                                 &shared,

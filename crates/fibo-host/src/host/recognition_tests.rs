@@ -459,14 +459,18 @@ fn a_removed_log_clears_the_published_card_but_keeps_the_session_and_outcome() {
         let message = serde_json::json!({
             "type":"event_msg", "payload":{"type":"user_message","message":text}
         });
-        fs::write(path, format!("{meta}\n{message}\n")).unwrap();
+        let call = serde_json::json!({
+            "type":"response_item",
+            "payload":{"type":"function_call","name":"list","call_id":id,"arguments":"{}"}
+        });
+        fs::write(path, format!("{meta}\n{message}\n{call}\n")).unwrap();
     };
     write_log(&log, "old", "test prompt");
     let mut index = crate::log_index::Index::open(&root, vec![(Agent::Codex, logs)]).unwrap();
-    index.initialize().unwrap();
+    let checkpoint = index.initialize().unwrap();
     let shared = shared_host(&root, &index);
     let mut association = Association::default();
-    let batch = index.update_many([log.clone()], 1).unwrap();
+    let batch = index.update_many([log.clone()], checkpoint + 1).unwrap();
     association.apply(&shared, &index, &batch).unwrap();
     let (id, revision) = {
         let mut host = lock(&shared).unwrap();
@@ -480,10 +484,38 @@ fn a_removed_log_clears_the_published_card_but_keeps_the_session_and_outcome() {
     };
 
     fs::remove_file(&log).unwrap();
-    assert!(index.update_many([log.clone()], 2).unwrap().is_empty());
+    assert!(index
+        .update_many([log.clone()], checkpoint + 2)
+        .unwrap()
+        .is_empty());
     // The path is reused before the host receives the removal.
     write_log(&log, "new", "new prompt");
-    let batch = index.update_many([log.clone()], 3).unwrap();
+    let batch = index.update_many([log.clone()], checkpoint + 3).unwrap();
+    let chat = super::client::dispatch(
+        &shared,
+        Request::Chat {
+            session: id.clone(),
+            after: None,
+            before: None,
+            limit: 10,
+            tools: true,
+        },
+    )
+    .unwrap();
+    assert!(matches!(chat, Reply::Chat { ref messages, .. } if messages.is_empty()));
+    assert!(index
+        .tool_call(log.to_str().unwrap(), "new")
+        .unwrap()
+        .is_some());
+    assert!(super::client::dispatch(
+        &shared,
+        Request::ToolCall {
+            session: id.clone(),
+            call: "new".into(),
+        }
+    )
+    .is_err());
+    Association::apply_removals(&shared, &index).unwrap();
     association.apply(&shared, &index, &batch).unwrap();
     let host = lock(&shared).unwrap();
     let snapshot = host.snapshot();
@@ -506,7 +538,26 @@ fn a_removed_log_clears_the_published_card_but_keeps_the_session_and_outcome() {
     let replacement = root.join("replacement.jsonl");
     write_log(&replacement, "replacement", "replacement prompt");
     fs::rename(replacement, &log).unwrap();
-    let batch = index.update_many([log], 4).unwrap();
+    let batch = index.update_many([log], checkpoint + 4).unwrap();
+    let db = rusqlite::Connection::open(root.join("workbench.sqlite")).unwrap();
+    db.execute_batch(
+        "CREATE TRIGGER reject_workspace_commit BEFORE UPDATE ON meta
+         BEGIN SELECT RAISE(ABORT, 'failed to publish removal'); END;",
+    )
+    .unwrap();
+    assert!(Association::apply_removals(&shared, &index).is_err());
+    assert_eq!(
+        lock(&shared).unwrap().snapshot().content[&new.id].title,
+        "new prompt"
+    );
+
+    db.execute_batch("DROP TRIGGER reject_workspace_commit")
+        .unwrap();
+    // The index checkpoint already includes the deletion. The same index bootstraps
+    // after the subscription error, so it must publish the queued removal unaided.
+    assert_eq!(index.initialize().unwrap(), checkpoint + 4);
+    index.bootstrap().unwrap();
+    Association::apply_removals(&shared, &index).unwrap();
     association.apply(&shared, &index, &batch).unwrap();
     let snapshot = lock(&shared).unwrap().snapshot();
     let previous = snapshot

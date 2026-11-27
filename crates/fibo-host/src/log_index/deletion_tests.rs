@@ -151,3 +151,58 @@ fn recovery_does_not_delete_anything_outside_its_scope() {
     assert_eq!(indexed_rows(&index, "session_records", &gone), 0);
     assert!(index.card(outside.to_str().unwrap()).unwrap().is_some());
 }
+
+#[test]
+fn conversation_identity_and_chat_share_a_read_snapshot() {
+    let fixture = Fixture::new();
+    let mut index = fixture.index();
+    let log = fixture.0.join("logs/shared.jsonl");
+    let key = log.to_str().unwrap();
+    conversation(&log, "old", "old message");
+    index.update(Agent::Codex, &log, true).unwrap();
+    let reader = index.fork_current().unwrap();
+    let messages = reader
+        .read_for(Agent::Codex, "old", key, |reader| {
+            let new = fixture.0.join("new.jsonl");
+            conversation(&new, "new", "new message");
+            fs::rename(new, &log).unwrap();
+            index.update(Agent::Codex, &log, true)?;
+            Ok(reader.chat(key, 0, None, None, 5, false)?.0)
+        })
+        .unwrap()
+        .unwrap();
+    assert_eq!(messages[0].text, "old message");
+    assert!(reader
+        .read_for(Agent::Codex, "old", key, |_| Ok(()))
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        reader.chat(key, 0, None, None, 5, false).unwrap().0[0].text,
+        "new message"
+    );
+}
+
+#[test]
+fn cards_from_old_orphan_rows_stay_hidden_after_restart() {
+    let fixture = Fixture::new();
+    let mut index = fixture.index();
+    let log = fixture.0.join("logs/old.jsonl");
+    let key = log.to_str().unwrap();
+    conversation(&log, "old", "historical fixture");
+    index.update(Agent::Codex, &log, true).unwrap();
+    assert!(index.card(key).unwrap().is_some());
+    // This is what an older index did on deletion.
+    index
+        .db
+        .execute("DELETE FROM log_files WHERE path=?1", [key])
+        .unwrap();
+    drop(index);
+
+    let reader = fixture.index();
+    assert!(reader.card(key).unwrap().is_none());
+    assert!(reader
+        .read_for(Agent::Codex, "old", key, |_| Ok(()))
+        .unwrap()
+        .is_none());
+    assert_eq!(indexed_rows(&reader, "session_content", &log), 1);
+}

@@ -3,7 +3,7 @@
 //! stretch before it, newest first, a segment at a time. It has its own connection, holds no
 //! lock of the host's, and never touches what the card says: it only adds the rows the
 //! skipped lines would have made, keyed by where they are, so nothing is read twice.
-use super::super::{err, Elide, Index};
+use super::super::{deletion::indexed_inode, err, Elide, Index};
 use crate::content::{save_records, Parser};
 use fibo_core::content::Source;
 use fibo_core::model::Agent;
@@ -122,7 +122,7 @@ impl Index {
 
     /// Reads back the next stretch of a log, ending as soon as there is a page of messages.
     /// A log replaced since, or read from a new place, starts over from there.
-    pub fn backfill(&self, runtime: Agent, path: &str) -> io::Result<Backfilled> {
+    pub fn backfill(&self, runtime: Agent, cli_id: &str, path: &str) -> io::Result<Backfilled> {
         let Some(card) = self.card(path)?.filter(|c| c.partial_history) else {
             return Ok(Backfilled {
                 added: 0,
@@ -155,13 +155,7 @@ impl Index {
             let (parser, first) = read_segment(&mut file, runtime, path, inode, from, start)?;
             let tx = self.db.unchecked_transaction().map_err(err)?;
             // Deletion or replacement after this began invalidates these rows.
-            let now: Option<i64> = tx
-                .prepare_cached("SELECT inode FROM log_files WHERE path=?1")
-                .map_err(err)?
-                .query_row([path], |r| r.get(0))
-                .optional()
-                .map_err(err)?;
-            if now != Some(inode as i64) {
+            if indexed_inode(&tx, runtime, cli_id, path)? != Some(inode as i64) {
                 return Err(io::Error::other("这份日志已经变了，读不回更早的部分"));
             }
             save_records(&tx, path, &parser)?;
@@ -234,7 +228,10 @@ mod tests {
         fn read_all(&self) -> u32 {
             let mut total = 0;
             for _ in 0..1000 {
-                let got = self.index.backfill(Agent::Codex, &self.key()).unwrap();
+                let got = self
+                    .index
+                    .backfill(Agent::Codex, "s1", &self.key())
+                    .unwrap();
                 total += got.added;
                 if got.done {
                     return total;
@@ -296,8 +293,9 @@ mod tests {
 
     #[test]
     fn a_parsed_backfill_cannot_write_after_its_index_entry_is_gone() {
-        let l = log((0..1000).map(|n| said(n, 900)));
+        let mut l = log((0..1000).map(|n| said(n, 900)));
         let key = l.key();
+        l.index.update_many([l.path.clone()], 1).unwrap();
         assert!(l.index.card(&key).unwrap().unwrap().partial_history);
         // Keep the card and readable bytes a backfill might already hold, but simulate
         // removal of the cursor on the other connection before publishing the segment.
@@ -305,7 +303,7 @@ mod tests {
             .db
             .execute("DELETE FROM log_files WHERE path=?1", [&key])
             .unwrap();
-        let result = l.index.backfill(Agent::Codex, &key);
+        let result = l.index.backfill(Agent::Codex, "s1", &key);
         assert!(result.is_err());
         let backfill: i64 = l
             .index
@@ -334,7 +332,7 @@ mod tests {
         // Each stretch joins on: what was shown, with more before it, nothing between.
         let mut seen = shown.len();
         for _ in 0..1000 {
-            let got = l.index.backfill(Agent::Codex, &l.key()).unwrap();
+            let got = l.index.backfill(Agent::Codex, "s1", &l.key()).unwrap();
             let now = trimmed(l.pages());
             assert_eq!(now, words(n - now.len()..n), "no hole after a stretch");
             assert!(now.len() >= seen);
@@ -351,13 +349,13 @@ mod tests {
     #[test]
     fn one_call_brings_about_a_page_and_says_when_it_is_done() {
         let l = log((0..4000).map(|i| said(i, 900)));
-        let first = l.index.backfill(Agent::Codex, &l.key()).unwrap();
+        let first = l.index.backfill(Agent::Codex, "s1", &l.key()).unwrap();
         assert!(first.added >= WANT_MESSAGES, "{first:?}");
         assert!(!first.done);
         assert!(l.from() > 0);
         l.read_all();
         assert_eq!(l.from(), 0);
-        let again = l.index.backfill(Agent::Codex, &l.key()).unwrap();
+        let again = l.index.backfill(Agent::Codex, "s1", &l.key()).unwrap();
         assert_eq!((again.added, again.done), (0, true));
     }
 
@@ -418,7 +416,7 @@ mod tests {
     #[test]
     fn a_log_read_whole_has_nothing_to_read_back() {
         let l = log((0..3).map(|i| said(i, 1)));
-        let got = l.index.backfill(Agent::Codex, &l.key()).unwrap();
+        let got = l.index.backfill(Agent::Codex, "s1", &l.key()).unwrap();
         assert_eq!((got.added, got.done), (0, true));
         assert_eq!(l.from(), 0);
     }
@@ -436,7 +434,7 @@ mod tests {
                 [l.key()],
             )
             .unwrap();
-        let got = l.index.backfill(Agent::Codex, &l.key()).unwrap();
+        let got = l.index.backfill(Agent::Codex, "s1", &l.key()).unwrap();
         assert_eq!((got.added, got.done), (0, true));
         assert!(l.pages().len() >= before.len());
     }
@@ -445,7 +443,7 @@ mod tests {
     #[test]
     fn a_replaced_log_starts_over() {
         let mut l = log((0..4000).map(|i| said(i, 900)));
-        l.index.backfill(Agent::Codex, &l.key()).unwrap();
+        l.index.backfill(Agent::Codex, "s1", &l.key()).unwrap();
         let tmp = l.path.with_extension("new");
         let mut file = File::create(&tmp).unwrap();
         file.write_all(META.as_bytes()).unwrap();

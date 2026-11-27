@@ -59,6 +59,24 @@ impl Index {
         Ok(())
     }
 
+    /// Check the owner and read its rows from the same SQLite snapshot.
+    pub fn read_for<T>(
+        &self,
+        runtime: Agent,
+        cli_id: &str,
+        path: &str,
+        read: impl FnOnce(&Self) -> io::Result<T>,
+    ) -> io::Result<Option<T>> {
+        let tx = self.db.unchecked_transaction().map_err(err)?;
+        let value = if indexed_inode(&tx, runtime, cli_id, path)?.is_some() {
+            Some(read(self)?)
+        } else {
+            None
+        };
+        tx.commit().map_err(err)?;
+        Ok(value)
+    }
+
     /// Clear the corresponding workspace cards after the index transaction committed.
     /// A failed workspace update keeps the notification for the retry.
     pub fn publish_removals(
@@ -84,6 +102,21 @@ impl Index {
         }
         Ok(())
     }
+}
+
+pub(super) fn indexed_inode(
+    db: &Connection,
+    runtime: Agent,
+    cli_id: &str,
+    path: &str,
+) -> io::Result<Option<i64>> {
+    db.prepare_cached("SELECT inode FROM log_files WHERE path=?1 AND runtime=?2 AND cli_id=?3")
+        .map_err(err)?
+        .query_row(params![path, runtime.executable(), cli_id], |row| {
+            row.get(0)
+        })
+        .optional()
+        .map_err(err)
 }
 
 pub(super) struct ParentRefresh {
