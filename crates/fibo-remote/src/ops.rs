@@ -5,6 +5,7 @@
 //! queued without waiting for the step at hand; `toolslast` says `toolcalls` takes `last`;
 //! `openimages` says `open` takes `images`, pictures for the new Agent's first message.
 //! `file` reads a Markdown or plain-text file in a terminal's folder, for a chat's file link.
+//! `transcribe` turns a phone's recording into text on the computer; listed only where it can.
 
 /// Every op, in the order `hello` lists them.
 pub const OPS: &[&str] = &[
@@ -51,4 +52,5 @@ pub const OPS: &[&str] = &[
     "toolslast",
     "openimages",
     "file",
+    "transcribe",
 ];

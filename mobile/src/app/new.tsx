@@ -9,7 +9,7 @@ import { router } from 'expo-router';
 import { type ComponentRef, useEffect, useRef, useState } from 'react';
 import { Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { confirm, oops } from '@/actions';
-import { tr } from '@/i18n';
+import { lang, tr } from '@/i18n';
 import { NOT_YET, refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
 import { getDraft, resetDraft, setDraft, useDraft } from '@/store/draft';
 import { rememberSent } from '@/store/sentPictures';
@@ -32,7 +32,6 @@ export default function NewTask() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [pictures, setPictures] = useState<Picture[]>([]);
-  const dictation = useDictation(draft.prompt, (prompt) => setDraft({ prompt }), oops);
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const typing = useRef(false);
   // The box is the last field: once the keyboard is up and the page has shrunk, bring it
@@ -43,6 +42,12 @@ export default function NewTask() {
   }, []);
   const online = machines.filter((m) => m.status === 'online');
   const m = machines.find((x) => x.id === draft.machine) ?? online[0] ?? machines[0];
+  const dictation = useDictation(
+    draft.prompt,
+    (prompt) => setDraft({ prompt }),
+    oops,
+    m && supports(m, 'transcribe') ? (audio) => write(m.id, 'transcribe', { audio, lang: lang() }).then((r) => String(r?.text ?? '')) : undefined,
+  );
 
   const selectedMachine = m?.id;
   useEffect(() => {
@@ -269,7 +274,15 @@ export default function NewTask() {
         )}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {canPicture && pictures.length < MAX_PICTURES && <Btn label={tr('加图片')} onPress={addPictures} />}
-          {dictation.can && <Btn label={dictation.listening ? tr('停止听写') : tr('说话输入')} icon="mic" primary={dictation.listening} onPress={dictation.toggle} />}
+          {dictation.can && (
+            <Btn
+              label={dictation.reading ? tr('正在转成文字…') : dictation.listening ? tr('停止听写') : tr('说话输入')}
+              icon="mic"
+              primary={dictation.listening}
+              disabled={dictation.reading}
+              onPress={dictation.toggle}
+            />
+          )}
           <Btn
             label={tr('从剪贴板粘贴')}
             onPress={() =>

@@ -37,6 +37,7 @@ export function Composer({
   onError,
   kept,
   onKeep,
+  onTranscribe,
 }: {
   agent: string;
   /** What the computer says is on. */
@@ -63,6 +64,8 @@ export function Composer({
   /** What this conversation's box held last time, read once; `onKeep` hears every change to it. */
   kept?: ChatDraft;
   onKeep?: (draft: ChatDraft) => void;
+  /** The computer turns a recording into text, for a phone without its own recognizer. */
+  onTranscribe?: (audio: string) => Promise<string>;
 }) {
   const t = useTheme();
   const bottom = useBottomOverKeyboard();
@@ -75,7 +78,7 @@ export function Composer({
   const [choosing, setChoosing] = useState(false);
   const [picking, setPicking] = useState(false);
   const input = useRef<ComponentRef<typeof TextInput>>(null);
-  const dictation = useDictation(draft, setDraft, onError);
+  const dictation = useDictation(draft, setDraft, onError, onTranscribe);
   const empty = !draft.trim() && !pictures.length;
   const stop = running && canStop && empty;
   const how = running && canSteer ? 'queue' : undefined;
@@ -168,7 +171,7 @@ export function Composer({
           dictation.cancel();
           setDraft(text);
         }}
-        placeholder={dictation.listening ? tr('在听，说完点麦克风') : offline ? tr('电脑没连上，写的话会在重连后发送') : running ? tr(whileBusy(controls, how).placeholder) : tr('回复，或者让它接着做…')}
+        placeholder={dictation.reading ? tr('正在转成文字…') : dictation.listening ? tr('在听，说完点麦克风') : offline ? tr('电脑没连上，写的话会在重连后发送') : running ? tr(whileBusy(controls, how).placeholder) : tr('回复，或者让它接着做…')}
         placeholderTextColor={t.dim}
         multiline
         numberOfLines={Platform.OS === 'web' ? 1 : undefined}

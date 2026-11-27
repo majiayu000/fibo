@@ -77,6 +77,7 @@
 | 11-26 | 在跑的第一分钟，走查脚本读不到屏幕：`texts` 空，`tap` 按文字找不到「发送」；`uiautomator dump` 报 could not get idle state | 平台差异 | dump 要等屏幕静止 1 秒，在跑那行「干了 N 秒」每秒变一次（#589 加的计时）；电脑上的测试和网页版不经过 uiautomator | 走查脚本读不到时每 2 秒重试，最多 80 秒（过了一分钟计时改按分钟变）；截图附带的 dump 不等 | 没有自动测试；本地走查 `2026-11-26-phone-walk` 的 `chat.queue`、`chat.live` 手动截图 |
 | 11-26 | 在跑区块里调用的说明被从中间剪掉：「Ping localhost 120 times, show summary」显示成「Ping localhost 1…s, show summary」，数字没了 | 真实的量和时长 | 测试数据的说明都很短，一行放得下；中间省略原是给命令留首尾的 | 有说明时末尾省略，只剩命令时仍中间省略 | `mobile/test/tools.test.ts` 的 a running step in its one line |
 | 11-28 | 语音输入的麦克风显示出来，一点就报「系统的语音识别用不了：Other client side errors.」 | 平台差异 | 单测和网页都没有安卓的识别服务；OPPO（ColorOS，安卓 16）系统不给第三方识别服务，唯一列出来的是 Claude App 自己的、要系统权限才绑得上，系统默认识别服务为空，`isRecognitionAvailable()` 却说有 | 安卓上还要有系统默认识别服务才显示麦克风；识别器报 client / service-not-allowed 后本次不再显示，提示改用输入法语音键 | 没有自动测试；本地走查 `2026-11-28-phone-walk` 的 `chat.voice` |
+| 11-28 | 手机录音交给电脑转文字，开头多出「优优独播剧场——YoYo Television Series Exclusive」 | 真实的量和时长 | whisper 遇到开头一段只有底噪会编出训练数据里的片头字幕；电脑合成的语音和合成噪声都复现不出来，只有真手机录音的底噪会 | 电脑端识别开 VAD（silero）跳过没人说话的部分、加 `-sns`；只有噪声的录音回空 | 没有自动测试；本地走查 `2026-11-28-phone-walk-5` 的 `chat.voice`（先停 3 秒再说） |
 
 11-05 之前的实测详情见 [v2-plan.md](v2-plan.md) 的「真机实测查出的问题」和「真机实测后留下的四件事」。
 

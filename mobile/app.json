@@ -77,6 +77,12 @@
           "microphonePermission": "把你说的话转成文字，发给电脑上的 Agent",
           "speechRecognitionPermission": "用系统的语音识别把你说的话转成文字"
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "把你说的话转成文字，发给电脑上的 Agent"
+        }
       ]
     ],
     "scheme": "mooring",

@@ -18,6 +18,16 @@ decision-makers: 用户
 - 打字、发送、开始任务、离开页面都会立刻停掉识别，之后到的字不再写进框里。
 - 识别语言跟 App 的界面语言：中文界面 `zh-CN`，其他 `en-US`。
 
+### 11-28 追加：手机识别不了时交给电脑
+
+用户的 OPPO（ColorOS 16）系统不给 App 提供语音识别（没装 Google 的 Speech Recognition & Synthesis，小布不对外开放）。国内 App（微信、搜狗）都是自己录音、压缩、传到自家服务器识别。Fibo 的「自家服务器」就是用户的电脑，用户：「那你这样做吧……我觉得没有问题的」。
+
+- 手机系统识别用不了、电脑在 `hello` 里列了 `transcribe` 时，麦克风改为录音：系统录音器录 16 kHz 单声道 AAC（.m4a，约 4 KB/秒，最长 90 秒），整段 base64 发给电脑。
+- 电脑 `transcribe`（只给完全控制）：`ffmpeg` 转 WAV，`whisper-cli`（whisper.cpp）用运行目录 `models/` 里的 `ggml-large-v3-turbo-q5_0.bin` 识别，中文带简体和标点的提示；有 `ggml-silero-v5.1.2.bin` 就开 VAD 跳过没人说话的部分。录音不离开电脑，用完即删。三样缺一样就不列这个操作，手机也不显示麦克风。
+- 实测（M2 Max）：11 秒的话 46 KB，说完到出字约 2 秒。
+
+现在要手动装：`brew install whisper-cpp ffmpeg`，把两个模型放进运行目录的 `models/`。**下一步**：电脑 App 设置里一个开关负责下载模型和说明依赖（用户偏好：功能要能在设置里配，不能只靠命令行）。
+
 ## Consequences
 
 - 安卓多了 `RECORD_AUDIO`。以前 `expo-image-picker` 的 `microphonePermission: false` 会把它列进屏蔽权限，`expo-camera` 的同一项会删掉 iOS 的 `NSMicrophoneUsageDescription`；两处都改成了同一句说明，相机仍不录音（`recordAudioAndroid: false`）。

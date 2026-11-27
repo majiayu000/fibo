@@ -1,11 +1,13 @@
 // Talking into a box with the phone's own speech recognition (Android's SpeechRecognizer,
 // iOS's SFSpeechRecognizer): the words land in the box as they are heard, sending is still yours.
-// Phones without a recognition service show no microphone; the keyboard's own voice key is left.
+// A phone without one records instead and the computer reads it (voicememo.ts), where the
+// computer can; with neither there is no microphone and the keyboard's own voice key is left.
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet } from 'react-native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { Icon } from './icons';
 import { QUIET_ERRORS, joinSpoken } from './spoken';
+import { useVoiceMemo } from './voicememo';
 import { useTheme } from './theme';
 import { lang, tr } from '../i18n';
 
@@ -41,18 +43,29 @@ function why(error: string, message: string): string {
 }
 
 export type Dictation = {
-  /** The phone has a recognizer: without one there is no microphone to show. */
+  /** The phone or the computer can read speech: without either there is no microphone to show. */
   can: boolean;
   listening: boolean;
+  /** A recording on its way to the computer and back. */
+  reading: boolean;
   toggle: () => void;
   /** Typing or sending: what is still being heard must not land in the box afterwards. */
   cancel: () => void;
 };
 
-export function useDictation(text: string, setText: (text: string) => void, onError?: (why: string) => void): Dictation {
+export function useDictation(
+  text: string,
+  setText: (text: string) => void,
+  onError?: (why: string) => void,
+  /** The computer reads a recording (`transcribe`); for phones whose own recognizer will not do. */
+  transcribe?: (audio: string) => Promise<string>,
+): Dictation {
   const id = useRef(0);
   if (!id.current) id.current = next++;
-  const [can, setCan] = useState(available);
+  const [system, setSystem] = useState(available);
+  const memo = useVoiceMemo(transcribe, (said) => setText(joinSpoken(textRef.current, said)), onError);
+  const textRef = useRef(text);
+  textRef.current = text;
   const [listening, setListening] = useState(false);
   // The box as it was when listening started, plus every phrase heard to the end since.
   const base = useRef('');
@@ -79,12 +92,15 @@ export function useDictation(text: string, setText: (text: string) => void, onEr
     setListening(false);
     if (UNUSABLE.has(e.error)) {
       broken = true;
-      setCan(false);
+      setSystem(false);
+      // The computer can still read it: the next tap records, nothing to say.
+      if (transcribe) return;
     }
     if (!QUIET_ERRORS.has(e.error)) onError?.(why(e.error, e.message));
   });
 
   const cancel = () => {
+    memo.cancel();
     if (!mine()) return;
     owner = 0;
     setListening(false);
@@ -117,9 +133,18 @@ export function useDictation(text: string, setText: (text: string) => void, onEr
     });
   }
 
+  if (!system && transcribe)
+    return {
+      can: true,
+      listening: memo.recording,
+      reading: memo.reading,
+      toggle: () => void (memo.recording ? memo.stop() : memo.reading ? undefined : memo.start()),
+      cancel,
+    };
   return {
-    can,
+    can: system,
     listening,
+    reading: false,
     toggle: () => (listening ? ExpoSpeechRecognitionModule.stop() : void start()),
     cancel,
   };
@@ -135,9 +160,9 @@ export function MicButton({ dictation, disabled }: { dictation: Dictation; disab
       accessibilityRole="button"
       accessibilityLabel={on ? tr('说完了') : tr('说话输入')}
       accessibilityState={{ selected: on }}
-      disabled={disabled}
+      disabled={disabled || dictation.reading}
       onPress={dictation.toggle}
-      style={({ pressed }) => [s.round, { backgroundColor: on ? t.act : t.well, opacity: disabled ? 0.35 : pressed ? 0.6 : 1 }]}
+      style={({ pressed }) => [s.round, { backgroundColor: on ? t.act : t.well, opacity: disabled || dictation.reading ? 0.35 : pressed ? 0.6 : 1 }]}
     >
       <Icon name="mic" size={17} width={2.1} color={on ? t.onAct : t.text} />
     </Pressable>

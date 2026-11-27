@@ -39,7 +39,7 @@ impl Role {
             // A file's whole text, though only in a conversation's folder: as `diff`'s patches.
             "file" => self == Self::Full,
             // Words `hello` lists to say what an op also takes: each goes with its op.
-            "steer" | "effort" | "openimages" => self == Self::Full,
+            "steer" | "effort" | "openimages" | "transcribe" => self == Self::Full,
             "toolslast" => true,
             "answer" => self != Self::View,
             "hello" | "ping" | "list" | "cards" | "read" | "chat" | "watch" | "events"
@@ -128,6 +128,7 @@ mod tests {
             "effort",
             "openimages",
             "file",
+            "transcribe",
         ] {
             assert!(!Role::Answer.allows(op) && Role::Full.allows(op), "{op}");
         }
