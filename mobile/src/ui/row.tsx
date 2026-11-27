@@ -12,7 +12,7 @@ import { TITLE_WEIGHT, mono } from './kit';
 import { useNow } from './now';
 import { questionText, runningFor } from './parse';
 import { rowDetail, spaceName, statusColor, statusWord, tilde } from './status';
-import { useTheme } from './theme';
+import { ago, useTheme } from './theme';
 
 export { spaceName };
 
@@ -49,7 +49,8 @@ export function Row({
 }) {
   const t = useTheme();
   const stale = m.status !== 'online';
-  const word = right?.text ?? (stale ? tr('断开前：{state}', { state: statusWord(c) }) : statusWord(c));
+  // A stopped row says when it stopped, as the computer's sidebar does.
+  const word = right?.text ?? (stale ? tr('断开前：{state}', { state: statusWord(c) }) : c.updated ? `${statusWord(c)} · ${ago(c.updated)}` : statusWord(c));
   const color = right ? (right.color ?? t.dim) : stale ? t.dim : statusColor(c, t);
   const space = spaceName(m, c);
   // 等你回答 says nothing on its own: what it asks, so the row is worth opening from here.
