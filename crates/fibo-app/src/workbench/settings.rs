@@ -341,11 +341,13 @@ pub(super) enum SettingsAction {
     MachinesChanged,
     /// A CLI's hooks were installed or removed here: the window reads them again.
     HooksChanged,
-    /// Phones on a relay: on or off, the relay, and its key (None keeps the saved one).
+    /// Phones on a relay: on or off, the relay, and its key (None keeps the saved one);
+    /// `also`, the backup relay (None leaves it, empty removes it).
     Remote {
         enabled: bool,
         relay: String,
         key: Option<String>,
+        also: Option<Vec<fibo_core::protocol::RemoteRelay>>,
     },
 }
 pub(super) struct SettingsView {
@@ -376,6 +378,9 @@ pub(super) struct SettingsView {
     pub(super) remote: fibo_core::protocol::RemoteStatus,
     relay: Entity<Field>,
     relay_key: Entity<Field>,
+    /// 备用中继 and its key (docs/decisions/2026-11-26-two-relays.md).
+    also: Entity<Field>,
+    also_key: Entity<Field>,
     /// Why the phones setting was not sent.
     remote_error: Option<&'static str>,
     /// 其他电脑: `<config>/machines.json`, the new one's field and the last save's error.
@@ -416,6 +421,19 @@ impl SettingsView {
                 .placeholder(t!("可不填"))
         });
         cx.observe(&relay, |_, _, cx| cx.notify()).detach();
+        let also = cx.new(|cx| {
+            let saved = remote.also.first().map_or("", String::as_str);
+            Field::new(t!("备用中继"), saved, cx)
+                .compact()
+                .placeholder(t!("可不填"))
+        });
+        let also_key = cx.new(|cx| {
+            Field::new(t!("备用中继的密钥"), "", cx)
+                .compact()
+                .placeholder(t!("可不填"))
+        });
+        cx.observe(&also, |_, _, cx| cx.notify()).detach();
+        cx.observe(&also_key, |_, _, cx| cx.notify()).detach();
         let machine_field = cx.new(|cx| {
             Field::new(t!("电脑"), "", cx)
                 .compact()
@@ -480,6 +498,8 @@ impl SettingsView {
             remote,
             relay,
             relay_key,
+            also,
+            also_key,
             remote_error: None,
             machines,
             machine_field,

@@ -38,7 +38,7 @@ decision-makers: majiayu000
 - `crates/fibo-host/src/relay.rs`、`relay/live.rs`：每台中继一条 `stay_connected`，`Live::scoped`。
 - `crates/fibo-host/src/remote.rs`：`hello` 带 `relays`，从 `remote_config` 读（只有一个来源）。
 - `mobile/src/remote/client.ts`：`Remote.connectAny`；`hub.ts` 的 `dial` 改用它，`hello.relays` 有新的就存下来。
-- 命令行：`fibo remote --enable --relay <国内中继> --relay-key <密钥> --also <香港中继> --also-key <密钥>`。设置页暂不加第二台中继的输入框。
+- 命令行：`fibo remote --enable --relay <国内中继> --relay-key <密钥> --also <香港中继> --also-key <密钥>`。设置页的「备用中继」「备用中继的密钥」做同样的事（11-28 补上；用户：「我们尽量都能用配置来调整……用户哪会用命令行呀？」）。
 
 ## Verification
 

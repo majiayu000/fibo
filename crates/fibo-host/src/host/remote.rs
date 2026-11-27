@@ -178,6 +178,7 @@ impl Supervisor {
             relay: inner.config.relay.clone(),
             keyed: inner.config.key.is_some(),
             also: inner.config.also.iter().map(|a| a.relay.clone()).collect(),
+            also_keyed: inner.config.also.first().is_some_and(|a| a.key.is_some()),
             devices: crate::devices::load(&socket)
                 .into_iter()
                 .map(|d| fibo_core::protocol::RemoteDevice {

@@ -226,12 +226,13 @@ impl Workbench {
                 enabled,
                 relay,
                 key,
+                also,
             } => this.request(
                 Request::RemoteConfigure {
                     enabled: *enabled,
                     relay: relay.clone(),
                     key: key.clone(),
-                    also: None,
+                    also: also.clone(),
                 },
                 cx,
             ),

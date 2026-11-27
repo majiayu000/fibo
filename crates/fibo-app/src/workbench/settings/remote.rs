@@ -6,6 +6,26 @@ impl SettingsView {
     fn typed_key(&self, cx: &gpui::App) -> Option<String> {
         Some(self.relay_key.read(cx).text.trim().to_owned()).filter(|k| !k.is_empty())
     }
+    /// 备用中继 as typed and its key; the key empty keeps the saved one.
+    fn typed_also(&self, cx: &gpui::App) -> (String, Option<String>) {
+        let key = self.also_key.read(cx).text.trim().to_owned();
+        let relay = self.also.read(cx).text.trim().to_owned();
+        (relay, Some(key).filter(|k| !k.is_empty()))
+    }
+    /// What changes about 备用中继: None when nothing does, empty to remove it.
+    fn also_change(&self, cx: &gpui::App) -> Option<Vec<fibo_core::protocol::RemoteRelay>> {
+        let (relay, key) = self.typed_also(cx);
+        let saved = self.remote.also.first().map_or("", String::as_str);
+        if relay == saved && key.is_none() {
+            return None;
+        }
+        Some(
+            (!relay.is_empty())
+                .then_some(fibo_core::protocol::RemoteRelay { relay, key })
+                .into_iter()
+                .collect(),
+        )
+    }
     fn send_remote(&mut self, enabled: bool, cx: &mut Context<Self>) {
         let relay = self.relay.read(cx).text.trim().to_owned();
         if enabled && relay.is_empty() {
@@ -15,14 +35,18 @@ impl SettingsView {
         }
         self.remote_error = None;
         let key = self.typed_key(cx);
-        self.relay_key.update(cx, |f, cx| {
-            f.set_text("");
-            cx.notify();
-        });
+        let also = self.also_change(cx);
+        for field in [&self.relay_key, &self.also_key] {
+            field.update(cx, |f, cx| {
+                f.set_text("");
+                cx.notify();
+            });
+        }
         cx.emit(SettingsAction::Remote {
             enabled,
             relay,
             key,
+            also,
         });
     }
     pub(super) fn phones_page(&self, cx: &Context<Self>) -> gpui::Div {
@@ -66,8 +90,30 @@ impl SettingsView {
                 )
                 .into_any_element(),
             );
+            link.push(
+                self.row(
+                    false,
+                    t!("备用中继"),
+                    t!("可不填。填了以后电脑同时挂在两台中继上，手机走先连通的那台，一台断了另一台照常；清空就去掉"),
+                    field(&self.also),
+                )
+                .into_any_element(),
+            );
+            link.push(
+                self.row(
+                    false,
+                    t!("备用中继的密钥"),
+                    if r.also_keyed {
+                        t!("已保存，不显示；要换就填新的")
+                    } else {
+                        t!("中继要求注册密钥时才填")
+                    },
+                    field(&self.also_key),
+                )
+                .into_any_element(),
+            );
             let typed = self.relay.read(cx).text.trim().to_owned();
-            if typed != r.relay || self.typed_key(cx).is_some() {
+            if typed != r.relay || self.typed_key(cx).is_some() || self.also_change(cx).is_some() {
                 link.push(
                     self.row(
                         false,
