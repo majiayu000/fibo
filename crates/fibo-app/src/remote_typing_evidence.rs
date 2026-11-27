@@ -21,7 +21,9 @@ pub(super) fn start(
     if std::env::var_os("MOORING_REMOTE_BOARD_EVIDENCE").is_some() {
         return board::start(handle, directory, cx);
     }
-    if std::env::var_os("MOORING_REMOTE_SIDEBAR_EVIDENCE").is_some() {
+    if std::env::var_os("MOORING_REMOTE_SIDEBAR_EVIDENCE").is_some()
+        || std::env::var_os("MOORING_REAL_SELECTION_EVIDENCE").is_some()
+    {
         return sidebar::start(handle, directory, cx);
     }
     if std::env::var_os("MOORING_REMOTE_TYPING_EVIDENCE").is_none() {

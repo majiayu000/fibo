@@ -18,7 +18,7 @@ pub struct FocusState {
 }
 
 impl Workbench {
-    fn visual_session_of(&self, cli_id: &str) -> AgentSession {
+    pub(super) fn visual_session_of(&self, cli_id: &str) -> AgentSession {
         self.workspace
             .agent_sessions
             .iter()

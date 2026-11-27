@@ -5,6 +5,7 @@
 //! `tests/guard-baseline.txt`; any change fails until the baseline is rewritten
 //! (`MOORING_GUARD_UPDATE=1 cargo test -p fibo-core --test guard`), so a new one
 //! is a choice a reviewer sees, and a removed one lowers the bar for good.
+//! The sidebar's selection is the third: which row is lit comes from `in_front` alone.
 use regex::Regex;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -149,6 +150,12 @@ fn count(root: &Path) -> BTreeMap<String, usize> {
         .collect();
     // A shortcut spelled in a string instead of read from the keymap (`keycap`).
     let key = Regex::new(r#"["'`][^"'`\n]*⌘[^"'`\n]*["'`]"#).unwrap();
+    // What is in front, read in the sidebar from the parts `in_front` decides it by: a peek,
+    // the machine drawn here, the focused pane. A row lit by one of them alone stays dark
+    // (or stays lit) when the view went another way: 11-06 48ad1c35, 11-15 52971020, 11-27.
+    let front =
+        Regex::new(r"\bself\.peek\b|\.nav\.focused\b|\bhosts\.showing\b|\bhosted_(focus|view)\(")
+            .unwrap();
     let bare = Regex::new(r#"["'`][^"'`\n]*出错[^了][^"'`\n]*["'`]|["'`]出错["'`]"#).unwrap();
     let mut out = BTreeMap::new();
     for p in paths {
@@ -173,6 +180,12 @@ fn count(root: &Path) -> BTreeMap<String, usize> {
                 if n > 0 {
                     out.insert(format!("field {k}\t{rel}"), n);
                 }
+            }
+        }
+        if rel.starts_with("crates/fibo-app/src/workbench/sidebar") {
+            let n = front.find_iter(&body).count();
+            if n > 0 {
+                out.insert(format!("in-front\t{rel}"), n);
             }
         }
         // The keymap reads chords; ui/words.rs says a label's Mac spelling in this system's words.
@@ -239,7 +252,8 @@ fn no_new_second_owner() {
     assert!(
         changes.is_empty(),
         "raw reads or hand-written state words changed (read the owner in core instead — \
-         status::of, session_title, session_updated, Status::label; a solid-surface is a large \
+         status::of, session_title, session_updated, Status::label; which sidebar row is lit, \
+         in_front; a solid-surface is a large \
          surface that should take T::surface; if a change is right, \
          rewrite the baseline with MOORING_GUARD_UPDATE=1):\n{}",
         changes.join("\n")

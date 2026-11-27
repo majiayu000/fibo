@@ -5,6 +5,8 @@
 //! between them, follows the next-waiting key across machines, then stops the other machine and checks its
 //! row stays, faded. Saves every step.
 use super::*;
+#[path = "remote_sidebar_selection.rs"]
+mod selection;
 
 /// Whether the pixels right of the column are as they were: a label that ticks meanwhile
 /// (a pane's age going from 2分 to 3分 on a slow run) is a few hundred pixels; anything
@@ -24,6 +26,9 @@ pub(super) fn start(
     directory: PathBuf,
     cx: &mut App,
 ) -> bool {
+    if std::env::var_os("MOORING_REAL_SELECTION_EVIDENCE").is_some() {
+        return selection::real(handle, directory, cx);
+    }
     cx.spawn(async move |cx| {
         let executor = cx.background_executor().clone();
         let wait = move |ms| executor.timer(Duration::from_millis(ms));
@@ -199,6 +204,7 @@ pub(super) fn start(
         let peek = handle.update(cx, |v, _, _| v.visual_peek_key()).unwrap();
         assert!(peek.is_some_and(|k| k.ends_with(":far")), "a click on the other machine's row opened nothing");
         handle.update(cx, |v, _, cx| v.visual_close_peek(cx)).unwrap();
+        selection::one_row_lit(handle, cx).await;
         // The other machine's session row offers what this machine's rows do, done by its
         // host: 标记完成 there, then 撤销结局. With peek on, 关闭终端 could not ask first.
         let menu = handle
