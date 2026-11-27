@@ -34,6 +34,12 @@ pub(super) fn start(
                 let mut ready = false;
                 for _ in 0..100 {
                     if $condition { ready = true; break; }
+                    // A detached fixture window may not get display-link callbacks.
+                    // Takeover sends its resize and held input from the native paint.
+                    cx.update_window(handle.into(), |_, w, a| {
+                        w.refresh();
+                        w.draw(a).clear(a);
+                    }).unwrap();
                     wait(50).await;
                 }
                 assert!(ready, "timed out: {}", stringify!($condition));
@@ -81,8 +87,9 @@ pub(super) fn start(
         let other = competitor();
         until!(pane.read_with(cx, |p, _| p.is_read_only()));
         cx.update_window(handle.into(), |_, w, a| {
+            w.refresh();
+            w.draw(a).clear(a);
             let viewport = w.viewport_size();
-            w.refresh(); w.draw(a).clear(a);
             native_click(w, a, point(viewport.width - px(40.), viewport.height - px(theme::Theme::STATUSBAR + theme::Theme::FOOTER / 2. + 2.)), gpui::MouseButton::Left);
         }).unwrap();
         until!(!writable(&other));
@@ -173,7 +180,85 @@ pub(super) fn start(
         assert_eq!(pane.read_with(cx, |p, _| {
             p.visual_cell(0, 1).unwrap().x - p.visual_cell(0, 0).unwrap().x
         }), cell_width, "read-only text was smaller than the saved size");
-        std::fs::write(directory.join("result.txt"), format!("PASS: the 127-column grid kept its saved cell width ({cell_width:?}); a sideways gesture brought RIGHT_EDGE into view and a click on the scrollbar returned to the start. After reducing the height, vertical scrolling reached the top of the grid. The other window remained the writer through scrolling. Typing, the footer and the writer leaving still handed input over.\n")).unwrap();
+        let summary = format!("PASS: the 127-column grid kept its saved cell width ({cell_width:?}); a sideways gesture brought RIGHT_EDGE into view and a click on the scrollbar returned to the start. After reducing the height, vertical scrolling reached the top of the grid. The other window remained the writer through scrolling. Typing, the footer and the writer leaving still handed input over.\n");
+        handle.update(cx, |_, w, _| w.resize(size(px(1200.), px(800.)))).unwrap();
+        let other = competitor();
+        until!(writable(&other));
+        let narrow = (65, 40);
+        other.send(fibo_core::protocol::Request::Resize {
+            cols: narrow.0, rows: narrow.1, cell_width: 8, cell_height: 16,
+        }).unwrap();
+        let line = format!("WRAP-CHECK {}", "0123456789".repeat(7));
+        other.send(fibo_core::protocol::Request::Input {
+            bytes: format!("{line}\r").into_bytes(), lossy: false,
+        }).unwrap();
+        until!(pane.read_with(cx, |p, _| p.is_read_only()));
+        until!(pane.read_with(cx, |p, _| p.visual_grid() == Some(narrow)));
+        until!(pane.read_with(cx, |p, _| p.visual_text().contains("WRAP-CHECK")));
+        shot("11-before-blank-click-native.png", cx);
+        let (from, to, gutter) = pane.read_with(cx, |p, _| {
+            let row = p.visual_text_shown().lines().position(|l| l.starts_with("WRAP-CHECK")).unwrap() as u16;
+            let from = p.visual_cell(row, 0).unwrap();
+            let to = p.visual_cell(row, 10).unwrap();
+            let start = p.visual_cell(row, narrow.0).unwrap();
+            let right = p.visual_bounds().unwrap().right();
+            assert!(right - start.x > px(20.), "fixture must leave a right gutter");
+            (from, to, point(start.x + (right - start.x) / 2., start.y))
+        });
+        let clipboard = cx.update(|app| app.read_from_clipboard());
+        let selected = cx.update_window(handle.into(), |_, w, a| {
+            use gpui::InputEvent;
+            let drag = |w: &mut gpui::Window, a: &mut App, from, path: &[gpui::Point<gpui::Pixels>]| {
+                w.dispatch_event(gpui::MouseDownEvent {
+                    position: from,
+                    button: gpui::MouseButton::Left,
+                    click_count: 1,
+                    ..Default::default()
+                }.to_platform_input(), a);
+                for &position in path {
+                    w.dispatch_event(gpui::MouseMoveEvent {
+                        position,
+                        pressed_button: Some(gpui::MouseButton::Left),
+                        modifiers: Default::default(),
+                    }.to_platform_input(), a);
+                }
+                w.dispatch_event(gpui::MouseUpEvent {
+                    position: *path.last().unwrap(),
+                    button: gpui::MouseButton::Left,
+                    click_count: 1,
+                    ..Default::default()
+                }.to_platform_input(), a);
+            };
+            drag(w, a, from, &[to]);
+            w.refresh();
+            w.draw(a).clear(a);
+            let selected = pane.read(a).visual_selection().1;
+            drag(w, a, gutter, &[to, gutter]);
+            selected
+        }).unwrap();
+        if let Some(clipboard) = clipboard {
+            cx.update(|app| app.write_to_clipboard(clipboard));
+        }
+        assert!(selected.as_deref().is_some_and(|s| s.contains("RAP-CHECK")), "drag selected {selected:?}");
+        wait(150).await;
+        assert!(writable(&other), "a drag took the input");
+        cx.update_window(handle.into(), |_, w, a| {
+            native_click(w, a, from, gpui::MouseButton::Left);
+        }).unwrap();
+        wait(150).await;
+        assert!(writable(&other), "clicking inside the grid took the input");
+        cx.update_window(handle.into(), |_, w, a| {
+            native_click(w, a, gutter, gpui::MouseButton::Left);
+        }).unwrap();
+        wait(1000).await;
+        shot("12-after-blank-click-native.png", cx);
+        until!(!writable(&other));
+        until!(pane.read_with(cx, |p, _| p.visual_grid().is_some_and(|(cols, _)| cols > narrow.0)));
+        shot("12-after-blank-click-native.png", cx);
+        assert!(pane.read_with(cx, |p, _| p.visual_text_shown().contains(&line)), "the line did not reflow");
+        let wide = pane.read_with(cx, |p, _| p.visual_grid().unwrap());
+        assert!(pane.read_with(cx, |p, _| p.visual_error()).is_none());
+        std::fs::write(directory.join("result.txt"), format!("{summary}In-grid clicks and drags kept it read-only. A click in the blank gutter took input and reflowed {narrow:?} to {wide:?}.\n")).unwrap();
         cx.update(|cx| cx.quit());
     }).detach();
     true

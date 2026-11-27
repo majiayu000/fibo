@@ -71,6 +71,11 @@ impl Pane {
     pub fn visual_bounds(&self) -> Option<Bounds<Pixels>> {
         self.bounds
     }
+    pub fn visual_grid(&self) -> Option<(u16, u16)> {
+        let state = self.connection.state.lock().ok()?;
+        let terminal = state.vt.as_ref()?.terminal();
+        Some((terminal.cols().ok()?, terminal.rows().ok()?))
+    }
     pub fn visual_viewport(&self) -> (usize, usize, usize) {
         self.viewport
     }

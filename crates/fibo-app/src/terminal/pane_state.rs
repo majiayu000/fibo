@@ -12,6 +12,8 @@ pub(super) struct Selection {
     pub(super) pressed_button: Option<gpui::MouseButton>,
     /// The scrollbar thumb is being dragged.
     pub(super) dragging_scrollbar: bool,
+    /// A press in the blank area beside a read-only grid, pending release as a click.
+    pub(super) gutter_press: Option<Point<Pixels>>,
 }
 impl Selection {
     pub(super) fn new() -> Self {
@@ -19,6 +21,7 @@ impl Selection {
             selecting: crate::terminal::selection::Selecting::new().ok(),
             pressed_button: None,
             dragging_scrollbar: false,
+            gutter_press: None,
         }
     }
 }

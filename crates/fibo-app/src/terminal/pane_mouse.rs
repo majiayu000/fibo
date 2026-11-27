@@ -9,6 +9,8 @@ use fibo_core::terminal::{
 };
 use gpui::{Axis, Context, Pixels, Point, Window, px};
 
+const CLICK_SLOP: f64 = 2.;
+
 impl Pane {
     /// The program reads the mouse itself, so a plain drag goes to it, not to selection.
     pub fn takes_mouse(&self) -> bool {
@@ -105,6 +107,7 @@ impl Pane {
     ) {
         window.focus(&self.focus, cx);
         self.take_size(cx);
+        self.select.gutter_press = None;
         if event.button == gpui::MouseButton::Left
             && let Some(view) = self.bounds
             && let Some(axis) = self.pan.bar_at(view, event.position)
@@ -140,6 +143,15 @@ impl Pane {
             && let Some(target) = self.path_target()
         {
             self.open_target(&target, event.modifiers.alt, cx);
+            cx.stop_propagation();
+            return;
+        }
+        if event.button == gpui::MouseButton::Left
+            && event.click_count == 1
+            && !event.modifiers.modified()
+            && self.in_takeover_gutter(event.position)
+        {
+            self.select.gutter_press = Some(event.position);
             cx.stop_propagation();
             return;
         }
@@ -189,6 +201,18 @@ impl Pane {
         cx: &mut Context<Self>,
     ) {
         if event.button == gpui::MouseButton::Left && self.pan.dragging.take().is_some() {
+            cx.stop_propagation();
+            return;
+        }
+        if event.button == gpui::MouseButton::Left
+            && let Some(start) = self.select.gutter_press.take()
+        {
+            if (event.position - start).magnitude() <= CLICK_SLOP
+                && !event.modifiers.modified()
+                && self.in_takeover_gutter(event.position)
+            {
+                self.take_input(Vec::new(), cx);
+            }
             cx.stop_propagation();
             return;
         }
@@ -282,6 +306,13 @@ impl Pane {
                 cx.notify();
             }
             return;
+        }
+        if self
+            .select
+            .gutter_press
+            .is_some_and(|start| (event.position - start).magnitude() > CLICK_SLOP)
+        {
+            self.select.gutter_press = None;
         }
         if self.select.dragging_scrollbar {
             if event.pressed_button == Some(gpui::MouseButton::Left) {
@@ -477,6 +508,26 @@ impl Pane {
             && self
                 .bounds
                 .is_some_and(|b| b.contains(&point) && point.x >= b.right() - px(SCROLLBAR_HIT))
+    }
+    fn in_takeover_gutter(&self, point: Point<Pixels>) -> bool {
+        let (Some(bounds), Some(metrics)) = (self.bounds, self.metrics) else {
+            return false;
+        };
+        if !bounds.contains(&point)
+            || self.pan.bar_at(bounds, point).is_some()
+            || self.on_scrollbar(point)
+            || !self.is_read_only()
+        {
+            return false;
+        }
+        let state = self.connection.state.lock().unwrap();
+        let Some(cols) = state.vt.as_ref().and_then(|vt| vt.terminal().cols().ok()) else {
+            return false;
+        };
+        let grid_right =
+            self.grid_bounds().unwrap_or(bounds).left() + metrics.width * f32::from(cols);
+        // A fraction of a cell at the edge is ordinary layout rounding.
+        point.x >= grid_right && bounds.right() - grid_right >= metrics.width
     }
     /// Centers the view on the history row under the pointer's height in the pane.
     fn scroll_to_pointer(&mut self, point: Point<Pixels>, cx: &mut Context<Self>) {
