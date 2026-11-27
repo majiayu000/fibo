@@ -30,7 +30,7 @@ struct Info {
 }
 /// What [`remote_socket`] and [`relay_about`] answer: that host's socket there (empty
 /// through the relay), `$HOME`, `$SHELL`, its id and name.
-type Answer = (String, String, String, (String, String));
+type Answer = (String, String, String, (String, String), Option<u64>);
 
 struct Forward {
     spec: Spec,
@@ -43,6 +43,7 @@ struct Forward {
     info: Mutex<Option<Info>>,
     /// Its id as each way said it, by [`slot`]: both must be the same machine.
     ids: Mutex<[Option<String>; 2]>,
+    preferred_relay: Mutex<Option<u64>>,
     /// Where it is forwarded to here: `<root>/workbench.sock`.
     local: PathBuf,
     /// Each way's `ssh -L` or `fibo remote dial`, by [`slot`].
@@ -60,6 +61,7 @@ impl Forward {
             remote: Mutex::new(String::new()),
             info: Mutex::new(None),
             ids: Mutex::new([None, None]),
+            preferred_relay: Mutex::new(None),
             local,
             children: [Mutex::new(None), Mutex::new(None)],
             stopped: AtomicBool::new(false),
@@ -78,7 +80,11 @@ impl Forward {
         }
     }
     /// Keeps what `via` answered.
-    fn learn(&self, via: Via, (remote, home, shell, machine): Answer) -> io::Result<()> {
+    fn learn(
+        &self,
+        via: Via,
+        (remote, home, shell, machine, preferred_relay): Answer,
+    ) -> io::Result<()> {
         if via == Via::Relay
             && machine.0.is_empty()
             && let Some(ways) = &self.ways
@@ -106,6 +112,8 @@ impl Forward {
         }
         if via == Via::Ssh {
             *self.remote.lock().unwrap() = remote;
+        } else {
+            *self.preferred_relay.lock().unwrap() = preferred_relay;
         }
         let mut info = self.info();
         if info.is_none() || via == Via::Ssh {
@@ -554,7 +562,13 @@ fn remote_socket(spec: &Spec) -> io::Result<Answer> {
             why
         )));
     }
-    Ok((path.to_owned(), home.to_owned(), shell.to_owned(), machine))
+    Ok((
+        path.to_owned(),
+        home.to_owned(),
+        shell.to_owned(),
+        machine,
+        None,
+    ))
 }
 
 /// What `fibo remote dial --about` says of a machine paired through the relay: as
@@ -572,9 +586,16 @@ fn relay_about(spec: &Spec) -> io::Result<Answer> {
         shell: String,
         machine: String,
         name: String,
+        preferred_relay: Option<u64>,
     }
     match serde_json::from_slice::<About>(&out.stdout) {
-        Ok(a) if out.status.success() => Ok((String::new(), a.home, a.shell, (a.machine, a.name))),
+        Ok(a) if out.status.success() => Ok((
+            String::new(),
+            a.home,
+            a.shell,
+            (a.machine, a.name),
+            a.preferred_relay,
+        )),
         _ => {
             let why = String::from_utf8_lossy(&out.stderr);
             let why = why.trim().trim_start_matches("fibo: ");
@@ -625,6 +646,9 @@ fn relay_argv(forward: &Forward, program: &Path) -> io::Result<Vec<String>> {
     ];
     if !expected.is_empty() {
         argv.extend(["--expect-machine-id".into(), expected]);
+    }
+    if let Some(preferred) = *forward.preferred_relay.lock().unwrap() {
+        argv.extend(["--prefer-relay".into(), preferred.to_string()]);
     }
     Ok(argv)
 }

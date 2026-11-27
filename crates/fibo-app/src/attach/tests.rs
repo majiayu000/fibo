@@ -41,6 +41,7 @@ fn answer(id: &str) -> Answer {
         format!("/{id}"),
         "/bin/sh".into(),
         (id.into(), id.into()),
+        None,
     )
 }
 
@@ -143,10 +144,14 @@ fn the_relay_sidecar_keeps_the_machine_id_discovered_for_its_route() {
     let program = Path::new("fibo");
     assert!(relay_argv(&forward, program).is_err());
     forward.learn(Via::Ssh, answer("machine-a")).unwrap();
-    forward.learn(Via::Relay, answer("machine-a")).unwrap();
+    let (path, home, shell, machine, _) = answer("machine-a");
+    forward
+        .learn(Via::Relay, (path, home, shell, machine, Some(27)))
+        .unwrap();
     for _ in 0..2 {
         let args = relay_argv(&forward, program).unwrap();
         assert!(args.windows(2).any(|kv| kv == ["--machine", "alias"]));
+        assert!(args.windows(2).any(|kv| kv == ["--prefer-relay", "27"]));
         assert!(
             args.windows(2)
                 .any(|kv| kv == ["--expect-machine-id", "machine-a"])

@@ -154,6 +154,7 @@ fibo todo note <文字|-> [--task <待办>]      写进展：做了什么、剩�
             "machine",
             "listen",
             "expect-machine-id",
+            "prefer-relay",
         ],
         switches: &[
             "stdio", "pair", "new-code", "devices", "enable", "disable", "status", "report", "json",
