@@ -131,7 +131,11 @@ impl Workbench {
                             .unwrap_or_default(),
                     )
                 }
-                Hit::Session { id, .. } | Hit::Message(MessageMatch { session: id, .. }) => {
+                Hit::Session { id, .. }
+                | Hit::Message(MessageMatch {
+                    position: MessagePosition { session: id, .. },
+                    ..
+                }) => {
                     let Some(s) = self.workspace.agent_sessions.iter().find(|s| &s.id == id) else {
                         return div().into_any_element();
                     };
@@ -152,7 +156,7 @@ impl Workbench {
                                 self.session_title(s)
                             ),
                             group.label().into(),
-                            ago(hit.at, now()),
+                            ago(hit.position.at.max(0) as u64, now()),
                         ),
                         _ => {
                             let place = (self.workspace.session_space(s))

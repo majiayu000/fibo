@@ -199,26 +199,22 @@ impl Workbench {
                 sections.push(self.section(title, hits.len().to_string(), hits));
             }
         }
-        if let Some((_, messages, more)) = self
+        if let Some(page) = self
             .search
             .message_result
             .as_ref()
-            .filter(|(q, _, _)| q == query)
+            .filter(|page| page.query == query)
         {
             let ids: HashSet<&str> = visible.iter().map(|s| s.id.as_str()).collect();
-            let hits: Vec<_> = messages
+            let hits: Vec<_> = page
+                .hits
                 .iter()
-                .filter(|hit| ids.contains(hit.session.as_str()))
+                .filter(|hit| ids.contains(hit.position.session.as_str()))
                 .cloned()
                 .map(Hit::Message)
                 .collect();
             if !hits.is_empty() {
-                let note = if *more {
-                    t!("显示最近 {n} 条，请缩小搜索范围", n = hits.len())
-                } else {
-                    hits.len().to_string()
-                };
-                sections.push(self.section(t!("聊天正文"), note, hits));
+                sections.push(self.section(t!("聊天正文"), hits.len().to_string(), hits));
             }
         }
         sections
@@ -228,14 +224,47 @@ impl Workbench {
         self.search.message_search = None;
         self.search.message_result = None;
         self.search.message_failed = false;
+        self.search.opened_message = None;
         if query.is_empty() || !self.search.is_open() {
             return;
         }
-        let query = query.to_owned();
+        self.request_message_page(query.to_owned(), Vec::new(), true, cx);
+    }
+
+    pub(super) fn turn_message_page(&mut self, older: bool, cx: &mut Context<Self>) {
+        if self.search.message_search.is_some() {
+            return;
+        }
+        let Some(page) = self.search.message_result.as_ref() else {
+            return;
+        };
+        let mut trail = page.trail.clone();
+        if older {
+            let Some(next) = &page.next else {
+                return;
+            };
+            trail.push(next.clone());
+        } else if trail.pop().is_none() {
+            return;
+        }
+        self.request_message_page(page.query.clone(), trail, false, cx);
+        self.pane_changed(cx);
+    }
+
+    fn request_message_page(
+        &mut self,
+        query: String,
+        trail: Vec<MessagePosition>,
+        typing: bool,
+        cx: &mut Context<Self>,
+    ) {
+        self.search.message_failed = false;
         self.search.message_search = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor()
-                .timer(Duration::from_millis(160))
-                .await;
+            if typing {
+                cx.background_executor()
+                    .timer(Duration::from_millis(160))
+                    .await;
+            }
             let asked = this.update(cx, |this, _| {
                 let sessions = this
                     .searchable()
@@ -245,6 +274,7 @@ impl Workbench {
                 this.store.send(Request::SearchMessages {
                     query: query.clone(),
                     sessions,
+                    before: trail.last().cloned(),
                 })
             });
             let Ok(asked) = asked else {
@@ -256,8 +286,23 @@ impl Workbench {
                     return;
                 }
                 match reply {
-                    Ok(Reply::MessageMatches { messages, more }) => {
-                        this.search.message_result = Some((query, messages, more));
+                    Ok(Reply::MessageMatches { messages, next }) => {
+                        this.search.message_result = Some(MessagePage {
+                            query,
+                            hits: messages,
+                            trail,
+                            next,
+                        });
+                        if !typing {
+                            this.search.shown.remove(t!("聊天正文"));
+                            this.search.index = this
+                                .search_sections(&this.search_query(cx))
+                                .iter()
+                                .flat_map(|s| &s.hits)
+                                .position(|hit| matches!(hit, Hit::Message(_)))
+                                .unwrap_or(0);
+                            this.search.scroll.scroll_to_item(this.search.index);
+                        }
                     }
                     _ => this.search.message_failed = true,
                 }
@@ -288,9 +333,15 @@ impl Workbench {
     /// ↑ ↓ move through every row; Tab and ⇧Tab jump between groups.
     pub(super) fn search_key(&mut self, event: &gpui::KeyDownEvent, cx: &mut Context<Self>) {
         let k = &event.keystroke;
-        if !matches!(k.key.as_str(), "up" | "down" | "tab")
-            || self.search.field.read(cx).composing()
-        {
+        if self.search.opened_message.is_some() || self.search.field.read(cx).composing() {
+            return;
+        }
+        if matches!(k.key.as_str(), "pageup" | "pagedown") {
+            self.turn_message_page(k.key == "pagedown", cx);
+            cx.stop_propagation();
+            return;
+        }
+        if !matches!(k.key.as_str(), "up" | "down" | "tab") {
             return;
         }
         // Recency and the available actions can change between painting and this key.
@@ -317,7 +368,9 @@ impl Workbench {
             cx.notify();
             return;
         }
-        self.search.hide();
+        if !matches!(&hit, Hit::Message(_)) {
+            self.search.hide();
+        }
         match hit {
             Hit::NewSession => {
                 self.nav.overview = false;
@@ -340,7 +393,11 @@ impl Workbench {
                     self.run_action(&pane, action, cx);
                 }
             }
-            Hit::Session { id, .. } | Hit::Message(MessageMatch { session: id, .. }) => {
+            Hit::Message(hit) => {
+                self.open_search_message(hit, cx);
+                return;
+            }
+            Hit::Session { id, .. } => {
                 if let Some(s) = self.workspace.agent_sessions.iter().find(|s| s.id == id) {
                     let s = s.clone();
                     let space = self.workspace.session_space(&s).map(str::to_owned);
@@ -366,6 +423,9 @@ impl Workbench {
     /// ↵ opens the selected row; with nothing found it starts a session, as the empty
     /// result's button says.
     pub(super) fn open_selected_hit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.search.opened_message.is_some() {
+            return;
+        }
         match self.selected_hit(cx) {
             Some(hit) => self.open_hit(hit, window, cx),
             None if self.search.message_search.is_none()

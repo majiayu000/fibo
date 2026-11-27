@@ -163,6 +163,12 @@ pub enum Request {
     SearchMessages {
         query: String,
         sessions: Vec<String>,
+        before: Option<MessagePosition>,
+    },
+    /// Open the exact saved message selected in the desktop search results.
+    ReadSearchMessage {
+        position: MessagePosition,
+        generation: String,
     },
     /// A phone's chat view: one conversation's user and Agent messages from the index,
     /// oldest first. `after` gives those newer than a `seq`; otherwise the newest `limit`,

@@ -3,9 +3,13 @@
 //! (Keepline repo, specs/terminal-workbench/design/palette-here.html).
 use super::overview::{quiet, solid};
 use super::*;
-use fibo_core::{protocol::MessageMatch, sidebar as presets};
+use fibo_core::{
+    protocol::{MessageMatch, MessagePosition},
+    sidebar as presets,
+};
 
 mod commands;
+mod message;
 mod parts;
 mod preview;
 mod rows;
@@ -54,10 +58,18 @@ pub(super) struct Section {
     pub total: usize,
     pub hits: Vec<Hit>,
 }
+/// The current page and the bounds used to reach it. Older pages are fetched on demand.
+struct MessagePage {
+    query: String,
+    hits: Vec<MessageMatch>,
+    trail: Vec<MessagePosition>,
+    next: Option<MessagePosition>,
+}
 /// The palette's own state: whether it shows, its query field and the selected row.
 pub(super) struct Search {
     open: bool,
     field: Entity<Field>,
+    observed_query: String,
     /// The selected row in the palette, counted across all groups.
     index: usize,
     scroll: gpui::ScrollHandle,
@@ -66,8 +78,9 @@ pub(super) struct Search {
     /// Rows a group shows past its first few, by group title, after 「再显示」.
     shown: HashMap<&'static str, usize>,
     message_search: Option<gpui::Task<()>>,
-    message_result: Option<(String, Vec<MessageMatch>, bool)>,
+    message_result: Option<MessagePage>,
     message_failed: bool,
+    opened_message: Option<message::OpenedMessage>,
 }
 impl Search {
     pub(super) fn new(window: &mut Window, cx: &mut Context<Workbench>) -> Self {
@@ -76,15 +89,14 @@ impl Search {
                 .compact()
                 .bare()
         });
-        let mut last_query = String::new();
-        cx.observe(&search, move |this, field, cx| {
+        cx.observe(&search, |this, field, cx| {
             let query = field.read(cx).text.clone();
-            if query != last_query {
-                last_query = query;
-                this.search_messages(last_query.trim(), cx);
+            if query != this.search.observed_query {
+                this.search.observed_query = query.clone();
+                this.search_messages(query.trim(), cx);
                 this.search.shown.clear();
                 // A status pick narrows the recent list; typing searches everything.
-                this.search.index = if last_query.trim().is_empty() {
+                this.search.index = if query.trim().is_empty() {
                     this.first_recent_session_row()
                 } else {
                     this.search.group = None;
@@ -99,13 +111,18 @@ impl Search {
         .detach();
         cx.subscribe_in(&search, window, |this, _, event, window, cx| match event {
             crate::ui::field::FieldEvent::Submit => this.open_selected_hit(window, cx),
-            crate::ui::field::FieldEvent::Cancel => this.close_search(cx),
+            crate::ui::field::FieldEvent::Cancel => {
+                if !this.back_to_search_results(cx) {
+                    this.close_search(cx);
+                }
+            }
             crate::ui::field::FieldEvent::ClickOut => {}
         })
         .detach();
         Self {
             open: false,
             field: search,
+            observed_query: String::new(),
             index: 0,
             scroll: gpui::ScrollHandle::new(),
             group: None,
@@ -113,6 +130,7 @@ impl Search {
             message_search: None,
             message_result: None,
             message_failed: false,
+            opened_message: None,
         }
     }
     pub(super) fn is_open(&self) -> bool {
@@ -122,6 +140,7 @@ impl Search {
     pub(super) fn hide(&mut self) {
         self.open = false;
         self.message_search = None;
+        self.opened_message = None;
     }
     #[cfg(feature = "visual-test")]
     pub(super) fn field(&self) -> &Entity<Field> {
@@ -149,7 +168,12 @@ const COUNTED: [Status; 4] = [
 impl Workbench {
     pub(super) fn search_palette(&self, cx: &Context<Self>) -> gpui::AnyElement {
         let query = self.search_query(cx);
-        let sections = self.search_sections(&query);
+        let reading = self.search.opened_message.is_some();
+        let sections = if reading {
+            Vec::new()
+        } else {
+            self.search_sections(&query)
+        };
         let total: usize = sections.iter().map(|s| s.hits.len()).sum();
         let index = self.search.index.min(total.saturating_sub(1));
         let selected = sections.iter().flat_map(|s| &s.hits).nth(index).cloned();
@@ -177,8 +201,16 @@ impl Workbench {
             }
         }
         let preview = match &selected {
-            Some(Hit::Session { id, quote }) => self.hit_preview(id, quote.as_deref(), &query, cx),
-            Some(Hit::Message(hit)) => self.hit_preview(&hit.session, Some(&hit.text), &query, cx),
+            Some(hit @ Hit::Session { id, quote }) => {
+                self.hit_preview(id, quote.as_deref(), &query, hit.clone(), cx)
+            }
+            Some(open @ Hit::Message(hit)) => self.hit_preview(
+                &hit.position.session,
+                Some(&hit.text),
+                &query,
+                open.clone(),
+                cx,
+            ),
             _ => None,
         };
         let count = |title: &str| {
@@ -187,7 +219,7 @@ impl Workbench {
                 .find(|s| s.title == Some(title))
                 .map_or(0, |s| s.total)
         };
-        let found = if query.is_empty() {
+        let found = if query.is_empty() || reading {
             None
         } else if self.search.message_search.is_some() {
             Some(t!("正在搜索聊天正文…").to_owned())
@@ -223,9 +255,13 @@ impl Workbench {
                 d.child(label(found).font_features(T::tabular()))
             })
             .child(kbd("esc"));
-        let nothing = !query.is_empty() && total == 0;
-        let body = if nothing && self.search.message_search.is_none() && !self.search.message_failed
-        {
+        let nothing = !query.is_empty()
+            && total == 0
+            && self.search.message_search.is_none()
+            && !self.search.message_failed;
+        let body = if let Some(message) = self.search.opened_message.as_ref() {
+            self.search_message_body(message, cx).into_any_element()
+        } else if nothing {
             self.no_results(&query, cx).into_any_element()
         } else {
             div()
@@ -257,7 +293,9 @@ impl Workbench {
             .text_color(T::color(T::muted()))
             .font_features(T::tabular())
             .map(|d| {
-                if nothing {
+                if reading {
+                    d.child(keys("esc", t!("返回搜索结果")))
+                } else if nothing {
                     d.child(keys("⌫", t!("改关键词")))
                         .child(keys("↵", t!("新建会话")))
                 } else {
@@ -275,6 +313,11 @@ impl Workbench {
                 }
             })
             .child(div().flex_1())
+            .when(!reading, |d| {
+                d.when_some(self.message_page_buttons(&query, cx), |d, buttons| {
+                    d.child(buttons)
+                })
+            })
             .child(if query.is_empty() {
                 let sessions = self.searchable().len();
                 t!("只搜索本地已索引的内容 · {sessions} 个会话", sessions)
@@ -466,7 +509,11 @@ impl Workbench {
             .map(|s| s.name.clone())
     }
     pub(super) fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.search.hide();
         self.search.open = true;
+        self.search.observed_query.clear();
+        self.search.message_result = None;
+        self.search.message_failed = false;
         self.search.group = None;
         self.search.shown.clear();
         self.search.index = self.first_recent_session_row();

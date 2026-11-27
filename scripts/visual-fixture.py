@@ -176,6 +176,13 @@ if sys.argv[1] == 'prepare':
         if n == 4 and os.environ.get('MOORING_FIXTURE_BOARD'):
             # The live running turn has changed a file: 在跑's card and row say so (#516).
             records += call(cid, 1, None, patch('crates/fibo-app/src/workbench/board/card.rs'), stamp - 300)
+        if n == 1 and os.environ.get('MOORING_SEARCH_QUERY') == '#636':
+            # One original reply before 200 newer matches. The original's ending is
+            # outside the excerpt, so opening the result has to read the saved record.
+            original = '原始评审 #636\n' + '请核对画布入口和迁移。\n' * 32 + '原消息最后一行：保留写入方。'
+            records.append((stamp - 250, 'event_msg', {'type':'agent_message', 'message':original}))
+            for i in range(200):
+                records.append((stamp - 249, 'event_msg', {'type':'user_message', 'message': f'后续消息 #636 第 {i + 1} 条'}))
         group = n % 8
         if group == 0: records.append((stamp, 'event_msg', {'type': 'request_user_input', 'message': '标签名在退出后要不要保留？我倾向保留，等你确认。', 'questions': [{'question': '标签名在退出后要不要保留？', 'options': [{'label': '保留，下次打开还叫这个名字'}, {'label': '不保留，按目录重新起名'}]}]}))
         elif group == 1: records.append((stamp, 'event_msg', {'type': 'task_complete', 'last_agent_message': '已找到 tab_name 的来源。'}))
