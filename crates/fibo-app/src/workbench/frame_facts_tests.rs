@@ -252,8 +252,9 @@ fn facts_answer_as_walking_every_session_does() {
     shown_as(&mut w, "failed", Turn::Error);
     assert_same_as_walking(&w, &resumed, 1000);
     let counts = FrameFacts::work_out(&w, inputs(&w, &resumed, 1000));
-    assert_eq!(counts.space_counts("nested").errors, 1);
-    assert_eq!(counts.space_counts("nested").group(), Status::Error);
+    // Counted where its tab is, not in the project space its folder sits in.
+    assert_eq!(counts.space_counts("space").errors, 1);
+    assert_eq!(counts.space_counts("nested").errors, 0);
 
     w.lost_agents
         .insert("t1".into(), Some("record-newer".into()));

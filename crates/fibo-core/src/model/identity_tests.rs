@@ -65,3 +65,44 @@ fn one_cli_identity_cannot_be_current_in_two_terminals() {
     assert_eq!(w.agent_sessions.len(), 1);
     assert_eq!(w.agent_sessions[0].terminal.as_deref(), Some("two"));
 }
+#[test]
+fn a_session_is_listed_in_the_space_whose_tab_holds_it() {
+    // 「mooring 空间下只有 2 个 tab？但是左侧就有 3 个 session」: a split in 工作空间
+    // that cd'ed into mooring was listed under mooring, whose tabs did not hold it.
+    let mut w = Workspace::default();
+    for (id, cwd) in [("home", "/u"), ("mooring", "/u/code/mooring")] {
+        w.spaces.push(Space {
+            id: id.into(),
+            name: id.into(),
+            cwd: cwd.into(),
+        });
+    }
+    w.terminals.push(Terminal {
+        id: "split".into(),
+        space: "home".into(),
+        argv: vec![],
+        cwd: "/u/code/mooring".into(),
+        pid: Some(1),
+        state: ProcessState::Running,
+        exit_code: None,
+        error: None,
+    });
+    let mut session = AgentSession {
+        id: "a".into(),
+        runtime: Agent::Claude,
+        cli_session_id: "cli".into(),
+        terminal: Some("split".into()),
+        current: true,
+        task: None,
+        outcome: Outcome::Open,
+        updated: 1,
+        cwd: "/u/code/mooring".into(),
+        transcript: "/log".into(),
+        binding: None,
+        name: String::new(),
+    };
+    assert_eq!(w.session_space(&session), Some("home"));
+    // One Fibo did not open still goes by its folder.
+    session.terminal = None;
+    assert_eq!(w.session_space(&session), Some("mooring"));
+}
