@@ -36,7 +36,12 @@ pub(super) fn start(
                     .update(cx, |view, window, cx| {
                         window.resize(size(px(width), px(theme::Theme::WINDOW_HEIGHT)));
                         window.bounds_changed(cx);
-                        view.visual_page(page, window, cx);
+                        let setup = if page.starts_with("SearchHistory") {
+                            "Search"
+                        } else {
+                            page
+                        };
+                        view.visual_page(setup, window, cx);
                     })
                     .unwrap();
                 if name == "HereTyped" {
@@ -173,6 +178,64 @@ pub(super) fn start(
                     shot("3-landed", cx);
                     eprintln!("{name}: dragged from {from} to done");
                 }
+                if matches!(name, "SearchHistoryOlder" | "SearchHistoryMessage") {
+                    use gpui::InputEvent;
+                    let press = |key, cx: &mut gpui::AsyncApp| {
+                        pane_drag_evidence::send(
+                            handle,
+                            cx,
+                            gpui::KeyDownEvent {
+                                keystroke: gpui::Keystroke::parse(key).unwrap(),
+                                is_held: false,
+                                prefer_character_input: false,
+                            }
+                            .to_platform_input(),
+                        );
+                    };
+                    let wait = cx.background_executor().clone();
+                    let last_page = if name == "SearchHistoryMessage" { 3 } else { 2 };
+                    for page in 1..=last_page {
+                        let expected = Some((page, if page == 3 { 1 } else { 100 }));
+                        for _ in 0..60 {
+                            if handle
+                                .update(cx, |v, _, _| v.visual_message_page())
+                                .unwrap()
+                                == expected
+                            {
+                                break;
+                            }
+                            wait.timer(Duration::from_millis(100)).await;
+                        }
+                        assert_eq!(
+                            handle
+                                .update(cx, |v, _, _| v.visual_message_page())
+                                .unwrap(),
+                            expected
+                        );
+                        if page < last_page {
+                            press("pagedown", cx);
+                        }
+                    }
+                    if last_page == 3 {
+                        press("enter", cx);
+                        let mut message = None;
+                        for _ in 0..60 {
+                            message = handle
+                                .update(cx, |v, _, _| v.visual_opened_search_message())
+                                .unwrap();
+                            if message.is_some() {
+                                break;
+                            }
+                            wait.timer(Duration::from_millis(100)).await;
+                        }
+                        let message = message.expect("opens the original selected message");
+                        assert!(message.starts_with("原始评审 #636"));
+                        assert!(message.ends_with("原消息最后一行：保留写入方。"));
+                    }
+                    eprintln!(
+                        "{name}: selected history page {last_page} and checked the expected results"
+                    );
+                }
                 // Starting an Agent and placing the task text takes a few quiet checks.
                 let settle = match name {
                     "TodoStart" => 4,
@@ -203,6 +266,56 @@ pub(super) fn start(
                     );
                 })
                 .unwrap();
+                if name == "SearchHistoryMessage" {
+                    use gpui::InputEvent;
+                    for key in ["escape", "pageup"] {
+                        pane_drag_evidence::send(
+                            handle,
+                            cx,
+                            gpui::KeyDownEvent {
+                                keystroke: gpui::Keystroke::parse(key).unwrap(),
+                                is_held: false,
+                                prefer_character_input: false,
+                            }
+                            .to_platform_input(),
+                        );
+                        if key == "escape" {
+                            assert_eq!(
+                                handle
+                                    .update(cx, |v, _, _| v.visual_message_page())
+                                    .unwrap(),
+                                Some((3, 1))
+                            );
+                            assert!(
+                                handle
+                                    .update(cx, |v, _, _| v.visual_opened_search_message())
+                                    .unwrap()
+                                    .is_none()
+                            );
+                        }
+                    }
+                    for _ in 0..60 {
+                        if handle
+                            .update(cx, |v, _, _| v.visual_message_page())
+                            .unwrap()
+                            == Some((2, 100))
+                        {
+                            break;
+                        }
+                        cx.background_executor()
+                            .timer(Duration::from_millis(100))
+                            .await;
+                    }
+                    assert_eq!(
+                        handle
+                            .update(cx, |v, _, _| v.visual_message_page())
+                            .unwrap(),
+                        Some((2, 100))
+                    );
+                    eprintln!(
+                        "SearchHistoryMessage: Escape preserved page 3, PageUp returned to page 2"
+                    );
+                }
             }
             cx.update(|cx| cx.quit());
         })

@@ -7,6 +7,7 @@ impl Workbench {
         id: &str,
         quote: Option<&str>,
         query: &str,
+        hit: Hit,
         cx: &Context<Self>,
     ) -> Option<gpui::Stateful<gpui::Div>> {
         use fibo_core::content::short;
@@ -75,7 +76,11 @@ impl Workbench {
                 div().child(c.here().stopped).into_any_element(),
             ));
         }
-        let session_id = s.id.clone();
+        let open_label = if matches!(hit, Hit::Message(_)) {
+            t!("打开原消息")
+        } else {
+            t!("打开")
+        };
         let command = self.workspace.resume_command(s);
         Some(
             div()
@@ -134,19 +139,12 @@ impl Workbench {
                         .gap(px(T::S6))
                         .child(
                             solid(button("search-open", ""))
-                                .aria_label(t!("打开"))
+                                .aria_label(open_label)
                                 .gap(px(T::S6))
-                                .child(t!("打开"))
+                                .child(open_label)
                                 .child(kbd("↵").text_color(T::color(T::on_accent())))
                                 .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.open_hit(
-                                        Hit::Session {
-                                            id: session_id.clone(),
-                                            quote: None,
-                                        },
-                                        window,
-                                        cx,
-                                    );
+                                    this.open_hit(hit.clone(), window, cx);
                                 })),
                         )
                         .child(

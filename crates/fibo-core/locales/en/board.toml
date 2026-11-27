@@ -130,11 +130,24 @@
 "不用管，跑完会挪到「{state}」" = "Nothing to do; moves to “{state}” when finished"
 
 [palette]
-"搜索会话、待办或你说过的话" = "Search sessions, to-dos or what you said"
+"打开会话" = "Open conversation"
+"打开原消息" = "Open original message"
+"返回搜索结果" = "Back to search results"
+"复制原消息" = "Copy original message"
+"正在读取原消息…" = "Loading original message…"
+"无法读取这条消息，请重新搜索" = "Unable to load this message. Search again."
+"第 {page} 页" = "Page {page}"
+"更新的消息" = "Newer messages"
+"更早的消息" = "Older messages"
+"搜索会话、聊天正文或待办" = "Search sessions, messages or to-dos"
+"正在搜索聊天正文…" = "Searching messages…"
+"聊天正文搜索失败" = "Message search failed"
+"会话 {sessions} · 消息 {messages} · 待办 {todos}" = "Sessions {sessions} · Messages {messages} · To-dos {todos}"
+"聊天正文" = "Messages"
+"已保存的聊天正文、会话信息和待办里都没有找到。" = "No match in saved messages, session details or to-dos."
+"Agent 回复" = "Agent reply"
 "0 项" = "0 results"
-"会话 {sessions} · 原话 {quotes} · 待办 {todos}" = "Sessions {sessions} · Quotes {quotes} · To-dos {todos}"
 "会话" = "Sessions"
-"原话" = "Quotes"
 "改关键词" = "Edit query"
 "新建会话" = "New session"
 "选择" = "Select"
@@ -147,9 +160,7 @@
 "还没收尾的会话按状态计数，点一下只看这一组" = "Open sessions by status; click to show only that group"
 "只搜「{term}」" = "Search only “{term}”"
 "没有找到「{query}」" = "Nothing found for “{query}”"
-"标题、会话 ID、目录、你说过的话和待办里都没有这几个字。没被索引的旧历史不会出现在这里。" = "Not found in titles, session IDs, folders, what you said or to-dos. Old history that was never indexed doesn't appear here."
 "会话标题 {len}" = "Session titles {len}"
-"原话 {asks} 句" = "Quotes {asks}"
 "待办 {len}" = "To-dos {len}"
 "在当前空间新建会话" = "New session in this space"
 
@@ -175,7 +186,6 @@
 "在新标签执行" = "Run in a new tab"
 "放进输入行，你按回车" = "Put on the input line; you press Return"
 "{executable} · {len} 条验收" = "{executable} · {len} {len|check|checks}"
-" · 你说过 {said} 句，{matched} 句含「{query}」" = " · you said {said} {said|thing|things}, {matched} with “{query}”"
 "再显示 {next} 条 ↓" = "Show {next} more ↓"
 "再显示 {next} 个 ↓" = "Show {next} more ↓"
 
@@ -183,7 +193,6 @@
 "动作" = "Actions"
 "左栏视图" = "Sidebar views"
 "工具" = "Tools"
-"{len} · 来自其他会话" = "{len} · from other sessions"
 
 [filters]
 "取消只看 {name}" = "Stop showing only {name}"

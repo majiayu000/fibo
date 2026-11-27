@@ -159,6 +159,17 @@ pub enum Request {
     Backfill {
         session: String,
     },
+    /// Search saved user and Agent messages in the palette's visible sessions.
+    SearchMessages {
+        query: String,
+        sessions: Vec<String>,
+        before: Option<MessagePosition>,
+    },
+    /// Open the exact saved message selected in the desktop search results.
+    ReadSearchMessage {
+        position: MessagePosition,
+        generation: String,
+    },
     /// A phone's chat view: one conversation's user and Agent messages from the index,
     /// oldest first. `after` gives those newer than a `seq`; otherwise the newest `limit`,
     /// or those older than `before`.

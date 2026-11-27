@@ -152,6 +152,11 @@ pub enum Reply {
     Interrupted {
         closed_background: bool,
     },
+    /// [`Request::SearchMessages`], newest matches first.
+    MessageMatches {
+        messages: Vec<MessageMatch>,
+        next: Option<MessagePosition>,
+    },
     /// `Chat`: the messages, oldest first, and whether older ones exist before them.
     /// `partial`: older lines of its log have not been read in yet ([`Request::Backfill`]).
     Chat {
@@ -188,6 +193,25 @@ pub enum Reply {
     /// A `Subscribe` stream's frames: first the state now, then each batch of changes.
     Events(Vec<crate::hook::Notice>),
     Error(String),
+}
+
+/// The stable sort key of a saved message, also used to read its exact record.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MessagePosition {
+    pub at: i64,
+    pub session: String,
+    pub inode: i64,
+    pub offset: i64,
+    pub ordinal: i64,
+}
+
+/// An excerpt around a match in a saved message.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MessageMatch {
+    pub position: MessagePosition,
+    pub generation: String,
+    pub user: bool,
+    pub text: String,
 }
 
 /// One message of a conversation as the index recorded it.
