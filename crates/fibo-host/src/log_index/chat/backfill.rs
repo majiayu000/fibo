@@ -154,14 +154,14 @@ impl Index {
             let from = start.saturating_sub(SEGMENT);
             let (parser, first) = read_segment(&mut file, runtime, path, inode, from, start)?;
             let tx = self.db.unchecked_transaction().map_err(err)?;
-            // Replaced after this began: these rows belong to a file that is gone.
+            // Deletion or replacement after this began invalidates these rows.
             let now: Option<i64> = tx
                 .prepare_cached("SELECT inode FROM log_files WHERE path=?1")
                 .map_err(err)?
                 .query_row([path], |r| r.get(0))
                 .optional()
                 .map_err(err)?;
-            if now.is_some_and(|n| n != inode as i64) {
+            if now != Some(inode as i64) {
                 return Err(io::Error::other("这份日志已经变了，读不回更早的部分"));
             }
             save_records(&tx, path, &parser)?;
@@ -292,6 +292,31 @@ mod tests {
         all.iter()
             .map(|t| t.trim_end_matches('。').to_owned())
             .collect()
+    }
+
+    #[test]
+    fn a_parsed_backfill_cannot_write_after_its_index_entry_is_gone() {
+        let l = log((0..1000).map(|n| said(n, 900)));
+        let key = l.key();
+        assert!(l.index.card(&key).unwrap().unwrap().partial_history);
+        // Keep the card and readable bytes a backfill might already hold, but simulate
+        // removal of the cursor on the other connection before publishing the segment.
+        l.index
+            .db
+            .execute("DELETE FROM log_files WHERE path=?1", [&key])
+            .unwrap();
+        let result = l.index.backfill(Agent::Codex, &key);
+        assert!(result.is_err());
+        let backfill: i64 = l
+            .index
+            .db
+            .query_row(
+                "SELECT count(*) FROM log_backfill WHERE path=?1",
+                [&key],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(backfill, 0);
     }
 
     /// Every message once, in the log's order, on every page, across segments, however the

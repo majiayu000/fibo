@@ -61,12 +61,40 @@ pub(super) struct Association {
     pub(super) screened: HashMap<(String, String), u8>,
 }
 impl Association {
+    fn apply_removals(shared: &Shared, index: &crate::log_index::Index) -> io::Result<()> {
+        index.publish_removals(|paths| {
+            let paths: HashSet<&str> = paths.iter().map(String::as_str).collect();
+            let mut host = lock(shared)?;
+            let mut next = None;
+            for (position, session) in host.workspace.agent_sessions.iter().enumerate() {
+                if !paths.contains(session.transcript.as_str()) {
+                    continue;
+                }
+                // The same path may already have been recreated for a different session.
+                // Release the stale pointer so the previous session cannot read its records.
+                if !index
+                    .paths_for(session.runtime, &session.cli_session_id)?
+                    .contains(&session.transcript)
+                {
+                    let workspace = next.get_or_insert_with(|| host.workspace.clone());
+                    workspace.agent_sessions[position].transcript.clear();
+                    workspace.content.remove(&session.id);
+                }
+            }
+            if let Some(next) = next {
+                host.commit(next)?;
+            }
+            Ok(())
+        })
+    }
+
     pub(super) fn apply(
         &mut self,
         shared: &Shared,
         index: &crate::log_index::Index,
         transcripts: &[Transcript],
     ) -> io::Result<()> {
+        Self::apply_removals(shared, index)?;
         if transcripts.is_empty() {
             return Ok(());
         }
@@ -313,6 +341,8 @@ pub(super) fn recover_logs(
     // Asked first: finishing forgets what was in a folder that is gone.
     let lost = index.lost_logs(scopes)?;
     index.finish_recovery(scopes)?;
+    let touched = index.take_touched();
+    association.apply(shared, index, &touched)?;
     // A folder that held logs and went away is repaired once its logs are forgotten:
     // recognition works, so the phase is Healthy and the detail says what went. Left
     // Interrupted, nothing ever cleared it (no later recovery runs for a gone folder),
@@ -428,11 +458,12 @@ pub(super) fn follow_associated(
     // Register first, then close the read/register race using the existing cursor.
     for path in watch.follow(&associated)? {
         if let Some(runtime) = index.runtime(&path) {
-            if let Some(t) = index.update(runtime, &path, true)? {
-                let mut found = vec![t];
-                found.extend(index.take_touched());
-                association.apply(shared, index, &found)?;
+            let changed = index.update(runtime, &path, true)?;
+            let mut found = index.take_touched();
+            if let Some(t) = changed {
+                found.insert(0, t);
             }
+            association.apply(shared, index, &found)?;
         }
     }
     Ok(())

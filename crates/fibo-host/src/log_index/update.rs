@@ -1,5 +1,5 @@
 //! The write path: reading a log's new lines into its card and flushing them.
-use super::*;
+use super::{deletion::refresh_parent, *};
 
 impl Index {
     pub fn hook(
@@ -92,6 +92,17 @@ impl Index {
                 held.entries.remove(path);
             }
             return written;
+        }
+        if self
+            .db
+            .prepare_cached("SELECT 1 FROM log_files WHERE path=?1")
+            .map_err(err)?
+            .query_row([path], |_| Ok(()))
+            .optional()
+            .map_err(err)?
+            .is_none()
+        {
+            return Ok(());
         }
         let mut parser = crate::content::load(&self.db, path)?;
         apply(&mut parser, fibo_core::content::now(), source)?;
@@ -225,6 +236,7 @@ impl Index {
             .lock()
             .map_err(|_| io::Error::other("log cursor lock poisoned"))?;
         self.db.execute_batch("BEGIN IMMEDIATE").map_err(err)?;
+        let previous_removals = held.removed.len();
         let result = (|| {
             let mut found = vec![];
             for path in paths {
@@ -255,7 +267,11 @@ impl Index {
             }
             Ok(found)
         })();
-        self.finish(&mut held, result)
+        let result = self.finish(&mut held, result);
+        if result.is_err() {
+            held.removed.truncate(previous_removals);
+        }
+        result
     }
     /// The adapter maps its own metadata layout back to the parent transcript. A child
     /// can start or finish without appending anything to that parent's log.
@@ -335,6 +351,19 @@ impl Index {
             return Ok(None);
         }
         let key = path.to_string_lossy().into_owned();
+        // Confirm that the log root is available before interpreting an absent file.
+        // The last component is never followed through a symlink.
+        let meta = match fs::symlink_metadata(path) {
+            Ok(meta) => Some(meta),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error),
+        };
+        let Some(meta) = meta.filter(|meta| meta.is_file()) else {
+            if self.can_confirm_absence(path)? {
+                self.delete_log(held, &key)?;
+            }
+            return Ok(None);
+        };
         // The entry, when this log is held, is newer than the database.
         let entry = held.entries.remove(&key);
         let ahead = entry.as_ref().and_then(|e| e.dirty);
@@ -351,19 +380,6 @@ impl Index {
         }).optional().map_err(err)?;
                 cursor.is_some()
             };
-        // No symlink traversal in event handling, just as in the initial directory walk.
-        let meta = match fs::symlink_metadata(path) {
-            Ok(m) if m.is_file() => m,
-            Ok(_) => return Ok(None),
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {
-                self.db
-                    .execute("DELETE FROM log_files WHERE path=?1", [&key])
-                    .map_err(err)?;
-                self.counts.writes += 1;
-                return Ok(None);
-            }
-            Err(e) => return Err(e),
-        };
         let id = fibo_platform::fs::file_id(path, &meta)?;
         let updated = meta
             .modified()?
@@ -613,48 +629,17 @@ impl Index {
         if now_written {
             crate::content::save_state(&tx, &key, &parser)?;
         }
-        if let Some(parent) = parent {
-            let row = tx
-                .prepare_cached("SELECT cli_id,path,cwd,updated FROM log_files WHERE runtime=?2 AND cli_id=?1 LIMIT 1")
-                .map_err(err)?
-                .query_row([parent.as_str(), runtime.executable()], |r| {
-                    Ok(Transcript {
-                        runtime,
-                        cli_id: r.get(0)?,
-                        path: r.get(1)?,
-                        cwd: r.get(2)?,
-                        updated: r.get::<_, i64>(3)? as u64,
-                    })
-                })
-                .optional()
-                .map_err(err)?;
-            if let Some(t) = row.filter(|t| t.path != key) {
-                if let Some(e) = held.entries.get_mut(&t.path) {
-                    let kids = crate::content::children(
-                        &tx,
-                        runtime,
-                        &parent,
-                        now,
-                        e.parser.card.turn_started,
-                    )?;
-                    e.parser.children(&kids, now, live(&t.path));
-                    e.dirty.get_or_insert_with(std::time::Instant::now);
-                } else {
-                    let mut owner = crate::content::load(&tx, &t.path)?;
-                    let kids = crate::content::children(
-                        &tx,
-                        runtime,
-                        &parent,
-                        now,
-                        owner.card.turn_started,
-                    )?;
-                    owner.children(&kids, now, live(&t.path));
-                    crate::content::save(&tx, &t.path, &owner)?;
-                }
-                self.touched.push(t);
-            }
-        }
+        let touched = if let Some(parent) = parent {
+            refresh_parent(&tx, held, runtime, &parent, &key, false)?
+        } else {
+            None
+        };
         tx.commit().map_err(err)?;
+        if replaced {
+            // A replacement can be the only event for a removed path.
+            held.removed.push(key.clone());
+        }
+        self.touched.extend(touched.map(|p| p.publish(held)));
         self.counts.writes += 1;
         let found = c.identity.clone().map(|(cli_id, cwd)| Transcript {
             runtime,
