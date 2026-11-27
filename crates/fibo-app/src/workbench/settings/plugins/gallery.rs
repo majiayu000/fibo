@@ -52,7 +52,7 @@ pub(super) fn switch_notice() -> Option<gpui::Div> {
             .py(px(T::S10))
             .text_size(px(T::SMALL))
             .text_color(Tone::Danger.ink())
-            .child(t!("无法读取插件开关，已暂停加载插件。{why}", why))
+            .child(t!("无法读取插件开关。重新加载插件时将保持停用。{why}", why))
     })
 }
 

@@ -588,6 +588,16 @@ pub fn dir(config: &Path) -> PathBuf {
 
 /// Every plugin directory under `plugins`, by name; a later id already taken is refused.
 pub fn discover(plugins: &Path) -> Vec<Found> {
+    discover_with_switches(plugins, disabled(plugins).ok().as_deref())
+}
+
+/// Selects installed plugins for a manual trial only when the switches can be read.
+pub fn discover_for_trial(plugins: &Path) -> std::io::Result<Vec<Found>> {
+    let off = disabled(plugins)?;
+    Ok(discover_with_switches(plugins, Some(&off)))
+}
+
+fn discover_with_switches(plugins: &Path, off: Option<&[String]>) -> Vec<Found> {
     let mut dirs: Vec<PathBuf> = match std::fs::read_dir(plugins) {
         Ok(entries) => entries
             .filter_map(|e| e.ok().map(|e| e.path()))
@@ -601,11 +611,10 @@ pub fn discover(plugins: &Path) -> Vec<Found> {
         Err(_) => return vec![],
     };
     dirs.sort();
-    let off = disabled(plugins);
     let mut found: Vec<Found> = Vec::new();
     for dir in dirs {
         let mut result = read(&dir).map(|mut p| {
-            p.enabled = off.as_ref().is_ok_and(|off| !off.contains(&p.id));
+            p.enabled = off.is_some_and(|off| !off.contains(&p.id));
             p
         });
         if let Ok(plugin) = &result

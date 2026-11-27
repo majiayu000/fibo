@@ -1,6 +1,6 @@
 # Settings › Plugins
 [plugins]
-"无法读取插件开关，已暂停加载插件。{why}" = "Plugin switches could not be read. Plugin loading is paused. {why}"
+"无法读取插件开关。重新加载插件时将保持停用。{why}" = "Could not read plugin switches. Plugins will stay off when reloaded. {why}"
 "搜索插件" = "Search plugins"
 "、" = ", "
 "{said}（这台电脑上还不能保存密钥）" = "{said} (secrets can't be saved on this computer yet)"
