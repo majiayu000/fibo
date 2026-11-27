@@ -6,6 +6,7 @@ use super::*;
 use fibo_core::{
     protocol::{MessageMatch, MessagePosition},
     sidebar as presets,
+    text_search::{SearchQuery, match_ranges},
 };
 
 mod commands;

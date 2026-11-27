@@ -1,5 +1,5 @@
 //! Search matching and palette list movement.
-pub use fibo_core::text_search::{SearchQuery, match_ranges};
+use fibo_core::text_search::match_ranges;
 
 /// About `width` characters of `text`, starting a little before the first match so the
 /// match is visible; whitespace runs collapse to one space.
@@ -76,6 +76,7 @@ pub fn section_jump(sizes: &[usize], index: usize, back: bool) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fibo_core::text_search::SearchQuery;
 
     #[test]
     fn search_matches_ignore_case_and_keep_byte_ranges() {
