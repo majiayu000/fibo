@@ -49,6 +49,10 @@ pub enum Request {
     /// rules and hooks; agents stay as registered at its start.
     ReloadPlugins,
     RecognitionStatus,
+    /// Each Agent's limits as this host's own window shows them, plugins' readings included:
+    /// for a window attached from another machine, which cannot read those files. Hosts
+    /// before it answer with an error.
+    Quotas,
     WatchRecognition,
     /// A fifteen-second measurement stream, cancelled by disconnecting this socket.
     Diagnose,
@@ -182,6 +186,10 @@ pub enum Request {
         limit: usize,
         #[serde(default)]
         last: Option<usize>,
+        /// With no `seq`: the stretch that ended where the turn was last stopped, not the one
+        /// after it (empty until it answers). A host before this reads it as absent.
+        #[serde(default)]
+        stopped: bool,
     },
     /// One tool call by its id, and where its raw lines are.
     ToolCall {
@@ -233,6 +241,22 @@ pub enum Request {
     },
     /// A guarded chat message using the Agent's queue or steer key.
     SendTurn(TurnInput),
+    /// A picture another computer's window was given for a terminal here (pasted or
+    /// dropped), PNG, JPEG, GIF or WebP as base64: kept on this machine as a phone's is.
+    /// Replies `Text`, its path here, for the window to paste. Hosts before it refuse it.
+    SaveImage {
+        data: String,
+    },
+    /// The folders in `path` on this machine (`~` is its home) for another computer's
+    /// window choosing a space's folder: `Dirs`. Hosts before it refuse it.
+    ListDirs {
+        path: String,
+    },
+    /// One new folder there, in an existing one: `Text`, its full path. Hosts before it
+    /// refuse it.
+    MakeDir {
+        path: String,
+    },
     /// `fibo run`: each time the Agent in `child` ends a turn (done, a question, an
     /// error), its last reply goes into `parent`'s Agent input, wrapped as
     /// `<fibo from=…>`, once that Agent is idle. Ends when either terminal exits.

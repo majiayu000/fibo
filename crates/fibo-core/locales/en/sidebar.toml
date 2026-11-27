@@ -79,14 +79,11 @@
 "{text}，共 {count} 个" = "{text}, {count} in all"
 
 [add_space]
-"先选或写一个目录" = "Pick or type a folder first"
-"没有找到这个目录" = "Folder not found"
-"~/code/项目，或名字" = "~/code/project, or a name"
+"先写一个名字" = "Type a name first"
+"{host} 没连上，连上后再建" = "{host} is not connected; try again once it is"
+"回车建好，目录可以之后在它的标签页里选" = "Enter makes it; pick its folder later in its tab"
 "在这台电脑上新建空间" = "New space on this computer"
 "新建空间" = "New space"
-"{path}，已是空间" = "{path}, already a space"
-"已是空间" = "Already a space"
-"正在 {name} 上建…" = "Creating on {name}…"
 "在 {name} 上新建空间" = "New space on {name}"
 "只看" = "Only"
 "看全部空间" = "Show all spaces"
@@ -191,3 +188,10 @@
 "已停" = "Stopped"
 "{state} · {total} 步" = "{state} · {total} steps"
 "{state} · {phase} 阶段 · {done}/{total} 完成" = "{state} · {phase} phase · {done}/{total} done"
+
+[remote_folder]
+"那台电脑上的 Fibo 太旧，还选不了那边的目录；更新它之后再试" = "Fibo on that computer is too old to pick its folders here; update it and try again"
+"那台电脑上的路径" = "Path on that computer"
+"那里没有这个目录" = "No such folder there"
+"输入 {host} 上的路径…" = "Type a path on {host}…"
+"新建文件夹 {path}" = "New folder {path}"

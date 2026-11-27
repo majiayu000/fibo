@@ -144,3 +144,25 @@ fn the_words_wait_until_the_cli_shows_the_picture() {
         "Enter came before the picture showed"
     );
 }
+
+/// Another computer's window has no clipboard or files there: its picture is kept here like
+/// a phone's, and the path it gets back is one a phone's `send` may name too.
+#[test]
+fn a_picture_from_another_computers_window_is_kept_here() {
+    use fibo_core::protocol::{rpc, Reply, Request};
+    let h = Host::start();
+    let saved = rpc(&h.socket(), &Request::SaveImage { data: PNG.into() }).unwrap();
+    let Reply::Text(path) = saved else {
+        panic!("{saved:?}")
+    };
+    assert!(path.starts_with(&*h.root.join("phone-images").to_string_lossy()));
+    assert!(path.ends_with(".png"));
+    assert_eq!(fs::read(&path).unwrap(), b"\x89PNG\r\n\x1a\n");
+    let script = rpc(
+        &h.socket(),
+        &Request::SaveImage {
+            data: "IyEvYmluL3No".into(),
+        },
+    );
+    assert!(script.is_err(), "{script:?}");
+}

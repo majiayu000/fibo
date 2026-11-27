@@ -102,7 +102,7 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: |
-          ignored_baseline=24
+          ignored_baseline=23
           unix_only_baseline=8
           read -r ignored unix_only < <(find crates/fibo-host/src -name '*.rs' -print0 | xargs -0 perl -0777 -ne '
             $win = qr/(?:windows|target_os\s*=\s*"windows")/;

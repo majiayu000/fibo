@@ -110,6 +110,22 @@ impl Index {
             .unwrap_or(said))
     }
 
+    /// Where the turn was stopped since the Agent last said anything, if it was: the end of the
+    /// stretch no reply folds. Asked for it, the phone shows what a stopped turn did, which
+    /// otherwise showed nowhere (2026-11-26 walk).
+    pub fn stopped_at(&self, path: &str) -> io::Result<Option<i64>> {
+        let said = self.stretch_start(path, place(i64::MAX))?;
+        let said_at = self
+            .db
+            .prepare_cached(&format!("SELECT {SEQ} FROM session_records WHERE path=?1 AND inode={LOG_INODE} AND kind='assistant' ORDER BY offset DESC,ordinal DESC LIMIT 1"))
+            .map_err(err)?
+            .query_row(params![path], |r| r.get::<_, i64>(0))
+            .optional()
+            .map_err(err)?
+            .unwrap_or(0);
+        Ok((said > said_at).then_some(said))
+    }
+
     /// Where turns were stopped between two places, in order.
     pub(super) fn interruptions(
         &self,

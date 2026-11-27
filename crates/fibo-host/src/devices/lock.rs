@@ -5,10 +5,11 @@ use std::time::{Duration, Instant};
 
 /// How long a waiter gives one holder before it gives up on it.
 const STALLED: Duration = Duration::from_secs(5);
+const STAMP_LEN: u32 = 32;
 
 /// Held from reading the phones to writing them back: the host and a `fibo remote` both
 /// change them, and a change made from a stale list brings back a phone just unpaired.
-/// Released when dropped. flock belongs to the open file, so this excludes other threads
+/// Released when dropped. The lock belongs to the open file, so this excludes other threads
 /// too, and whoever holds it must not ask for it again: it would wait on itself.
 pub(super) fn lock(socket: &Path) -> io::Result<std::fs::File> {
     let mut file = fibo_platform::fs::private_file()
@@ -26,7 +27,7 @@ pub(super) fn lock(socket: &Path) -> io::Result<std::fs::File> {
     let mut seen = stamp(&mut file);
     let mut since = Instant::now();
     loop {
-        match file.try_lock() {
+        match fibo_platform::fs::try_lock_with_readable_prefix(&file, STAMP_LEN) {
             Ok(()) => break,
             Err(std::fs::TryLockError::Error(e)) => return Err(e),
             Err(std::fs::TryLockError::WouldBlock) => {
@@ -57,10 +58,10 @@ pub(super) fn lock(socket: &Path) -> io::Result<std::fs::File> {
 
 /// The last holder's stamp; empty when none (yet), or one that cannot be read.
 fn stamp(file: &mut std::fs::File) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(32);
+    let mut bytes = Vec::with_capacity(STAMP_LEN as usize);
     let read = file
         .seek(SeekFrom::Start(0))
-        .and_then(|_| (&*file).take(32).read_to_end(&mut bytes));
+        .and_then(|_| (&*file).take(u64::from(STAMP_LEN)).read_to_end(&mut bytes));
     if read.is_err() {
         bytes.clear();
     }

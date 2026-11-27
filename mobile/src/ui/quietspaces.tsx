@@ -28,8 +28,10 @@ export function QuietSpaces({ machines, open, onToggle, named }: { machines: Mac
   return (
     <>
       <Group label={tr('先不管的空间 · {n}', { n: aside.length })} open={open} onPress={onToggle} />
+      {/* Quiet goes by the tab a conversation runs in (core's session_home); one listed under a quiet
+          space but open in another tab still shows, under that space's name (2026-11-26 walk). */}
       {open && (
-        <Text style={[s.note, { color: t.dim }]}>{tr('在电脑上点了「先不管」，这些空间的对话不会出现在手机上。')}</Text>
+        <Text style={[s.note, { color: t.dim }]}>{tr('在电脑上点了「先不管」，开在这些空间标签页里的对话不会出现在手机上；开在别处的照常显示。')}</Text>
       )}
       {open &&
         aside.map((a) => {

@@ -51,9 +51,9 @@ impl Workbench {
         self.layout.panes.retain(|id, _| ids.contains(id));
         self.prune_pins(cx);
         let split = ids.len() > 1;
-        // Showing a terminal is not wanting its input: a pane made here writes only when
-        // nobody else does. Tab switches, restores and a split synced from another machine's
-        // window all make panes; typing in one is what takes the input (`take_input`).
+        // Tab switches, restores and synced splits only show the terminal. The local
+        // window can inherit a free terminal; a window through an SSH forward only watches
+        // until it is used (`take_input`).
         for id in ids {
             if !undrawn && !self.layout.panes.contains_key(&id) {
                 let pane = cx.new(|cx| Pane::new(self.store.socket(), &id, false, cx));

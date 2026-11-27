@@ -78,7 +78,7 @@ if [ -z "$added" ]; then
   kill $FAR 2>/dev/null
   exit 1
 fi
-PATH="$R/bin:$PATH" HOME="$R/home" MOORING_HOSTS_EVIDENCE=1 \
+PATH="$R/bin:$PATH" HOME="$R/home" MOORING_HOSTS_EVIDENCE=1 MOORING_HOSTS_FARHOME="$R/farhome" \
   perl -e 'alarm 180; exec @ARGV' "$REPO/target/debug/fibo-app" --runtime "$R/rt" --visual-evidence "$R/shots" > "$R/app.log" 2>&1
 APP_STATUS=$?
 echo "app exit $APP_STATUS"

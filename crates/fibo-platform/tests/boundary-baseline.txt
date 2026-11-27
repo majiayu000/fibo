@@ -9,4 +9,3 @@ unix-path	crates/fibo-app/src/main.rs	1
 unix-path	crates/fibo-core/src/sample.rs	1
 unix-path	crates/fibo-core/src/secret.rs	1
 unix-path	crates/fibo-host/src/agents/mod.rs	2
-unix-path	crates/fibo-host/src/plugin_hooks.rs	1

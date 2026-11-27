@@ -49,6 +49,13 @@ export const stepWords = (c: ToolCall) => c.about || c.label || c.name;
  *  times, show summary」 read 「Ping localhost 1…s, show summary」 on 2026-11-26's walk. */
 export const stepCut = (c: ToolCall): 'tail' | 'middle' => (c.about ? 'tail' : 'middle');
 
+/** A turn stopped before it answered: your word is the last one, nothing runs and nothing is
+ *  asked. What it did folds above an answer, and there is none, so after 停下 its calls showed
+ *  nowhere (2026-11-26 walk); the chat shows them where the running block stood. */
+export function cutShort(messages: readonly { role: string }[], running: boolean, asking: boolean): boolean {
+  return !running && !asking && messages.at(-1)?.role === 'user';
+}
+
 /** The tool's own name, an MCP tool's as `server · tool`. */
 export function toolName(name: string): string {
   const short = name.startsWith('mcp__') ? name.slice(5).replace('__', ' · ') : name;

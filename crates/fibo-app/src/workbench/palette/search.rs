@@ -299,7 +299,11 @@ impl Workbench {
             Hit::Session { id, .. } | Hit::Quote { id, .. } => {
                 if let Some(s) = self.workspace.agent_sessions.iter().find(|s| s.id == id) {
                     let s = s.clone();
-                    self.enter_card(&s, window, cx);
+                    let space = self.workspace.session_space(&s).map(str::to_owned);
+                    self.close_peek(cx);
+                    self.leave_host(cx);
+                    self.reveal_machine(None, space.as_deref());
+                    self.open_session(&s, window, cx);
                 }
             }
             Hit::Task(id) => {

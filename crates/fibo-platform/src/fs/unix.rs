@@ -2,6 +2,14 @@ use std::io;
 use std::os::unix::fs::DirBuilderExt;
 use std::path::Path;
 
+pub fn try_lock_with_readable_prefix(
+    file: &std::fs::File,
+    _prefix_len: u32,
+) -> Result<(), std::fs::TryLockError> {
+    // The whole-file lock is advisory, so other handles can still read the prefix.
+    file.try_lock()
+}
+
 pub fn link_dir(to: &Path, at: &Path) -> io::Result<()> {
     std::os::unix::fs::symlink(to, at)
 }

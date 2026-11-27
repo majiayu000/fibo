@@ -13,8 +13,12 @@ impl Pane {
             // Claude Code and Codex read an image off the clipboard themselves on Ctrl+V.
             // Sent whatever runs here, as libghostty-swift does: a pane is not always
             // known to hold an Agent, and a shell only takes it as quoted-insert.
-            PasteAction::Image => {
-                if !self.refuse_remote_file(cx) {
+            // On another computer the program would read that computer's clipboard: the
+            // picture goes there first and its path is pasted.
+            PasteAction::Image(bytes) => {
+                if crate::attach::Host::of(&self.socket).attached() {
+                    self.send_pictures(vec![super::remote_image::Picture::Bytes(bytes)], cx);
+                } else {
                     self.input(vec![0x16], cx);
                 }
                 return;
@@ -28,16 +32,6 @@ impl Pane {
         } else {
             self.prefill(&text, cx);
         }
-    }
-    pub(super) fn refuse_remote_file(&mut self, cx: &mut Context<Self>) -> bool {
-        if !crate::attach::Host::of(&self.socket).attached() {
-            return false;
-        }
-        self.local_error = Some(
-            t!("文件和图片还不能从这里传到另一台电脑；请先上传，再输入那台电脑上的路径").into(),
-        );
-        cx.notify();
-        true
     }
     pub(super) fn confirm_paste(&mut self, cx: &mut Context<Self>) {
         if let Some(text) = self.paste_confirm.take() {
@@ -91,8 +85,8 @@ pub(super) fn copied_note(text: &str, whole_screen: bool) -> String {
 #[derive(Debug, PartialEq)]
 enum PasteAction {
     Text(String),
-    /// Only an image: the program fetches it from the clipboard on Ctrl+V.
-    Image,
+    /// Only an image: here the program fetches it from the clipboard on Ctrl+V.
+    Image(Vec<u8>),
     Nothing,
 }
 fn paste_action(item: Option<&gpui::ClipboardItem>) -> PasteAction {
@@ -102,15 +96,11 @@ fn paste_action(item: Option<&gpui::ClipboardItem>) -> PasteAction {
     if let Some(text) = item.text() {
         return PasteAction::Text(text);
     }
-    let image = item
-        .entries()
-        .iter()
-        .any(|e| matches!(e, gpui::ClipboardEntry::Image(_)));
-    if image {
-        PasteAction::Image
-    } else {
-        PasteAction::Nothing
-    }
+    let image = item.entries().iter().find_map(|e| match e {
+        gpui::ClipboardEntry::Image(image) => Some(image.bytes.clone()),
+        _ => None,
+    });
+    image.map_or(PasteAction::Nothing, PasteAction::Image)
 }
 
 /// What a terminal sends for a paste without bracketed paste: newlines become CR.

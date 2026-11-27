@@ -21,16 +21,16 @@ const CATCH_UP: Duration = Duration::from_secs(1);
 
 /// The newest account limits per CLI, worked out at most once a second per workspace
 /// revision: every pane header asks, and finding them looks at each session's content.
-pub(super) fn quotas(w: &Workspace, now: u64, attached: bool) -> Rc<[(Agent, Quota)]> {
+pub(super) fn quotas(w: &Workspace, now: u64, host: &crate::attach::Host) -> Rc<[(Agent, Quota)]> {
     type Seen = Option<(usize, u64, u64, Rc<[(Agent, Quota)]>)>;
     thread_local!(static SEEN: std::cell::RefCell<Seen> = const { std::cell::RefCell::new(None) });
     SEEN.with_borrow_mut(|seen| match seen {
         Some((at, r, t, q)) if *at == at_of(w) && *r == w.revision && *t == now => q.clone(),
         _ => {
-            // Plugins' readings are files on this machine: an attached window shows the
-            // other machine's, which its host reads from its own sessions.
-            let plugins = match attached {
-                true => Vec::new(),
+            // Plugins' readings are files on their machine: an attached window shows the
+            // other machine's, as its host reads them there.
+            let plugins = match host.attached() {
+                true => host.quotas(),
                 false => fibo_core::quota::from_plugins(),
             };
             let q: Rc<[_]> = fibo_core::quota::latest(w, &plugins, now).into();
@@ -546,7 +546,7 @@ mod tests {
         };
         w.content
             .insert("a".into(), std::sync::Arc::new(reading(10)));
-        let used = |w: &Workspace, now| quotas(w, now, false)[0].1.windows[0].used;
+        let used = |w: &Workspace, now| quotas(w, now, &Default::default())[0].1.windows[0].used;
         assert_eq!(used(&w, 2000), 10);
         w.content
             .insert("a".into(), std::sync::Arc::new(reading(90)));

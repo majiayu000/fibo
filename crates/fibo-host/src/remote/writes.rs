@@ -279,21 +279,7 @@ pub(super) fn stop(socket: &Path, request: &Value, client: Option<&str>) -> io::
 /// `mkdir`: one new folder in an existing one. A folder already there is what was asked
 /// for, so a resend after a lost reply succeeds too.
 pub(super) fn mkdir(request: &Value) -> io::Result<Value> {
-    let path = super::dirs::expand(text(request, "path")?)?;
-    let parent = (path.parent())
-        .filter(|p| p.is_dir())
-        .ok_or_else(|| io::Error::other(t!("上一级文件夹不存在")))?;
-    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    if name.is_empty() || name == "." || name == ".." {
-        return Err(io::Error::other(t!("文件夹名不对")));
-    }
-    match std::fs::create_dir(parent.join(name)) {
-        Err(e) if e.kind() == io::ErrorKind::AlreadyExists && path.is_dir() => (),
-        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-            return Err(io::Error::other(t!("这里已经有同名文件")));
-        }
-        r => r?,
-    }
+    let path = fibo_host::folders::make_dir(text(request, "path")?)?;
     Ok(json!({ "path": path.to_string_lossy() }))
 }
 

@@ -247,6 +247,15 @@ fn supervisor(shared: &Shared) -> io::Result<std::sync::Arc<super::remote::Super
 pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
     match request {
         Request::RecognitionStatus => Ok(Reply::Recognition(recognition_status(&*lock(shared)?))),
+        Request::Quotas => {
+            // Plugins' files and commands are read outside the lock.
+            fibo_core::quota::install();
+            let plugins = fibo_core::quota::from_plugins();
+            let now = fibo_core::content::now();
+            let host = lock(shared)?;
+            let all = fibo_core::quota::latest(&host.workspace, &plugins, now);
+            Ok(Reply::Quotas(all))
+        }
         Request::RefreshAgents => {
             let transcripts = {
                 let host = lock(shared)?;
@@ -469,6 +478,19 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
         Request::RemoteReport(live) => {
             supervisor(shared)?.report(live);
             Ok(Reply::Ok)
+        }
+        Request::SaveImage { data } => {
+            use base64::Engine;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .map_err(io::Error::other)?;
+            let path = crate::pictures::save(&supervisor(shared)?.socket(), &bytes)?;
+            Ok(Reply::Text(path.to_string_lossy().into_owned()))
+        }
+        Request::ListDirs { path } => Ok(Reply::Dirs(crate::folders::list(&path)?)),
+        Request::MakeDir { path } => {
+            let made = crate::folders::make_dir(&path)?;
+            Ok(Reply::Text(made.to_string_lossy().into_owned()))
         }
         Request::TerminalCwd { id } => {
             let host = lock(shared)?;

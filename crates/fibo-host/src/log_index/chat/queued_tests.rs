@@ -117,3 +117,40 @@ fn an_interruption_ends_the_stretch_even_without_an_assistant_reply() {
     drop(i); // Windows 不删还开着的文件.
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+/// 2026-11-26 walk: after 停下 the phone showed nothing of the stopped ping. Its stretch ends at
+/// the interruption; `stopped_at` finds it so the phone can ask for that stretch, and only
+/// while no reply has come since.
+#[test]
+fn a_stopped_turn_can_be_asked_for_until_it_answers() {
+    let (dir, i) = index(&[
+        (10, "user", "跑一下"),
+        (12, "assistant", "ready"),
+        (100, "user", "再跑 ping，我会停下"),
+        (101, "tool_call", PING),
+        (110, "turn", "Interrupted"),
+    ]);
+    let stop = i
+        .stopped_at("p")
+        .unwrap()
+        .expect("stopped since the last reply");
+    let (tools, rows, _) = i.last_tool_calls("p", Some(stop), 3).unwrap();
+    assert_eq!((rows.len(), tools.unwrap().commands), (1, 1));
+    // The stretch after the stop, what `last` alone answers, is still empty.
+    let (_, rows, _) = i.last_tool_calls("p", None, 3).unwrap();
+    assert!(rows.is_empty());
+    drop(i);
+    std::fs::remove_dir_all(dir).unwrap();
+
+    // Once it answers, nothing is stopped any more.
+    let (dir, i) = index(&[
+        (100, "user", "再跑 ping，我会停下"),
+        (101, "tool_call", PING),
+        (110, "turn", "Interrupted"),
+        (200, "user", "写 notes.txt"),
+        (220, "assistant", "done"),
+    ]);
+    assert_eq!(i.stopped_at("p").unwrap(), None);
+    drop(i); // Windows 不删还开着的文件.
+    std::fs::remove_dir_all(dir).unwrap();
+}

@@ -78,6 +78,11 @@ impl Pane {
                 self.viewport = v;
             }
         }
+        if let (Some(view), Some(metrics)) = (self.bounds, self.metrics) {
+            let x = metrics.width * f32::from(m.col);
+            let y = metrics.height * m.row.saturating_sub(self.viewport.0) as f32;
+            self.pan.reveal(view.size, gpui::point(x, y));
+        }
         self.search.current_match = Some(i);
         cx.notify();
     }

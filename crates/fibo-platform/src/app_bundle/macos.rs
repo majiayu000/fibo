@@ -29,7 +29,7 @@ fn run(mut command: Command, what: &str) -> Result<Output, String> {
 
 fn curl(allow_http: bool, max: u64, seconds: u32) -> Command {
     let protocols = if allow_http { "=https,http" } else { "=https" };
-    let mut c = Command::new("/usr/bin/curl");
+    let mut c = Command::new(crate::process::curl());
     c.args(["-fsSL", "--proto", protocols, "--proto-redir", protocols])
         .args(["--max-time", &seconds.to_string()])
         .args(["--max-filesize", &max.to_string()])
