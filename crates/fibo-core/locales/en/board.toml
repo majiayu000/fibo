@@ -12,7 +12,6 @@
 
 [board.card]
 "外部" = "External"
-"还没开始" = "Not started"
 "{needs} 个{needs_you_word}" = "{needs} {needs_you_word}"
 "{len} 个会话在做" = "{len} {len|session|sessions} working"
 "· {len} 条验收" = "· {len} {len|check|checks}"

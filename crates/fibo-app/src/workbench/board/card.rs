@@ -49,7 +49,14 @@ impl Workbench {
                         sessions.last().map_or(task.agent, |s| s.runtime),
                         T::color(T::muted()),
                     ))
-                    .when(sessions.is_empty(), |d| d.child(t!("还没开始")))
+                    // Nothing runs it: where it stands is core's word (未开始, 有进展, 等你确认…).
+                    .when(sessions.is_empty(), |d| {
+                        let state = fibo_core::status::task_state(&self.workspace, task, now());
+                        d.when(state == fibo_core::status::TaskState::Claimed, |d| {
+                            d.text_color(T::color(T::link()))
+                        })
+                        .child(state.label())
+                    })
                     // One thing on this row: what needs you if anything does, else how many run.
                     .when(!sessions.is_empty(), |d| {
                         d.child(div().min_w_0().truncate().when_else(

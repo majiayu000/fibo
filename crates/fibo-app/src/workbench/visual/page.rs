@@ -238,6 +238,15 @@ impl Workbench {
                         .map(|c| c.id.clone());
                 }
             }
+            // 标记完成 on a session tied to a todo: the offer over the main area.
+            "TodoOffer" => {
+                let session = (self.workspace.agent_sessions.iter())
+                    .find(|s| s.task.as_deref() == Some("task0"))
+                    .map(|s| s.id.clone());
+                if let Some(session) = session {
+                    self.offer_session_todos(&session, cx);
+                }
+            }
             // A todo settled without criteria or sessions.
             "TodoDetailDone" => {
                 self.edit(
