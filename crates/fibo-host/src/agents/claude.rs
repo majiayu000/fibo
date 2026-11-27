@@ -12,6 +12,11 @@ const CONTINUED: &str = "Claude 会话已转到另一个会话接着跑";
 
 pub struct Claude;
 impl Adapter for Claude {
+    // Claude sets its entrypoint for what it starts, hooks included; runs without a
+    // person often keep no transcript, so the hook is the only place left to tell.
+    fn headless_hook(&self) -> bool {
+        headless_entrypoint(std::env::var("CLAUDE_CODE_ENTRYPOINT").ok())
+    }
     /// Enter queues while it works (「Press up to edit queued messages」); Ctrl+Enter, the kitty
     /// code it reads, sends now: a real run changed its answer mid-turn (2.1.319, 11-09).
     fn turn_keys(&self) -> Option<super::TurnKeys> {
@@ -723,4 +728,19 @@ mod tests {
             assert_eq!(Claude.screen_busy(&screen(done)), Some(false), "{done}");
         }
     }
+}
+
+/// Claude's entrypoint says a run without a person at it (`-p` is `sdk-cli`, the SDKs
+/// `sdk-ts` / `sdk-py`), as `metadata` hides their transcripts.
+fn headless_entrypoint(entrypoint: Option<String>) -> bool {
+    entrypoint.is_some_and(|e| e == "hook" || e.contains("sdk") || e.contains("print"))
+}
+
+#[test]
+fn print_mode_claude_is_not_the_terminals_conversation() {
+    assert!(headless_entrypoint(Some("sdk-cli".into())));
+    assert!(headless_entrypoint(Some("sdk-ts".into())));
+    assert!(!headless_entrypoint(Some("cli".into())));
+    // Older Claude versions set nothing: kept, as before.
+    assert!(!headless_entrypoint(None));
 }

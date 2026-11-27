@@ -163,6 +163,11 @@ pub trait Adapter: Sync {
     fn interrupt_background(&self) -> Option<fn(&str) -> bool> {
         None
     }
+    /// Whether the environment its hooks run in says nobody is at this run (`claude -p`
+    /// some tool starts inside a terminal): such a run is not the terminal's conversation.
+    fn headless_hook(&self) -> bool {
+        false
+    }
     /// Whether a phone can read this CLI's tool calls back from its log: the two below.
     fn reads_tools(&self) -> bool {
         false
