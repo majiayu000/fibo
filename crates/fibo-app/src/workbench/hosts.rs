@@ -44,40 +44,6 @@ fn socket_of(root: &std::path::Path) -> std::path::PathBuf {
     root.join("workbench.sock")
 }
 
-/// One request's round trip on a link already open: what typing there waits for. Opening
-/// the link through its forward costs more, so it is left out, and the link is kept for the
-/// next one: through the relay each new link is a new session there, which it counts.
-fn round_trip(
-    socket: &std::path::Path,
-    kept: Option<fibo_platform::local::Stream>,
-) -> (
-    Option<std::time::Duration>,
-    Option<fibo_platform::local::Stream>,
-) {
-    use fibo_core::protocol::{CONTROL, MAJOR, Reply, receive, send};
-    let open = || -> std::io::Result<fibo_platform::local::Stream> {
-        let mut stream = fibo_platform::local::Stream::connect(socket)?;
-        stream.set_read_timeout(Some(std::time::Duration::from_secs(10)))?;
-        send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
-        receive::<Reply>(&mut stream)?;
-        Ok(stream)
-    };
-    let was_kept = kept.is_some();
-    let Some(mut stream) = kept.map_or_else(|| open().ok(), Some) else {
-        return (None, None);
-    };
-    let at = std::time::Instant::now();
-    // A terminal no one has: answered at once, whatever the host's version.
-    let probe = Request::TerminalCwd { id: String::new() };
-    let answered = send(&mut stream, CONTROL, &probe).and_then(|_| receive::<Reply>(&mut stream));
-    match answered {
-        Ok(_) => (Some(at.elapsed()), Some(stream)),
-        // The host there restarted or the forward did: once more on a new link.
-        Err(_) if was_kept => round_trip(socket, None),
-        Err(_) => (None, None),
-    }
-}
-
 /// Where another machine's workbench opens at.
 #[derive(Clone)]
 pub(super) enum Go {
@@ -157,10 +123,11 @@ impl Workbench {
             .into_iter()
             .map(|remote| {
                 let spec = remote.view.lock().unwrap().spec.clone();
-                match old
-                    .iter()
-                    .position(|m| m.view.lock().unwrap().spec.host == spec.host)
-                {
+                // A machine whose way changed (路线 in settings) is reached again from scratch.
+                let same = |m: &crate::machines::Spec| {
+                    m.host == spec.host && (m.via, m.auto) == (spec.via, spec.auto)
+                };
+                match old.iter().position(|m| same(&m.view.lock().unwrap().spec)) {
                     Some(i) => {
                         let kept = old.remove(i);
                         kept.view.lock().unwrap().spec = spec;
@@ -385,6 +352,7 @@ impl Workbench {
         let owner = self.machine_of(&host).unwrap().view.clone();
         cx.spawn(async move |this, cx| {
             let mut kept = None;
+            let mut last_route = None;
             loop {
                 if !this
                     .update(cx, |this, _| {
@@ -398,10 +366,14 @@ impl Workbench {
                 }
                 let socket = socket.clone();
                 let (rtt, link) = cx
-                    .background_spawn(async move { round_trip(&socket, kept) })
+                    .background_spawn(async move {
+                        crate::attach::round_trip(&socket, kept, std::time::Duration::from_secs(10))
+                    })
                     .await;
                 kept = link;
-                let moved = crate::machines::set_latency(&host, rtt);
+                let route = crate::attach::route(&host);
+                let moved = crate::machines::set_latency(&host, rtt) || route != last_route;
+                last_route = route;
                 if this
                     .update(cx, |_, cx| {
                         if moved {

@@ -52,6 +52,11 @@ pub struct Spec {
     /// How its host's socket is reached here.
     #[serde(default, skip_serializing_if = "Via::is_ssh")]
     pub via: Via,
+    /// Both ways kept and the faster one taken, `via` first when they are even
+    /// (docs/multi-machine/routes.md). A separate field, not a third `via`: an older build
+    /// ignores it and keeps to `via`, where an unknown `via` would fail the whole file.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub auto: bool,
 }
 
 /// The way to a machine (docs/decisions/2026-11-27-computers-over-relay.md).
@@ -69,6 +74,20 @@ impl Via {
     fn is_ssh(&self) -> bool {
         *self == Via::Ssh
     }
+    /// The other way.
+    pub fn other(self) -> Via {
+        match self {
+            Via::Ssh => Via::Relay,
+            Via::Relay => Via::Ssh,
+        }
+    }
+    /// How the window names it beside a round trip: `ssh 17 ms`, `中继 139 ms`.
+    pub fn word(self) -> &'static str {
+        match self {
+            Via::Ssh => "ssh",
+            Via::Relay => t!("中继"),
+        }
+    }
 }
 
 impl Spec {
@@ -78,6 +97,7 @@ impl Spec {
             path: None,
             quiet: false,
             via: Via::Ssh,
+            auto: false,
         }
     }
     /// Shell that sets `$p` to `fibo` on that machine: the path written down, else on its
@@ -119,6 +139,16 @@ impl Spec {
 }
 
 use fibo_platform::shell::quote_posix as quote;
+
+/// `host` was paired here through the relay (`fibo remote join`): its link is kept as
+/// `fibo-host`'s `relay::computer::link_file` writes it.
+pub fn relay_paired(host: &str) -> bool {
+    let plain =
+        !host.is_empty() && (host.chars()).all(|c| c.is_alphanumeric() || "-_.@".contains(c));
+    plain
+        && fibo_core::agent::config_dir()
+            .is_some_and(|d| d.join("relay-links").join(format!("{host}.link")).is_file())
+}
 
 pub fn file() -> Option<PathBuf> {
     fibo_core::agent::config_dir().map(|d| d.join("machines.json"))
@@ -183,9 +213,21 @@ fn keep_quiet(mut next: Vec<Spec>, saved: &[Spec]) -> Vec<Spec> {
         if let Some(s) = saved.iter().find(|s| s.host == spec.host) {
             spec.quiet = s.quiet;
             spec.via = s.via;
+            spec.auto = s.auto;
         }
     }
     next
+}
+/// 路线 in settings: both ways (`None`), or only `via`; everything else the file says stays.
+pub fn set_route(host: &str, only: Option<Via>) -> io::Result<()> {
+    let mut specs = load()?;
+    let spec = (specs.iter_mut().find(|s| s.host == host))
+        .ok_or_else(|| io::Error::other(t!("设置里没有 {host} 这台电脑", host)))?;
+    match only {
+        Some(via) => (spec.via, spec.auto) = (via, false),
+        None => spec.auto = true,
+    }
+    save(&specs)
 }
 /// Saves the list settings edits, which adds and removes machines and nothing else.
 pub fn save_keeping_quiet(next: &[Spec]) -> io::Result<()> {
@@ -280,6 +322,7 @@ mod tests {
             path: Some("/opt/My Apps/mooring".into()),
             quiet: false,
             via: Via::Ssh,
+            auto: false,
         };
         let argv = named.ssh(&named.find_program());
         assert_eq!(argv[0], "ssh");
@@ -291,6 +334,7 @@ mod tests {
             path: None,
             quiet: false,
             via: Via::Ssh,
+            auto: false,
         };
         let probe = unnamed.find_program();
         assert!(probe.contains("command -v fibo || command -v mooring"));
@@ -334,6 +378,29 @@ mod tests {
         assert_eq!(next[1].via, Via::Ssh);
         let text = serde_json::to_string(&next).unwrap();
         assert_eq!(text.matches("via").count(), 1, "ssh is not written: {text}");
+    }
+    #[test]
+    fn both_ways_are_a_field_an_older_build_skips_and_settings_keep() {
+        let text = r#"[{"host":"apple","auto":true}]"#;
+        // What a build from before `auto` reads: the same fields, no `auto`.
+        #[derive(serde::Deserialize)]
+        struct Older {
+            host: String,
+            #[serde(default)]
+            via: Via,
+        }
+        let older: Vec<Older> = serde_json::from_str(text).unwrap();
+        assert_eq!((older[0].host.as_str(), older[0].via), ("apple", Via::Ssh));
+        let saved: Vec<Spec> = serde_json::from_str(text).unwrap();
+        assert!(saved[0].auto);
+        let next = keep_quiet(vec![spec("apple", false), spec("mac2", false)], &saved);
+        assert!(next[0].auto && !next[1].auto);
+        let written = serde_json::to_string(&next).unwrap();
+        assert_eq!(
+            written.matches("auto").count(),
+            1,
+            "off is not written: {written}"
+        );
     }
     #[test]
     fn settings_adding_a_machine_does_not_undo_quiet() {

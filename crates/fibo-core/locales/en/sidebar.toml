@@ -51,7 +51,6 @@
 "在新窗口打开" = "Open in New Window"
 "{ms} ms" = "{ms} ms"
 "<1 ms" = "<1 ms"
-"{note} · {ms} ms" = "{note} · {ms} ms"
 "没能打开 {host}：{e}" = "Couldn't open {host}: {e}"
 "← 本机" = "← This Mac"
 "回到本机" = "Back to this Mac"
@@ -195,3 +194,4 @@
 "那里没有这个目录" = "No such folder there"
 "输入 {host} 上的路径…" = "Type a path on {host}…"
 "新建文件夹 {path}" = "New folder {path}"
+"{note} · {rtt}" = "{note} · {rtt}"

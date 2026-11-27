@@ -138,20 +138,24 @@ impl SettingsView {
                 .path
                 .clone()
                 .unwrap_or_else(|| t!("自动找那台电脑上的 fibo").into());
+            let remove = secondary(("machine-remove", index), t!("移除")).on_click(cx.listener(
+                move |this, _, _, cx| {
+                    let mut next = this.machines.clone();
+                    next.remove(index);
+                    this.save_machines(next, cx);
+                },
+            ));
+            let control = div()
+                .flex()
+                .items_center()
+                .gap(px(T::S8))
+                .when(crate::machines::relay_paired(&spec.host), |d| {
+                    d.child(self.route_picker(index, spec, cx))
+                })
+                .child(remove);
             rows.push(
-                self.row(
-                    rows.is_empty(),
-                    &spec.host,
-                    &note,
-                    secondary(("machine-remove", index), t!("移除")).on_click(cx.listener(
-                        move |this, _, _, cx| {
-                            let mut next = this.machines.clone();
-                            next.remove(index);
-                            this.save_machines(next, cx);
-                        },
-                    )),
-                )
-                .into_any_element(),
+                self.row(rows.is_empty(), &spec.host, &note, control)
+                    .into_any_element(),
             );
         }
         let typed = self.machine_field.read(cx).text.trim().to_owned();
@@ -194,6 +198,42 @@ impl SettingsView {
             .into_any_element(),
         );
         rows
+    }
+    /// 路线 of a machine paired through the relay (docs/multi-machine/routes.md): both ways,
+    /// the faster taken, or only one.
+    fn route_picker(
+        &self,
+        index: usize,
+        spec: &crate::machines::Spec,
+        cx: &Context<Self>,
+    ) -> gpui::Div {
+        use crate::machines::Via;
+        let chosen = (!spec.auto).then_some(spec.via);
+        let choices = [
+            (None, t!("自动")),
+            (Some(Via::Ssh), t!("只走 ssh")),
+            (Some(Via::Relay), t!("只走中继")),
+        ];
+        let mut picker = segments();
+        for (i, (only, text)) in choices.into_iter().enumerate() {
+            let host = spec.host.clone();
+            picker = picker.child(
+                segment(("machine-route", index * 3 + i), text, only == chosen).on_click(
+                    cx.listener(move |this, _, _, cx| {
+                        match crate::machines::set_route(&host, only) {
+                            Ok(()) => {
+                                this.machines = crate::machines::load().unwrap_or_default();
+                                this.machines_error = None;
+                                cx.emit(SettingsAction::MachinesChanged);
+                            }
+                            Err(e) => this.machines_error = Some(t!("没存上：{e}", e)),
+                        }
+                        cx.notify();
+                    }),
+                ),
+            );
+        }
+        picker
     }
     fn save_machines(&mut self, next: Vec<crate::machines::Spec>, cx: &mut Context<Self>) {
         match crate::machines::save_keeping_quiet(&next) {

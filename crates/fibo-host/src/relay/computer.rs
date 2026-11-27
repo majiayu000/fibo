@@ -68,8 +68,9 @@ pub(super) fn load_link(host: &str) -> io::Result<Link> {
     Link::parse(&text).map_err(io::Error::other)
 }
 
-/// `fibo remote join <link> [--name <名字>]`.
-pub(super) fn join(text: &str, name: Option<&str>) -> io::Result<String> {
+/// `fibo remote join <link> [--name <名字>]`: the name it is kept by, and whether it now
+/// has two ways (it was already reached by ssh).
+pub(super) fn join(text: &str, name: Option<&str>) -> io::Result<(String, bool)> {
     let link = Link::parse(text).map_err(|e| io::Error::other(t!("配对链接不对：{e}", e)))?;
     let host = name
         .map(str::to_owned)
@@ -82,13 +83,14 @@ pub(super) fn join(text: &str, name: Option<&str>) -> io::Result<String> {
     let machines = fibo_core::agent::config_dir()
         .ok_or_else(|| io::Error::other(t!("找不到配置目录")))?
         .join("machines.json");
-    write_machine(&machines, &host)?;
-    Ok(host)
+    let both = write_machine(&machines, &host)?;
+    Ok((host, both))
 }
 
 /// Adds `host` to machines.json reached by the relay, keeping what else it says; a file
-/// that cannot be read is left as it is.
-fn write_machine(file: &Path, host: &str) -> io::Result<()> {
+/// that cannot be read is left as it is. One already reached by ssh keeps ssh and gets
+/// both ways (`auto`, docs/multi-machine/routes.md): true then.
+fn write_machine(file: &Path, host: &str) -> io::Result<bool> {
     let mut list: Vec<Value> = match std::fs::read(file) {
         Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| {
             io::Error::other(t!("{display} 格式不对：{e}", display = file.display(), e))
@@ -96,14 +98,22 @@ fn write_machine(file: &Path, host: &str) -> io::Result<()> {
         Err(e) if e.kind() == io::ErrorKind::NotFound => vec![],
         Err(e) => return Err(e),
     };
-    match list.iter_mut().find(|m| m["host"] == host) {
-        Some(m) => m["via"] = "relay".into(),
-        None => list.push(serde_json::json!({ "host": host, "via": "relay" })),
-    }
+    let both = match list.iter_mut().find(|m| m["host"] == host) {
+        Some(m) if m["via"] != "relay" => {
+            m["auto"] = true.into();
+            true
+        }
+        Some(_) => false,
+        None => {
+            list.push(serde_json::json!({ "host": host, "via": "relay" }));
+            false
+        }
+    };
     if let Some(dir) = file.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    fibo_platform::fs::write_atomic(file, &serde_json::to_vec_pretty(&list)?)
+    fibo_platform::fs::write_atomic(file, &serde_json::to_vec_pretty(&list)?)?;
+    Ok(both)
 }
 
 #[cfg(test)]
@@ -116,8 +126,10 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("machines.json");
         std::fs::write(&file, r#"[{"host":"mac2","quiet":true}]"#).unwrap();
-        write_machine(&file, "apple").unwrap();
-        write_machine(&file, "apple").unwrap();
+        assert!(!write_machine(&file, "apple").unwrap());
+        assert!(!write_machine(&file, "apple").unwrap());
+        // One reached by ssh keeps it and gets both ways.
+        assert!(write_machine(&file, "mac2").unwrap());
         let list: Vec<Value> = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
         assert_eq!(list.len(), 2);
         assert_eq!(
@@ -125,6 +137,9 @@ mod tests {
             "the other machine is kept as it was"
         );
         assert_eq!(list[1]["via"], "relay");
+        assert_eq!(list[0]["via"], Value::Null, "ssh, as before");
+        assert_eq!(list[0]["auto"], true);
+        assert_eq!(list[1]["auto"], Value::Null);
         std::fs::write(&file, "[{").unwrap();
         assert!(write_machine(&file, "apple").is_err());
         assert_eq!(

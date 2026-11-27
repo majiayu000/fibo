@@ -380,8 +380,8 @@ impl Workbench {
         let note = match &link {
             Link::Online => {
                 let note = t!("{len} 个会话", len = rows.len());
-                match crate::machines::latency(&host) {
-                    Some(rtt) => t!("{note} · {ms} ms", note, ms = rtt.as_millis().to_string()),
+                match super::latency::round_trip_words(&host) {
+                    Some(rtt) => t!("{note} · {rtt}", note, rtt),
                     None => note,
                 }
             }

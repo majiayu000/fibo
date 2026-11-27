@@ -51,13 +51,20 @@ pub fn run(a: &Args) -> io::Result<()> {
         return list_devices(&a.socket);
     }
     if let Some(link) = a.value("join") {
-        let host = computer::join(link, a.value("name"))?;
+        let (host, both) = computer::join(link, a.value("name"))?;
         println!(
             "{}",
-            t!(
-                "已加上「{host}」：经中继连过去，不用 ssh。打开 Fibo 窗口就能在侧栏看到它",
-                host
-            )
+            if both {
+                t!(
+                    "{host} 现在有两条路：ssh 和中继，自动选快的。设置 › 手机与远程里可以改成只走一条",
+                    host
+                )
+            } else {
+                t!(
+                    "已加上「{host}」：经中继连过去，不用 ssh。打开 Fibo 窗口就能在侧栏看到它",
+                    host
+                )
+            }
         );
         return Ok(());
     }
