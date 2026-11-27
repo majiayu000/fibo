@@ -1,7 +1,8 @@
 //! Two real connections to one PTY: a pane shown again only looks, typing takes the input,
-//! and a click in the pane, the takeover button and the writer leaving hand it over.
+//! a drag there copies without taking it, and a click in the pane, the takeover button and the writer leaving hand it over.
 use super::*;
 use crate::connection::Connection;
+use gpui::InputEvent;
 
 pub(super) fn start(
     handle: Option<WindowHandle<workbench::Workbench>>,
@@ -96,6 +97,20 @@ pub(super) fn start(
         // A click in the terminal itself is someone here wanting it, so it takes over too.
         let other = competitor();
         until!(pane.read_with(cx, |p, _| p.is_read_only()));
+        // A drag there selects and copies instead, and leaves the input where it was.
+        cx.update(|cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(String::new())));
+        let (from, to) = pane.read_with(cx, |p, _| (p.visual_cell(2, 0), p.visual_cell(3, 20)));
+        let (from, to) = (from.expect("pane laid out"), to.expect("pane laid out"));
+        cx.update_window(handle.into(), |_, w, a| {
+            w.refresh(); w.draw(a).clear(a);
+            w.dispatch_event(gpui::MouseDownEvent { button: gpui::MouseButton::Left, position: from, modifiers: Default::default(), click_count: 1, first_mouse: false }.to_platform_input(), a);
+            w.dispatch_event(gpui::MouseMoveEvent { position: to, pressed_button: Some(gpui::MouseButton::Left), modifiers: Default::default() }.to_platform_input(), a);
+            w.dispatch_event(gpui::MouseUpEvent { button: gpui::MouseButton::Left, position: to, modifiers: Default::default(), click_count: 1 }.to_platform_input(), a);
+        }).unwrap();
+        let clip = cx.update(|cx| cx.read_from_clipboard().and_then(|c| c.text())).unwrap_or_default();
+        assert!(!clip.trim().is_empty(), "a drag in a read-only pane copied nothing");
+        wait(500).await;
+        assert!(writable(&other) && pane.read_with(cx, |p, _| p.is_read_only()), "a drag took the input over");
         cx.update_window(handle.into(), |_, w, a| {
             let viewport = w.viewport_size();
             w.refresh(); w.draw(a).clear(a);
