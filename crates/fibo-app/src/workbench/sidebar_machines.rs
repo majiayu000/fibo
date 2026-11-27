@@ -357,9 +357,9 @@ impl Workbench {
         }
         self.note_landed();
     }
-    /// Makes sure the row ⌘J went to, in `space`, is on the list: a space shown alone stays
+    /// Makes sure the session opened by a jump is on the list: a space shown alone stays
     /// so when the row is in it, on this machine and on another alike.
-    fn reveal_machine(&mut self, index: Option<usize>, space: Option<&str>) {
+    pub(super) fn reveal_machine(&mut self, index: Option<usize>, space: Option<&str>) {
         let filter = match index {
             None => &mut self.sidebar.space_filter,
             Some(_) => {
