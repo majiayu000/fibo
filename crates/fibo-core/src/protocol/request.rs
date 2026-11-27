@@ -182,6 +182,10 @@ pub enum Request {
         limit: usize,
         #[serde(default)]
         last: Option<usize>,
+        /// With no `seq`: the stretch that ended where the turn was last stopped, not the one
+        /// after it (empty until it answers). A host before this reads it as absent.
+        #[serde(default)]
+        stopped: bool,
     },
     /// One tool call by its id, and where its raw lines are.
     ToolCall {

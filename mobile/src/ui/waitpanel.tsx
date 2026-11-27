@@ -1,9 +1,10 @@
 // The strip above the composer while an Agent waits on you: what it asks and a way to answer
 // it from here (see waits.ts for which way).
-import { Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ScrollView, Text, View } from 'react-native';
 import { Btn } from './kit';
 import { useTheme } from './theme';
-import type { WaitView } from './waits';
+import { longWait, type WaitView } from './waits';
 import { tr } from '../i18n';
 
 export function WaitPanel({
@@ -19,17 +20,25 @@ export function WaitPanel({
   onTerminal: () => void;
 }) {
   const t = useTheme();
+  // Six lines keep the composer in sight; a plan runs longer, and its steps were cut off with
+  // only 「看终端」 to read them by (2026-11-26 walk). 看全文 opens it here, scrolling in place.
+  const long = longWait(view.text);
+  const [whole, setWhole] = useState(false);
+  useEffect(() => setWhole(false), [view.text]);
   return (
     <View style={{ paddingHorizontal: 18, paddingBottom: 10, gap: 8 }}>
-      <Text numberOfLines={6} style={{ color: t.wait, fontSize: 13, lineHeight: 19 }}>
-        {view.text}
-      </Text>
+      <ScrollView style={{ maxHeight: whole ? 300 : undefined }} scrollEnabled={whole} nestedScrollEnabled>
+        <Text numberOfLines={whole ? undefined : 6} style={{ color: t.wait, fontSize: 13, lineHeight: 19 }}>
+          {view.text}
+        </Text>
+      </ScrollView>
       {!!view.computer && <Text style={{ color: t.dim, fontSize: 13, lineHeight: 19 }}>{view.computer}</Text>}
       {!view.options.length && !view.computer && (
         <Text style={{ color: t.dim, fontSize: 12, lineHeight: 17 }}>{tr('先点「看终端」看清楚，再用 ↑ ↓ 移到要的那项、按回车')}</Text>
       )}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {canKey && view.options.map((o) => <Btn key={o.key} label={o.label} onPress={() => onKeys([o.key])} />)}
+        {long && <Btn label={whole ? tr('收起') : tr('看全文')} onPress={() => setWhole(!whole)} />}
         <Btn label={tr('看终端')} onPress={onTerminal} />
         {canKey && view.keys && (
           <>
