@@ -32,4 +32,4 @@ decision-makers: majiayu000
 - `cargo test -p fibo-host --bin fibo remote::file`：项目里的 `.md`、`.txt` 能读；`../`、项目外绝对路径、项目内指向外面的符号链接都回「不在会话所在的仓库里」；`.rs` 和不存在的文件被拒；超长截断、二进制拒绝。
 - `cargo test -p fibo-remote role`：`file` 只有完全控制有，且不算写操作。
 - `mobile/test/filelink.test.ts`：网页链接打开、`.md`/`.txt`（含 `file://`、URL 转义、`#L12`）进预览、其他文件和没有会话上下文时复制。
-- 真手机待走：`docs/phone-app/walkthrough.md` 的 `chat.filelink`，在真手机点对话里的设计稿，看到正文，返回后仍在原对话位置；核对普通网页、旧电脑端、离线、配对权限不足、项目外路径或符号链接。
+- 真手机（11-28，OPPO PMA110 安卓 16，`chat.filelink`）：仓库里的 `.md` 显示正文；仓库外的 README 说明「不在会话所在的仓库里」；两种都有「复制电脑路径」；返回后仍在原对话位置。没走：普通网页、旧电脑端、离线、配对权限不足、符号链接（单测守着）、复制到剪贴板的内容。
