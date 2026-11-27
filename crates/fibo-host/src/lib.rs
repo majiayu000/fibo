@@ -15,6 +15,7 @@ mod diagnostics;
 mod host;
 pub mod log_index;
 mod official;
+pub mod pictures;
 pub mod plugin_hooks;
 mod program_status;
 mod prompt_modes;

@@ -4,7 +4,10 @@ use gpui::{ClipboardItem, Image, ImageFormat};
 #[test]
 fn an_image_goes_to_the_program_as_ctrl_v() {
     let image = ClipboardItem::new_image(&Image::from_bytes(ImageFormat::Png, vec![1]));
-    assert_eq!(super::paste_action(Some(&image)), PasteAction::Image);
+    assert_eq!(
+        super::paste_action(Some(&image)),
+        PasteAction::Image(vec![1])
+    );
 }
 #[test]
 fn copied_note_counts_lines_or_characters_and_flags_a_whole_screen_copy() {

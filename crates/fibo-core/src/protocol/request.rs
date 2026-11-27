@@ -237,6 +237,12 @@ pub enum Request {
     },
     /// A guarded chat message using the Agent's queue or steer key.
     SendTurn(TurnInput),
+    /// A picture another computer's window was given for a terminal here (pasted or
+    /// dropped), PNG, JPEG, GIF or WebP as base64: kept on this machine as a phone's is.
+    /// Replies `Text`, its path here, for the window to paste. Hosts before it refuse it.
+    SaveImage {
+        data: String,
+    },
     /// `fibo run`: each time the Agent in `child` ends a turn (done, a question, an
     /// error), its last reply goes into `parent`'s Agent input, wrapped as
     /// `<fibo from=…>`, once that Agent is idle. Ends when either terminal exits.
