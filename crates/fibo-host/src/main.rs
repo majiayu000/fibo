@@ -269,6 +269,11 @@ fn hook(mut args: impl Iterator<Item = String>) -> std::io::Result<()> {
     if bytes.len() > 1024 * 1024 {
         return Err(std::io::Error::other(t!("hook 传来的内容超过 1 MiB")));
     }
+    // A `claude -p` some tool runs inside the terminal (remem's summaries) inherits its
+    // FIBO_TERMINAL and fires the same hooks: it is not the terminal's conversation.
+    if agent == Agent::Claude && headless_claude(std::env::var("CLAUDE_CODE_ENTRYPOINT").ok()) {
+        return Ok(());
+    }
     let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(std::io::Error::other)?;
     let cli_id = value["session_id"]
         .as_str()
@@ -296,5 +301,24 @@ fn hook(mut args: impl Iterator<Item = String>) -> std::io::Result<()> {
             "后台的回复不对：{other}",
             other = format!("{other:?}")
         ))),
+    }
+}
+
+/// Claude's entrypoint says a run without a person at it (`-p` is `sdk-cli`, the SDKs
+/// `sdk-ts` / `sdk-py`), as the transcript parser's rule hides them (`agents/claude.rs`);
+/// such runs often keep no transcript, so the hook is the only place left to tell.
+fn headless_claude(entrypoint: Option<String>) -> bool {
+    entrypoint.is_some_and(|e| e == "hook" || e.contains("sdk") || e.contains("print"))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn print_mode_claude_is_not_the_terminals_conversation() {
+        assert!(super::headless_claude(Some("sdk-cli".into())));
+        assert!(super::headless_claude(Some("sdk-ts".into())));
+        assert!(!super::headless_claude(Some("cli".into())));
+        // Older Claude versions set nothing: kept, as before.
+        assert!(!super::headless_claude(None));
     }
 }
