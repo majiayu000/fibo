@@ -324,7 +324,10 @@ impl Workbench {
                         div()
                             .text_size(px(T::SMALL))
                             .text_color(T::color(T::primary()))
-                            .child(format!("{} · {}", d.name, role_label(&d.role))),
+                            .child(match d.is_computer() {
+                                true => t!("{name} · 电脑 · 完全控制", name = &d.name),
+                                false => format!("{} · {}", d.name, role_label(&d.role)),
+                            }),
                     )
                     .child(label(detail).truncate()),
             )
@@ -360,7 +363,11 @@ impl Workbench {
         let mut block = div().flex().flex_col().gap(px(T::S4)).child(row);
         if unfolded {
             let mut roles = div().flex().items_center().gap(px(T::S4));
-            for (role, text) in ROLES {
+            // A computer has full control or nothing: less would only get it refused.
+            if d.is_computer() {
+                roles = roles.child(label(t!("电脑只能完全控制；不让它连就取消配对")));
+            }
+            for (role, text) in ROLES.into_iter().filter(|_| !d.is_computer()) {
                 let on = d.role == role;
                 let id = id.clone();
                 roles = roles.child(

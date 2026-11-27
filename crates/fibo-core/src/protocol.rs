@@ -72,6 +72,16 @@ pub struct RemoteDevice {
     /// Unix seconds.
     pub paired: u64,
     pub last_seen: Option<u64>,
+    /// "computer" for another computer paired through the relay; empty for a phone, and from
+    /// a host before 11-27, which paired only phones.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub kind: String,
+}
+
+impl RemoteDevice {
+    pub fn is_computer(&self) -> bool {
+        self.kind == "computer"
+    }
 }
 
 /// One phone connected now.
