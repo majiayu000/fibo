@@ -97,8 +97,10 @@ fn a_refresh_on_the_hosts_own_content_is_the_delta_of_its_snapshot() {
         .unwrap();
     c.turn = fibo_core::content::Turn::Completed;
     let content = c.clone();
-    host.title_busy
-        .insert(live.terminal.clone().unwrap(), (live.id.clone(), 7));
+    host.title_busy.insert(
+        live.terminal.clone().unwrap(),
+        BusyCue::new(&live.id, 7, None),
+    );
     let mut old = live.clone();
     (old.id, old.terminal, old.current, old.updated) = ("old".into(), None, false, 0);
     let mut past = old.clone();

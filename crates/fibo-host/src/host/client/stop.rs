@@ -43,7 +43,7 @@ pub(super) fn await_interrupt(shared: &Shared, id: &str) -> io::Result<Reply> {
                 });
             }
             return Err(io::Error::other(t!(
-                "发了中断，但它没有停。可以打开终端看一眼，或者再试一次"
+                "已发送中断，暂时还没确认停下。可以打开终端查看"
             )));
         }
         std::thread::sleep(Duration::from_millis(200));

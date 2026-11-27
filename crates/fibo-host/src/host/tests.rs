@@ -82,7 +82,8 @@ fn snapshot_keeps_only_retained_content_and_applies_screen_wait_without_mutating
         crate::screen_rules::bundled(Agent::Claude),
         "Do you want to continue?\n❯ 1. Yes\n  2. No",
     );
-    host.title_busy.insert("t".into(), ("live".into(), 1));
+    host.title_busy
+        .insert("t".into(), BusyCue::new("live", 1, None));
     assert!(seen.waiting());
     host.screen_waits.insert("t".into(), seen);
     let snapshot = host.snapshot();
@@ -121,6 +122,44 @@ fn snapshot_keeps_only_retained_content_and_applies_screen_wait_without_mutating
     fs::remove_dir_all(root).unwrap();
 }
 #[test]
+fn an_ended_turn_outlasts_its_old_busy_cues() {
+    use fibo_core::content::{Content, Turn};
+    let (mut host, root) = fixture();
+    host.workspace.agent_sessions = vec![session("live", 0, Some("t"), true)];
+    for turn in [Turn::Interrupted, Turn::Completed] {
+        let ended = Content {
+            turn,
+            turn_started: 99,
+            turn_key: "first".into(),
+            signal_at: 100,
+            ..Content::default()
+        };
+        host.title_busy
+            .insert("t".into(), BusyCue::new("live", 99, None));
+        host.screen_busy
+            .insert("t".into(), BusyCue::new("live", 100, None));
+        host.workspace
+            .content
+            .insert("live".into(), std::sync::Arc::new(ended));
+        assert_eq!(host.snapshot().content["live"].turn, turn);
+
+        // A new cue after the end can start another turn within the very same second.
+        let cue = BusyCue::new("live", 100, Some(&host.workspace.content["live"]));
+        host.screen_busy.insert("t".into(), cue);
+        let live = &host.snapshot().content["live"];
+        assert_eq!(live.turn, Turn::Running);
+        assert_eq!(live.turn_started, 100);
+
+        // If another turn also ended in that second, the cue preceded that ending.
+        let content = host.workspace.content.get_mut("live").unwrap();
+        std::sync::Arc::make_mut(content).turn_key = "second".into();
+        assert_eq!(host.snapshot().content["live"].turn, turn);
+    }
+    drop(host);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn an_approved_dialog_runs_again_once_the_screen_ticks() {
     use fibo_core::content::{Content, Turn};
     let (mut host, root) = fixture();
@@ -141,7 +180,8 @@ fn an_approved_dialog_runs_again_once_the_screen_ticks() {
         "Do you want to proceed?\n❯ 1. Yes\n  2. No",
     );
     host.screen_waits.insert("t".into(), seen);
-    host.screen_busy.insert("t".into(), ("live".into(), 101));
+    host.screen_busy
+        .insert("t".into(), BusyCue::new("live", 101, None));
     assert_eq!(host.snapshot().content["live"].turn, Turn::Waiting);
     // Answered: the dialog is gone and the timer came back after it.
     host.screen_waits.remove("t");
@@ -149,7 +189,8 @@ fn an_approved_dialog_runs_again_once_the_screen_ticks() {
     assert_eq!(live.turn, Turn::Running);
     assert!(live.waiting.is_empty());
     // A timer from before the dialog proves nothing about it.
-    host.screen_busy.insert("t".into(), ("live".into(), 99));
+    host.screen_busy
+        .insert("t".into(), BusyCue::new("live", 99, None));
     assert_eq!(host.snapshot().content["live"].turn, Turn::Waiting);
     drop(host);
     fs::remove_dir_all(root).unwrap();
@@ -164,7 +205,8 @@ fn a_program_report_outranks_screen_guesses_and_ends_with_its_program() {
         .content
         .insert("live".into(), std::sync::Arc::new(Content::default()));
     // The title spins, but the program says it is waiting on the user.
-    host.title_busy.insert("t".into(), ("live".into(), 1));
+    host.title_busy
+        .insert("t".into(), BusyCue::new("live", 1, None));
     let said = |state: &str, msg: &str| Said {
         state: state.into(),
         kind: None,
