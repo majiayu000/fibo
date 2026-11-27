@@ -14,7 +14,7 @@ pub(super) fn start(
     {
         let handle = *handle;
         cx.spawn(async move |cx| {
-            use gpui::InputEvent;
+            use gpui::{EntityInputHandler, Focusable, InputEvent};
             let executor = cx.background_executor().clone();
             let wait = move |s: u64| executor.timer(Duration::from_millis(s));
             macro_rules! until {
@@ -99,7 +99,23 @@ pub(super) fn start(
             press("escape", cx);
             wait(300).await;
             assert_eq!(typed.get(), 1, "Esc with nothing open reaches the terminal");
-            eprintln!("layer keys native PASS: close question holds Return ⌃C ⌘W, the tab menu holds Return Space Tab Down, Esc dismisses both layers; Esc with nothing open does");
+            let name = handle.update(cx, |v, w, a| v.visual_focus_phone_name(w, a)).unwrap();
+            wait(300).await;
+            let caret = |cx: &mut gpui::AsyncApp| {
+                handle
+                    .update(cx, |_, w, a| {
+                        assert!(name.focus_handle(a).is_focused(w), "phone name field holds focus");
+                        name.update(a, |field, a| {
+                            field.selected_text_range(false, w, a).unwrap().range
+                        })
+                    })
+                    .unwrap()
+            };
+            assert_eq!(caret(cx), 10..10);
+            press("left", cx);
+            wait(200).await;
+            assert_eq!(caret(cx), 9..9, "Left must move the phone name caret");
+            eprintln!("layer keys native PASS: close question holds Return ⌃C ⌘W, the tab menu holds Return Space Tab Down, Esc dismisses both layers; Esc with nothing open reaches the terminal; Left moves the phone name caret");
             cx.update(|cx| cx.quit());
         })
         .detach();

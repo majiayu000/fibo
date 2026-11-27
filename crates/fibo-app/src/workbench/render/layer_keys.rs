@@ -89,11 +89,21 @@ impl Workbench {
         if self.self_keyed_layer() {
             return;
         }
-        let fate = layer_key(
-            self.layout.confirm_close.is_some(),
-            self.menu_open(),
-            &event.keystroke,
-        );
+        let confirm = self.layout.confirm_close.is_some();
+        let fate = layer_key(confirm, self.menu_open(), &event.keystroke);
+        // Menus sometimes contain their own focused fields. Keep their navigation
+        // unless the key would land in a terminal pane.
+        if fate == LayerKey::Hold
+            && !confirm
+            && !self
+                .layout
+                .panes
+                .values()
+                .chain(self.peek.iter().map(|peek| &peek.pane))
+                .any(|pane| pane.focus_handle(cx).is_focused(window))
+        {
+            return;
+        }
         if fate == LayerKey::Dismiss {
             self.dismiss_top_layer();
             cx.notify();
