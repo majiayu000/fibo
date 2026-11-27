@@ -11,7 +11,7 @@ mod themes_cmd;
 fn main() {
     let mut args = std::env::args().skip(1).peekable();
     let ran = if args.next().as_deref() == Some("claude-quota") {
-        if args.peek().is_some_and(|s| s == "usage" || s == "refresh") {
+        if args.peek().is_some_and(|s| s == "usage") {
             apply_language();
         }
         fibo_host::claude_quota::run(args)

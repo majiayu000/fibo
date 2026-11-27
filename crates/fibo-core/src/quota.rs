@@ -663,7 +663,7 @@ mod tests {
     }
 
     #[test]
-    fn the_claude_plugin_reads_only_http_samples_and_keeps_their_time() {
+    fn the_claude_plugin_reads_what_its_status_line_kept() {
         let root = std::env::temp_dir().join(format!("kl-quota-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let dir = root.join("plugins/claude-quota");
@@ -675,15 +675,19 @@ mod tests {
         let (sources, report) = load(vec![dir.join("quota.json")]);
         assert!(report[0].result.is_ok(), "{report:?}");
         let s = &sources[0];
-        assert_eq!(sources.len(), 1);
-        assert!(s.path().is_none());
+        assert_eq!(
+            s.path().unwrap(),
+            root.join("plugin-data/claude-quota/statusline.json")
+        );
         let doc = serde_json::json!({
-            "at": 1_793_605_648u64,
-            "session": {"used": 23.6, "resets_at": 1_798_000_000},
-            "week": {"used": 41, "resets_at": 1_798_400_000},
-            "models": []
+            "session_id": "abc",
+            "rate_limits": {
+                "five_hour": {"used_percentage": 23.6, "resets_at": 1_798_000_000},
+                "seven_day": {"used_percentage": 41, "resets_at": 1_798_400_000},
+                "seven_day_opus": null
+            }
         });
-        let q = s.reading(&doc, 1_793_605_999).unwrap();
+        let q = s.reading(&doc, 1_793_605_648).unwrap();
         assert_eq!(q.at, 1_793_605_648);
         assert_eq!(
             q.windows,
@@ -702,7 +706,7 @@ mod tests {
                 },
             ]
         );
-        // A legacy status line is never another account quota source.
+        // API-key sign-ins: no limits, nothing to show.
         assert_eq!(
             s.reading(&serde_json::json!({"rate_limits": null}), 1),
             None
