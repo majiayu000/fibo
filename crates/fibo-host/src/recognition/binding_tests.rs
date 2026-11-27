@@ -262,6 +262,7 @@ fn a_hook_switch_after_clear_outlives_the_launch_id_on_argv() {
         &ta,
         &processes,
         true,
+        false,
     )
     .unwrap();
     reconcile(&mut w, &both, &processes, &HashMap::new()).unwrap();
@@ -274,6 +275,7 @@ fn a_hook_switch_after_clear_outlives_the_launch_id_on_argv() {
         &b,
         &tb,
         &processes,
+        false,
         false,
     )
     .unwrap();
@@ -294,6 +296,7 @@ fn a_hook_switch_after_clear_outlives_the_launch_id_on_argv() {
         &a,
         &ta,
         &processes,
+        false,
         false,
     )
     .unwrap();
@@ -347,6 +350,7 @@ fn a_claude_run_from_the_terminals_claude_keeps_the_binding() {
             &log(id),
             processes,
             ended,
+            false,
         )
     };
     // The wrapper and its native child are one Agent, not a nesting.
@@ -365,6 +369,70 @@ fn a_claude_run_from_the_terminals_claude_keeps_the_binding() {
     assert_eq!(current(&w), None);
     hook(&mut w, 1, &inner, &processes, false).unwrap();
     assert_eq!(current(&w), Some(inner));
+}
+
+#[test]
+fn a_claude_outside_the_tree_with_the_terminals_environment_keeps_the_binding() {
+    let mut w = Workspace::default();
+    let [own, worker, cleared] = [0, 1, 2].map(|_| uuid::Uuid::new_v4().to_string());
+    w.terminals.push(Terminal {
+        id: "pty-0".into(),
+        space: "s".into(),
+        argv: vec!["zsh".into()],
+        cwd: "/same".into(),
+        pid: Some(100),
+        state: ProcessState::Running,
+        exit_code: None,
+        error: None,
+    });
+    let process = |pid, parent, runtime| Process {
+        pid,
+        parent,
+        runtime,
+        cli_session_id: None,
+        no_daemon: false,
+        launch: vec![],
+    };
+    // The terminal's Claude, and a detached worker's `claude -p` that inherited its
+    // environment (remem summarizing the turn that just ended, 2026-11-27).
+    let processes = vec![
+        process(100, 1, None),
+        process(101, 100, Some(Agent::Claude)),
+        process(400, 1, None),
+        process(401, 400, Some(Agent::Claude)),
+    ];
+    let log = |id: &str| Transcript {
+        runtime: Agent::Claude,
+        cli_id: id.into(),
+        path: format!("/same/{id}.jsonl"),
+        cwd: "/same".into(),
+        updated: 1,
+    };
+    let current = |w: &Workspace| w.current_agent("pty-0").map(|s| s.cli_session_id.clone());
+    let hook = |w: &mut Workspace, pid, id: &str, ended, in_place| {
+        let t = log(id);
+        apply_hook(
+            w,
+            Agent::Claude,
+            pid,
+            Some("pty-0"),
+            id,
+            &t,
+            &processes,
+            ended,
+            in_place,
+        )
+    };
+    hook(&mut w, 1, &own, false, false).unwrap();
+    // Traced to the worker's CLI, or only named after the hook's caller left.
+    for pid in [401, 1] {
+        assert!(hook(&mut w, pid, &worker, false, false).is_err());
+        assert!(hook(&mut w, pid, &worker, true, false).is_err());
+        assert_eq!(current(&w), Some(own.clone()));
+    }
+    // `/clear` in the terminal's Claude announces itself in place and still moves it.
+    hook(&mut w, 1, &cleared, false, true).unwrap();
+    assert_eq!(current(&w), Some(cleared));
 }
 
 #[test]
@@ -499,13 +567,25 @@ fn a_conversation_handed_to_the_claude_daemon_stays_with_its_terminal() {
         &ta,
         &processes,
         false,
+        false,
     )
     .unwrap();
     let first = w.current_agent("pty-0").unwrap().id.clone();
     w.agent_sessions[0].task = Some("todo".into());
     let current = |w: &Workspace| w.current_agent("pty-0").map(|s| s.cli_session_id.clone());
     // Before the old log says where it went, a daemon's hook belongs to nobody.
-    assert!(apply_hook(&mut w, Agent::Claude, 301, None, &b, &tb, &processes, false).is_err());
+    assert!(apply_hook(
+        &mut w,
+        Agent::Claude,
+        301,
+        None,
+        &b,
+        &tb,
+        &processes,
+        false,
+        false
+    )
+    .is_err());
     w.content.insert(
         first.clone(),
         std::sync::Arc::new(fibo_core::content::Content {
@@ -527,19 +607,42 @@ fn a_conversation_handed_to_the_claude_daemon_stays_with_its_terminal() {
             &other,
             &tc,
             &processes,
+            false,
             false
         )
         .is_err(),
         "only the session the log names"
     );
-    apply_hook(&mut w, Agent::Claude, 301, None, &b, &tb, &processes, false).unwrap();
+    apply_hook(
+        &mut w,
+        Agent::Claude,
+        301,
+        None,
+        &b,
+        &tb,
+        &processes,
+        false,
+        false,
+    )
+    .unwrap();
     assert_eq!(current(&w), Some(b.clone()));
     assert_eq!(
         w.current_agent("pty-0").unwrap().binding,
         Some(Binding::Continued)
     );
     // Its next hooks (Stop, approvals) keep reaching the terminal.
-    apply_hook(&mut w, Agent::Claude, 301, None, &b, &tb, &processes, false).unwrap();
+    apply_hook(
+        &mut w,
+        Agent::Claude,
+        301,
+        None,
+        &b,
+        &tb,
+        &processes,
+        false,
+        false,
+    )
+    .unwrap();
     assert_eq!(current(&w), Some(b.clone()));
     // The old log held open by the terminal's Claude does not take it back.
     let open = HashMap::from([(101, vec![ta.path.clone()])]);
@@ -559,6 +662,7 @@ fn a_conversation_handed_to_the_claude_daemon_stays_with_its_terminal() {
         &a,
         &ta,
         &processes,
+        false,
         false,
     )
     .unwrap();

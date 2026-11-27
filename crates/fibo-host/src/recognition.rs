@@ -191,7 +191,9 @@ pub(crate) fn bound(t: &Transcript, terminal: String, binding: Binding) -> Agent
 }
 /// `named` is the terminal the hook's environment says it runs in (`MOORING_TERMINAL`).
 /// The process tree decides when it can be read; the name only stands in when the hook's
-/// caller already left it, and never when the two disagree.
+/// caller already left it, and never when the two disagree. `in_place` is a SessionStart
+/// the terminal's own Agent sends when it changes conversation without a new process
+/// (`/clear`, `/resume`, compaction).
 // Each input is a separate piece of hook evidence; bundling them would hide which one decides.
 #[allow(clippy::too_many_arguments)]
 pub fn apply_hook(
@@ -203,6 +205,7 @@ pub fn apply_hook(
     transcript: &Transcript,
     processes: &[Process],
     ended: bool,
+    in_place: bool,
 ) -> io::Result<()> {
     let agent = ancestors(pid, processes)
         .into_iter()
@@ -224,6 +227,7 @@ pub fn apply_hook(
     } else {
         Binding::Hook
     };
+    let outside = traced.is_none();
     let terminal = match (traced, named) {
         (Some(traced), Some(named)) if traced != named => {
             return Err(io::Error::other(
@@ -265,6 +269,19 @@ pub fn apply_hook(
     if other && inner {
         return Err(io::Error::other(
             "Hook from an Agent nested in the terminal's Agent keeps the binding",
+        ));
+    }
+    // Nor one outside the tree that only inherited the environment: a detached worker's
+    // `claude -p` (a memory tool summarizing the turn that just ended). While the
+    // terminal's Agent holds another conversation, only that Agent changes it in place,
+    // or hands it to the daemon.
+    if other
+        && outside
+        && !in_place
+        && continued_terminal(workspace, runtime, cli_id).as_deref() != Some(terminal.as_str())
+    {
+        return Err(io::Error::other(
+            "Hook from an Agent outside the terminal's process tree keeps the binding",
         ));
     }
     let mut observed = bound(transcript, terminal, binding);

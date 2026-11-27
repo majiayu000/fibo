@@ -88,6 +88,10 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 &observed,
                 &processes,
                 ended,
+                matches!(
+                    facts.source.as_deref(),
+                    Some("clear" | "resume" | "compact")
+                ),
             )?;
             if let Some(event) = event.filter(|_| written) {
                 index.hook(&observed.path, &event, &facts)?;
