@@ -45,6 +45,17 @@ pub(in crate::workbench) enum Tab {
     Discover,
 }
 
+pub(super) fn switch_notice() -> Option<gpui::Div> {
+    fibo_core::plugin::switch_error().map(|why| {
+        div()
+            .px(px(T::S16))
+            .py(px(T::S10))
+            .text_size(px(T::SMALL))
+            .text_color(Tone::Danger.ink())
+            .child(t!("无法读取插件开关，已暂停加载插件。{why}", why))
+    })
+}
+
 pub(super) fn mark(c: Category) -> &'static str {
     match c {
         Category::Effects => "✓",

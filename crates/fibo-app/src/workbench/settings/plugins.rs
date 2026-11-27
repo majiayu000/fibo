@@ -776,6 +776,7 @@ impl SettingsView {
         if self.market.face.is_some() {
             return div().pt(px(T::S8)).child(card().child(self.face_card(cx)));
         }
+        let page = div().flex().flex_col().children(gallery::switch_notice());
         let items = catalog::items(&self.market.offers());
         if let Some(item) = self
             .market
@@ -783,18 +784,14 @@ impl SettingsView {
             .as_ref()
             .and_then(|id| items.iter().find(|i| i.id == *id))
         {
-            return self.item_detail(item, &items, cx);
+            return page.child(self.item_detail(item, &items, cx));
         }
         let installed = items.iter().filter(|i| i.plugin.is_some()).count();
         let total = items.iter().filter(|i| !i.builtin()).count();
         let top = self.plugin_tabs(installed, total, cx);
-        div()
-            .flex()
-            .flex_col()
-            .child(top)
-            .child(match self.market.tab {
-                Tab::Discover => self.discover_tab(&items, cx),
-                Tab::Installed => self.installed_tab(&items, cx),
-            })
+        page.child(top).child(match self.market.tab {
+            Tab::Discover => self.discover_tab(&items, cx),
+            Tab::Installed => self.installed_tab(&items, cx),
+        })
     }
 }

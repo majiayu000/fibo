@@ -49,6 +49,7 @@ impl Prepared {
             err
         };
         let _held = plugin::lock(&plugins).map_err(discard)?;
+        let off = plugin::disabled(&plugins).map_err(|e| discard(e.to_string()))?;
         let target = plugin::discover(&plugins)
             .into_iter()
             .find(|f| f.result.as_ref().is_ok_and(|p| p.id == id))
@@ -67,7 +68,7 @@ impl Prepared {
             }
             None => plugins.join(&id),
         };
-        let on = !plugin::turned_off(&plugins, &id);
+        let on = !off.contains(&id);
         let had = target.exists();
         let provides_setup =
             |dir: &Path| plugin::check(dir).is_ok_and(|p| p.provides.contains(&Kind::Setup));

@@ -108,14 +108,33 @@ fn a_turned_off_plugin_is_listed_but_loads_nothing() {
         r#"{"api":1,"id":"aider","name":"Aider","provides":["agent"]}"#,
         &[("agent.json", "{}")],
     );
-    std::fs::write(root.join("disabled.json"), r#"["aider"]"#).unwrap();
-    let found = discover(&root);
-    assert_eq!(found.len(), 1, "the switch file is not a plugin");
-    let p = found[0].result.as_ref().unwrap();
-    assert!(!p.enabled);
-    assert!(p.files(Kind::Agent).is_empty());
-    std::fs::write(root.join("disabled.json"), "not json").unwrap();
-    assert!(discover(&root)[0].result.as_ref().unwrap().enabled);
+    let file = switches(&root);
+    let loaded = || discover(&root).pop().unwrap().result.unwrap();
+    assert_eq!(
+        loaded().files(Kind::Agent),
+        [root.join("a-aider/agent.json")]
+    );
+
+    let saved = r#"["aider"]"#;
+    std::fs::write(&file, saved).unwrap();
+    assert_eq!(discover(&root).len(), 1, "the switch file is not a plugin");
+    assert!(!loaded().enabled);
+    assert!(loaded().files(Kind::Agent).is_empty());
+
+    let broken = "not json";
+    std::fs::write(&file, broken).unwrap();
+    assert!(!loaded().enabled);
+    assert!(loaded().files(Kind::Agent).is_empty());
+    let why = disabled(&root).unwrap_err().to_string();
+    assert!(why.contains("disabled.json"), "{why}");
+    assert!(uninstall_in(&root, "aider", true).is_err());
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), broken);
+    assert!(root.join("a-aider/agent.json").is_file());
+
+    std::fs::write(&file, saved).unwrap();
+    assert!(!loaded().enabled);
+    set_enabled_in(&root, "aider", true, false).unwrap();
+    assert!(loaded().enabled);
     let _ = std::fs::remove_dir_all(&root);
 }
 

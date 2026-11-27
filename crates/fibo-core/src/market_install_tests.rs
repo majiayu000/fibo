@@ -130,6 +130,32 @@ fn the_confirmation_names_commands_and_webhooks() {
     assert!(lines.iter().any(|l| l.contains("say hi")), "{lines:?}");
 }
 
+#[test]
+fn an_unreadable_switch_blocks_a_catalog_update() {
+    let catalog = tmp("bad-switch-catalog");
+    let plugins = tmp("bad-switch-install");
+    const EFFECT: &str = r#"{"api":1,"complete":{"style":"sweep"}}"#;
+    let offer = |version| {
+        offer_of(
+            &catalog,
+            &format!(
+                r#"{{"api":1,"id":"switched","name":"S","version":"{version}","provides":["effects"]}}"#
+            ),
+            &[("effects.json", EFFECT)],
+        )
+    };
+    offer("1.0.0").install_into(&plugins).unwrap();
+    let switches = plugins.join("disabled.json");
+    std::fs::write(&switches, "broken").unwrap();
+    let why = offer("2.0.0").install_into(&plugins).unwrap_err();
+    assert!(why.contains("disabled.json"), "{why}");
+    assert_eq!(std::fs::read_to_string(&switches).unwrap(), "broken");
+    let kept = plugin::check(&plugins.join("switched")).unwrap();
+    assert_eq!(kept.version.as_deref(), Some("1.0.0"));
+    let _ = std::fs::remove_dir_all(&catalog);
+    let _ = std::fs::remove_dir_all(&plugins);
+}
+
 /// An update is asked about exactly when it adds to what runs; animations are not.
 #[test]
 fn an_update_asks_only_when_it_adds_to_what_runs() {
