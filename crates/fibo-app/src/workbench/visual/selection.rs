@@ -24,6 +24,23 @@ impl Workbench {
         }
         lit
     }
+    /// A row to walk between on each side: this machine's first open session with a live
+    /// terminal (its CLI id and id), machine 0's first such row (its terminal and key).
+    pub fn visual_pick_rows(&self, cx: &gpui::App) -> Option<(String, String, String, String)> {
+        let here = (self.workspace.agent_sessions.iter()).find(|s| {
+            self.session_hidden(s).is_none()
+                && self.session_open(s)
+                && live_terminal(&self.workspace, s).is_some()
+        })?;
+        let rows = self.session_rows_of(0, cx);
+        let far = rows.iter().find(|r| r.online && r.target() != r.l.0.id)?;
+        Some((
+            here.cli_session_id.clone(),
+            here.id.clone(),
+            far.target().to_owned(),
+            far.key().to_owned(),
+        ))
+    }
     /// The key of machine `index`'s row for its terminal `terminal`.
     pub fn visual_remote_row_key(&self, index: usize, terminal: &str, cx: &gpui::App) -> String {
         (self.session_rows_of(index, cx).iter())

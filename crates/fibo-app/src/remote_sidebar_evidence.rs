@@ -26,6 +26,9 @@ pub(super) fn start(
     directory: PathBuf,
     cx: &mut App,
 ) -> bool {
+    if std::env::var_os("MOORING_REAL_SELECTION_EVIDENCE").is_some() {
+        return selection::real(handle, directory, cx);
+    }
     cx.spawn(async move |cx| {
         let executor = cx.background_executor().clone();
         let wait = move |ms| executor.timer(Duration::from_millis(ms));
