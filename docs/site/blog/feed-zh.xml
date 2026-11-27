@@ -4,8 +4,40 @@
   <link href="https://fibo.page/blog/zh.html"/>
   <link rel="self" href="https://fibo.page/blog/feed-zh.xml"/>
   <id>https://fibo.page/blog/zh.html</id>
-  <updated>2026-11-27T00:00:00+08:00</updated>
+  <updated>2026-11-28T00:00:00+08:00</updated>
   <author><name>Fibo</name><uri>https://fibo.page/</uri></author>
+  <entry>
+    <title>Fibo 的终端为什么不用 Tauri + xterm.js：一轮测评后换成 GPUI + libghostty-vt 原生绘制</title>
+    <link href="https://fibo.page/blog/why-gpui/zh.html"/>
+    <id>https://fibo.page/blog/why-gpui/zh.html</id>
+    <published>2026-11-28T00:00:00+08:00</published>
+    <updated>2026-11-28T00:00:00+08:00</updated>
+    <summary>Fibo 要在一个窗口里挂 40 个 Coding Agent 会话，原计划用 Tauri + React + xterm.js。测评里 WebView 同负载内存约是原生 Ghostty 的 3.5 倍，alacritty_terminal 存 40 个会话要 1.29 GiB。最后后台用 libghostty-vt（405 MiB，空闲可压到 66.5 MiB），窗口用 GPUI 在 GPU 上直接画；代价是 GPUI 空闲 CPU 是 Ghostty 的 8 倍，要靠自己维护的补丁压到 0.07%。附四条路线对比表和测量方法。</summary>
+  </entry>
+  <entry>
+    <title>不改 Agent，Fibo 怎么知道它在等你</title>
+    <link href="https://fibo.page/blog/waiting-for-you/zh.html"/>
+    <id>https://fibo.page/blog/waiting-for-you/zh.html</id>
+    <published>2026-11-28T00:00:00+08:00</published>
+    <updated>2026-11-28T00:00:00+08:00</updated>
+    <summary>Claude Code、Codex 不会告诉别的程序自己停在审批框上。Fibo 从会话日志、Hook、屏幕、OSC 7501 和进程五个来源拼出每个会话的状态，按固定顺序叠加，只由 status::of 一处判定，再用守卫测试按文件计数，防止别处另算一遍。附来源对比表、状态机、判错案例和基线变化数据。</summary>
+  </entry>
+  <entry>
+    <title>Fibo 的性能门禁：数退休指令而不看 CPU 时间，以及侧栏重画这本账</title>
+    <link href="https://fibo.page/blog/perf-gate/zh.html"/>
+    <id>https://fibo.page/blog/perf-gate/zh.html</id>
+    <published>2026-11-28T00:00:00+08:00</published>
+    <updated>2026-11-28T00:00:00+08:00</updated>
+    <summary>同一帧的 CPU 时间随机器负载差 2.5 倍，退休指令数差不到 1%。Fibo 的性能门禁因此在真机上按指令数设 15% 的线，在读不到指令数的 GitHub macOS 虚拟机上改查同进程比例。附侧栏重画从 7430 万条指令降到 452 万的每一步、十条规则和 11-28 的实测。</summary>
+  </entry>
+  <entry>
+    <title>关掉窗口、更新 App，终端都不断：Fibo 的常驻后台和终端交接</title>
+    <link href="https://fibo.page/blog/handover/zh.html"/>
+    <id>https://fibo.page/blog/handover/zh.html</id>
+    <published>2026-11-28T00:00:00+08:00</published>
+    <updated>2026-11-28T00:00:00+08:00</updated>
+    <summary>终端住在后台常驻进程 fibo serve 里，窗口只是客户端；换新版本时，旧后台用 SCM_RIGHTS 把每个 PTY 文件描述符和画面快照交给新后台，新后台回「taken」之前任何一步失败都由旧后台继续服务。附交接时序图、macOS 上 EMSGSIZE 边界的实测，以及常驻进程踩过的十个坑。</summary>
+  </entry>
   <entry>
     <title>Fibo 如何让 ssh 那头的 Claude Code 也能 ⌘V 贴截图</title>
     <link href="https://fibo.page/blog/remote-paste/zh.html"/>

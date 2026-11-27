@@ -48,13 +48,29 @@ addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('themeb
 
 <main class="post list">
 <ul class="posts">
+  <li><a class="card" href="why-gpui/zh.html">
+    <img src="why-gpui/images/00-cover.webp" alt="" loading="lazy" width="1600" height="840">
+    <div><p class="eyebrow">技术选型 · 2026 年 11 月</p><h2>Fibo 的终端为什么不用 Tauri + xterm.js：一轮测评后换成 GPUI + libghostty-vt 原生绘制</h2><p>Fibo 要在一个窗口里挂 40 个 Coding Agent 会话，原计划用 Tauri + React + xterm.js。</p></div>
+  </a></li>
+  <li><a class="card" href="waiting-for-you/zh.html">
+    <img src="waiting-for-you/images/00-cover.webp" alt="" loading="lazy" width="1600" height="840">
+    <div><p class="eyebrow">工程实践 · 2026 年 11 月</p><h2>不改 Agent，Fibo 怎么知道它在等你</h2><p>Claude Code、Codex 不会告诉别的程序自己停在审批框上。</p></div>
+  </a></li>
+  <li><a class="card" href="perf-gate/zh.html">
+    <img src="perf-gate/images/00-cover.webp" alt="" loading="lazy" width="1600" height="840">
+    <div><p class="eyebrow">工程实践 · 2026 年 11 月</p><h2>Fibo 的性能门禁：数退休指令而不看 CPU 时间，以及侧栏重画这本账</h2><p>同一帧的 CPU 时间随机器负载差 2.5 倍，退休指令数差不到 1%。Fibo 的性能门禁因此在真机上按指令数设 15% 的线，在读不到指令数的 GitHub macOS 虚拟机上改查同进程比例。</p></div>
+  </a></li>
+  <li><a class="card" href="handover/zh.html">
+    <img src="handover/images/00-cover.webp" alt="" loading="lazy" width="1600" height="840">
+    <div><p class="eyebrow">技术架构 · 2026 年 11 月</p><h2>关掉窗口、更新 App，终端都不断：Fibo 的常驻后台和终端交接</h2><p>终端住在后台常驻进程 fibo serve 里，窗口只是客户端；换新版本时，旧后台用 SCM_RIGHTS 把每个 PTY 文件描述符和画面快照交给新后台，新后台回「taken」之前任何一步失败都由旧后台继续服务。</p></div>
+  </a></li>
   <li><a class="card" href="remote-paste/zh.html">
     <img src="remote-paste/images/00-cover.webp" alt="" loading="lazy" width="1600" height="840">
-    <div><p class="eyebrow">工程实践 · 2026 年 11 月</p><h2>Fibo 如何让 ssh 那头的 Claude Code 也能 ⌘V 贴截图</h2><p>Claude Code 读的是它自己那台电脑的剪贴板。实测 20 种粘贴写法后发现：一个单独的图片绝对路径就是一个附件。Fibo 先把图存到那台电脑，再只贴路径。</p></div>
+    <div><p class="eyebrow">工程实践 · 2026 年 11 月</p><h2>Fibo 如何让 ssh 那头的 Claude Code 也能 ⌘V 贴截图</h2><p>ssh 到另一台电脑后，Claude Code 读的是那台电脑的剪贴板，所以贴不了截图。实测 20 种粘贴写法后发现：一次粘贴里只有一个图片绝对路径，Claude Code 就当它是附件。Fibo 据此先把图存到那台电脑，再只贴那边的路径。</p></div>
   </a></li>
   <li><a class="card" href="many-machines/zh.html">
     <img src="many-machines/images/00-cover.webp" alt="" loading="lazy" width="1600" height="840">
-    <div><p class="eyebrow">技术架构 · 2026 年 11 月</p><h2>一个窗口，管多台电脑上的终端：Fibo 跨机终端架构与慢链路同步设计</h2><p>另一台电脑上的终端，像本机一样开标签、分屏、打字：架构选型、边界隔离、视图解耦，以及 54 KB/s 慢链路上从 3.59 MB 到 660 字节的增量协议设计。</p></div>
+    <div><p class="eyebrow">技术架构 · 2026 年 11 月</p><h2>一个窗口，管多台电脑上的终端：Fibo 跨机终端架构与慢链路同步设计</h2><p>Fibo 如何让一个窗口像操作本机一样操作多台电脑上的终端：为什么废弃另写的远程界面、如何通过一条 ssh -L 转发复用 85 种原生请求、如何解耦视图与数据源，以及在 54 KB/s 慢链路上如何把单次同步从 3.59 MB 压缩 5400 倍至 660 字节。</p></div>
   </a></li>
 </ul>
 </main>

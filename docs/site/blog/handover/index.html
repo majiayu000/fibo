@@ -361,7 +361,7 @@ tmux attach -t work       # reattach later</code></pre>
   <li><b>A long-running host does nothing slow under a lock and is not started from the wrong place</b>: with byte-merged queues a 4000-byte paste went from failing at 5.2 s to arriving whole in 28 ms; the host checks 3 inherited properties at start, and what <code>env -i</code> cannot clear the window fixes by restarting it properly.</li>
 </ul>
 
-<nav class="pn" aria-label="More posts"><a class="pn-card" href="../remote-paste/"><span class="eyebrow">Previous post</span><b>How Fibo lets Claude Code on the other end of ssh take a pasted screenshot</b></a></nav>
+<nav class="pn" aria-label="More posts"><a class="pn-card" href="../remote-paste/"><span class="eyebrow">Previous post</span><b>How Fibo lets Claude Code on the other end of ssh take a pasted screenshot</b></a><a class="pn-card" href="../perf-gate/"><span class="eyebrow">Next post</span><b>Fibo’s performance gate: count retired instructions, not CPU time, and what sidebar redraws cost</b></a></nav>
 <footer class="end">
   <p>Fibo is open source (MIT). The handover lives in <code>crates/fibo-platform/src/terminal/hand_over.rs</code> and <code>crates/fibo-host/src/host/runtime.rs</code>; all the source is on <a href="https://github.com/majiayu000/fibo">GitHub</a>.</p>
   <p><a href="../">← All posts</a> · <a href="../../">Back to fibo.page</a></p>

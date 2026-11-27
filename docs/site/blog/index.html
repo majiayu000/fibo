@@ -48,13 +48,29 @@ addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('themeb
 
 <main class="post list">
 <ul class="posts">
+  <li><a class="card" href="why-gpui/">
+    <img src="why-gpui/images/00-cover-en.webp" alt="" loading="lazy" width="1600" height="840">
+    <div><p class="eyebrow">Technical choices · November 2026</p><h2>Why Fibo dropped Tauri + xterm.js and draws its terminals natively with GPUI + libghostty-vt</h2><p>Fibo runs 40 coding-agent sessions in one window. The plan was Tauri + React + xterm.js;</p></div>
+  </a></li>
+  <li><a class="card" href="waiting-for-you/">
+    <img src="waiting-for-you/images/00-cover-en.webp" alt="" loading="lazy" width="1600" height="840">
+    <div><p class="eyebrow">Engineering · November 2026</p><h2>How Fibo knows an agent is waiting for you, without changing the agent</h2><p>Claude Code and Codex do not tell other programs they are stuck on an approval prompt.</p></div>
+  </a></li>
+  <li><a class="card" href="perf-gate/">
+    <img src="perf-gate/images/00-cover-en.webp" alt="" loading="lazy" width="1600" height="840">
+    <div><p class="eyebrow">Engineering · November 2026</p><h2>Fibo’s performance gate: count retired instructions, not CPU time, and what sidebar redraws cost</h2><p>The same frame’s CPU time moves 2.5x with machine load; its retired instructions move under 1%.</p></div>
+  </a></li>
+  <li><a class="card" href="handover/">
+    <img src="handover/images/00-cover-en.webp" alt="" loading="lazy" width="1600" height="840">
+    <div><p class="eyebrow">Architecture · November 2026</p><h2>Close the window, update the app, keep every terminal: Fibo’s background host and terminal handover</h2><p>Terminals live in a long-running host, fibo serve, and the window is only a client.</p></div>
+  </a></li>
   <li><a class="card" href="remote-paste/">
     <img src="remote-paste/images/00-cover-en.webp" alt="" loading="lazy" width="1600" height="840">
-    <div><p class="eyebrow">Engineering · November 2026</p><h2>How Fibo lets Claude Code on the other end of ssh take a pasted screenshot</h2><p>Claude Code reads the clipboard of the machine it runs on. After testing 20 kinds of paste, we found one rule: a lone absolute image path is an attachment. Fibo saves the picture on that machine, then pastes only its path.</p></div>
+    <div><p class="eyebrow">Engineering · November 2026</p><h2>How Fibo lets Claude Code on the other end of ssh take a pasted screenshot</h2><p>Over ssh, Claude Code reads the clipboard of the computer it runs on, so a pasted screenshot never arrives. After testing 20 kinds of paste: a paste that is only one absolute image path becomes an attachment.</p></div>
   </a></li>
   <li><a class="card" href="many-machines/">
-    <img src="many-machines/images/00-cover.webp" alt="" loading="lazy" width="1600" height="840">
-    <div><p class="eyebrow">Architecture · November 2026</p><h2>One Window for Terminals on Every Machine: Fibo’s Multi-Host Architecture and Slow-Link Sync Design</h2><p>Protocol unification over ssh -L, isolating localhost assumptions, decoupling view chrome from host state, and shrinking refreshes 5,400× from 3.59 MB to 660 bytes.</p></div>
+    <img src="many-machines/images/00-cover-en.webp" alt="" loading="lazy" width="1600" height="840">
+    <div><p class="eyebrow">Architecture · November 2026</p><h2>One Window for Terminals on Every Machine: Fibo’s Multi-Host Architecture and Slow-Link Sync Design</h2><p>How Fibo lets one desktop window operate terminals across multiple machines: why we dropped our separate remote UI, how one ssh -L socket tunnel unified 85 native RPCs, how we decoupled per-window view chrome from per-host state, and how we shrank refreshes from 3.59 MB to 660 bytes on a 54 KB/s link.</p></div>
   </a></li>
 </ul>
 </main>
