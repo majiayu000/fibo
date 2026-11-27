@@ -52,8 +52,9 @@ type Page = { tools?: Summary; calls: ToolCall[]; next?: number; gone?: boolean 
 export default function ToolsScreen() {
   const t = useTheme();
   const bottom = useBottom();
-  // No `seq`: the turn still going, since the last thing it said.
-  const { machine, terminal, session, seq } = useLocalSearchParams<{ machine: string; terminal: string; session: string; seq?: string }>();
+  // No `seq`: the turn still going, since the last thing it said; `stopped`: the turn stopped
+  // before it answered, up to where it was stopped.
+  const { machine, terminal, session, seq, stopped } = useLocalSearchParams<{ machine: string; terminal: string; session: string; seq?: string; stopped?: string }>();
   const { machines } = useHub();
   const m = machines.find((x) => x.id === machine);
   const online = m?.status === 'online';
@@ -72,7 +73,7 @@ export default function ToolsScreen() {
       if (!r || busy.current) return;
       busy.current = true;
       try {
-        const ask: Record<string, unknown> = seq ? { session, seq: Number(seq) } : { session };
+        const ask: Record<string, unknown> = seq ? { session, seq: Number(seq) } : stopped ? { session, stopped: true } : { session };
         if (after !== undefined) ask.after = after;
         const p: Page = await r.request('toolcalls', ask);
         next.current = p.next;
@@ -92,7 +93,7 @@ export default function ToolsScreen() {
         setLoading(false);
       }
     },
-    [machine, session, seq],
+    [machine, session, seq, stopped],
   );
 
   useEffect(() => {
@@ -109,7 +110,7 @@ export default function ToolsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
-      <Nav rule title={seq ? tr('这段做了什么') : tr('它到现在做了什么')} sub={summaryWords(tools, calls.length, next.current !== undefined)} />
+      <Nav rule title={seq || stopped ? tr('这段做了什么') : tr('它到现在做了什么')} sub={summaryWords(tools, calls.length, next.current !== undefined)} />
       {files.length > 0 && (
         <Pressable
           accessibilityRole="button"

@@ -59,7 +59,7 @@
 "丢弃" = "Discard"
 "正在载入画面…" = "Loading the screen…"
 "只读 · 打字就接管" = "Read-only · type to take over"
-"只读 · 尺寸跟另一个窗口（{cols}×{rows}）· 打字就接管" = "Read-only · sized by another window ({cols}×{rows}) · type to take over"
+"只读 · 终端尺寸（{cols}×{rows}）· 打字就接管" = "Read-only · terminal size ({cols}×{rows}) · type to take over"
 "程序{v1}" = "{v1} (by the program)"
 "这个程序没有启用安全粘贴：要粘贴的 {lines} 行会逐行立即执行。" = "This program has no safe paste: the {lines} lines will run one by one right away."
 "仍然粘贴 {lines} 行" = "Paste {lines} lines anyway"
@@ -179,7 +179,7 @@
 "打开待办详情" = "Open to-do details"
 "你要它 {v1}" = "You asked: {v1}"
 "停在 {d}" = "Stopped at {d}"
-"另一个窗口在输入 · 在这里打字就接管" = "Another window has input · type here to take over"
+"当前只读 · 在这里打字就接管" = "Read-only · type here to take over"
 "点击接管输入" = "Click to take over"
 
 [pane_menu]

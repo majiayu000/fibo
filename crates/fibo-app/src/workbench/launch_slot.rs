@@ -241,6 +241,13 @@ impl Workbench {
                         this.nav.pending_focus = true;
                         this.nav.overview = false;
                         this.sync_panes(cx);
+                        // Starting new work here is an explicit use of its new terminal.
+                        if new_work
+                            && this.host.attached()
+                            && let Some(pane) = this.layout.panes.get(&terminal)
+                        {
+                            pane.update(cx, |pane, cx| pane.take_input(Vec::new(), cx));
+                        }
                         if let Some(old) = &replaced {
                             this.ring_landing_again(old, &terminal, cx);
                         }

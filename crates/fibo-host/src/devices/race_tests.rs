@@ -228,15 +228,21 @@ fn the_lock_excludes_another_open_file_in_this_process_and_is_private() {
     let socket = dir.socket();
     let try_lock = || {
         let other = std::fs::File::open(socket.with_file_name("remote-devices.lock")).unwrap();
-        // The same call `lock` makes: flock on Unix, LockFileEx on Windows.
+        // A whole-file lock also covers the byte reserved by the Windows device lock.
         other.try_lock().is_ok()
     };
     let held = lock(&socket).unwrap();
     assert!(!try_lock(), "持锁时第二个 fd 不该拿到");
+    let mut stamp = [0; 32];
+    std::fs::File::open(socket.with_file_name("remote-devices.lock"))
+        .unwrap()
+        .read_exact(&mut stamp)
+        .expect("等待方应当能读取持有者标记");
+    assert!(stamp.iter().all(u8::is_ascii_hexdigit), "标记应当是 UUID");
     drop(held);
     // Not at once: a process another thread is spawning right now copied the open files, this
-    // one too, and the lock lasts until its exec closes that copy (tens of milliseconds at
-    // worst under load). Nothing waits on it for long: `lock` blocks, it does not give up.
+    // one too, and the lock lasts until its exec closes that copy (tens of milliseconds
+    // under load). Windows can also defer releasing locks after the handle closes.
     let released = std::time::Instant::now();
     while !try_lock() {
         assert!(
@@ -408,10 +414,6 @@ fn a_stalled_writer_times_out_without_changing_the_device_list() {
 /// past the stalled-writer limit. Each holder stamps the lock file; here one holder
 /// stamps as the next would, so no gap lets the waiter in early by luck.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Windows 的文件锁是强制锁，等待方读不到持有者写的戳，换手的锁被当成卡住，5 秒就超时（#506 记录，待修）"
-)]
 fn a_lock_changing_hands_past_the_limit_is_waited_for() {
     use std::io::{Seek, SeekFrom};
     let dir = Dir::new();

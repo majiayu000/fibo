@@ -85,6 +85,15 @@ const acts = (i: Item) => i.m.status === 'online' && (rank(i.c) <= 2 || reminder
 /** One entry of the space filter; `name` null is 全部. `count` is its inbox, `acts` what of that is yours to act on. */
 export type Chip = { name: string | null; count: number; acts: number };
 
+/** Where to scroll a row of chips so one shows whole (`pad` clear of the edge), or null when it
+ *  already does. A chip's x is in the row's content, padding included. */
+export function revealX(chip: { x: number; width: number }, scrolled: number, view: number, pad: number): number | null {
+  if (view <= 0) return null;
+  if (chip.x - pad < scrolled) return Math.max(0, chip.x - pad);
+  if (chip.x + chip.width + pad > scrolled + view) return chip.x + chip.width + pad - view;
+  return null;
+}
+
 export type Shelf = {
   /** The space shown, null for all. A saved choice whose space has gone reads as all. */
   filter: string | null;

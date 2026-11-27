@@ -22,6 +22,8 @@ mod offline;
 mod overlays;
 #[path = "pane_paste.rs"]
 mod paste;
+#[path = "pane_remote_image.rs"]
+mod remote_image;
 #[path = "pane_render.rs"]
 mod render;
 #[path = "pane_search.rs"]
@@ -82,6 +84,7 @@ pub struct Pane {
     /// Cells at the saved text size; `metrics` are what this frame draws with.
     base_metrics: Option<screen::CellMetrics>,
     fit: Option<fit::Fit>,
+    pan: fit::Pan,
     metrics: Option<screen::CellMetrics>,
     cursor_anchor: screen::CursorAnchor,
     requested_size: (u16, u16),
@@ -269,6 +272,7 @@ impl Pane {
             bounds: None,
             base_metrics: None,
             fit: None,
+            pan: fit::Pan::default(),
             metrics: None,
             cursor_anchor: screen::CursorAnchor::default(),
             requested_size: (0, 0),
@@ -312,7 +316,6 @@ impl Pane {
     /// Attaches again after the host dropped this pane's stream; the snapshot restores
     /// the screen, and input works again once the pane owns the terminal.
     fn recover(&mut self, cx: &mut Context<Self>) {
-        self.send_held();
         let (dropped, settled) = self.connection.state.lock().map_or((false, false), |s| {
             (
                 s.dropped,
@@ -372,9 +375,12 @@ impl Pane {
     pub fn program_title(&self) -> Option<String> {
         self.connection.state.lock().ok()?.vt.as_ref()?.title()
     }
-    /// Dropped files arrive as their paths, escaped for a shell, like any terminal.
+    /// Dropped files arrive as their paths, escaped for a shell, like any terminal. On
+    /// another computer those paths name nothing: pictures go there first.
     fn drop_paths(&mut self, paths: &gpui::ExternalPaths, cx: &mut Context<Self>) {
-        if self.refuse_remote_file(cx) {
+        if crate::attach::Host::of(&self.socket).attached() {
+            let files = paths.paths().iter().cloned();
+            self.send_pictures(files.map(remote_image::Picture::File).collect(), cx);
             return;
         }
         let text = crate::terminal::terminal_input::dropped_paths(paths.paths());
@@ -466,7 +472,7 @@ impl Pane {
         })
         .detach();
     }
-    pub fn has_other_owner(&self) -> bool {
+    pub fn is_read_only(&self) -> bool {
         self.connection
             .state
             .lock()

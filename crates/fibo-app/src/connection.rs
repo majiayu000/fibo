@@ -27,6 +27,8 @@ pub struct State {
     pub cursor_shape: Option<crate::ui::terminal_text::CursorDefault>,
 }
 pub struct Connection {
+    /// A passive connection through an SSH forward never inherits input.
+    pub watch: bool,
     pub state: Arc<Mutex<State>>,
     pub dirty: Arc<AtomicBool>,
     /// BELs the program rang since this pane connected; counted by the display copy.
@@ -48,6 +50,7 @@ impl Drop for Connection {
 }
 impl Connection {
     pub fn new(socket: &Path, id: &str, takeover: bool, wake: UnboundedSender<()>) -> Self {
+        let watch = !takeover && crate::attach::Host::of(socket).attached();
         let state = Arc::new(Mutex::new(State {
             vt: None,
             writable: false,
@@ -67,6 +70,7 @@ impl Connection {
         let receiver = Arc::clone(&outbox);
         let unsent = Arc::clone(&outbox);
         let result = Self {
+            watch,
             state: Arc::clone(&state),
             dirty: Arc::clone(&dirty),
             bells: Arc::clone(&bells),
@@ -91,7 +95,7 @@ impl Connection {
                     &Request::Attach {
                         id,
                         takeover,
-                        watch: false,
+                        watch,
                     },
                 )?;
                 match receive::<Reply>(&mut stream)? {
@@ -385,6 +389,7 @@ mod tests {
     #[test]
     fn input_refusals_describe_the_state_and_never_replay_after_promotion() {
         let connection = Connection {
+            watch: false,
             state: Arc::new(Mutex::new(State {
                 vt: None,
                 writable: false,

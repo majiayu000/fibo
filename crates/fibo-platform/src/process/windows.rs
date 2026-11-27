@@ -23,6 +23,13 @@ pub fn no_console(command: &mut Command) {
     command.creation_flags(CREATE_NO_WINDOW);
 }
 
+pub fn curl() -> std::path::PathBuf {
+    let root = std::env::var_os("SystemRoot").unwrap_or_else(|| r"C:\Windows".into());
+    std::path::Path::new(&root)
+        .join("System32")
+        .join("curl.exe")
+}
+
 pub fn detach(command: &mut Command) {
     use std::os::windows::process::CommandExt;
     command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);

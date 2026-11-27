@@ -45,7 +45,7 @@ jobs:
             target/ios-evidence/native-smoke
       - name: Keep the unsigned iPhone archive and its evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ios-device-unsigned
           path: |

@@ -18,7 +18,7 @@ gpui = { path = "../../.deps/zed/crates/gpui" }
 gpui_platform = { path = "../../.deps/zed/crates/gpui_platform", features = ["font-kit"] }
 futures = "0.3"
 # A theme's background picture; the same crate and version GPUI already builds.
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "tiff", "bmp"] }
 serde_json.workspace = true
 serde.workspace = true
 libc.workspace = true

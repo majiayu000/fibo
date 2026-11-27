@@ -75,7 +75,7 @@ impl Workbench {
                 div().child(c.here().stopped).into_any_element(),
             ));
         }
-        let resume = s.clone();
+        let session_id = s.id.clone();
         let command = self.workspace.resume_command(s);
         Some(
             div()
@@ -139,10 +139,14 @@ impl Workbench {
                                 .child(t!("打开"))
                                 .child(kbd("↵").text_color(T::color(T::on_accent())))
                                 .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.search.open = false;
-                                    this.enter_card(&resume, window, cx);
-                                    this.nav.pending_focus = true;
-                                    cx.notify();
+                                    this.open_hit(
+                                        Hit::Session {
+                                            id: session_id.clone(),
+                                            quote: None,
+                                        },
+                                        window,
+                                        cx,
+                                    );
                                 })),
                         )
                         .child(

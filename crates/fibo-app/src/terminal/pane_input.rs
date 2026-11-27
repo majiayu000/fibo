@@ -112,32 +112,20 @@ impl Pane {
         }
         cx.notify();
     }
-    /// Typed into a pane another window or machine holds: typing is wanting it, so the pane
-    /// attaches again as the writer and what was typed waits for the new link's screen.
-    /// Showing a pane never takes it (`sync_panes`); only this and 点击接管输入 do.
-    fn take_input(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) {
+    /// Attach as the writer on explicit use. Held bytes wait for the first resize.
+    pub(crate) fn take_input(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) {
         let wake = self.wake.clone();
         self.connection = Connection::new(&self.socket, &self.terminal, true, wake);
         self.bells_seen = 0;
+        self.requested_size = (0, 0);
         self.local_error = None;
         self.held = bytes;
         cx.notify();
     }
-    /// What was typed while input was being taken over, once the link has the screen. The
-    /// pane's size goes first, so the keys land on the terminal sized as the pane shows it.
+    /// Deliver the first typed bytes after the writable pane sent its own size.
     pub(super) fn send_held(&mut self) {
-        let ready = self.connection.state.lock().is_ok_and(|s| s.vt.is_some());
-        if self.held.is_empty() || !ready {
+        if self.held.is_empty() {
             return;
-        }
-        let ((cols, rows), (cell_width, cell_height)) = (self.requested_size, self.requested_cell);
-        if cols > 0 && rows > 0 {
-            let _ = self.connection.send(Request::Resize {
-                cols,
-                rows,
-                cell_width,
-                cell_height,
-            });
         }
         let bytes = std::mem::take(&mut self.held);
         if let Err(error) = self.connection.send(Request::Input {
@@ -162,7 +150,15 @@ impl Pane {
         }
         // Mouse reports and focus reports are not wanting the terminal: moving the pointer
         // over a pane must not take it from whoever is typing there.
-        if origin == Origin::Typed && self.has_other_owner() {
+        if origin == Origin::Typed
+            && self.connection.state.lock().is_ok_and(|s| {
+                !s.writable
+                    && !s.ended
+                    && !s.dropped
+                    && s.error.is_none()
+                    && (self.connection.watch || s.vt.is_some())
+            })
+        {
             self.take_input(bytes, cx);
             return true;
         }

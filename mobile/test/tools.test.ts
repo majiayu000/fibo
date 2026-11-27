@@ -1,7 +1,7 @@
 // A tool's text as the phone holds and draws it: bytes against the machine's offsets, the gap
 // between head and tail, rows of one height however long a line is.
 import { describe, expect, test } from 'bun:test';
-import { allText, byteLength, screenText, bytes, columns, commandSteps, extend, loaded, metaWords, missing, MOST_COLUMNS, opensAtEnd, stepCut, stepWords, textRows, took, toolName, viewRows } from '../src/ui/toolview';
+import { allText, byteLength, screenText, bytes, columns, commandSteps, cutShort, extend, loaded, metaWords, missing, MOST_COLUMNS, opensAtEnd, stepCut, stepWords, textRows, took, toolName, viewRows } from '../src/ui/toolview';
 
 const utf8 = (s: string) => new TextEncoder().encode(s).length;
 
@@ -39,6 +39,20 @@ describe('a running step in its one line', () => {
     expect([stepWords(said), stepCut(said)]).toEqual(['Ping localhost 120 times, show summary', 'tail']);
     expect([stepWords(call), stepCut(call)]).toEqual(['ping -c 120 127.0.0.1 | tail -3', 'middle']);
     expect(stepWords({ ...call, label: '' })).toBe('Bash');
+  });
+});
+
+describe('a turn stopped before it answered', () => {
+  const asked = [{ role: 'agent' }, { role: 'user' }];
+  test('its work shows where the running block stood', () => {
+    // 2026-11-26 walk: after 停下 the stopped stretch folded nowhere and vanished.
+    expect(cutShort(asked, false, false)).toBe(true);
+  });
+  test('not while it runs, asks you something, or has answered', () => {
+    expect(cutShort(asked, true, false)).toBe(false);
+    expect(cutShort(asked, false, true)).toBe(false);
+    expect(cutShort([...asked, { role: 'agent' }], false, false)).toBe(false);
+    expect(cutShort([], false, false)).toBe(false);
   });
 });
 

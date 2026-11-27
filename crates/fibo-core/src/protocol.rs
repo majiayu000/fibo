@@ -119,6 +119,8 @@ pub enum Reply {
     Cwd(String),
     NotificationClaimed(bool),
     Recognition(RecognitionStatus),
+    /// [`Request::Quotas`].
+    Quotas(Vec<(crate::agent::Agent, crate::quota::Quota)>),
     Diagnostics(crate::diagnostics::Diagnostics),
     ReclaimableWorktrees(Vec<crate::diagnostics::ReclaimableWorktree>),
     Attached {
@@ -133,6 +135,8 @@ pub enum Reply {
     },
     Ok,
     Text(String),
+    /// Folders by full path (`ListDirs`).
+    Dirs(Vec<String>),
     /// [`Request::AssociateScreen`]: the conversation that terminal now holds; None when
     /// the screen did not say which.
     ScreenAssociated {

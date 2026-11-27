@@ -580,3 +580,38 @@ fn a_resume_start_handed_over_while_its_cli_loads_binds_once_it_shows_its_input(
             .is_some_and(|s| s.cli_session_id == "fake-old")
     });
 }
+
+/// A window attached from another machine cannot read this one's plugin files: the host
+/// gives their readings with its sessions' (`Request::Quotas`), and a plugin added later
+/// counts once plugins are reloaded.
+#[test]
+fn quotas_carry_this_machines_plugin_readings() {
+    let h = Host::start_bare();
+    match h.call(Request::Quotas).unwrap() {
+        Reply::Quotas(all) => assert!(all.is_empty(), "{all:?}"),
+        x => panic!("{x:?}"),
+    }
+    let plugin = h.root.join("plugins/q");
+    fs::create_dir_all(&plugin).unwrap();
+    let reading = h.root.join("reading.json");
+    fs::write(&reading, r#"{"plan":"max","week":{"used":37}}"#).unwrap();
+    fs::write(
+        plugin.join("plugin.json"),
+        r#"{"api":1,"id":"q","name":"Q","provides":["quota"]}"#,
+    )
+    .unwrap();
+    let source = serde_json::json!({ "api": 1, "sources": [{
+        "agent": "claude", "file": reading, "plan": "/plan",
+        "windows": [{ "minutes": 10080, "used": "/week/used" }]
+    }] });
+    fs::write(plugin.join("quota.json"), source.to_string()).unwrap();
+    h.call(Request::ReloadPlugins).unwrap();
+    let Reply::Quotas(all) = h.call(Request::Quotas).unwrap() else {
+        panic!("not quotas")
+    };
+    let [(agent, q)] = all.as_slice() else {
+        panic!("{all:?}")
+    };
+    assert_eq!((*agent, q.plan.as_str()), (Agent::Claude, "max"));
+    assert_eq!(q.windows[0].used, 37);
+}

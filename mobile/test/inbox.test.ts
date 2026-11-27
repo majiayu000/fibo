@@ -2,7 +2,7 @@
 // And it reads 要你处理 off the host, so what the host brings back shows here too.
 import { describe, expect, test } from 'bun:test';
 import type { Card, Machine } from '../src/remote/hub';
-import { HOLD_NONE, RUNNING_PREVIEW, asksElsewhere, asksElsewhereLine, connectionLine, elsewhereLine, namesComputer, pulse, offlineRows, runningShown, searchCards, undoTo, SCROLL_QUIET_MS, SETTLE_MS, TOUCH_LIMIT_MS, arrange, foldLabel, holdLeft, restLabel, settleLeft, settleNext, shelve, sort } from '../src/ui/inbox';
+import { HOLD_NONE, RUNNING_PREVIEW, asksElsewhere, asksElsewhereLine, connectionLine, elsewhereLine, namesComputer, pulse, offlineRows, runningShown, searchCards, undoTo, SCROLL_QUIET_MS, SETTLE_MS, TOUCH_LIMIT_MS, arrange, foldLabel, holdLeft, restLabel, revealX, settleLeft, settleNext, shelve, sort } from '../src/ui/inbox';
 import { spaceName } from '../src/ui/status';
 
 const card = (id: string, status: string, updated = 0, more: Partial<Card> = {}) =>
@@ -427,4 +427,12 @@ describe('an open conversation says what asks you in the others', () => {
   test('a computer that cannot hear you has nothing to answer now', () => {
     expect(open([machine([card('here', 'running')]), machine([approval('b')], 'n', 'offline')])).toEqual([]);
   });
+});
+
+test('the chosen space chip scrolls into sight, and a chip in sight stays put', () => {
+  // 2026-11-26 walk: the chosen chip sat past the right edge, reading 「moori」.
+  expect(revealX({ x: 930, width: 160 }, 0, 1080, 18)).toBe(28);
+  expect(revealX({ x: 20, width: 100 }, 300, 1080, 18)).toBe(2);
+  expect(revealX({ x: 400, width: 100 }, 0, 1080, 18)).toBeNull();
+  expect(revealX({ x: 400, width: 100 }, 0, 0, 18)).toBeNull();
 });

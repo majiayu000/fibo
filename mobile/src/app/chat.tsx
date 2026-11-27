@@ -24,6 +24,7 @@ import { HOW_NOTE, type How, QUEUED_TAP, SENT_NOW, sendsNow, steerable, whileBus
 import { Composer } from '@/ui/composer';
 import { KeyboardSafe } from '@/ui/keyboard';
 import { LiveWork, type LiveProps } from '@/ui/livework';
+import { cutShort } from '@/ui/toolview';
 import { QueuedSheet } from '@/ui/queuedsheet';
 import type { Picture } from '@/ui/pictures';
 import { cardTitle } from '@/ui/format';
@@ -347,7 +348,8 @@ export default function Chat() {
   const suggestion = useSuggestion(machine, terminal, card?.session ?? null, turnEnded ? (card.turn ?? null) : null);
   const toDiff = useCallback(() => router.push({ pathname: '/diff', params: { machine, terminal } }), [machine, terminal]);
   const toTools = useCallback(
-    (seq?: number) => router.push({ pathname: '/tools', params: { machine, terminal, session: shown.current ?? '', ...(seq ? { seq: String(seq) } : {}) } }),
+    (seq?: number, stopped?: boolean) =>
+      router.push({ pathname: '/tools', params: { machine, terminal, session: shown.current ?? '', ...(seq ? { seq: String(seq) } : {}), ...(stopped ? { stopped: '1' } : {}) } }),
     [machine, terminal],
   );
   // What it does since its last message, in the flow where that work's folded line will stand,
@@ -359,24 +361,27 @@ export default function Chat() {
   const canList = supports(m, 'toolcalls');
   const canLast = supports(m, 'toolslast');
   const workflowLines = card?.workflows?.join('\n') ?? '';
+  // Stopped before it answered: what it did has no answer to fold above, so it stays here.
+  const stopped = !!online && canLast && cutShort(messages, !!running, card?.phase === 'waiting' || !!card?.approval);
   const live: LiveProps | null = useMemo(
     () =>
-      session && (workflowLines || (running && (card?.doing || canList)))
+      session && (workflowLines || (running && (card?.doing || canList)) || stopped)
         ? {
             machine,
             session,
             running: !!running,
+            stopped,
             // A word sent mid-turn does not restart the stretch the command count covers.
             since: Math.max(card?.running_since ?? 0, lastAgentAt),
             after: lastAgentAt,
             doing: card?.doing,
             workflows: workflowLines ? workflowLines.split('\n') : undefined,
-            steps: !!running && canLast,
+            steps: (!!running || stopped) && canLast,
             focused,
-            onOpen: canList ? () => toTools() : undefined,
+            onOpen: canList ? () => toTools(undefined, stopped && !running) : undefined,
           }
         : null,
-    [session, workflowLines, running, card?.doing, card?.running_since, lastAgentAt, machine, focused, toTools, canList, canLast],
+    [session, workflowLines, running, stopped, card?.doing, card?.running_since, lastAgentAt, machine, focused, toTools, canList, canLast],
   );
 
   // Inverted list: index 0 sits at the bottom.

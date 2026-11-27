@@ -280,6 +280,10 @@ pub enum Op {
         /// Only the stretch's last this many calls, oldest first (with `toolslast`).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         last: Option<u64>,
+        /// With no `seq`: the stretch that ended at the turn's last 停下, which no reply folds
+        /// (a host before 2026-11-27 ignores it and answers the empty stretch after it).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        stopped: bool,
     },
     /// One call in full, from its raw log lines, secrets hidden: [`ToolCallDetail`], the
     /// head and tail of its input and output. With `part` (`input` or `output`) and

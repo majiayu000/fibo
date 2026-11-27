@@ -189,7 +189,7 @@ impl Workbench {
     /// for the popover, which lists them all.
     fn quota_cells(&self, cx: &Context<Self>) -> gpui::Stateful<gpui::Div> {
         let now = now();
-        let all = super::redraw::quotas(&self.workspace, now, self.host.attached());
+        let all = super::redraw::quotas(&self.workspace, now, &self.host);
         let readings = bar_order(&tightest_first(&all, now), self.quota_pin);
         let on = self.statusbar == Some(StatusPop::Quota);
         let mut b = item("status-quota", on)
@@ -310,7 +310,7 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
         let now = now();
-        let all = super::redraw::quotas(&self.workspace, now, self.host.attached());
+        let all = super::redraw::quotas(&self.workspace, now, &self.host);
         let readings = tightest_first(&all, now);
         panel = panel.child(heading(
             t!("额度"),
@@ -480,7 +480,7 @@ impl Workbench {
     /// The pane header's warning when the CLI running there has used up a window.
     pub(super) fn quota_alert(&self, session: &AgentSession) -> Option<String> {
         let now = now();
-        let all = super::redraw::quotas(&self.workspace, now, self.host.attached());
+        let all = super::redraw::quotas(&self.workspace, now, &self.host);
         let (_, quota) = all.iter().find(|(a, _)| *a == session.runtime)?;
         let w = quota
             .windows

@@ -32,6 +32,13 @@ export function waitView(waiting: string | null | undefined): WaitView | null {
   return { text, options, keys: !options.length && !computer, computer };
 }
 
+/** Words that may run past the panel's six lines: more than six of them, or a long one that wraps
+ *  (about 40 characters a line on a phone). A guess either way costs one extra button at most. */
+export function longWait(text: string): boolean {
+  const lines = text.split('\n');
+  return lines.length > 6 || lines.reduce((n, l) => n + Math.max(1, Math.ceil(l.length / 40)), 0) > 6;
+}
+
 /** Waits whose answer is words: what is typed is the reply. */
 const FREE = /^(?:Agent 等待你的输入|等待你的输入|等待你处理|子 Agent)/;
 

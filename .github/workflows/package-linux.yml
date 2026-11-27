@@ -29,13 +29,13 @@ jobs:
       CARGO_INCREMENTAL: 0
       LIBGHOSTTY_VT_SYS_OPTIMIZE: ReleaseFast
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Toolchain and native dependencies
         run: |
           rustup toolchain install --no-self-update
           sudo apt-get update -qq
           sudo apt-get install -y clang cmake libasound2-dev libfontconfig-dev libglib2.0-dev libssl-dev libwayland-dev libx11-xcb-dev libxkbcommon-x11-dev libzstd-dev libvulkan1 desktop-file-utils dpkg-dev zsh
-      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: 0.16.0
           use-cache: false
@@ -72,7 +72,7 @@ jobs:
         run: |
           sudo apt-get install -y -qq xvfb x11-utils imagemagick mesa-vulkan-drivers libgl1-mesa-dri libegl1
           xvfb-run -a -s '-screen 0 1440x900x24 -br' packaging/linux/window-shot.sh target/linux-package/window
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: Fibo-linux-${{ matrix.runner }}

@@ -286,7 +286,9 @@
 
 "它在等你审批，先允许或拒绝，再发送消息" = "Allow or deny the pending approval before sending a message"
 
-"文件和图片还不能从这里传到另一台电脑；请先上传，再输入那台电脑上的路径" = "Files and images cannot be transferred to another computer here yet. Upload them first, then enter their path on that computer."
+"只有图片能传到另一台电脑；其他文件请先上传，再输入那台电脑上的路径" = "Only images can be sent to another computer from here. Upload other files first, then enter their path on that computer."
+"图片超过 11 MB，传不到另一台电脑" = "The image is over 11 MB and can't be sent to another computer."
+"那台电脑上的 Fibo 太旧，还收不了图片；更新它之后再试" = "Fibo on that computer is too old to receive images. Update it, then try again."
 
 "逐个确认" = "Ask each time"
 "自动接受编辑" = "Accept edits automatically"
