@@ -27,11 +27,16 @@ fn main() -> std::io::Result<()> {
     let root = log.parent().expect("a log in a directory").to_owned();
     let mut index = Index::open(&dir, vec![(agent, root)])?;
     let size = std::fs::metadata(&log)?.len();
-    index.update(agent, &log, true)?;
+    let transcript = index.update(agent, &log, true)?.ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "log has no session identity",
+        )
+    })?;
     index.flush()?;
-    let path = log.to_string_lossy();
-    let origin = index.card(&path)?.map_or(0, |c| c.from_offset);
-    let first = index.chat(&path, origin, None, None, 500, false)?.0.len();
+    let path = transcript.path.as_str();
+    let origin = index.card(path)?.map_or(0, |c| c.from_offset);
+    let first = index.chat(path, origin, None, None, 500, false)?.0.len();
     println!(
         "{} MB, first read: {first} messages, peak {} MB",
         size >> 20,
@@ -41,7 +46,7 @@ fn main() -> std::io::Result<()> {
     let mut first_page = None;
     loop {
         let t = Instant::now();
-        let got = index.backfill(agent, &path)?;
+        let got = index.backfill(agent, &transcript.cli_id, path)?;
         let took = t.elapsed().as_secs_f64() * 1000.0;
         slowest = slowest.max(took);
         calls += 1;
@@ -64,7 +69,7 @@ fn main() -> std::io::Result<()> {
     let mut last_seq = i64::MAX;
     let mut ordered = true;
     loop {
-        let (page, more) = index.chat(&path, 0, None, before, 50, false)?;
+        let (page, more) = index.chat(path, 0, None, before, 50, false)?;
         pages += 1;
         shown += page.len();
         ordered &= page.iter().all(|m| m.seq < last_seq);
