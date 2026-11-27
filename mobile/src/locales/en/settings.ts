@@ -23,7 +23,7 @@ export const settings: Record<string, Entry> = {
   跟随系统: 'System',
   浅色: 'Light',
   深色: 'Dark',
-  '打开时要{way}': (a) => `Require ${String(a.way).trim()}`,
+  '批准命令前要{way}': (a) => `Require ${String(a.way).trim()} to approve`,
   验证方式: 'Check with',
   指纹: 'fingerprint',
   指纹或面容: 'fingerprint or face',
@@ -129,9 +129,6 @@ export const settings: Record<string, Entry> = {
   记下: 'Save',
 
   // Lock, dialogs, times
-  '打开 Fibo': 'Open Fibo',
-  解锁: 'Unlock',
-  '用{way}解锁': (a) => `Unlock with ${String(a.way).trim()}`,
   关闭: 'Close',
   返回: 'Back',
   '电脑没读出它要做什么，打开终端看一眼更稳妥。': "The computer couldn't tell what this will do. Check the terminal first to be safe.",

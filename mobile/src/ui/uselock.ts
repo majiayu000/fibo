@@ -8,7 +8,7 @@ import { inline, type LockKit, type LockWay, lockChoices, lockWay, wayIcon, wayW
 /** `inline`: the words to put inside a sentence (lockway.ts `inline`). */
 export type LockLook = { kit: LockKit | null; way: LockWay; words: string; inline: string; icon: 'face' | 'lock'; choices: LockWay[] };
 
-// The layout refreshes on launch and foreground return. All lock labels use that result.
+// The layout refreshes it on launch, settings before turning the lock on. All lock labels use that result.
 let known: LockKit | null = null;
 let asking: Promise<LockKit> | null = null;
 const listeners = new Set<() => void>();

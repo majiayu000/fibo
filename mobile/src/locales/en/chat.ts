@@ -7,6 +7,7 @@ export const chat: Record<string, Entry> = {
   // Waits and the strip above the composer
   '先点「看终端」看清楚，再用 ↑ ↓ 移到要的那项、按回车': 'Tap “View terminal” to see it, then use ↑ ↓ to move to the one you want and press Return',
   看终端: 'View terminal',
+  在终端里选这一项: 'Choose this in the terminal',
   收起: 'Show less',
   回车: 'Return',
   '要在电脑的浏览器里完成，手机上做不了': 'This has to be done in the browser on the computer, not on the phone',

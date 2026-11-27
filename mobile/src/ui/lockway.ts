@@ -47,16 +47,6 @@ export function wayIcon(way: LockWay, k: LockKit): 'face' | 'lock' {
   return k.face && (k.ios || (way === 'weak' && k.level >= 2 && !k.finger)) ? 'face' : 'lock';
 }
 
-/** A prompt cancelled this quickly on Android foreground return may not have been shown. */
-export const UNSEEN_MS = 800;
-
-/** Asked as the app comes back to the front, the system's box can be cancelled before it shows:
- *  back from the background on 2026-11-27 there was only 「解锁」 and no box. Android reports
- *  that as the same `user_cancel` a person's 取消 gives. Only a foreground attempt retries. */
-export function cancelledUnseen(error: string | undefined, ms: number): boolean {
-  return (error === 'user_cancel' || error === 'app_cancel') && ms < UNSEEN_MS;
-}
-
 /** A way's words inside a Chinese sentence: 「打开时要指纹」 but 「打开时要 Face ID」, a space
  *  only around Latin words (2026-11-27: 「打开 指纹 锁」 read as three words). English trims it. */
 export function inline(words: string): string {

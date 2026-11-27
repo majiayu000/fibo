@@ -4,7 +4,7 @@
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Keyboard, Pressable, Text, View } from 'react-native';
-import { approve, deny, oops } from '@/actions';
+import { approve, deny, oops, verify } from '@/actions';
 import { catchUp } from '@/remote/gap';
 import { mergeChat as merge, readChatPage } from '@/remote/chatHistory';
 import { refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
@@ -46,6 +46,7 @@ import { picturesFor, sameWords, sendTarget, shownWords, wordsBeside } from '@/u
 import { useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
 import { tr } from '@/i18n';
+import { submitsChoice } from '@/ui/termkeys';
 
 const POLL_MS = 2000;
 
@@ -315,6 +316,12 @@ export default function Chat() {
     }
   }
 
+  // A choice handed to the terminal is an approval too: it asks when the setting is on.
+  async function sendKeys(keys: string[]) {
+    if (submitsChoice(keys) && !(await verify(tr('在终端里选这一项')))) return;
+    await act('keys', { keys });
+  }
+
   async function stop() {
     try {
       const done = await write(machine, 'stop', { terminal });
@@ -536,7 +543,7 @@ export default function Chat() {
         </View>
       )}
       {!!view && (
-        <WaitPanel view={view} canKey={supports(m, 'keys')} onKeys={(keys) => act('keys', { keys })} onTerminal={() => setTerm(true)} />
+        <WaitPanel view={view} canKey={supports(m, 'keys')} onKeys={(keys) => void sendKeys(keys)} onTerminal={() => setTerm(true)} />
       )}
       {!!error && <Notice tone="danger" text={error} />}
       {online && !card ? (
