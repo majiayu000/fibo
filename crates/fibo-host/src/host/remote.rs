@@ -204,10 +204,6 @@ impl Supervisor {
         (self.on_change)();
     }
 
-    pub(crate) fn key(&self) -> Option<String> {
-        self.lock().config.key.clone()
-    }
-
     pub(crate) fn relay(&self) -> String {
         self.lock().config.relay.clone()
     }

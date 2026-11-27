@@ -51,7 +51,7 @@ fn a_missing_relay_setting_is_off_and_a_saved_one_keeps_its_keys() {
         serde_json::from_slice(&std::fs::read(root.join("remote-relay.json")).unwrap()).unwrap();
     assert_eq!(saved.key.as_deref(), Some("kept"));
     assert_eq!(saved.also[0].key.as_deref(), Some("also kept"));
-    assert_eq!(remote.key().as_deref(), Some("kept"));
+    assert!(remote.status().keyed);
 }
 
 #[test]
@@ -84,6 +84,7 @@ fn saving_after_an_external_repair_keeps_the_recovered_keys() {
             ..repaired
         }
     );
-    assert_eq!(remote.key().as_deref(), Some("recovered"));
-    assert_eq!(remote.status().live.state, RemoteState::Off);
+    let status = remote.status();
+    assert!(status.keyed);
+    assert_eq!(status.live.state, RemoteState::Off);
 }
