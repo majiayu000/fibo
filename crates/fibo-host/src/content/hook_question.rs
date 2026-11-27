@@ -13,6 +13,9 @@ static PLAN_STEP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\s*)(\d+)[.)
 /// backticks round inline code (`` `epsilon` ``, 2026-11-12 walk). A fence line stays.
 static PLAN_HEADING: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\s*)#{1,6}\s+").unwrap());
 static PLAN_CODE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"`([^`\n]+)`").unwrap());
+/// How much of a plan the card carries. A real plan runs 1–4k characters with its Context
+/// first, so 600 ended it before its steps (2026-11-26 walk); the phone scrolls the rest.
+const PLAN_CHARS: usize = 4000;
 pub(super) fn hook_question(v: &Value) -> Option<(String, Vec<String>)> {
     let name = v["tool_name"].as_str()?;
     let input = &v["tool_input"];
@@ -30,7 +33,7 @@ pub(super) fn hook_question(v: &Value) -> Option<(String, Vec<String>)> {
             .collect::<Vec<_>>()
             .join("\n");
         return Some((
-            short(&format!("【计划】按这个计划开始做吗？\n{plan}"), 600),
+            short(&format!("【计划】按这个计划开始做吗？\n{plan}"), PLAN_CHARS),
             Vec::new(),
         ));
     }
