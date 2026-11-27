@@ -94,14 +94,22 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
                 ),
             )?;
             if let Some(event) = event.filter(|_| written) {
-                index.hook(&observed.path, &event, &facts)?;
+                index.hook(
+                    observed.runtime,
+                    &observed.cli_id,
+                    &observed.path,
+                    &event,
+                    &facts,
+                )?;
             }
             if let Some(s) = next
                 .agent_sessions
                 .iter()
                 .find(|s| s.runtime == runtime && s.cli_session_id == cli_session_id)
             {
-                if let Some(card) = index.card(&observed.path)? {
+                if let Some(card) =
+                    index.card_for(observed.runtime, &observed.cli_id, &observed.path)?
+                {
                     next.content.insert(s.id.clone(), std::sync::Arc::new(card));
                 }
                 if written {

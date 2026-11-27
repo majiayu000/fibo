@@ -580,17 +580,35 @@ impl Index {
         Ok(out)
     }
     pub fn card(&self, path: &str) -> io::Result<Option<fibo_core::content::Content>> {
+        self.card_at(path, None)
+    }
+    pub fn card_for(
+        &self,
+        runtime: Agent,
+        cli_id: &str,
+        path: &str,
+    ) -> io::Result<Option<fibo_core::content::Content>> {
+        self.card_at(path, Some((runtime, cli_id)))
+    }
+    fn card_at(
+        &self,
+        path: &str,
+        owner: Option<(Agent, &str)>,
+    ) -> io::Result<Option<fibo_core::content::Content>> {
         let held = self
             .gate
             .lock()
-            .map_err(|_| io::Error::other("log cursor lock poisoned"))?
-            .entries
-            .get(path)
-            .map(|e| e.parser.card.clone());
-        let mut card = match held {
-            Some(card) => Some(card),
-            None => crate::content::card(&self.db, path)?,
+            .map_err(|_| io::Error::other("log cursor lock poisoned"))?;
+        let mut card = match held.entries.get(path) {
+            Some(e) => owner
+                .is_none_or(|(runtime, id)| {
+                    e.runtime == runtime
+                        && e.cursor.identity.as_ref().is_some_and(|(key, _)| key == id)
+                })
+                .then(|| e.parser.card.clone()),
+            None => crate::content::card(&self.db, path, owner)?,
         };
+        drop(held);
         if let Some(c) = card.as_mut().filter(|c| c.name.is_empty()) {
             let path = Path::new(path);
             if let Some((agent, root)) = self.roots.iter().find(|(_, r)| path.starts_with(r)) {

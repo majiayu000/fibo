@@ -247,7 +247,9 @@ mod tests {
         let before = l.chat(None, 50).0;
         assert!(!before.is_empty());
         let facts = fibo_core::protocol::HookFacts::default();
-        l.index.hook(&l.key(), "Stop", &facts).unwrap();
+        l.index
+            .hook(Agent::Codex, "s1", &l.key(), "Stop", &facts)
+            .unwrap();
         let signals: i64 = (l.index.db)
             .query_row(
                 "SELECT COUNT(*) FROM session_records WHERE path=?1 AND inode=0",

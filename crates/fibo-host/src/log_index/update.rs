@@ -1,21 +1,26 @@
 //! The write path: reading a log's new lines into its card and flushing them.
-use super::{deletion::refresh_parent, *};
+use super::{
+    deletion::{indexed_inode, refresh_parent},
+    *,
+};
 
 impl Index {
     pub fn hook(
         &self,
+        runtime: Agent,
+        cli_id: &str,
         path: &str,
         event: &str,
         facts: &fibo_core::protocol::HookFacts,
     ) -> io::Result<()> {
-        self.amend(path, |parser, at, source| {
+        self.amend(runtime, cli_id, path, |parser, at, source| {
             parser.hook(event, facts, at, source);
             Ok(())
         })
     }
     /// The user's input answered what the session waits on (`Content::answer`).
-    pub fn answered(&self, path: &str) -> io::Result<()> {
-        self.amend(path, |parser, at, _| {
+    pub fn answered(&self, runtime: Agent, cli_id: &str, path: &str) -> io::Result<()> {
+        self.amend(runtime, cli_id, path, |parser, at, _| {
             parser.card.answer(at);
             Ok(())
         })
@@ -33,7 +38,7 @@ impl Index {
         if status.is_none() && !self.waits_on_child(path)? {
             return Ok(false);
         }
-        self.amend(path, |parser, at, source| {
+        self.amend(runtime, cli_id, path, |parser, at, source| {
             if parser.waits_on_child() {
                 let started = parser.card.turn_started;
                 let kids = crate::content::children(&self.db, runtime, cli_id, at, started)?;
@@ -59,6 +64,8 @@ impl Index {
     /// Applies a live signal that has no transcript offset; its source is the arrival time.
     fn amend(
         &self,
+        runtime: Agent,
+        cli_id: &str,
         path: &str,
         apply: impl FnOnce(
             &mut crate::content::Parser,
@@ -80,6 +87,14 @@ impl Index {
         };
         // A log being read: its entry takes the signal and is written with its cursor.
         if let Some(e) = held.entries.get_mut(path) {
+            if e.runtime != runtime
+                || e.cursor
+                    .identity
+                    .as_ref()
+                    .is_none_or(|(id, _)| id != cli_id)
+            {
+                return Ok(());
+            }
             apply(&mut e.parser, fibo_core::content::now(), source)?;
             let tx = self.db.unchecked_transaction().map_err(err)?;
             let written = write_cursor(&tx, path, e.runtime, &e.cursor)
@@ -93,15 +108,7 @@ impl Index {
             }
             return written;
         }
-        if self
-            .db
-            .prepare_cached("SELECT 1 FROM log_files WHERE path=?1")
-            .map_err(err)?
-            .query_row([path], |_| Ok(()))
-            .optional()
-            .map_err(err)?
-            .is_none()
-        {
+        if indexed_inode(&self.db, runtime, cli_id, path)?.is_none() {
             return Ok(());
         }
         let mut parser = crate::content::load(&self.db, path)?;

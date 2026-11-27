@@ -414,7 +414,11 @@ pub(super) fn apply_official(
             {
                 continue;
             }
-            if let Some(card) = index.card(&session.transcript)? {
+            if let Some(card) = index.card_for(
+                session.runtime,
+                &session.cli_session_id,
+                &session.transcript,
+            )? {
                 changed = true;
                 next.content
                     .insert(session.id.clone(), std::sync::Arc::new(card));

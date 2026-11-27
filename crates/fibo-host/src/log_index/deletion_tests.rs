@@ -82,7 +82,7 @@ fn a_removed_log_loses_its_durable_and_held_content_without_touching_another_pat
         assert_eq!(indexed_rows(&reader, table, &gone), 0, "{table}");
         assert!(indexed_rows(&reader, table, &kept) > 0, "{table}");
     }
-    reader.answered(key).unwrap();
+    reader.answered(Agent::Codex, "same-id", key).unwrap();
     assert!(reader.card(key).unwrap().is_none());
     assert_ne!(reader.chat_generation(key).unwrap(), old_generation);
     assert!(reader

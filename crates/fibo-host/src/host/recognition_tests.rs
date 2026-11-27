@@ -491,6 +491,31 @@ fn a_removed_log_clears_the_published_card_but_keeps_the_session_and_outcome() {
     // The path is reused before the host receives the removal.
     write_log(&log, "new", "new prompt");
     let batch = index.update_many([log.clone()], checkpoint + 3).unwrap();
+    // Model a crash after the index committed, before the host saved its new
+    // workspace. A new index has no Held entries or pending removals.
+    let (cold_store, cold_workspace) = Store::open(&root).unwrap();
+    let cold_index =
+        crate::log_index::Index::open(&root, vec![(Agent::Codex, root.join("logs"))]).unwrap();
+    let stored = cold_workspace
+        .agent_sessions
+        .iter()
+        .find(|s| s.id == id)
+        .unwrap();
+    assert_eq!(stored.transcript, log.to_str().unwrap());
+    assert!(cold_index
+        .card_for(stored.runtime, &stored.cli_session_id, &stored.transcript)
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        cold_index
+            .card_for(Agent::Codex, "new", &stored.transcript)
+            .unwrap()
+            .unwrap()
+            .title,
+        "new prompt",
+    );
+    drop((cold_store, cold_index));
+
     let chat = super::client::dispatch(
         &shared,
         Request::Chat {

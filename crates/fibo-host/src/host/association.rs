@@ -180,7 +180,7 @@ impl Association {
                     session_position(positions.as_ref(), &next.agent_sessions, t)
                 {
                     let s = &mut next.agent_sessions[position];
-                    if let Some(card) = index.card(&t.path)? {
+                    if let Some(card) = index.card_for(t.runtime, &t.cli_id, &t.path)? {
                         if next.content.get(&s.id).is_some_and(|old| {
                             !card.turn_key.is_empty() && card.turn_key != old.turn_key
                         }) && s.outcome != fibo_core::model::Outcome::Open
