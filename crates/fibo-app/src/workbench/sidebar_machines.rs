@@ -422,6 +422,13 @@ impl Workbench {
         let view = self.machines[index].view.lock().unwrap();
         view.spaces.iter().map(|s| s.id.clone()).collect()
     }
+    /// Its spaces as `(id, name, folder)`.
+    pub fn visual_machine_spaces(&self, index: usize) -> Vec<(String, String, String)> {
+        let view = self.machines[index].view.lock().unwrap();
+        (view.spaces.iter())
+            .map(|s| (s.id.clone(), s.name.clone(), s.cwd.clone()))
+            .collect()
+    }
     pub fn visual_machine_online(&self, index: usize) -> Option<bool> {
         let view = self.machines.get(index)?.view.lock().unwrap();
         Some(view.link == Link::Online)

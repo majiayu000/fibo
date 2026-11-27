@@ -327,6 +327,31 @@ fn addspace_makes_one_space_for_a_folder_for_the_full_role_only() {
     assert!(e.contains("不能 addspace"), "{e}");
 }
 
+/// Named as typed in the window, with no folder, as 新建空间 there makes one: a resend
+/// finds it, a name with a folder names that folder's space, and neither is a lesser role's.
+#[test]
+fn addspace_with_a_name_makes_that_space_with_or_without_a_folder() {
+    let h = Host::start();
+    let dir = scratch(&h, "web-old").to_string_lossy().into_owned();
+    let mut r = Remote::open(&h, None, &[]);
+    assert!(r.ops().contains(&"spacename".into()));
+    let add = json!({ "op": "addspace", "name": " 前端 ", "request": "n1" });
+    let space = r.ok(add.clone());
+    assert_eq!(
+        (&space["name"], &space["cwd"]),
+        (&json!("前端"), &json!(""))
+    );
+    assert_eq!(r.ok(add), space, "a resend makes nothing new");
+    let w = h.workspace();
+    assert_eq!(w.spaces.iter().filter(|s| s.name == "前端").count(), 1);
+    let both = r.ok(json!({ "op": "addspace", "name": "网站", "path": dir, "request": "n2" }));
+    assert_eq!((&both["name"], &both["cwd"]), (&json!("网站"), &json!(dir)));
+    let e = r.error(json!({ "op": "addspace", "name": "  ", "request": "n3" }));
+    assert!(e.contains("path 或 name"), "{e}");
+    let answer = Remote::open(&h, Some("answer"), &[]);
+    assert!(!answer.ops().contains(&"spacename".into()));
+}
+
 /// The phone names the space: the tab goes there even when the folder is outside it (it used
 /// to fall into the first space). Without one, as from an older phone, the folder decides.
 #[test]

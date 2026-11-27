@@ -312,6 +312,7 @@
 "data 不是 base64：{e}" = "data is not base64: {e}"
 "always 只能和 allow: true 一起" = "always requires allow: true"
 "answer 需要 allow: true 或 false" = "answer requires allow: true or false"
+"addspace 需要 path 或 name" = "addspace requires path or name"
 "resize 需要 stream" = "resize requires stream"
 "resize 需要 {key}" = "resize requires {key}"
 "这个画面没有接管，不能改尺寸" = "This screen has not been taken over and cannot be resized"

@@ -37,7 +37,7 @@ impl Role {
             | "mkdir" | "stop" | "lastsession" | "addspace" | "spacequiet" | "trust" | "modes"
             | "setmode" | "todoadd" | "todooutcome" | "image" | "sendnow" => self == Self::Full,
             // Words `hello` lists to say what an op also takes: each goes with its op.
-            "steer" | "effort" | "openimages" => self == Self::Full,
+            "steer" | "effort" | "openimages" | "spacename" => self == Self::Full,
             "toolslast" => true,
             "answer" => self != Self::View,
             "hello" | "ping" | "list" | "cards" | "read" | "chat" | "watch" | "events"
@@ -125,6 +125,7 @@ mod tests {
             "steer",
             "effort",
             "openimages",
+            "spacename",
         ] {
             assert!(!Role::Answer.allows(op) && Role::Full.allows(op), "{op}");
         }

@@ -66,15 +66,33 @@ fn offered(reply: &Dirs, text: &str) -> Vec<String> {
         .take(OFFERED)
         .collect()
 }
-/// The folder Enter means: a path as written, or a name's first match.
-fn target(text: &str, offered: &[String]) -> Result<String, &'static str> {
+/// What a new space there is made from.
+#[derive(Debug, PartialEq)]
+enum Make {
+    Folder(String),
+    /// A space of this name with no folder, as this machine's 新建空间 makes.
+    Named(String),
+}
+/// What Enter means: a path as written; a name is the new space's own where its host takes
+/// one (`spacename`), else (an older host) its first folder.
+fn target(text: &str, offered: &[String], names: bool) -> Result<Make, &'static str> {
     let text = text.trim();
     if text.is_empty() {
         Err(t!("先选或写一个目录"))
     } else if is_path(text) {
-        Ok(text.to_owned())
+        Ok(Make::Folder(text.to_owned()))
+    } else if names {
+        Ok(Make::Named(text.to_owned()))
     } else {
-        (offered.first().cloned()).ok_or(t!("没有找到这个目录"))
+        (offered.first().cloned().map(Make::Folder)).ok_or(t!("没有找到这个目录"))
+    }
+}
+/// The name Enter makes a space of, when it does.
+fn named(adding: &AddingSpace) -> Option<String> {
+    let names = adding.brief.lists("spacename");
+    match target(&adding.text, &[], names) {
+        Ok(Make::Named(name)) => Some(name),
+        _ => None,
     }
 }
 fn shorter(path: &str, home: &str) -> String {
@@ -208,7 +226,7 @@ impl Workbench {
     /// Makes the space there: `chosen`, or what Enter means. It stays open with the reason
     /// when refused; once made, the column lists that space. A space that exists already
     /// comes back the same way.
-    fn submit_machine_space(&mut self, chosen: Option<String>, cx: &mut Context<Self>) {
+    fn submit_machine_space(&mut self, chosen: Option<Make>, cx: &mut Context<Self>) {
         let Some(linked) = self.adding_link() else {
             return;
         };
@@ -218,20 +236,41 @@ impl Workbench {
         if adding.sending {
             return;
         }
-        let path = match chosen.map_or_else(|| target(&adding.text, &adding.offered), Ok) {
-            Ok(path) => path,
+        let names = adding.brief.lists("spacename");
+        let make = chosen.map_or_else(|| target(&adding.text, &adding.offered, names), Ok);
+        let make = match make {
+            Ok(make) => make,
             Err(why) => {
                 adding.error = Some(why.to_owned());
                 cx.notify();
                 return;
             }
         };
+        // A name that already is a space there picks that one rather than a second of it.
+        if let Make::Named(name) = &make {
+            let host = adding.host.clone();
+            if let Some(space) = self.machine_space_named(&host, name) {
+                self.sidebar.machine_space = Some(space.id);
+                self.layout.adding_machine_space = None;
+                self.nav.pending_focus = true;
+                cx.notify();
+                return;
+            }
+        }
+        let Some(adding) = &mut self.layout.adding_machine_space else {
+            return;
+        };
         adding.sending = true;
         adding.error = None;
         adding.asked += 1;
         let (asked, host) = (adding.asked, adding.host.clone());
+        let (path, name) = match make {
+            Make::Folder(path) => (Some(path), None),
+            Make::Named(name) => (None, Some(name)),
+        };
         let op = Op::AddSpace {
             path,
+            name,
             request: Some(fibo_core::protocol::RequestId::fresh().id),
         };
         let sent = cx.background_spawn(async move { linked.request(op, REPLY) });
@@ -243,6 +282,11 @@ impl Workbench {
             });
         })
         .detach();
+    }
+    fn machine_space_named(&self, host: &str, name: &str) -> Option<Space> {
+        let remote = self.machines.get(self.machine_index(host)?)?;
+        let view = remote.view.lock().unwrap();
+        view.spaces.iter().find(|s| s.name == name).cloned()
     }
     fn machine_space_made(
         &mut self,
@@ -415,7 +459,46 @@ impl Workbench {
                     )
                 })
                 .on_click(cx.listener(move |this, _, _, cx| {
-                    this.submit_machine_space(Some(chosen.clone()), cx);
+                    this.submit_machine_space(Some(Make::Folder(chosen.clone())), cx);
+                }))
+        });
+        // What Enter makes, said first, so a name never quietly turns into a folder's.
+        let named = named(adding).map(|name| {
+            let known = spaces.iter().any(|s| s.name == name);
+            let made = name.clone();
+            div()
+                .id("machine-space-named")
+                .role(gpui::accesskit::Role::Button)
+                .h(px(ROW))
+                .flex_shrink_0()
+                .px(px(T::S6))
+                .flex()
+                .items_center()
+                .rounded(px(T::S4))
+                .bg(T::color(F::selected()))
+                .cursor_pointer()
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_size(px(F::TIME))
+                        .text_color(T::color(F::title()))
+                        .child(if known {
+                            t!("已有空间「{name}」", name)
+                        } else {
+                            t!("新建空间「{name}」", name)
+                        }),
+                )
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(px(F::TAG))
+                        .text_color(T::color(F::third()))
+                        .child(t!("回车")),
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.submit_machine_space(Some(Make::Named(made.clone())), cx);
                 }))
         });
         let shown = adding.offered.len().min(SHOWN);
@@ -455,6 +538,7 @@ impl Workbench {
                     .text_size(px(T::SMALL))
                     .child(adding.field.clone()),
             )
+            .when_some(named.filter(|_| !adding.sending), |d, row| d.child(row))
             .when(!adding.sending && shown > 0, |d| {
                 // A definite height: docs/performance on wrappers sized by max_h.
                 d.child(
@@ -643,10 +727,23 @@ mod tests {
     #[test]
     fn enter_takes_a_path_as_written_a_name_as_its_first_match_and_says_why_not() {
         let found = ["/code/vsr".to_owned()];
-        assert_eq!(target("~/nope", &found), Ok("~/nope".to_owned()));
-        assert_eq!(target("vsr", &found), Ok("/code/vsr".to_owned()));
-        assert_eq!(target("  ", &found), Err("先选或写一个目录"));
-        assert_eq!(target("vsr", &[]), Err("没有找到这个目录"));
+        let folder = |p: &str| Ok(Make::Folder(p.to_owned()));
+        assert_eq!(target("~/nope", &found, false), folder("~/nope"));
+        assert_eq!(target("vsr", &found, false), folder("/code/vsr"));
+        assert_eq!(target("  ", &found, false), Err("先选或写一个目录"));
+        assert_eq!(target("vsr", &[], false), Err("没有找到这个目录"));
+    }
+    #[test]
+    fn a_host_that_takes_names_makes_the_space_typed_not_a_folder_found() {
+        let found = ["/code/vsr-old".to_owned()];
+        let named = Ok(Make::Named("vsr".to_owned()));
+        assert_eq!(target(" vsr ", &found, true), named);
+        assert_eq!(target("vsr", &[], true), named);
+        assert_eq!(
+            target("~/code/vsr", &found, true),
+            Ok(Make::Folder("~/code/vsr".into()))
+        );
+        assert_eq!(target("", &found, true), Err("先选或写一个目录"));
     }
     #[test]
     fn home_shortens_only_as_a_whole_folder() {

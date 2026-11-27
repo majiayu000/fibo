@@ -446,9 +446,34 @@ pub(super) fn start(
             "the existing space was not chosen"
         );
         handle.update(cx, |v, _, cx| v.visual_machine_space(chosen.as_deref().unwrap(), cx)).unwrap();
+        // By a name no space has: that space, named as typed with no folder (as 新建空间 here
+        // makes one), never the first folder whose name holds it.
+        handle.update(cx, |v, w, cx| v.visual_begin_add_machine_space(0, w, cx)).unwrap();
+        handle.update(cx, |v, _, cx| v.visual_type_machine_space("brand", cx)).unwrap();
+        wait(600).await;
+        shoot("spaces-named-row.png", cx);
+        handle.update(cx, |v, _, cx| v.visual_submit_machine_space(cx)).unwrap();
+        for _ in 0..50 {
+            if adding(cx).is_none() {
+                break;
+            }
+            wait(100).await;
+        }
+        assert!(adding(cx).is_none(), "the panel stayed open after naming a space");
+        let named = handle.update(cx, |v, _, _| v.visual_machine_space_chosen()).unwrap();
+        wait(2500).await;
+        let spaces = handle.update(cx, |v, _, _| v.visual_machine_spaces(0)).unwrap();
+        assert_eq!(spaces.len(), before + 2, "naming a space made none: {spaces:?}");
+        let made = spaces.iter().find(|s| Some(&s.0) == named.as_ref());
+        assert!(
+            made.is_some_and(|s| s.1 == "brand" && s.2.is_empty()),
+            "not the space named, without a folder: {made:?}"
+        );
+        shoot("spaces-named.png", cx);
+        handle.update(cx, |v, _, cx| v.visual_machine_space(named.as_deref().unwrap(), cx)).unwrap();
         handle.update(cx, |v, _, cx| v.visual_set_space_quiet("other", false, cx)).unwrap();
         wait(900).await;
-        eprintln!("machine spaces PASS: chips, refused, cancelled, made, made again");
+        eprintln!("machine spaces PASS: chips, refused, cancelled, made, made again, named");
 
         // 先不管这台: out of every count, the key and the board, in every layout; looking at
         // its sessions does not end it, and the words and the file follow both ways.

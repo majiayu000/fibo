@@ -222,29 +222,56 @@ pub(super) fn open(socket: &Path, request: &Value, client: Option<&str>) -> io::
     Ok(json!({ "terminal": terminal, "tab": tab, "space": space.id }))
 }
 
-/// `addspace`: a folder as a space of its own, named after it. One that already is a space
-/// keeps it, so a resend after a lost reply finds what the first one made.
+/// `addspace`: a folder as a space of its own, named after it unless `name` says otherwise.
+/// One that already is a space keeps it, so a resend after a lost reply finds what the first
+/// one made. With `name` and no `path`, a space with no folder, as the window's 新建空间
+/// makes: named after the request, a resend finds it too.
 pub(super) fn add_space(socket: &Path, request: &Value, client: Option<&str>) -> io::Result<Value> {
-    let path = super::dirs::expand(super::text(request, "path")?)?;
-    if !path.is_dir() {
-        return Err(io::Error::other(t!("目录不存在")));
-    }
-    let cwd = path.to_string_lossy().trim_end_matches('/').to_owned();
+    let name = (request["name"].as_str())
+        .map(str::trim)
+        .filter(|n| !n.is_empty());
+    let path = request["path"].as_str().filter(|p| !p.is_empty());
     let w = super::held::workspace(socket)?;
-    let space = match (w.spaces.iter()).find(|s| s.cwd.trim_end_matches('/') == cwd) {
-        Some(space) => space.clone(),
+    let space = match path {
+        Some(path) => {
+            let path = super::dirs::expand(path)?;
+            if !path.is_dir() {
+                return Err(io::Error::other(t!("目录不存在")));
+            }
+            let cwd = path.to_string_lossy().trim_end_matches('/').to_owned();
+            match (w.spaces.iter()).find(|s| s.cwd.trim_end_matches('/') == cwd) {
+                Some(space) => return Ok(reply(space)),
+                None => Space {
+                    id: uuid::Uuid::new_v4().simple().to_string(),
+                    name: name.map(str::to_owned).unwrap_or_else(|| {
+                        (path.file_name())
+                            .map_or_else(|| cwd.clone(), |n| n.to_string_lossy().into_owned())
+                    }),
+                    cwd,
+                },
+            }
+        }
         None => {
-            let space = Space {
-                id: uuid::Uuid::new_v4().simple().to_string(),
-                name: (path.file_name())
-                    .map_or_else(|| cwd.clone(), |n| n.to_string_lossy().into_owned()),
-                cwd,
-            };
-            edit_once(socket, request, client, Edit::AddSpace(space.clone()))?;
-            space
+            let name = name.ok_or_else(|| io::Error::other(t!("addspace 需要 path 或 name")))?;
+            let id = named_id(client, request).map_or_else(
+                || uuid::Uuid::new_v4().simple().to_string(),
+                |r| format!("remote-space-{}-{}", r.client, r.id).replace([':', '/'], "-"),
+            );
+            if let Some(space) = w.spaces.iter().find(|s| s.id == id) {
+                return Ok(reply(space));
+            }
+            Space {
+                id,
+                name: name.to_owned(),
+                cwd: String::new(),
+            }
         }
     };
-    Ok(json!({ "id": space.id, "name": space.name, "cwd": space.cwd }))
+    edit_once(socket, request, client, Edit::AddSpace(space.clone()))?;
+    Ok(reply(&space))
+}
+fn reply(space: &Space) -> Value {
+    json!({ "id": space.id, "name": space.name, "cwd": space.cwd })
 }
 
 /// 先不管 a space, or take it back: the same switch as the window's. Its conversations come

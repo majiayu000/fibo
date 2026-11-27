@@ -104,8 +104,7 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
     },
-    /// What the approval on a terminal's screen asks about: [`Ask`]. An error when it shows
-    /// none.
+    /// What the approval on a terminal's screen asks about: [`Ask`], or an error for none.
     Ask {
         terminal: String,
     },
@@ -163,14 +162,17 @@ pub enum Op {
         cwd: String,
         agent: String,
     },
-    /// Makes a folder a space: [`Space`]. One that already is keeps its space.
+    /// A folder made a space (one already is keeps it), or with only `name` (`spacename`) a
+    /// space with no folder: [`Space`].
     AddSpace {
-        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
     },
-    /// Tokens each Agent's local logs say it used since `since` (Unix seconds, the phone's
-    /// midnight): [`Usage`].
+    /// Tokens each Agent's logs say it used since `since` (Unix secs, phone's midnight): [`Usage`].
     Usage {
         since: u64,
     },

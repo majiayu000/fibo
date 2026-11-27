@@ -211,6 +211,8 @@ pub struct View {
 pub struct Brief {
     spec: Spec,
     client: Arc<Mutex<Option<Arc<fibo_remote::client::Client>>>>,
+    /// The ops its hello listed, once it said hello.
+    ops: Arc<Mutex<Vec<String>>>,
 }
 
 impl Brief {
@@ -218,7 +220,12 @@ impl Brief {
         Self {
             spec,
             client: Arc::new(Mutex::new(None)),
+            ops: Arc::default(),
         }
+    }
+    /// Whether its hello listed `op`; false before the first request.
+    pub fn lists(&self, op: &str) -> bool {
+        self.ops.lock().unwrap().iter().any(|o| o == op)
     }
     /// `op` there, opening the exchange first if this is its first request.
     pub fn request(
@@ -234,13 +241,15 @@ impl Brief {
                 None => {
                     let client =
                         Arc::new(fibo_remote::client::Client::spawn(&self.spec.command())?);
-                    client.request(
+                    let hello = client.request(
                         Op::Hello {
                             version: Some(fibo_remote::protocol::VERSION),
                             client: Some(fibo_core::protocol::RequestId::fresh().client),
                         },
                         wait,
                     )?;
+                    *self.ops.lock().unwrap() =
+                        serde_json::from_value(hello["ops"].clone()).unwrap_or_default();
                     *held = Some(Arc::clone(&client));
                     client
                 }

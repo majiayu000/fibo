@@ -3,7 +3,8 @@
 //! says `modes` and `setmode` take the kind `effort`; `spacequiet` puts a space aside or takes it
 //! back, and `list` names the ones put aside in `quiet`. `sendnow` sends what the Agent has
 //! queued without waiting for the step at hand; `toolslast` says `toolcalls` takes `last`;
-//! `openimages` says `open` takes `images`, pictures for the new Agent's first message.
+//! `openimages` says `open` takes `images`, pictures for the new Agent's first message;
+//! `spacename` says `addspace` takes `name`, and without `path` makes a space with no folder.
 
 /// Every op, in the order `hello` lists them.
 pub const OPS: &[&str] = &[
@@ -49,4 +50,5 @@ pub const OPS: &[&str] = &[
     "sendnow",
     "toolslast",
     "openimages",
+    "spacename",
 ];
