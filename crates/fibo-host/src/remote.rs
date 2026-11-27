@@ -24,6 +24,7 @@ mod chat;
 mod diff;
 mod diff_summary;
 mod dirs;
+mod file;
 mod held;
 mod image_wait;
 mod images;
@@ -528,6 +529,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
         "suggestion" => chat::suggestion(socket, &terminal()?),
         "diff" => diff::diff(socket, request, role),
         "dirs" => dirs::dirs(socket, request),
+        "file" => file::file(socket, request),
         "quota" => quota::quota(socket),
         "lastsession" => resume::last_session(socket, request),
         "addspace" => writes::add_space(socket, request, client),

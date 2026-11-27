@@ -86,6 +86,8 @@ export const chat: Record<string, Entry> = {
   复制代码: 'Copy code',
   代码: 'Code',
   '已复制路径 {path}': 'Path copied: {path}',
+  复制电脑路径: 'Copy computer path',
+  这台手机的配对权限不能读电脑上的文件: "This phone's pairing can't read files on the computer",
   '展开其余 {n} 行': (a) => `Show ${a.n} more line${s(a.n)}`,
   '{n} 个文件': (a) => `${a.n} file${s(a.n)}`,
   '干了 {time}': 'Worked {time}',

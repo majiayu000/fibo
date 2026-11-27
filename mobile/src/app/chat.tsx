@@ -356,6 +356,7 @@ export default function Chat() {
   const turnEnded = online && card?.controls?.suggestion && card.phase === 'idle' && !card.trust && supports(m, 'suggestion');
   const suggestion = useSuggestion(machine, terminal, card?.session ?? null, turnEnded ? (card.turn ?? null) : null);
   const toDiff = useCallback(() => router.push({ pathname: '/diff', params: { machine, terminal } }), [machine, terminal]);
+  const toFile = useCallback((path: string) => router.push({ pathname: '/file', params: { machine, terminal, path } }), [machine, terminal]);
   const toTools = useCallback(
     (seq?: number, stopped?: boolean) =>
       router.push({ pathname: '/tools', params: { machine, terminal, session: shown.current ?? '', ...(seq ? { seq: String(seq) } : {}), ...(stopped ? { stopped: '1' } : {}) } }),
@@ -413,7 +414,7 @@ export default function Chat() {
         l.m.role === 'user' ? (
           <UserLine m={l.m} files={picturesFor(sentPictures, machine, terminal, l.m.text, l.m.at)} />
         ) : (
-          <Theirs m={l.m} agent={agent} onTools={toTools} />
+          <Theirs m={l.m} agent={agent} onTools={toTools} onFile={toFile} />
         )
       ) : l.kind === 'pending' ? (
         l.p.how === 'queue' && !l.p.now && canSendNow ? (
@@ -433,7 +434,7 @@ export default function Chat() {
           <Mine text={l.text} note={l.error ? tr('没发出去（点一下重发，按住删除）：{why}', { why: l.error }) : tr('重连后发送（按住删除）')} tone={l.error ? 'error' : 'pending'} />
         </Pressable>
       ),
-    [agent, card?.controls, toTools, canSendNow, openQueued, sentPictures, machine, terminal],
+    [agent, card?.controls, toTools, toFile, canSendNow, openQueued, sentPictures, machine, terminal],
   );
 
   return (

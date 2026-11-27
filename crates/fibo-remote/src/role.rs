@@ -36,6 +36,8 @@ impl Role {
             "send" | "keys" | "input" | "resize" | "open" | "end" | "outcome" | "dirs"
             | "mkdir" | "stop" | "lastsession" | "addspace" | "spacequiet" | "trust" | "modes"
             | "setmode" | "todoadd" | "todooutcome" | "image" | "sendnow" => self == Self::Full,
+            // A file's whole text, though only in a conversation's folder: as `diff`'s patches.
+            "file" => self == Self::Full,
             // Words `hello` lists to say what an op also takes: each goes with its op.
             "steer" | "effort" | "openimages" => self == Self::Full,
             "toolslast" => true,
@@ -125,6 +127,7 @@ mod tests {
             "steer",
             "effort",
             "openimages",
+            "file",
         ] {
             assert!(!Role::Answer.allows(op) && Role::Full.allows(op), "{op}");
         }
@@ -141,6 +144,6 @@ mod tests {
         assert!(acts("keys") && acts("mkdir") && acts("addspace") && !acts("watch"));
         assert!(acts("todoadd") && acts("todooutcome") && acts("image") && acts("sendnow"));
         assert!(!acts("diff") && !acts("dirs") && !acts("quota") && !acts("usage"));
-        assert!(!acts("toolcalls") && !acts("toolcall") && !acts("suggestion"));
+        assert!(!acts("toolcalls") && !acts("toolcall") && !acts("suggestion") && !acts("file"));
     }
 }

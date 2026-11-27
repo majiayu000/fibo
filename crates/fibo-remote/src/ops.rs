@@ -4,6 +4,7 @@
 //! back, and `list` names the ones put aside in `quiet`. `sendnow` sends what the Agent has
 //! queued without waiting for the step at hand; `toolslast` says `toolcalls` takes `last`;
 //! `openimages` says `open` takes `images`, pictures for the new Agent's first message.
+//! `file` reads a Markdown or plain-text file in a terminal's folder, for a chat's file link.
 
 /// Every op, in the order `hello` lists them.
 pub const OPS: &[&str] = &[
@@ -49,4 +50,5 @@ pub const OPS: &[&str] = &[
     "sendnow",
     "toolslast",
     "openimages",
+    "file",
 ];
