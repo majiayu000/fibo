@@ -194,7 +194,8 @@ async fn carry(link: &Link, stream: local::Stream) -> io::Result<()> {
         let room = waiting.is_empty() && window_open;
         tokio::select! {
             bytes = from_window.recv(), if room => match bytes {
-                Some(bytes) => waiting.push_back(squeeze.pack(&bytes)?),
+                // Each message within `secure::CHUNK`, compressed or not.
+                Some(bytes) => waiting.extend(squeeze.pack(&bytes)?.chunks(secure::CHUNK).map(<[u8]>::to_vec)),
                 None => window_open = false,
             },
             Some(n) = done.recv() => {
