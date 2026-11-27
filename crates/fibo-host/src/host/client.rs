@@ -418,19 +418,7 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             key,
             also,
         } => {
-            let relay = relay.trim().to_owned();
-            let remote = supervisor(shared)?;
-            let key = match key {
-                None => remote.key(),
-                Some(k) => Some(k.trim().to_owned()).filter(|k| !k.is_empty()),
-            };
-            let also = super::remote::merge_also(remote.also(), also, &relay);
-            remote.configure(super::remote::Config {
-                enabled,
-                relay,
-                key,
-                also,
-            })?;
+            supervisor(shared)?.configure(enabled, relay, key, also)?;
             Ok(Reply::Ok)
         }
         Request::RemotePair { name, role } => {

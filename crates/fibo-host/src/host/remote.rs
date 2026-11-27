@@ -17,7 +17,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 mod also;
-pub(crate) use also::merge_also;
+use also::merge_also;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
@@ -113,16 +113,33 @@ impl Supervisor {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    pub(crate) fn configure(&self, config: Config) -> io::Result<()> {
+    pub(crate) fn configure(
+        &self,
+        enabled: bool,
+        relay: String,
+        key: Option<String>,
+        also: Option<Vec<RemoteRelay>>,
+    ) -> io::Result<()> {
+        let mut inner = self.lock();
+        let saved = load_for_update(&self.root)?;
+        let relay = relay.trim().to_owned();
+        let config = Config {
+            enabled,
+            also: merge_also(saved.also, also, &relay),
+            relay,
+            key: match key {
+                None => saved.key,
+                Some(key) => Some(key.trim().to_owned()).filter(|key| !key.is_empty()),
+            },
+        };
+
         if config.enabled {
             for relay in std::iter::once(&config.relay).chain(config.also.iter().map(|a| &a.relay))
             {
                 fibo_remote::link::Link::websocket_base(relay).map_err(io::Error::other)?;
             }
         }
-        load_for_update(&self.root)?;
         save(&self.root, &config)?;
-        let mut inner = self.lock();
         inner.config = config;
         inner.generation += 1;
         inner.live = RemoteLive {
