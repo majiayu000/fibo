@@ -190,6 +190,11 @@ pub fn set(plugins: &Path, id: &str, key: &str, value: Value) -> Result<(), Stri
     if !opt.accepts(&value) {
         return Err(t!("{title} 的值不对", title = opt.title));
     }
+    let data = crate::setup::data_dir(plugins, id);
+    fibo_platform::fs::create_private_dir(&data).map_err(|e| e.to_string())?;
+    let lock =
+        fibo_platform::fs::lock_file(&data.join("options.lock")).map_err(|e| e.to_string())?;
+    lock.lock().map_err(|e| e.to_string())?;
     let file = options_file(plugins, id);
     let mut stored: serde_json::Map<String, Value> =
         crate::state_file::read_for_update(&file).map_err(|e| e.to_string())?;
@@ -207,13 +212,8 @@ pub fn set(plugins: &Path, id: &str, key: &str, value: Value) -> Result<(), Stri
     } else {
         stored.insert(key.to_owned(), value);
     }
-    if let Some(parent) = file.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let tmp = file.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(&stored).unwrap_or_default())
-        .and_then(|()| std::fs::rename(&tmp, &file))
-        .map_err(|e| t!("存不了设置：{e}", e))
+    let bytes = serde_json::to_vec_pretty(&stored).map_err(|e| t!("存不了设置：{e}", e))?;
+    fibo_platform::fs::write_private(&file, &bytes).map_err(|e| t!("存不了设置：{e}", e))
 }
 
 /// The `fibo` command next to this program: the app bundle ships it beside the app,
@@ -330,7 +330,9 @@ pub fn record(dir: &Path, what: &str, result: &Result<(), String>, ms: u64, on_c
             .unwrap_or_default(),
         ms,
     };
-    let _ = append(&data, &run);
+    if let Err(e) = append(&data, &run) {
+        eprintln!("plugins: {}: {e}", data.join("runs.jsonl").display());
+    }
 }
 
 /// Adds a run, keeping the last `KEPT`. The host's hooks, several at once, and the app's
@@ -358,24 +360,20 @@ fn redacted(
 
 fn append(data: &Path, run: &Run) -> std::io::Result<()> {
     fibo_platform::fs::create_private_dir(data)?;
-    let lock = std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .open(data.join("runs.lock"))?;
+    let lock = fibo_platform::fs::lock_file(&data.join("runs.lock"))?;
     // Released when it closes.
     lock.lock()?;
     let file = data.join("runs.jsonl");
-    let mut lines: Vec<String> = std::fs::read_to_string(&file)
-        .unwrap_or_default()
+    let saved = crate::state_file::read_if_present(&file)?.unwrap_or_default();
+    let saved = std::str::from_utf8(&saved)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let line = serde_json::to_string(run).map_err(std::io::Error::other)?;
+    let lines: Vec<_> = saved
         .lines()
-        .map(str::to_owned)
+        .chain(std::iter::once(line.as_str()))
         .collect();
-    lines.push(serde_json::to_string(run).map_err(std::io::Error::other)?);
     let from = lines.len().saturating_sub(KEPT);
-    let tmp = file.with_extension("jsonl.tmp");
-    std::fs::write(&tmp, lines[from..].join("\n") + "\n")?;
-    std::fs::rename(tmp, file)
+    fibo_platform::fs::write_private(&file, (lines[from..].join("\n") + "\n").as_bytes())
 }
 
 /// Each command's latest run where that run failed: what is broken now. A success of one
@@ -453,6 +451,66 @@ mod tests {
         set(&plugins, "notify", "only_errors", Value::Bool(false)).unwrap();
         let stored = std::fs::read_to_string(root.join("plugin-data/notify/options.json")).unwrap();
         assert!(!stored.contains("only_errors"), "{stored}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn concurrent_settings_keep_both_changes() {
+        let manifest = r#"{"api":1,"id":"parallel","name":"P","provides":["hooks"],"options":[
+          {"key":"first","title":"First","type":"boolean","default":false},
+          {"key":"second","title":"Second","type":"boolean","default":false}]}"#;
+        let (root, _) = plugin_dir("parallel", manifest);
+        let plugins = root.join("plugins");
+        let ready = std::sync::Barrier::new(2);
+        std::thread::scope(|scope| {
+            for key in ["first", "second"] {
+                let (ready, plugins) = (&ready, &plugins);
+                scope.spawn(move || {
+                    ready.wait();
+                    set(plugins, "parallel", key, true.into()).unwrap();
+                });
+            }
+        });
+        let saved = std::fs::read(options_file(&plugins, "parallel")).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&saved).unwrap(),
+            serde_json::json!({"first": true, "second": true})
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_run_log_that_cannot_be_read_is_never_saved_over() {
+        let (root, _) = plugin_dir(
+            "bad-runs",
+            r#"{"api":1,"id":"bad-runs","name":"B","provides":["hooks"]}"#,
+        );
+        let data = crate::setup::data_dir(&root.join("plugins"), "bad-runs");
+        std::fs::create_dir_all(&data).unwrap();
+        let file = data.join("runs.jsonl");
+        let run = Run {
+            at: 2,
+            what: "new".into(),
+            ok: true,
+            detail: String::new(),
+            ms: 1,
+        };
+        let old = r#"{"at":1,"what":"old","ok":true,"detail":"","ms":1}"#;
+        let bad = [old.as_bytes(), b"\n\xff"].concat();
+        std::fs::write(&file, &bad).unwrap();
+        assert_eq!(
+            append(&data, &run).unwrap_err().kind(),
+            std::io::ErrorKind::InvalidData
+        );
+        assert_eq!(std::fs::read(&file).unwrap(), bad);
+
+        std::fs::write(&file, format!("{old}\n")).unwrap();
+        append(&data, &run).unwrap();
+        let saved = std::fs::read_to_string(&file).unwrap();
+        assert_eq!(
+            saved,
+            format!("{old}\n{}\n", serde_json::to_string(&run).unwrap())
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
