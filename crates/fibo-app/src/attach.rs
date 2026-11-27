@@ -235,12 +235,30 @@ impl Host {
     }
 }
 
-/// Where this machine keeps the forwarded socket of `host`.
+/// Where the standalone window keeps its forward and its per-host instance lock.
 pub fn root(host: &str) -> io::Result<PathBuf> {
+    Ok(machine_root(&runtime()?, host, None))
+}
+
+/// The sidebar's forward is private to this process. The standalone window can run
+/// beside it and its existing instance lock still names the same directory.
+pub fn embedded_root(host: &str) -> io::Result<PathBuf> {
+    Ok(machine_root(&runtime()?, host, Some(std::process::id())))
+}
+
+fn runtime() -> io::Result<PathBuf> {
     let home = fibo_platform::dirs::home().ok_or_else(|| io::Error::other("HOME unavailable"))?;
-    Ok(fibo_core::legacy::runtime_dir(&home)
-        .join("m")
-        .join(dir_name(host)))
+    Ok(fibo_core::legacy::runtime_dir(&home))
+}
+
+fn machine_root(runtime: &Path, host: &str, embedded_pid: Option<u32>) -> PathBuf {
+    let dir = match embedded_pid {
+        // A standalone name cannot contain the underscore. With /workbench.sock this
+        // uses the same maximum path length as the standalone's /client/client.sock.
+        Some(pid) => format!("{pid:x}_{:012x}", host_hash(host) & 0xffff_ffff_ffff),
+        None => dir_name(host),
+    };
+    runtime.join("m").join(dir)
 }
 /// `user@host` or an ssh alias as one short folder name: a readable start and a hash of
 /// the whole destination, so `alice@server` and `alice-server` never share a socket or a
@@ -250,11 +268,14 @@ fn dir_name(host: &str) -> String {
         .filter(|c| c.is_ascii_alphanumeric())
         .take(8)
         .collect();
+    format!("{start}-{:08x}", host_hash(host) as u32)
+}
+
+fn host_hash(host: &str) -> u64 {
     // FNV-1a: the same name on every run and every build.
-    let hash = (host.bytes()).fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
+    host.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
         (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    });
-    format!("{start}-{:08x}", hash as u32)
+    })
 }
 
 /// One attempt to reach a machine with the current settings.
@@ -582,16 +603,7 @@ fn relay_about(spec: &Spec) -> io::Result<Answer> {
 fn forward_argv(forward: &Forward, via: Via) -> io::Result<Vec<String>> {
     let listen = forward.listen(via);
     if via == Via::Relay {
-        let program = crate::lifecycle::host_program()?;
-        return Ok(vec![
-            program.display().to_string(),
-            "remote".into(),
-            "dial".into(),
-            "--machine".into(),
-            forward.spec.host.clone(),
-            "--listen".into(),
-            listen.display().to_string(),
-        ]);
+        return relay_argv(forward, &crate::lifecycle::host_program()?);
     }
     let mut argv = forward.spec.ssh_options("-N");
     argv.extend([
@@ -607,6 +619,25 @@ fn forward_argv(forward: &Forward, via: Via) -> io::Result<Vec<String>> {
         format!("{}:{}", listen.display(), forward.remote.lock().unwrap()),
         forward.spec.host.clone(),
     ]);
+    Ok(argv)
+}
+
+fn relay_argv(forward: &Forward, program: &Path) -> io::Result<Vec<String>> {
+    let expected = forward.ids.lock().unwrap()[slot(Via::Relay)]
+        .clone()
+        .ok_or_else(|| io::Error::other("relay machine identity missing"))?;
+    let mut argv = vec![
+        program.display().to_string(),
+        "remote".into(),
+        "dial".into(),
+        "--machine".into(),
+        forward.spec.host.clone(),
+        "--listen".into(),
+        forward.listen(Via::Relay).display().to_string(),
+    ];
+    if !expected.is_empty() {
+        argv.extend(["--expect-machine-id".into(), expected]);
+    }
     Ok(argv)
 }
 

@@ -106,3 +106,48 @@ fn a_cancelled_discovery_does_not_bind_or_reuse_its_replacement() {
         .unwrap()
         .retain(|f| !Arc::ptr_eq(f, &replacement));
 }
+
+#[test]
+fn embedded_and_standalone_socket_names_do_not_overlap() {
+    let runtime = Path::new("/Users/someone-long/.local/share/mooring-workbench");
+    let host = "lifcc@agent-os.tailc3193d.ts.net.example.internal";
+    let standalone = machine_root(runtime, host, None);
+    assert_eq!(standalone, runtime.join("m").join(dir_name(host)));
+    let embedded = machine_root(runtime, host, Some(u32::MAX));
+    assert_ne!(standalone, embedded);
+    assert_ne!(embedded, machine_root(runtime, host, Some(u32::MAX - 1)));
+    assert_ne!(
+        embedded,
+        machine_root(runtime, "lifcc@another-host", Some(u32::MAX))
+    );
+    let socket = embedded.join("workbench.sock");
+    assert_eq!(
+        socket.as_os_str().len(),
+        standalone.join("client/client.sock").as_os_str().len()
+    );
+    assert!(socket.as_os_str().len() < 104, "{}", socket.display());
+}
+
+#[test]
+fn the_relay_sidecar_keeps_the_machine_id_discovered_for_its_route() {
+    let forward = Forward::new(
+        Spec::new("alias".into()),
+        PathBuf::from("/unused/workbench.sock"),
+        true,
+    );
+    let program = Path::new("fibo");
+    assert!(relay_argv(&forward, program).is_err());
+    forward.learn(Via::Ssh, answer(""));
+    forward.learn(Via::Relay, answer("machine-a"));
+    for _ in 0..2 {
+        let args = relay_argv(&forward, program).unwrap();
+        assert!(args.windows(2).any(|kv| kv == ["--machine", "alias"]));
+        assert!(
+            args.windows(2)
+                .any(|kv| kv == ["--expect-machine-id", "machine-a"])
+        );
+    }
+    forward.learn(Via::Relay, answer(""));
+    let args = relay_argv(&forward, program).unwrap();
+    assert!(!args.iter().any(|arg| arg == "--expect-machine-id"));
+}

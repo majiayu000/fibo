@@ -177,7 +177,7 @@ impl Workbench {
             let host = host.clone();
             let attempt = attempt.clone();
             async move {
-                let root = crate::attach::root(&host)?;
+                let root = crate::attach::embedded_root(&host)?;
                 let attached = crate::attach::start(&host, &root, &attempt)?;
                 let workspace =
                     crate::load_attached_workspace(&attached, &attempt).map_err(|e| {

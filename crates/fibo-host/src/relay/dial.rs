@@ -27,11 +27,15 @@ type Ws =
 
 const PING: Duration = Duration::from_secs(25);
 
-pub(super) fn run(machine: &str, listen: Option<&Path>) -> io::Result<()> {
+pub(super) fn run(
+    machine: &str,
+    listen: Option<&Path>,
+    expected_machine: Option<&str>,
+) -> io::Result<()> {
     let link = load_link(machine)?;
     let Some(listen) = listen else {
         let rt = runtime()?;
-        let (_, _, about) = rt.block_on(open(&link))?;
+        let (_, _, about) = rt.block_on(open(&link, None))?;
         println!("{}", serde_json::to_string(&about)?);
         return Ok(());
     };
@@ -41,12 +45,16 @@ pub(super) fn run(machine: &str, listen: Option<&Path>) -> io::Result<()> {
     // As `ssh -o StreamLocalBindUnlink=yes`: a socket left by an earlier run is replaced.
     let _ = std::fs::remove_file(listen);
     let listener = local::Listener::bind(listen)?;
+    let expected_machine = expected_machine.map(std::sync::Arc::<str>::from);
     let _ = local::restrict(listen);
     loop {
         let stream = listener.accept()?;
         let link = link.clone();
+        let expected_machine = expected_machine.clone();
         std::thread::spawn(move || {
-            if let Err(e) = runtime().and_then(|rt| rt.block_on(carry(&link, stream))) {
+            if let Err(e) = runtime()
+                .and_then(|rt| rt.block_on(carry(&link, expected_machine.as_deref(), stream)))
+            {
                 eprintln!("fibo remote dial: {e}");
             }
         });
@@ -61,14 +69,15 @@ fn runtime() -> io::Result<tokio::runtime::Runtime> {
 
 /// One session through the first relay of the link that answers: the channel, and what
 /// the machine said it is.
-async fn open(link: &Link) -> io::Result<(Ws, Channel, About)> {
+async fn open(link: &Link, expected_machine: Option<&str>) -> io::Result<(Ws, Channel, About)> {
     let mut why = io::Error::other(t!("配对链接里没有中继"));
     for relay in std::iter::once(&link.relay).chain(&link.alts) {
         let link = Link {
             relay: relay.clone(),
             ..link.clone()
         };
-        match tokio::time::timeout(Duration::from_secs(20), open_on(&link)).await {
+        match tokio::time::timeout(Duration::from_secs(20), open_on(&link, expected_machine)).await
+        {
             Ok(Ok(open)) => return Ok(open),
             Ok(Err(e)) => why = e,
             Err(_) => why = io::Error::other(t!("{relay} 连接超时", relay)),
@@ -77,7 +86,7 @@ async fn open(link: &Link) -> io::Result<(Ws, Channel, About)> {
     Err(why)
 }
 
-async fn open_on(link: &Link) -> io::Result<(Ws, Channel, About)> {
+async fn open_on(link: &Link, expected_machine: Option<&str>) -> io::Result<(Ws, Channel, About)> {
     let url = link.url().map_err(io::Error::other)?;
     let (mut ws, _) = tokio_tungstenite::connect_async(&url)
         .await
@@ -134,6 +143,7 @@ async fn open_on(link: &Link) -> io::Result<(Ws, Channel, About)> {
                 e
             ))
         })?;
+        check_machine(&about, expected_machine)?;
         let ack = c.ack(line.len() as u32)?;
         ws.send(Message::binary(ack))
             .await
@@ -142,9 +152,25 @@ async fn open_on(link: &Link) -> io::Result<(Ws, Channel, About)> {
     }
 }
 
+fn check_machine(about: &About, expected: Option<&str>) -> io::Result<()> {
+    // Older machines may have answered discovery without an ID. With a known ID,
+    // a missing one in a subsequent session is also a mismatch.
+    if expected.is_some_and(|id| !id.is_empty() && about.machine != id) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            t!("中继连接到另一台机器，请重新打开 Fibo"),
+        ));
+    }
+    Ok(())
+}
+
 /// Carries one local connection through its own session until either end closes.
-async fn carry(link: &Link, stream: local::Stream) -> io::Result<()> {
-    let (mut ws, mut channel, _) = open(link).await?;
+async fn carry(
+    link: &Link,
+    expected_machine: Option<&str>,
+    stream: local::Stream,
+) -> io::Result<()> {
+    let (mut ws, mut channel, _) = open(link, expected_machine).await?;
     // Read here on a thread: what the window sends.
     let (sent, mut from_window) = mpsc::channel::<Vec<u8>>(8);
     let mut reader = stream.try_clone()?;
@@ -227,4 +253,33 @@ async fn carry(link: &Link, stream: local::Stream) -> io::Result<()> {
     let _ = ws.close(None).await;
     let _ = stream.shutdown(std::net::Shutdown::Both);
     ended
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_dial_requires_the_discovered_machine_in_every_authenticated_about() {
+        let mut about = About {
+            home: "/home/other".into(),
+            shell: "/bin/sh".into(),
+            name: "unchanged-alias".into(),
+            machine: "original-machine".into(),
+        };
+        let expected = Some("original-machine");
+        check_machine(&about, expected).unwrap();
+        about.machine = "replacement-machine".into();
+        assert_eq!(
+            check_machine(&about, expected).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
+        about.machine.clear();
+        assert_eq!(
+            check_machine(&about, expected).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
+        check_machine(&about, None).unwrap();
+        check_machine(&about, Some("")).unwrap();
+    }
 }

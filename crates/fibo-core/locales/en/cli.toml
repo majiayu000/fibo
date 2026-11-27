@@ -462,6 +462,7 @@
 "中继关闭了连接（{code}）" = "The relay closed the connection ({code})"
 "中继拒绝了这台机器：{why}" = "The relay refused this computer: {why}"
 "中继断开" = "Relay disconnected"
+"中继连接到另一台机器，请重新打开 Fibo" = "The relay connected to a different machine. Reopen Fibo."
 "中继没有回应注册" = "The relay did not acknowledge registration"
 "中继发送连接已结束" = "The relay send connection has ended"
 "中继很久没有消息" = "No message from the relay for too long"
