@@ -79,45 +79,72 @@ fn window_options(bounds: Bounds<gpui::Pixels>) -> WindowOptions {
     }
 }
 fn load_workspace(root: &Path) -> io::Result<Workspace> {
+    let host = attach::Host::of(root);
+    if host.attached() {
+        return load_attached_workspace(&host, &attach::Attempt::default());
+    }
     ensure_host(root)?;
     let socket = root.join("workbench.sock");
-    let mut workspace = match rpc(&socket, &Request::Workspace)? {
+    read_workspace(
+        |request| rpc(&socket, request),
+        || {
+            // The desktop starts the app in a system directory. Use home there and the
+            // launch directory when the user started it from a shell.
+            let cwd = std::env::current_dir()?;
+            let dir = match fibo_platform::dirs::home() {
+                Some(home) if fibo_platform::dirs::is_system_start(&cwd) => home,
+                _ => cwd,
+            };
+            Ok(dir.to_string_lossy().into_owned())
+        },
+    )
+}
+
+/// Use the same connected forward for the workspace and its default space. A settings
+/// change can close that connection, but cannot reroute those requests to its replacement.
+fn load_attached_workspace(
+    host: &attach::Host,
+    attempt: &attach::Attempt,
+) -> io::Result<Workspace> {
+    let mut stream = host.workspace_connection(attempt)?;
+    read_workspace(
+        |request| {
+            attempt.check()?;
+            send(&mut stream, CONTROL, request)?;
+            match receive::<Reply>(&mut stream)? {
+                Reply::Error(message) => Err(io::Error::other(message)),
+                reply => Ok(reply),
+            }
+        },
+        || {
+            host.home()
+                .ok_or_else(|| io::Error::other("attached home missing"))
+        },
+    )
+}
+
+fn read_workspace(
+    mut ask: impl FnMut(&Request) -> io::Result<Reply>,
+    default_space_dir: impl FnOnce() -> io::Result<String>,
+) -> io::Result<Workspace> {
+    let mut workspace = match ask(&Request::Workspace)? {
         Reply::Workspace(w) => w,
         _ => return Err(io::Error::other("workspace response missing")),
     };
     if workspace.spaces.is_empty() {
-        let cwd = default_space_dir(root)?.to_string_lossy().into_owned();
-        if let Reply::Workspace(w) = rpc(
-            &socket,
-            &Request::Edit {
-                request: None,
-                edit: Edit::AddSpace(Space {
-                    id: "default".into(),
-                    name: t!("工作空间").into(),
-                    cwd,
-                }),
-            },
-        )? {
+        let cwd = default_space_dir()?;
+        if let Reply::Workspace(w) = ask(&Request::Edit {
+            request: None,
+            edit: Edit::AddSpace(Space {
+                id: "default".into(),
+                name: t!("工作空间").into(),
+                cwd,
+            }),
+        })? {
             workspace = w;
         }
     }
     Ok(workspace)
-}
-/// The desktop starts apps somewhere nobody means to open a terminal: use the home directory
-/// then, and the launch directory otherwise (`run.sh`, a shell).
-fn default_space_dir(root: &Path) -> io::Result<PathBuf> {
-    // The first space of another machine's host starts in that machine's home.
-    let host = attach::Host::of(root);
-    if host.attached()
-        && let Some(home) = host.home()
-    {
-        return Ok(PathBuf::from(home));
-    }
-    let cwd = std::env::current_dir()?;
-    Ok(match fibo_platform::dirs::home() {
-        Some(home) if fibo_platform::dirs::is_system_start(&cwd) => home,
-        _ => cwd,
-    })
 }
 fn reopen_window(root: &Path, cx: &mut App) {
     if let Some(handle) = cx.windows().first().copied() {
@@ -314,10 +341,13 @@ fn run() -> io::Result<()> {
         lifecycle::Admission::Forwarded => return Ok(()),
         lifecycle::Admission::Primary(guard, events) => (guard, events),
     };
-    if let Some(host) = &attach {
-        attach::start(host, &root)?;
-    }
-    let initial = load_workspace(&root);
+    let initial = if let Some(host) = &attach {
+        let attempt = attach::Attempt::default();
+        let attached = attach::start(host, &root, &attempt)?;
+        load_attached_workspace(&attached, &attempt)
+    } else {
+        load_workspace(&root)
+    };
     let icon_file = instance_dir.join("app-icon");
     #[cfg(feature = "visual-test")]
     let evidence = args
