@@ -6,11 +6,12 @@
 use crate::machines::Via;
 use fibo_platform::local;
 use std::collections::VecDeque;
+use std::io;
 use std::net::Shutdown;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
 
 /// How often each way is timed.
 pub(super) const EVERY: Duration = Duration::from_secs(5);
@@ -36,8 +37,21 @@ struct State {
     samples: [VecDeque<Option<Duration>>; 2],
     /// Why each way last failed.
     why: [Option<String>; 2],
+    relay_rejected: bool,
+    relay_used: bool,
+    stopped: bool,
     /// Connections handed on through the splitter, to close when their way is left.
     links: Vec<(u64, Via, local::Stream)>,
+}
+
+impl State {
+    fn usable(&self, via: Via) -> bool {
+        self.samples[slot(via)].back().is_some_and(Option::is_some)
+    }
+
+    fn ready(&self) -> bool {
+        self.active.is_some_and(|via| self.usable(via))
+    }
 }
 
 /// The two ways' state, kept by a forward that has both.
@@ -45,6 +59,7 @@ struct State {
 pub(super) struct Ways {
     state: Mutex<State>,
     next_id: AtomicU64,
+    changed: Condvar,
 }
 
 pub(super) fn slot(via: Via) -> usize {
@@ -63,18 +78,60 @@ pub(super) fn beside(local: &Path, via: Via) -> PathBuf {
 }
 
 impl Ways {
-    /// The first way that answered starts as the one taken.
-    pub(super) fn begin(&self, via: Via) {
+    pub(super) fn wait_ready(&self, until: Instant) -> bool {
+        let s = self.state.lock().unwrap();
+        let (s, _) = self
+            .changed
+            .wait_timeout_while(s, until.saturating_duration_since(Instant::now()), |s| {
+                !s.stopped && !s.ready()
+            })
+            .unwrap();
+        !s.stopped && s.ready()
+    }
+
+    pub(super) fn reject_relay(&self, why: String, relay_was_only_identity: bool) {
         let mut s = self.state.lock().unwrap();
-        s.active.get_or_insert(via);
+        s.relay_rejected = true;
+        // Clients already handed to a relay-only identity cannot move to a
+        // different machine through the same splitter.
+        s.stopped |= relay_was_only_identity && s.relay_used;
+        s.samples[slot(Via::Relay)].clear();
+        s.why[slot(Via::Relay)] = Some(why);
+        if s.active == Some(Via::Relay) {
+            s.active = s.usable(Via::Ssh).then_some(Via::Ssh);
+        }
+        for (_, _, stream) in s.links.iter().filter(|(_, via, _)| *via == Via::Relay) {
+            let _ = stream.shutdown(Shutdown::Both);
+        }
+        self.changed.notify_all();
+    }
+
+    pub(super) fn is_stopped(&self) -> bool {
+        self.state.lock().unwrap().stopped
+    }
+
+    pub(super) fn relay_rejected(&self) -> bool {
+        self.state.lock().unwrap().relay_rejected
+    }
+
+    pub(super) fn stop(&self) {
+        let mut s = self.state.lock().unwrap();
+        s.stopped = true;
+        for (_, _, stream) in &s.links {
+            let _ = stream.shutdown(Shutdown::Both);
+        }
+        self.changed.notify_all();
     }
     /// Why `via` is not reached now, for the window; cleared by its next good probe.
     pub(super) fn failed(&self, via: Via, why: String) {
-        self.state.lock().unwrap().why[slot(via)] = Some(why);
+        let mut s = self.state.lock().unwrap();
+        if via != Via::Relay || !s.relay_rejected {
+            s.why[slot(via)] = Some(why);
+        }
     }
     pub(super) fn route(&self, relay_paired: bool) -> Option<Route> {
         let s = self.state.lock().unwrap();
-        let via = s.active?;
+        let via = s.active.or(s.relay_rejected.then_some(Via::Ssh))?;
         let other = via.other();
         let state = match (other, relay_paired) {
             (Via::Relay, false) => Err(t!("没配对").to_owned()),
@@ -94,6 +151,9 @@ impl Ways {
     /// connections on the way left closed.
     fn probed(&self, via: Via, rtt: Option<Duration>) -> Option<Via> {
         let mut s = self.state.lock().unwrap();
+        if s.stopped || (via == Via::Relay && s.relay_rejected) {
+            return None;
+        }
         let samples = &mut s.samples[slot(via)];
         samples.push_back(rtt);
         while samples.len() > RUNS {
@@ -102,6 +162,7 @@ impl Ways {
         if rtt.is_some() {
             s.why[slot(via)] = None;
         }
+        self.changed.notify_all();
         let Some(active) = s.active else {
             s.active = rtt.map(|_| via);
             return s.active;
@@ -152,12 +213,10 @@ pub fn round_trip(
     kept: Option<local::Stream>,
     wait: Duration,
 ) -> (Option<Duration>, Option<local::Stream>) {
-    use fibo_core::protocol::{CONTROL, MAJOR, Reply, Request, receive, send};
+    use fibo_core::protocol::{CONTROL, Reply, Request, receive, send};
     let open = || -> std::io::Result<local::Stream> {
         let mut stream = local::Stream::connect(socket)?;
-        stream.set_read_timeout(Some(wait))?;
-        send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
-        receive::<Reply>(&mut stream)?;
+        greet(&mut stream, wait)?;
         Ok(stream)
     };
     let was_kept = kept.is_some();
@@ -174,6 +233,18 @@ pub fn round_trip(
         // a timeout: the way itself is stuck, and a new link would wait as long again.
         Err(e) if was_kept && !timed_out(&e) => round_trip(socket, None, wait),
         Err(_) => (None, None),
+    }
+}
+
+pub(super) fn greet(stream: &mut local::Stream, wait: Duration) -> std::io::Result<()> {
+    use fibo_core::protocol::{CONTROL, MAJOR, Reply, Request, receive, send};
+    stream.set_read_timeout(Some(wait))?;
+    stream.set_write_timeout(Some(wait))?;
+    send(stream, CONTROL, &Request::Hello { major: MAJOR })?;
+    match receive::<Reply>(stream)? {
+        Reply::Hello { major: MAJOR, .. } => Ok(()),
+        Reply::Error(message) => Err(std::io::Error::other(message)),
+        _ => Err(std::io::Error::other("workbench protocol hello missing")),
     }
 }
 
@@ -196,7 +267,11 @@ pub(super) fn time_ways(
     let mut kept: [Option<local::Stream>; 2] = [None, None];
     while !stopped() {
         for via in [Via::Ssh, Via::Relay] {
-            if via == Via::Relay && !relay {
+            if ways.is_stopped() {
+                return;
+            }
+            if via == Via::Relay && (!relay || ways.relay_rejected()) {
+                kept[slot(via)] = None;
                 continue;
             }
             let (rtt, link) = round_trip(&beside(local, via), kept[slot(via)].take(), PROBE_WAIT);
@@ -205,8 +280,40 @@ pub(super) fn time_ways(
                 eprintln!("forward {host}: now {}", next.word());
             }
         }
-        std::thread::sleep(EVERY);
+        let s = ways.state.lock().unwrap();
+        let delay = if s.active.is_none() {
+            Duration::from_millis(100)
+        } else {
+            EVERY
+        };
+        drop(
+            ways.changed
+                .wait_timeout_while(s, delay, |s| !s.stopped)
+                .unwrap(),
+        );
     }
+}
+
+/// Detach old owned listeners before any new splitter, supervisor or probe starts.
+pub(super) fn clear_socket_names(local: &Path, both: bool) -> io::Result<()> {
+    let backends = both.then(|| [beside(local, Via::Ssh), beside(local, Via::Relay)]);
+    let mut owned = Vec::new();
+    for path in std::iter::once(local.to_owned()).chain(backends.into_iter().flatten()) {
+        match local::at_path(&path)? {
+            local::AtPath::Nothing => (),
+            local::AtPath::MySocket => owned.push(path),
+            local::AtPath::Other => {
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    t!("转发套接字路径已被占用：{path}", path = path.display()),
+                ));
+            }
+        }
+    }
+    for path in owned {
+        std::fs::remove_file(path)?;
+    }
+    Ok(())
 }
 
 /// Listens on `local` for this window's connections to that machine and hands each to the
@@ -217,9 +324,6 @@ pub(super) fn split(
     relay: bool,
     stopped: Arc<dyn Fn() -> bool + Send + Sync>,
 ) -> std::io::Result<()> {
-    if matches!(local::at_path(&local)?, local::AtPath::MySocket) {
-        std::fs::remove_file(&local)?;
-    }
     let listener = local::Listener::bind(&local)?;
     local::restrict(&local)?;
     std::thread::spawn(move || {
@@ -241,25 +345,58 @@ pub(super) fn wake(local: &Path) {
 }
 
 fn hand_on(ways: &Ways, local: &Path, relay: bool, inbound: local::Stream) {
-    let first = ways.state.lock().unwrap().active.unwrap_or(Via::Ssh);
-    let tries = [first, first.other()];
-    let Some((via, outbound)) = tries
-        .into_iter()
-        .filter(|via| relay || *via == Via::Ssh)
-        .find_map(|via| Some((via, local::Stream::connect(beside(local, via)).ok()?)))
-    else {
+    let Some((id, outbound)) = register(ways, relay, &inbound, |via| {
+        local::Stream::connect(beside(local, via)).ok()
+    }) else {
         return;
     };
-    let id = ways.next_id.fetch_add(1, Ordering::Relaxed);
-    if let Ok(kept) = inbound.try_clone() {
-        ways.state.lock().unwrap().links.push((id, via, kept));
-    }
     pipe(inbound, outbound);
     ways.state
         .lock()
         .unwrap()
         .links
         .retain(|(i, _, _)| *i != id);
+}
+
+/// Connect without holding the route lock. Register only if the selection is still current,
+/// so a switch cannot miss a connection that was on its way to the previous route.
+fn register(
+    ways: &Ways,
+    relay: bool,
+    inbound: &local::Stream,
+    connect: impl Fn(Via) -> Option<local::Stream>,
+) -> Option<(u64, local::Stream)> {
+    loop {
+        let (first, allow_relay, standby_ready) = {
+            let s = ways.state.lock().unwrap();
+            if s.stopped {
+                return None;
+            }
+            let first = s.active?;
+            let standby_ready = s.usable(first.other());
+            (first, relay && !s.relay_rejected, standby_ready)
+        };
+        let picked = [first, first.other()]
+            .into_iter()
+            .filter(|via| *via == first || standby_ready)
+            .filter(|via| allow_relay || *via == Via::Ssh)
+            .find_map(|via| Some((via, connect(via)?)));
+        let mut s = ways.state.lock().unwrap();
+        if s.stopped {
+            return None;
+        }
+        if s.active != Some(first)
+            || allow_relay != (relay && !s.relay_rejected)
+            || standby_ready != s.usable(first.other())
+        {
+            continue;
+        }
+        let (via, outbound) = picked?;
+        let id = ways.next_id.fetch_add(1, Ordering::Relaxed);
+        s.links.push((id, via, inbound.try_clone().ok()?));
+        s.relay_used |= via == Via::Relay;
+        return Some((id, outbound));
+    }
 }
 
 /// Copies both ways until either end closes, then closes both.

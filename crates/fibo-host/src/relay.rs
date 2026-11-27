@@ -78,7 +78,12 @@ pub fn run(a: &Args) -> io::Result<()> {
                 "--dial 需要 --listen <socket> 或 --about"
             )));
         }
-        return dial::run(machine, listen);
+        return dial::run(
+            machine,
+            listen,
+            a.value("expect-machine-id"),
+            a.value("prefer-relay").and_then(|value| value.parse().ok()),
+        );
     }
     let root = a.socket.parent().unwrap_or(Path::new("."));
     if a.has("enable") || a.has("disable") {

@@ -16,8 +16,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod paths;
 mod quota;
 mod routes;
+pub use paths::{embedded_root, root};
 pub use routes::{Route, round_trip};
 
 /// What a machine says of itself: home, shell, and its id and name.
@@ -28,7 +30,7 @@ struct Info {
 }
 /// What [`remote_socket`] and [`relay_about`] answer: that host's socket there (empty
 /// through the relay), `$HOME`, `$SHELL`, its id and name.
-type Answer = (String, String, String, (String, String));
+type Answer = (String, String, String, (String, String), Option<u64>);
 
 struct Forward {
     spec: Spec,
@@ -37,11 +39,11 @@ struct Forward {
     remote: Mutex<String>,
     /// `$HOME`, `$SHELL` (what its terminals start, as its own window's do), and its id and
     /// name as its host gives them to phones (`machine-id`, `machine-name` beside its
-    /// socket, else its host name; the id is empty before a phone asked): from the first
-    /// way that answered.
-    info: std::sync::OnceLock<Info>,
+    /// socket, else its host name). SSH is authoritative if both ways answered.
+    info: Mutex<Option<Info>>,
     /// Its id as each way said it, by [`slot`]: both must be the same machine.
     ids: Mutex<[Option<String>; 2]>,
+    preferred_relay: Mutex<Option<u64>>,
     /// Where it is forwarded to here: `<root>/workbench.sock`.
     local: PathBuf,
     /// Each way's `ssh -L` or `fibo remote dial`, by [`slot`].
@@ -53,10 +55,22 @@ struct Forward {
 }
 
 impl Forward {
-    fn info(&self) -> &Info {
-        self.info
-            .get()
-            .expect("a forward is kept once a way answered")
+    fn new(spec: Spec, local: PathBuf, both: bool) -> Self {
+        Self {
+            spec,
+            remote: Mutex::new(String::new()),
+            info: Mutex::new(None),
+            ids: Mutex::new([None, None]),
+            preferred_relay: Mutex::new(None),
+            local,
+            children: [Mutex::new(None), Mutex::new(None)],
+            stopped: AtomicBool::new(false),
+            ways: both.then(Default::default),
+        }
+    }
+
+    fn info(&self) -> std::sync::MutexGuard<'_, Option<Info>> {
+        self.info.lock().unwrap()
     }
     /// Asks the way `via` what that machine is.
     fn ask(&self, via: Via) -> io::Result<Answer> {
@@ -66,23 +80,50 @@ impl Forward {
         }
     }
     /// Keeps what `via` answered.
-    fn learn(&self, via: Via, (remote, home, shell, machine): Answer) {
+    fn learn(
+        &self,
+        via: Via,
+        (remote, home, shell, machine, preferred_relay): Answer,
+    ) -> io::Result<()> {
+        if via == Via::Relay
+            && machine.0.is_empty()
+            && let Some(ways) = &self.ways
+        {
+            let why = t!("中继没有返回机器 ID");
+            ways.reject_relay(why.to_owned(), false);
+            return Err(io::Error::other(why));
+        }
+        let mut ids = self.ids.lock().unwrap();
+        let relay_was_only_identity =
+            ids[slot(Via::Ssh)].is_none() && ids[slot(Via::Relay)].is_some();
+        ids[slot(via)] = Some(machine.0.clone());
+        let disagrees = matches!(&*ids,
+            [Some(ssh), Some(relay)] if !ssh.is_empty() && !relay.is_empty() && ssh != relay);
+        drop(ids);
+        if disagrees && let Some(ways) = &self.ways {
+            ways.reject_relay(
+                t!("配对的不是这台（重新 fibo remote join）").to_owned(),
+                relay_was_only_identity,
+            );
+            if let Some(mut child) = self.children[slot(Via::Relay)].lock().unwrap().take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
         if via == Via::Ssh {
             *self.remote.lock().unwrap() = remote;
+        } else {
+            *self.preferred_relay.lock().unwrap() = preferred_relay;
         }
-        self.ids.lock().unwrap()[slot(via)] = Some(machine.0.clone());
-        let _ = self.info.set(Info {
-            home,
-            shell,
-            machine,
-        });
-    }
-    /// The relay pairing is of another machine than ssh reaches.
-    fn not_the_same(&self) -> bool {
-        match &*self.ids.lock().unwrap() {
-            [Some(a), Some(b)] => !a.is_empty() && !b.is_empty() && a != b,
-            _ => false,
+        let mut info = self.info();
+        if info.is_none() || via == Via::Ssh {
+            *info = Some(Info {
+                home,
+                shell,
+                machine,
+            });
         }
+        Ok(())
     }
     /// Where the way `via` listens here.
     fn listen(&self, via: Via) -> PathBuf {
@@ -95,6 +136,8 @@ impl Forward {
 /// Every forward this app keeps, found by the folder its socket is in.
 static FORWARDS: Mutex<Vec<Arc<Forward>>> = Mutex::new(Vec::new());
 const BACKOFF_MAX: Duration = Duration::from_secs(30);
+const SSH_ABOUT_WAIT: Duration = Duration::from_secs(20);
+const STARTUP_WAIT: Duration = Duration::from_secs(20);
 
 /// The machine a host runs on, as this app reaches it: this one, or another through its
 /// forward. Cheap to clone; ask it rather than assuming the machine is this one.
@@ -115,6 +158,27 @@ impl Host {
     pub fn attached(&self) -> bool {
         self.0.is_some()
     }
+    /// Open only this forward. A cancelled attempt cannot connect to a replacement
+    /// listening at the same path, even if it was between opening and reading workspaces.
+    pub fn workspace_connection(&self, attempt: &Attempt) -> io::Result<local::Stream> {
+        let forward = self
+            .0
+            .as_ref()
+            .ok_or_else(|| io::Error::other("not attached"))?;
+        let mut stream = {
+            let registered = FORWARDS.lock().unwrap();
+            attempt.check()?;
+            if !registered.iter().any(|f| Arc::ptr_eq(f, forward)) {
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "attachment replaced",
+                ));
+            }
+            local::Stream::connect(&forward.local)?
+        };
+        routes::greet(&mut stream, Duration::from_secs(10))?;
+        Ok(stream)
+    }
     /// What this app calls that machine: 本机, or the name it was written down by.
     pub fn name(&self) -> String {
         match &self.0 {
@@ -125,18 +189,27 @@ impl Host {
     /// `$HOME` on that machine: the folders this app offers there start from it.
     pub fn home(&self) -> Option<String> {
         match &self.0 {
-            Some(f) => Some(f.info().home.clone()),
+            Some(f) => f.info().as_ref().map(|info| info.home.clone()),
             None => fibo_platform::dirs::home_str(),
         }
     }
     /// What a new terminal there starts: its login shell.
     /// That machine's id and name as its host gives them; None for this machine.
     pub fn machine(&self) -> Option<(String, String)> {
-        self.0.as_ref().map(|f| f.info().machine.clone())
+        self.0
+            .as_ref()?
+            .info()
+            .as_ref()
+            .map(|info| info.machine.clone())
     }
     pub fn shell(&self) -> String {
         match &self.0 {
-            Some(f) => f.info().shell.clone(),
+            Some(f) => f
+                .info()
+                .as_ref()
+                .expect("attached machine info")
+                .shell
+                .clone(),
             None => fibo_platform::shell::interactive(),
         }
     }
@@ -154,7 +227,11 @@ impl Host {
     /// `fibo <args>` run there over ssh; None for this machine, which runs its own.
     pub fn run(&self, args: &[&str]) -> Option<io::Result<std::process::Output>> {
         let f = self.0.as_ref()?;
-        if f.spec.via == Via::Relay && f.ways.is_none() {
+        if (f.spec.via == Via::Relay && f.ways.is_none())
+            || f.ways
+                .as_ref()
+                .is_some_and(|ways| ways.is_stopped() || f.remote.lock().unwrap().is_empty())
+        {
             return Some(Err(io::Error::other(t!(
                 "{host} 经中继连着，这里不能在那台上运行命令；到那台电脑上操作，或改用 ssh 连它",
                 host = &f.spec.host
@@ -177,104 +254,172 @@ impl Host {
     }
 }
 
-/// Where this machine keeps the forwarded socket of `host`.
-pub fn root(host: &str) -> io::Result<PathBuf> {
-    let home = fibo_platform::dirs::home().ok_or_else(|| io::Error::other("HOME unavailable"))?;
-    Ok(fibo_core::legacy::runtime_dir(&home)
-        .join("m")
-        .join(dir_name(host)))
-}
-/// `user@host` or an ssh alias as one short folder name: a readable start and a hash of
-/// the whole destination, so `alice@server` and `alice-server` never share a socket or a
-/// lock, and the socket path stays under the 104-byte limit however long the host is.
-fn dir_name(host: &str) -> String {
-    let start: String = (host.chars())
-        .filter(|c| c.is_ascii_alphanumeric())
-        .take(8)
-        .collect();
-    // FNV-1a: the same name on every run and every build.
-    let hash = (host.bytes()).fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
-        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    });
-    format!("{start}-{:08x}", hash as u32)
+/// One attempt to reach a machine with the current settings.
+#[derive(Default)]
+pub struct Attempt(AtomicBool);
+
+impl Attempt {
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+
+    pub fn check(&self) -> io::Result<()> {
+        if self.0.load(Ordering::Acquire) {
+            Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "attachment cancelled",
+            ))
+        } else {
+            Ok(())
+        }
+    }
 }
 
-/// Asks `host` where its host listens, starts the forward to `root` and keeps it up; one
-/// already kept for `root` is reused.
-pub fn start(host: &str, root: &Path) -> io::Result<Host> {
-    let found = Host::of(root);
-    if found.attached() {
-        return Ok(found);
+/// Asks `host` where its host listens, starts the forward to `root` and keeps it up.
+pub fn start(host: &str, root: &Path, attempt: &Attempt) -> io::Result<Host> {
+    attempt.check()?;
+    let local = root.join("workbench.sock");
+    let existing = Host::of(&local).0;
+    if let Some(forward) = existing {
+        ensure_forward(&forward, attempt)?;
+        return Ok(Host(Some(forward)));
     }
     let spec = (crate::machines::load().unwrap_or_default().into_iter())
         .find(|s| s.host == host)
         .unwrap_or_else(|| Spec::new(host.to_owned()));
     let both = spec.auto && crate::machines::relay_paired(host);
-    fibo_platform::fs::create_private_dir(root)?;
-    let forward = Arc::new(Forward {
-        spec,
-        remote: Mutex::new(String::new()),
-        info: std::sync::OnceLock::new(),
-        ids: Mutex::new([None, None]),
-        local: root.join("workbench.sock"),
-        children: [Mutex::new(None), Mutex::new(None)],
-        stopped: AtomicBool::new(false),
-        ways: both.then(Default::default),
-    });
-    match &forward.ways {
-        None => {
-            let via = forward.spec.via;
-            forward.learn(via, forward.ask(via)?);
-            let kept = forward.clone();
-            std::thread::spawn(move || supervise(&kept, via));
+    let forward = Arc::new(Forward::new(spec, local, both));
+    let relay = if both {
+        prepare_both(&forward, attempt)?
+    } else {
+        let via = forward.spec.via;
+        forward.learn(via, forward.ask(via)?)?;
+        None
+    };
+    let kept = register(&forward, root, attempt, relay)?;
+    if let Err(e) = ensure_forward(&kept, attempt) {
+        let mut forwards = FORWARDS.lock().unwrap();
+        if Arc::ptr_eq(&kept, &forward) {
+            forwards.retain(|f| {
+                if !Arc::ptr_eq(f, &forward) {
+                    return true;
+                }
+                stop_forward(f);
+                false
+            });
         }
-        Some(ways) => start_both(&forward, ways)?,
+        return Err(e);
     }
-    FORWARDS.lock().unwrap().push(forward.clone());
-    Ok(Host(Some(forward)))
+    Ok(Host(Some(kept)))
 }
 
-/// Asks both ways at once and keeps the first that answers; the other goes on in the
-/// background, and both are kept from then on.
-fn start_both(forward: &Arc<Forward>, ways: &Arc<Ways>) -> io::Result<()> {
+type About = std::sync::mpsc::Receiver<io::Result<Answer>>;
+
+fn ask_in_background(forward: &Arc<Forward>, via: Via) -> About {
     let (tx, rx) = std::sync::mpsc::channel();
-    for via in [Via::Ssh, Via::Relay] {
-        let (forward, ways, tx) = (forward.clone(), ways.clone(), tx.clone());
-        std::thread::spawn(move || {
-            let answered = forward.ask(via);
-            match &answered {
-                Ok(a) => forward.learn(via, a.clone()),
-                Err(e) => ways.failed(via, e.to_string()),
-            }
-            let _ = tx.send((via, answered.map(drop)));
+    let forward = forward.clone();
+    std::thread::spawn(move || {
+        let _ = tx.send(forward.ask(via));
+    });
+    rx
+}
+
+fn receive_about(rx: About, attempt: &Attempt, until: Option<Instant>) -> io::Result<Answer> {
+    loop {
+        attempt.check()?;
+        let poll = Duration::from_millis(100);
+        let wait = until.map_or(poll, |until| {
+            until.saturating_duration_since(Instant::now()).min(poll)
         });
-    }
-    drop(tx);
-    let mut why = Vec::new();
-    let first = loop {
-        match rx.recv() {
-            Ok((via, Ok(()))) => break via,
-            Ok((_, Err(e))) => why.push(e.to_string()),
-            Err(_) => return Err(io::Error::other(why.join("; "))),
+        match rx.recv_timeout(wait) {
+            Ok(answer) => return answer,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+                if until.is_none_or(|until| Instant::now() < until) => {}
+            Err(e) => return Err(io::Error::other(e)),
         }
-    };
-    ways.begin(first);
-    let stopped = {
-        let forward = forward.clone();
-        Arc::new(move || forward.stopped.load(Ordering::Acquire))
-    };
-    routes::split(ways.clone(), forward.local.clone(), true, stopped.clone())?;
-    for via in [Via::Ssh, Via::Relay] {
-        let kept = forward.clone();
-        std::thread::spawn(move || supervise(&kept, via));
     }
-    let (ways, local, host) = (
-        ways.clone(),
-        forward.local.clone(),
-        forward.spec.host.clone(),
-    );
-    std::thread::spawn(move || routes::time_ways(&ways, &local, true, &host, &*stopped));
-    Ok(())
+}
+
+/// Ask both together. Establish SSH's identity before the relay can serve a workspace.
+fn prepare_both(forward: &Arc<Forward>, attempt: &Attempt) -> io::Result<Option<About>> {
+    let ssh_until = Instant::now() + SSH_ABOUT_WAIT;
+    prepare_from_answers(
+        forward,
+        attempt,
+        ask_in_background(forward, Via::Ssh),
+        ask_in_background(forward, Via::Relay),
+        ssh_until,
+    )
+}
+
+fn prepare_from_answers(
+    forward: &Forward,
+    attempt: &Attempt,
+    ssh: About,
+    relay: About,
+    ssh_until: Instant,
+) -> io::Result<Option<About>> {
+    match receive_about(ssh, attempt, Some(ssh_until)) {
+        Ok(answer) => {
+            forward.learn(Via::Ssh, answer)?;
+            Ok(Some(relay))
+        }
+        Err(ssh) => {
+            attempt.check()?;
+            // The relay command gives each configured endpoint its own timeout.
+            // Wait for that whole discovery while still honoring settings changes.
+            receive_about(relay, attempt, None)
+                .and_then(|answer| forward.learn(Via::Relay, answer))
+                .map(|()| {
+                    forward
+                        .ways
+                        .as_ref()
+                        .unwrap()
+                        .failed(Via::Ssh, ssh.to_string());
+                    None
+                })
+                .map_err(|relay| io::Error::other(format!("{ssh}; {relay}")))
+        }
+    }
+}
+
+/// Serialize socket ownership with `forget`. The caller cancels the attempt before forgetting
+/// the machine, so an outdated discovery can never bind a socket for its replacement.
+fn register(
+    forward: &Arc<Forward>,
+    root: &Path,
+    attempt: &Attempt,
+    relay: Option<About>,
+) -> io::Result<Arc<Forward>> {
+    let mut forwards = FORWARDS.lock().unwrap();
+    attempt.check()?;
+    if let Some(kept) = forwards.iter().find(|f| f.local == forward.local) {
+        return Ok(kept.clone());
+    }
+    fibo_platform::fs::create_private_dir(root)?;
+    routes::clear_socket_names(&forward.local, forward.ways.is_some())?;
+    if let Some(ways) = &forward.ways {
+        let stopped = {
+            let forward = forward.clone();
+            Arc::new(move || forward.stopped.load(Ordering::Acquire))
+        };
+        routes::split(ways.clone(), forward.local.clone(), true, stopped.clone())?;
+        let kept = forward.clone();
+        std::thread::spawn(move || supervise(&kept, Via::Ssh, None));
+        let kept = forward.clone();
+        std::thread::spawn(move || supervise(&kept, Via::Relay, relay));
+        let (ways, local, host) = (
+            ways.clone(),
+            forward.local.clone(),
+            forward.spec.host.clone(),
+        );
+        std::thread::spawn(move || routes::time_ways(&ways, &local, true, &host, &*stopped));
+    } else {
+        let kept = forward.clone();
+        std::thread::spawn(move || supervise(&kept, kept.spec.via, None));
+    }
+    forwards.push(forward.clone());
+    Ok(forward.clone())
 }
 
 /// The ways to `host` as this window takes them now; None while it is not reached.
@@ -298,18 +443,33 @@ pub fn ensure(root: &Path) -> io::Result<()> {
         .0
         .as_ref()
         .ok_or_else(|| io::Error::other("not attached"))?;
-    // With both ways the splitter answers at once; what matters is a way behind it.
-    let sockets = match forward.ways {
-        Some(_) => vec![forward.listen(Via::Ssh), forward.listen(Via::Relay)],
-        None => vec![root.join("workbench.sock")],
-    };
-    let until = Instant::now() + Duration::from_secs(20);
-    while Instant::now() < until {
-        if sockets.iter().any(|s| local::Stream::connect(s).is_ok()) {
-            return Ok(());
+    ensure_forward(forward, &Attempt::default())
+}
+
+fn ensure_forward(forward: &Forward, attempt: &Attempt) -> io::Result<()> {
+    let until = Instant::now() + STARTUP_WAIT;
+    if let Some(ways) = &forward.ways {
+        if ways.wait_ready(until) {
+            return attempt.check();
         }
-        std::thread::sleep(Duration::from_millis(100));
+        if ways.is_stopped() && ways.relay_rejected() {
+            return Err(io::Error::other(t!(
+                "配对的不是这台（重新 fibo remote join）"
+            )));
+        }
+    } else {
+        while Instant::now() < until {
+            attempt.check()?;
+            if forward.stopped.load(Ordering::Acquire) {
+                break;
+            }
+            if local::Stream::connect(&forward.local).is_ok() {
+                return Ok(());
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
     }
+    attempt.check()?;
     Err(io::Error::other(match forward.spec.via {
         Via::Ssh => t!(
             "连不上 {host} 上的 Fibo：ssh 转发没有在 20 秒内接通",
@@ -338,6 +498,9 @@ pub fn open_window(host: &str) -> io::Result<()> {
 /// Ends only the local forward; the other machine's host keeps running.
 fn stop_forward(forward: &Forward) {
     forward.stopped.store(true, Ordering::Release);
+    if let Some(ways) = &forward.ways {
+        ways.stop();
+    }
     for child in &forward.children {
         if let Some(mut child) = child.lock().unwrap().take() {
             let _ = child.kill();
@@ -399,7 +562,13 @@ fn remote_socket(spec: &Spec) -> io::Result<Answer> {
             why
         )));
     }
-    Ok((path.to_owned(), home.to_owned(), shell.to_owned(), machine))
+    Ok((
+        path.to_owned(),
+        home.to_owned(),
+        shell.to_owned(),
+        machine,
+        None,
+    ))
 }
 
 /// What `fibo remote dial --about` says of a machine paired through the relay: as
@@ -417,9 +586,16 @@ fn relay_about(spec: &Spec) -> io::Result<Answer> {
         shell: String,
         machine: String,
         name: String,
+        preferred_relay: Option<u64>,
     }
     match serde_json::from_slice::<About>(&out.stdout) {
-        Ok(a) if out.status.success() => Ok((String::new(), a.home, a.shell, (a.machine, a.name))),
+        Ok(a) if out.status.success() => Ok((
+            String::new(),
+            a.home,
+            a.shell,
+            (a.machine, a.name),
+            a.preferred_relay,
+        )),
         _ => {
             let why = String::from_utf8_lossy(&out.stderr);
             let why = why.trim().trim_start_matches("fibo: ");
@@ -436,16 +612,7 @@ fn relay_about(spec: &Spec) -> io::Result<Answer> {
 fn forward_argv(forward: &Forward, via: Via) -> io::Result<Vec<String>> {
     let listen = forward.listen(via);
     if via == Via::Relay {
-        let program = crate::lifecycle::host_program()?;
-        return Ok(vec![
-            program.display().to_string(),
-            "remote".into(),
-            "dial".into(),
-            "--machine".into(),
-            forward.spec.host.clone(),
-            "--listen".into(),
-            listen.display().to_string(),
-        ]);
+        return relay_argv(forward, &crate::lifecycle::host_program()?);
     }
     let mut argv = forward.spec.ssh_options("-N");
     argv.extend([
@@ -464,6 +631,28 @@ fn forward_argv(forward: &Forward, via: Via) -> io::Result<Vec<String>> {
     Ok(argv)
 }
 
+fn relay_argv(forward: &Forward, program: &Path) -> io::Result<Vec<String>> {
+    let expected = forward.ids.lock().unwrap()[slot(Via::Relay)]
+        .clone()
+        .ok_or_else(|| io::Error::other("relay machine identity missing"))?;
+    let mut argv = vec![
+        program.display().to_string(),
+        "remote".into(),
+        "dial".into(),
+        "--machine".into(),
+        forward.spec.host.clone(),
+        "--listen".into(),
+        forward.listen(Via::Relay).display().to_string(),
+    ];
+    if !expected.is_empty() {
+        argv.extend(["--expect-machine-id".into(), expected]);
+    }
+    if let Some(preferred) = *forward.preferred_relay.lock().unwrap() {
+        argv.extend(["--prefer-relay".into(), preferred.to_string()]);
+    }
+    Ok(argv)
+}
+
 /// Keeps the way `via` going: what is not known of it yet asked first, ended again when the
 /// two ways turn out to be two machines.
 fn ready(forward: &Forward, via: Via) -> io::Result<()> {
@@ -472,30 +661,44 @@ fn ready(forward: &Forward, via: Via) -> io::Result<()> {
     }
     if via == Via::Ssh && forward.remote.lock().unwrap().is_empty() {
         let answer = forward.ask(via)?;
-        forward.learn(via, answer);
+        forward.learn(via, answer)?;
     }
     if via == Via::Relay && forward.ids.lock().unwrap()[slot(via)].is_none() {
         let answer = forward.ask(via)?;
-        forward.learn(via, answer);
-    }
-    if forward.not_the_same() {
-        if let Some(mut child) = forward.children[slot(Via::Relay)].lock().unwrap().take() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-        return Err(io::Error::other(t!(
-            "配对的不是这台（重新 fibo remote join）"
-        )));
+        forward.learn(via, answer)?;
     }
     Ok(())
 }
 
 /// Runs the way `via` (`ssh -L` or `fibo remote dial`) and starts it again after it ends,
 /// waiting longer each time it ends quickly, until `stop` takes it.
-fn supervise(forward: &Forward, via: Via) {
+fn supervise(forward: &Forward, via: Via, initial: Option<About>) {
+    if let Some(result) = initial.and_then(|rx| rx.recv().ok()) {
+        match result {
+            Ok(answer) if !forward.stopped.load(Ordering::Acquire) => {
+                if forward.learn(via, answer).is_err() {
+                    return;
+                }
+            }
+            Err(e) => {
+                if let Some(ways) = &forward.ways {
+                    ways.failed(via, e.to_string());
+                }
+            }
+            _ => return,
+        }
+    }
     let mut backoff = Duration::from_millis(500);
     let slot = &forward.children[slot(via)];
     while !forward.stopped.load(Ordering::Acquire) {
+        if via == Via::Relay
+            && forward
+                .ways
+                .as_ref()
+                .is_some_and(|ways| ways.relay_rejected())
+        {
+            return;
+        }
         if let Err(e) = ready(forward, via) {
             eprintln!("forward {} {}: {e}", forward.spec.host, via.word());
             if let Some(ways) = &forward.ways {
@@ -521,22 +724,26 @@ fn supervise(forward: &Forward, via: Via) {
         // A window that crashes leaves its forwards behind; TERM must still end them.
         fibo_platform::process::takes_term(&mut command);
         fibo_platform::process::no_console(&mut command);
-        let child = command.spawn();
         let started = Instant::now();
-        match child {
-            Ok(mut child) => {
-                let mut slot = slot.lock().unwrap();
-                if forward.stopped.load(Ordering::Acquire) {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return;
-                }
-                *slot = Some(child);
+        {
+            let mut slot = slot.lock().unwrap();
+            if forward.stopped.load(Ordering::Acquire)
+                || (via == Via::Relay
+                    && forward
+                        .ways
+                        .as_ref()
+                        .is_some_and(|ways| ways.relay_rejected()))
+            {
+                return;
             }
-            Err(e) => {
-                eprintln!("ssh -L {}: {e}", forward.spec.host);
-                std::thread::sleep(BACKOFF_MAX);
-                continue;
+            match command.spawn() {
+                Ok(child) => *slot = Some(child),
+                Err(e) => {
+                    eprintln!("forward {} {}: {e}", forward.spec.host, via.word());
+                    drop(slot);
+                    std::thread::sleep(BACKOFF_MAX);
+                    continue;
+                }
             }
         }
         // Waits for it to end without holding the lock, so `stop` can take it meanwhile.
@@ -586,40 +793,4 @@ pub fn visual_drop_link() {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_host_is_one_short_folder_of_its_own() {
-        let alias = dir_name("alice-server");
-        assert_ne!(
-            dir_name("alice@server"),
-            alias,
-            "two destinations, one socket"
-        );
-        assert_eq!(alias, dir_name("alice-server"), "the same name every run");
-        assert!(!dir_name("../x").contains(['/', '.']));
-        // The longest path under it, the window's lock socket, stays under macOS's 104
-        // bytes for a long host under a usual home.
-        let root = Path::new("/Users/someone-long/.local/share/mooring-workbench/m")
-            .join(dir_name(
-                "lifcc@agent-os.tailc3193d.ts.net.example.internal",
-            ))
-            .join("client/client.sock");
-        assert!(root.as_os_str().len() < 104, "{}", root.display());
-    }
-    #[test]
-    fn the_socket_is_asked_for_then_found_as_an_older_fibo_finds_it() {
-        let spec = Spec {
-            host: "far".into(),
-            path: Some("/opt/fibo".into()),
-            quiet: false,
-            via: Via::Ssh,
-            auto: false,
-        };
-        let argv = spec.ssh(&format!("{}; \"$p\" socket", spec.find_program()));
-        assert_eq!(argv[0], "ssh");
-        assert!(argv.contains(&"BatchMode=yes".to_owned()));
-        assert!(argv.last().unwrap().starts_with("p='/opt/fibo'"));
-    }
-}
+mod tests;

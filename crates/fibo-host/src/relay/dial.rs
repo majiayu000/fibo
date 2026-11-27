@@ -2,7 +2,7 @@
 //! reaches another through the relay. `--listen` keeps a local socket that stands for that
 //! machine's own, as `ssh -L` does: each connection to it is one session through the relay,
 //! a Noise channel the relay cannot read, to that machine's native protocol. `--about`
-//! prints what that machine says it is ([`About`]) and ends.
+//! prints its [`About`] with the successful local relay preference and ends.
 //!
 //! Flow control is the phone's: at most [`secure::WINDOW`] bytes sent and not yet
 //! acknowledged each way; what arrives is acknowledged once it was written here. After
@@ -16,6 +16,7 @@ use fibo_remote::{
 };
 use futures_util::{SinkExt, StreamExt};
 use std::collections::VecDeque;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{self, Read, Write};
 use std::path::Path;
 use std::time::Duration;
@@ -27,26 +28,48 @@ type Ws =
 
 const PING: Duration = Duration::from_secs(25);
 
-pub(super) fn run(machine: &str, listen: Option<&Path>) -> io::Result<()> {
-    let link = load_link(machine)?;
+pub(super) fn run(
+    machine: &str,
+    listen: Option<&Path>,
+    expected_machine: Option<&str>,
+    preferred_relay: Option<u64>,
+) -> io::Result<()> {
+    let mut link = load_link(machine)?;
     let Some(listen) = listen else {
         let rt = runtime()?;
-        let (_, _, about) = rt.block_on(open(&link))?;
-        println!("{}", serde_json::to_string(&about)?);
+        let (_, _, about, preferred_relay) = rt.block_on(open(&link, None))?;
+        #[derive(serde::Serialize)]
+        struct Discovery {
+            #[serde(flatten)]
+            about: About,
+            preferred_relay: u64,
+        }
+        println!(
+            "{}",
+            serde_json::to_string(&Discovery {
+                about,
+                preferred_relay
+            })?
+        );
         return Ok(());
     };
+    prefer_relay(&mut link, preferred_relay);
     // Ends with the window that started it, however it went (a crash, a TERM): left
     // behind, it would keep its sessions open on the relay and on that machine.
     fibo_platform::process::exit_with_parent();
     // As `ssh -o StreamLocalBindUnlink=yes`: a socket left by an earlier run is replaced.
     let _ = std::fs::remove_file(listen);
     let listener = local::Listener::bind(listen)?;
+    let expected_machine = expected_machine.map(std::sync::Arc::<str>::from);
     let _ = local::restrict(listen);
     loop {
         let stream = listener.accept()?;
         let link = link.clone();
+        let expected_machine = expected_machine.clone();
         std::thread::spawn(move || {
-            if let Err(e) = runtime().and_then(|rt| rt.block_on(carry(&link, stream))) {
+            if let Err(e) = runtime()
+                .and_then(|rt| rt.block_on(carry(&link, expected_machine.as_deref(), stream)))
+            {
                 eprintln!("fibo remote dial: {e}");
             }
         });
@@ -59,17 +82,45 @@ fn runtime() -> io::Result<tokio::runtime::Runtime> {
         .build()
 }
 
+/// Local hint only: it can reorder a pairing's existing endpoints, never add one.
+fn relay_preference(endpoint: &str) -> u64 {
+    let mut hash = DefaultHasher::new();
+    endpoint.hash(&mut hash);
+    hash.finish()
+}
+
+fn prefer_relay(link: &mut Link, preferred: Option<u64>) {
+    let Some(preferred) = preferred else { return };
+    if relay_preference(&link.relay) == preferred {
+        return;
+    }
+    if let Some(i) = link
+        .alts
+        .iter()
+        .position(|alt| relay_preference(alt) == preferred)
+    {
+        let old = std::mem::replace(&mut link.relay, link.alts.remove(i));
+        link.alts.insert(0, old);
+    }
+}
+
 /// One session through the first relay of the link that answers: the channel, and what
 /// the machine said it is.
-async fn open(link: &Link) -> io::Result<(Ws, Channel, About)> {
+async fn open(
+    link: &Link,
+    expected_machine: Option<&str>,
+) -> io::Result<(Ws, Channel, About, u64)> {
     let mut why = io::Error::other(t!("配对链接里没有中继"));
     for relay in std::iter::once(&link.relay).chain(&link.alts) {
         let link = Link {
             relay: relay.clone(),
             ..link.clone()
         };
-        match tokio::time::timeout(Duration::from_secs(20), open_on(&link)).await {
-            Ok(Ok(open)) => return Ok(open),
+        match tokio::time::timeout(Duration::from_secs(20), open_on(&link, expected_machine)).await
+        {
+            Ok(Ok((ws, channel, about))) => {
+                return Ok((ws, channel, about, relay_preference(relay)));
+            }
             Ok(Err(e)) => why = e,
             Err(_) => why = io::Error::other(t!("{relay} 连接超时", relay)),
         }
@@ -77,7 +128,7 @@ async fn open(link: &Link) -> io::Result<(Ws, Channel, About)> {
     Err(why)
 }
 
-async fn open_on(link: &Link) -> io::Result<(Ws, Channel, About)> {
+async fn open_on(link: &Link, expected_machine: Option<&str>) -> io::Result<(Ws, Channel, About)> {
     let url = link.url().map_err(io::Error::other)?;
     let (mut ws, _) = tokio_tungstenite::connect_async(&url)
         .await
@@ -134,6 +185,7 @@ async fn open_on(link: &Link) -> io::Result<(Ws, Channel, About)> {
                 e
             ))
         })?;
+        check_machine(&about, expected_machine)?;
         let ack = c.ack(line.len() as u32)?;
         ws.send(Message::binary(ack))
             .await
@@ -142,9 +194,25 @@ async fn open_on(link: &Link) -> io::Result<(Ws, Channel, About)> {
     }
 }
 
+fn check_machine(about: &About, expected: Option<&str>) -> io::Result<()> {
+    // Older machines may have answered discovery without an ID. With a known ID,
+    // a missing one in a subsequent session is also a mismatch.
+    if expected.is_some_and(|id| !id.is_empty() && about.machine != id) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            t!("中继连接到另一台机器，请重新打开 Fibo"),
+        ));
+    }
+    Ok(())
+}
+
 /// Carries one local connection through its own session until either end closes.
-async fn carry(link: &Link, stream: local::Stream) -> io::Result<()> {
-    let (mut ws, mut channel, _) = open(link).await?;
+async fn carry(
+    link: &Link,
+    expected_machine: Option<&str>,
+    stream: local::Stream,
+) -> io::Result<()> {
+    let (mut ws, mut channel, _, _) = open(link, expected_machine).await?;
     // Read here on a thread: what the window sends.
     let (sent, mut from_window) = mpsc::channel::<Vec<u8>>(8);
     let mut reader = stream.try_clone()?;
@@ -227,4 +295,62 @@ async fn carry(link: &Link, stream: local::Stream) -> io::Result<()> {
     let _ = ws.close(None).await;
     let _ = stream.shutdown(std::net::Shutdown::Both);
     ended
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_discovered_standby_is_first_without_adding_or_losing_endpoints() {
+        let primary = "primary.invalid";
+        let standby = "standby.invalid";
+        let other = "other.invalid";
+        let code = secure::Code::generate().unwrap();
+        let mut link = Link {
+            relay: primary.into(),
+            alts: vec![other.into(), standby.into()],
+            code: code.clone(),
+            device: "fixture".into(),
+            key: code,
+            machine: "machine".into(),
+            name: "alias".into(),
+        };
+        let original = link.clone();
+        prefer_relay(&mut link, Some(relay_preference("removed.invalid")));
+        assert_eq!(
+            link, original,
+            "only a configured endpoint may be preferred"
+        );
+        prefer_relay(&mut link, Some(relay_preference(standby)));
+        assert_eq!(link.relay, standby);
+        assert_eq!(link.alts, [primary, other]);
+        prefer_relay(&mut link, Some(relay_preference(standby)));
+        assert_eq!(link.alts, [primary, other]);
+        assert_eq!(link.key, original.key);
+    }
+
+    #[test]
+    fn a_dial_requires_the_discovered_machine_in_every_authenticated_about() {
+        let mut about = About {
+            home: "/home/other".into(),
+            shell: "/bin/sh".into(),
+            name: "unchanged-alias".into(),
+            machine: "original-machine".into(),
+        };
+        let expected = Some("original-machine");
+        check_machine(&about, expected).unwrap();
+        about.machine = "replacement-machine".into();
+        assert_eq!(
+            check_machine(&about, expected).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
+        about.machine.clear();
+        assert_eq!(
+            check_machine(&about, expected).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
+        check_machine(&about, None).unwrap();
+        check_machine(&about, Some("")).unwrap();
+    }
 }

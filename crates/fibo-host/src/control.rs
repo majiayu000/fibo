@@ -153,6 +153,8 @@ fibo todo note <文字|-> [--task <待办>]      写进展：做了什么、剩�
             "join",
             "machine",
             "listen",
+            "expect-machine-id",
+            "prefer-relay",
         ],
         switches: &[
             "stdio", "pair", "new-code", "devices", "enable", "disable", "status", "report", "json",
@@ -173,7 +175,7 @@ fibo remote pair --relay <中继地址> --computer --name <那台电脑的名字
                                              打印的链接在那台电脑上用 fibo remote join 加进去
 fibo remote join <配对链接> [--name <这台在那边叫什么>]
                                              把经中继配对的电脑加进这台窗口的电脑列表，不用 ssh
-fibo remote dial --machine <名字> (--listen <socket> | --about)
+fibo remote dial --machine <名字> (--listen <socket> [--expect-machine-id <机器 ID>] [--prefer-relay <端点标识>] | --about)
                                              窗口自己用：把那台电脑的后台经中继接到本地 socket，或打印那台的信息
 fibo remote enable --relay <中继地址> [--relay-key <密钥>] [--also <另一台中继> [--also-key <密钥>]]
                                              让后台一直挂在中继上（重启后也会自动连回去）；配对保留。
