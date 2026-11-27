@@ -1,5 +1,5 @@
 //! Two real connections to one PTY: a pane shown again only looks, typing takes the input,
-//! and the takeover click and the writer leaving still hand it over.
+//! and a click in the pane, the takeover button and the writer leaving hand it over.
 use super::*;
 use crate::connection::Connection;
 
@@ -34,6 +34,8 @@ pub(super) fn start(
                 let mut ready = false;
                 for _ in 0..100 {
                     if $condition { ready = true; break; }
+                    // Held keys go out once the pane paints its size, as a real window does.
+                    cx.update_window(handle.into(), |_, w, a| { w.refresh(); w.draw(a).clear(a); }).unwrap();
                     wait(50).await;
                 }
                 assert!(ready, "timed out: {}", stringify!($condition));
@@ -91,6 +93,19 @@ pub(super) fn start(
         pane.update(cx, |p, a| p.visual_type("CLICKED-ONCE\r", a));
         until!(pane.read_with(cx, |p, _| p.visual_text().contains("CLICKED-ONCE")));
         drop(other);
+        // A click in the terminal itself is someone here wanting it, so it takes over too.
+        let other = competitor();
+        until!(pane.read_with(cx, |p, _| p.is_read_only()));
+        cx.update_window(handle.into(), |_, w, a| {
+            let viewport = w.viewport_size();
+            w.refresh(); w.draw(a).clear(a);
+            native_click(w, a, point(viewport.width * 0.6, viewport.height * 0.5), gpui::MouseButton::Left);
+        }).unwrap();
+        until!(!writable(&other));
+        until!(pane.read_with(cx, |p, _| p.visual_vt_ready() && !p.is_read_only()));
+        pane.update(cx, |p, a| p.visual_type("PANE-CLICK\r", a));
+        until!(pane.read_with(cx, |p, _| p.visual_text().contains("PANE-CLICK")));
+        drop(other);
         // The writer leaving hands the input to the one still looking.
         let other = competitor();
         until!(pane.read_with(cx, |p, _| p.is_read_only()));
@@ -100,7 +115,7 @@ pub(super) fn start(
         until!(pane.read_with(cx, |p, _| p.visual_text().contains("PROMOTED-ONCE")));
         assert!(pane.read_with(cx, |p, _| p.visual_error()).is_none());
         let text = pane.read_with(cx, |p, _| p.visual_text());
-        for word in ["TYPED-TAKES", "AFTER-TAKE", "CLICKED-ONCE", "PROMOTED-ONCE"] {
+        for word in ["TYPED-TAKES", "AFTER-TAKE", "CLICKED-ONCE", "PANE-CLICK", "PROMOTED-ONCE"] {
             assert_eq!(text.matches(word).count(), 1, "{word}: {text}");
         }
         shot("4-promoted-native.png", cx);

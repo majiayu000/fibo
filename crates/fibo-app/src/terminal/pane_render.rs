@@ -133,9 +133,13 @@ impl Render for Pane {
         } else if state.writable {
             String::new()
         } else if let Some((cols, rows)) = grid {
-            t!("只读 · 终端尺寸（{cols}×{rows}）· 打字就接管", cols, rows)
+            t!(
+                "只读 · 终端尺寸（{cols}×{rows}）· 点一下或打字就接管",
+                cols,
+                rows
+            )
         } else {
-            t!("只读 · 打字就接管").into()
+            t!("只读 · 点一下或打字就接管").into()
         };
         let writable = state.writable;
         drop(state);

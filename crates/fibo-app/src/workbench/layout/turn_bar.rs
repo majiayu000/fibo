@@ -348,7 +348,7 @@ impl Workbench {
             .border_color(T::color(T::border()))
             .text_size(px(T::PANE_FOOTER_SIZE))
             .text_color(T::color(T::muted()))
-            .child(div().flex_1().child(t!("当前只读 · 在这里打字就接管")))
+            .child(div().flex_1().child(t!("当前只读 · 点一下或打字就接管")))
             .child(
                 button(
                     gpui::SharedString::from(format!("takeover-{id}")),
