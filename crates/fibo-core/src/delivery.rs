@@ -75,6 +75,7 @@ pub fn resendable(request: &Request) -> bool {
         | Request::Once { .. }
         | Request::Workspace
         | Request::RecognitionStatus
+        | Request::Quotas
         | Request::ReloadPlugins => true,
         _ => false,
     }

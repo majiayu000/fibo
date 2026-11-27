@@ -12,6 +12,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod quota;
+
 struct Forward {
     spec: Spec,
     /// That host's socket on its machine, as it said (`fibo socket`).
