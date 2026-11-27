@@ -253,16 +253,9 @@ impl Workbench {
                 std::cmp::Reverse(*i),
             )
         });
-        // A peek is what is in front: its row is the selected one until it closes.
-        let current = match &self.peek {
-            Some(peek) => Some(peek.session.clone()),
-            None => self
-                .nav
-                .focused
-                .as_ref()
-                .and_then(|id| self.current_agent(id))
-                .map(|s| s.id.clone()),
-        };
+        // The one row lit: what is in front, wherever the view went (a peek, another
+        // machine drawn here, this machine's focused pane).
+        let current = self.in_front(cx);
         // Agents running in a tab here that no evidence has tied to a conversation yet:
         // listed rather than missing, so a CLI Fibo cannot read is never silent.
         // A program that reports its own status (OSC 7501) is listed the same way, its dot

@@ -10,6 +10,7 @@ pub(super) use history::{full_history, skipped_history};
 mod layer_keys;
 mod page;
 mod resize;
+mod selection;
 mod spaces;
 #[path = "subagent_sample_tests.rs"]
 mod subagent_samples;

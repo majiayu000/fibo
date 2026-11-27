@@ -57,6 +57,9 @@ field turn_started	crates/fibo-app/src/workbench/sidebar_recent.rs	1
 field turn_started	crates/fibo-app/src/workbench/sidebar_wasm.rs	1
 field turn_started	crates/fibo-host/src/host/association.rs	1
 field turn_started	crates/fibo-host/src/host/snapshot.rs	1
+in-front	crates/fibo-app/src/workbench/sidebar_list/list_scroll.rs	1
+in-front	crates/fibo-app/src/workbench/sidebar_machines.rs	2
+in-front	crates/fibo-app/src/workbench/sidebar_machines/remote_menu.rs	1
 keycap	crates/fibo-app/src/terminal/open_path.rs	7
 keycap	crates/fibo-app/src/terminal/pane_links.rs	1
 keycap	crates/fibo-app/src/workbench/board/composer.rs	1

@@ -64,6 +64,8 @@ impl Workbench {
             return Vec::new();
         };
         let w: &'a Workbench = view.read(cx);
+        // Before the lock: with a machine drawn here, what is in front is read under it.
+        let here = self.in_front(cx);
         let v = remote.view.lock().unwrap();
         let machine = machine_label(&v.spec.host).to_owned();
         let online = v.link == Link::Online;
@@ -90,7 +92,7 @@ impl Workbench {
                 machine: machine.clone(),
                 online,
                 why: why.clone(),
-                shown: self.peek.as_ref().is_some_and(|p| p.terminal == key),
+                shown: here.as_deref() == Some(key.as_str()),
                 key,
                 pin: (terminal.as_ref()).and_then(|t| v.pins.iter().flatten().position(|p| p == t)),
                 terminal,

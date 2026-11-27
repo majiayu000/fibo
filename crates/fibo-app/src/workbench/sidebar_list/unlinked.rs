@@ -24,12 +24,6 @@ fn heading_text(count: usize) -> Option<(&'static str, usize)> {
     (count > 0).then_some((fibo_core::i18n::say(TITLE), count))
 }
 
-/// Whether this row is the selected one. A peek is what is in front: its session's row is
-/// selected until it closes, and there is one selection at a time.
-fn row_selected(focused: Option<&str>, terminal: &str, peeking: bool) -> bool {
-    !peeking && focused == Some(terminal)
-}
-
 /// The list a row sits in, whose rows it lines up with.
 #[derive(Clone, Copy)]
 enum Look {
@@ -188,6 +182,7 @@ impl Workbench {
         let Some((title, count)) = heading_text(rows.len()) else {
             return vec![];
         };
+        let here = self.in_front(cx);
         let look = match (recent, self.sidebar.dense()) {
             (true, _) => Look::Flat,
             (false, true) => Look::Dense,
@@ -207,12 +202,8 @@ impl Workbench {
                     group,
                     there,
                 } = row;
-                let focused = match &there {
-                    Some((_, key)) => self.peek.as_ref().is_some_and(|p| &p.terminal == key),
-                    None => {
-                        row_selected(self.nav.focused.as_deref(), &terminal, self.peek.is_some())
-                    }
-                };
+                let key = there.as_ref().map_or(&terminal, |(_, key)| key);
+                let focused = here.as_ref() == Some(key);
                 let id = gpui::SharedString::from(format!("unread-row-{terminal}"));
                 row_box(id, look, focused)
                     .child(self.row_mark(look, group, cx))
@@ -274,13 +265,6 @@ mod tests {
     fn no_such_terminal_means_no_heading() {
         assert_eq!(heading_text(0), None);
         assert_eq!(heading_text(2), Some((TITLE, 2)));
-    }
-
-    #[test]
-    fn a_peek_takes_the_selection_from_the_row_underneath() {
-        assert!(row_selected(Some("t"), "t", false));
-        assert!(!row_selected(Some("t"), "t", true));
-        assert!(!row_selected(Some("other"), "t", false));
     }
 
     /// 「两个栏不是一样宽的」: a row's box starts where the search field and the chips do,

@@ -17,23 +17,32 @@ impl Workbench {
             here: self.overview.here.clone(),
         }
     }
-    /// What the view is on, as ⌘J counts its place in the queue: the peeked or drawn
-    /// machine's terminal, the focused pane's session or asking terminal, the board's card.
-    pub(in crate::workbench) fn here_key(&self, cx: &gpui::App) -> Option<String> {
-        match self.peek.as_ref().filter(|p| p.remote.is_some()) {
-            Some(peek) => Some(peek.terminal.clone()),
-            None if self.hosted_view().is_some() => self.hosted_focus(cx),
-            None => self
-                .nav
-                .focused
-                .as_ref()
-                .and_then(|id| self.current_agent(id))
-                .map(|s| s.id.clone())
-                .or_else(|| {
-                    (self.nav.focused.clone()).filter(|t| self.store.recognition().asks_first(t))
-                })
-                .or_else(|| self.overview.here.clone()),
+    /// What is in front, as the key of the sidebar row standing for it: a peek (this
+    /// machine's session, another machine's terminal); the terminal focused in the machine
+    /// drawn here, and nothing of this machine's while one is; else the focused pane's
+    /// session, or the terminal itself when no session is tied to it. Every row of the
+    /// sidebar is lit by comparing its key to this, so one is lit at a time wherever the
+    /// view went (`crates/fibo-core/tests/guard.rs` counts other reads in the sidebar).
+    pub(in crate::workbench) fn in_front(&self, cx: &gpui::App) -> Option<String> {
+        if let Some(peek) = &self.peek {
+            return Some(match peek.remote {
+                Some(_) => peek.terminal.clone(),
+                None => peek.session.clone(),
+            });
         }
+        if self.hosted_view().is_some() {
+            return self.hosted_focus(cx);
+        }
+        let focused = self.nav.focused.as_ref()?;
+        Some(
+            self.current_agent(focused)
+                .map_or_else(|| focused.clone(), |s| s.id.clone()),
+        )
+    }
+    /// What the view is on, as ⌘J counts its place in the queue: what is in front, else
+    /// the board's card.
+    pub(in crate::workbench) fn here_key(&self, cx: &gpui::App) -> Option<String> {
+        self.in_front(cx).or_else(|| self.overview.here.clone())
     }
     /// A jump the user did not pick a place for (⌘J, a notification) is about to go to `to`.
     pub(in crate::workbench) fn note_jump(&mut self, to: &str, cx: &gpui::App) {
