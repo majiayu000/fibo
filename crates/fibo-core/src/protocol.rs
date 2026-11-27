@@ -32,6 +32,9 @@ pub struct RemoteStatus {
     /// The other relays the machine is on beside `relay`; their keys stay with the host.
     #[serde(default)]
     pub also: Vec<String>,
+    /// The first of `also` has a registration key saved.
+    #[serde(default)]
+    pub also_keyed: bool,
     #[serde(flatten)]
     pub live: RemoteLive,
 }
