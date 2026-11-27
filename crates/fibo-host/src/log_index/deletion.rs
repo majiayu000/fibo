@@ -1,5 +1,5 @@
 //! Reconcile a confirmed deletion against the cursor, content and live projection.
-use super::*;
+use super::{update::refresh_parent, *};
 
 impl Index {
     /// An unavailable log root cannot tell us which of its transcripts were removed.
@@ -117,80 +117,4 @@ pub(super) fn indexed_inode(
         })
         .optional()
         .map_err(err)
-}
-
-pub(super) struct ParentRefresh {
-    transcript: Transcript,
-    parser: Option<crate::content::Parser>,
-}
-
-impl ParentRefresh {
-    pub(super) fn publish(self, held: &mut Held) -> Transcript {
-        if let (Some(parser), Some(e)) = (self.parser, held.entries.get_mut(&self.transcript.path))
-        {
-            e.parser = parser;
-            e.dirty = None;
-        }
-        self.transcript
-    }
-}
-
-/// Rebuild the one parent projection affected by a child log change.
-pub(super) fn refresh_parent(
-    db: &Connection,
-    held: &mut Held,
-    runtime: Agent,
-    parent: &str,
-    child_path: &str,
-    persist: bool,
-) -> io::Result<Option<ParentRefresh>> {
-    let row = db
-        .prepare_cached(
-            "SELECT cli_id,path,cwd,updated FROM log_files WHERE runtime=?2 AND cli_id=?1 LIMIT 1",
-        )
-        .map_err(err)?
-        .query_row([parent, runtime.executable()], |r| {
-            Ok(Transcript {
-                runtime,
-                cli_id: r.get(0)?,
-                path: r.get(1)?,
-                cwd: r.get(2)?,
-                updated: r.get::<_, i64>(3)? as u64,
-            })
-        })
-        .optional()
-        .map_err(err)?;
-    let Some(t) = row.filter(|t| t.path != child_path) else {
-        return Ok(None);
-    };
-    let now = fibo_core::content::now();
-    let source = fibo_core::content::Source {
-        path: t.path.clone(),
-        offset: now,
-        ..Default::default()
-    };
-    let parser = if let Some(e) = held.entries.get_mut(&t.path) {
-        let kids = crate::content::children(db, runtime, parent, now, e.parser.card.turn_started)?;
-        if persist {
-            let mut updated = e.parser.clone();
-            updated.children(&kids, now, source);
-            write_cursor(db, &t.path, e.runtime, &e.cursor)?;
-            crate::content::save_state(db, &t.path, &updated)?;
-            Some(updated)
-        } else {
-            e.parser.children(&kids, now, source);
-            e.dirty.get_or_insert_with(std::time::Instant::now);
-            None
-        }
-    } else {
-        let mut owner = crate::content::load(db, &t.path)?;
-        let kids = crate::content::children(db, runtime, parent, now, owner.card.turn_started)?;
-        owner.children(&kids, now, source);
-        crate::content::save(db, &t.path, &owner)?;
-        None
-    };
-    Ok(Some(ParentRefresh {
-        transcript: t,
-        parser,
-    }))
 }
