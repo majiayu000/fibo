@@ -1,12 +1,10 @@
-// What a tap does when it changes something on the computer, with the checks this phone
-// adds first: a second confirmation for dangerous commands and the lock's check when
-// settings ask. The computer checks permissions itself; these only guard the phone.
-import * as LocalAuthentication from 'expo-local-authentication';
+// What a tap does when it changes something on the computer, with the one check this phone
+// adds first: a second confirmation for dangerous commands. The computer checks permissions
+// itself. No fingerprint or face check: docs/decisions/2026-11-28-phone-no-lock.md.
 import { Alert, Platform } from 'react-native';
 import { tr } from './i18n';
 import { type Card, getMachine, NOT_YET, refresh, write } from './remote/hub';
 import { readSettings } from './store/settings';
-import { type LockKit, type LockWay, lockWay } from './ui/lockway';
 import { FULL_CONFIRM, type ModeKind, type ModeOption } from './ui/modes';
 import { type Ask, asksTwice } from './ui/parse';
 
@@ -19,46 +17,6 @@ export function confirm(title: string, detail: string, ok: string, destructive =
       { text: ok, style: destructive ? 'destructive' : 'default', onPress: () => done(true) },
     ]),
   );
-}
-
-/** What this phone can prove you with (see ui/lockway.ts); nothing on the web. A question the
- *  phone cannot answer reads as nothing: the check then stays strict, never open. */
-export async function lockKit(): Promise<LockKit> {
-  const ios = Platform.OS === 'ios';
-  if (Platform.OS === 'web') return { ios, level: 0, finger: false, face: false };
-  const ask = <T,>(f: () => Promise<T>, none: T) => Promise.resolve().then(f).catch(() => none);
-  const [level, types] = await Promise.all([
-    ask(() => LocalAuthentication.getEnrolledLevelAsync(), 0),
-    ask((): Promise<number[]> => LocalAuthentication.supportedAuthenticationTypesAsync(), []),
-  ]);
-  // AuthenticationType: 1 fingerprint, 2 face, 3 iris.
-  const androidApi = Platform.OS === 'android' ? Platform.Version : undefined;
-  return { ios, androidApi, level: Number(level) || 0, finger: types.includes(1), face: types.includes(2) };
-}
-
-/** The system's own box, at the strictness the person chose. `error` says why it did not pass. */
-export async function proveIt(reason: string, way: LockWay): Promise<{ ok: boolean; error?: string }> {
-  const r = await LocalAuthentication.authenticateAsync({ promptMessage: reason, cancelLabel: tr('取消'), biometricsSecurityLevel: way });
-  return r.success ? { ok: true } : { ok: false, error: r.error };
-}
-
-/** The lock's check (or the passcode) when the lock setting is on; true when it is off. */
-export async function verify(reason: string): Promise<boolean> {
-  return (await verifyWhy(reason)).ok;
-}
-
-/** `verify`, saying why a check did not pass: the app returning to the front can cancel it. */
-export async function verifyWhy(reason: string, kit?: Promise<LockKit>): Promise<{ ok: boolean; error?: string }> {
-  try {
-    // Unread or unreadable settings are not 「lock off」, and a phone without a fingerprint or
-    // face does not skip the lock: the system then asks for the screen lock.
-    const settings = await readSettings();
-    if (!settings.lock) return { ok: true };
-    if (Platform.OS === 'web') return { ok: false };
-    return await proveIt(reason, lockWay(settings.lockWay, await (kit ?? lockKit())));
-  } catch {
-    return { ok: false };
-  }
 }
 
 // All approval entry points share this lock, including taps before React redraws.
@@ -86,7 +44,6 @@ export async function approve(machine: string, card: Card, ask: Ask, always = fa
       const sure = await confirm(tr('确定允许？'), always ? `${what}\n\n${ask.always}` : what, tr('允许'));
       if (!sure) return false;
     }
-    if (!(await verify(tr('允许 {what}', { what: ask.subject })))) return false;
     await write(machine, 'answer', {
       terminal: card.id,
       question: card.approval,
@@ -131,7 +88,6 @@ export async function answerTrust(machine: string, card: Card, trust: boolean) {
   const folder = card.trust?.folder;
   if (!folder) return;
   return answerOnce(machine, card.id, async () => {
-    if (trust && !(await verify(tr('信任这个文件夹')))) return;
     await write(machine, 'trust', { terminal: card.id, folder, trust });
     setTimeout(() => refresh(machine), 300);
   });
@@ -139,13 +95,12 @@ export async function answerTrust(machine: string, card: Card, trust: boolean) {
 
 /**
  * Picks a model or permission mode the computer offered; it presses the keys and says what the CLI
- * shows then. The one that stops asking goes through a second confirmation and Face ID first, and
+ * shows then. The one that stops asking goes through a second confirmation first, and
  * only then carries `allow_full`, without which the computer refuses it. False: the person said no.
  */
 export async function switchMode(machine: string, terminal: string, kind: ModeKind, option: ModeOption): Promise<boolean> {
   if (option.full) {
     if (!(await confirm(FULL_CONFIRM.title, FULL_CONFIRM.detail, FULL_CONFIRM.ok, true))) return false;
-    if (!(await verify(FULL_CONFIRM.title))) return false;
   }
   await write(machine, 'setmode', { terminal, kind, choice: option.key, ...(option.full ? { allow_full: true } : {}) });
   setTimeout(() => refresh(machine), 200);
