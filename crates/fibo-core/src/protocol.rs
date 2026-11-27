@@ -119,6 +119,8 @@ pub enum Reply {
     Cwd(String),
     NotificationClaimed(bool),
     Recognition(RecognitionStatus),
+    /// [`Request::Quotas`].
+    Quotas(Vec<(crate::agent::Agent, crate::quota::Quota)>),
     Diagnostics(crate::diagnostics::Diagnostics),
     ReclaimableWorktrees(Vec<crate::diagnostics::ReclaimableWorktree>),
     Attached {

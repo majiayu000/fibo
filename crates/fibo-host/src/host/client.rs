@@ -247,6 +247,15 @@ fn supervisor(shared: &Shared) -> io::Result<std::sync::Arc<super::remote::Super
 pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
     match request {
         Request::RecognitionStatus => Ok(Reply::Recognition(recognition_status(&*lock(shared)?))),
+        Request::Quotas => {
+            // Plugins' files and commands are read outside the lock.
+            fibo_core::quota::install();
+            let plugins = fibo_core::quota::from_plugins();
+            let now = fibo_core::content::now();
+            let host = lock(shared)?;
+            let all = fibo_core::quota::latest(&host.workspace, &plugins, now);
+            Ok(Reply::Quotas(all))
+        }
         Request::RefreshAgents => {
             let transcripts = {
                 let host = lock(shared)?;

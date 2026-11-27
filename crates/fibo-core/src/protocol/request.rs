@@ -49,6 +49,10 @@ pub enum Request {
     /// rules and hooks; agents stay as registered at its start.
     ReloadPlugins,
     RecognitionStatus,
+    /// Each Agent's limits as this host's own window shows them, plugins' readings included:
+    /// for a window attached from another machine, which cannot read those files. Hosts
+    /// before it answer with an error.
+    Quotas,
     WatchRecognition,
     /// A fifteen-second measurement stream, cancelled by disconnecting this socket.
     Diagnose,
