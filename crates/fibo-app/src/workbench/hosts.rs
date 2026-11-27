@@ -45,19 +45,37 @@ fn socket_of(root: &std::path::Path) -> std::path::PathBuf {
 }
 
 /// One request's round trip on a link already open: what typing there waits for. Opening
-/// the link through its forward costs more, so it is left out.
-fn round_trip(socket: &std::path::Path) -> std::io::Result<std::time::Duration> {
+/// the link through its forward costs more, so it is left out, and the link is kept for the
+/// next one: through the relay each new link is a new session there, which it counts.
+fn round_trip(
+    socket: &std::path::Path,
+    kept: Option<fibo_platform::local::Stream>,
+) -> (
+    Option<std::time::Duration>,
+    Option<fibo_platform::local::Stream>,
+) {
     use fibo_core::protocol::{CONTROL, MAJOR, Reply, receive, send};
-    let mut stream = fibo_platform::local::Stream::connect(socket)?;
-    stream.set_read_timeout(Some(std::time::Duration::from_secs(10)))?;
-    send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
-    receive::<Reply>(&mut stream)?;
+    let open = || -> std::io::Result<fibo_platform::local::Stream> {
+        let mut stream = fibo_platform::local::Stream::connect(socket)?;
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(10)))?;
+        send(&mut stream, CONTROL, &Request::Hello { major: MAJOR })?;
+        receive::<Reply>(&mut stream)?;
+        Ok(stream)
+    };
+    let was_kept = kept.is_some();
+    let Some(mut stream) = kept.map_or_else(|| open().ok(), Some) else {
+        return (None, None);
+    };
     let at = std::time::Instant::now();
     // A terminal no one has: answered at once, whatever the host's version.
     let probe = Request::TerminalCwd { id: String::new() };
-    send(&mut stream, CONTROL, &probe)?;
-    receive::<Reply>(&mut stream)?;
-    Ok(at.elapsed())
+    let answered = send(&mut stream, CONTROL, &probe).and_then(|_| receive::<Reply>(&mut stream));
+    match answered {
+        Ok(_) => (Some(at.elapsed()), Some(stream)),
+        // The host there restarted or the forward did: once more on a new link.
+        Err(_) if was_kept => round_trip(socket, None),
+        Err(_) => (None, None),
+    }
 }
 
 /// Where another machine's workbench opens at.
@@ -366,6 +384,7 @@ impl Workbench {
     fn time_machine(&mut self, host: String, socket: std::path::PathBuf, cx: &mut Context<Self>) {
         let owner = self.machine_of(&host).unwrap().view.clone();
         cx.spawn(async move |this, cx| {
+            let mut kept = None;
             loop {
                 if !this
                     .update(cx, |this, _| {
@@ -378,9 +397,10 @@ impl Workbench {
                     return;
                 }
                 let socket = socket.clone();
-                let rtt = cx
-                    .background_spawn(async move { round_trip(&socket).ok() })
+                let (rtt, link) = cx
+                    .background_spawn(async move { round_trip(&socket, kept) })
                     .await;
+                kept = link;
                 let moved = crate::machines::set_latency(&host, rtt);
                 if this
                     .update(cx, |_, cx| {

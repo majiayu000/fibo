@@ -49,6 +49,26 @@ pub struct Spec {
     /// 先不管这台: it stays connected but asks nothing of you here.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub quiet: bool,
+    /// How its host's socket is reached here.
+    #[serde(default, skip_serializing_if = "Via::is_ssh")]
+    pub via: Via,
+}
+
+/// The way to a machine (docs/decisions/2026-11-27-computers-over-relay.md).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Via {
+    /// `ssh -L` to its socket: over Tailscale, the LAN, whatever `ssh` reaches it by.
+    #[default]
+    Ssh,
+    /// `fibo remote dial` through the relay it was paired on (`fibo remote join`): no ssh.
+    Relay,
+}
+
+impl Via {
+    fn is_ssh(&self) -> bool {
+        *self == Via::Ssh
+    }
 }
 
 impl Spec {
@@ -57,6 +77,7 @@ impl Spec {
             host,
             path: None,
             quiet: false,
+            via: Via::Ssh,
         }
     }
     /// Shell that sets `$p` to `fibo` on that machine: the path written down, else on its
@@ -155,12 +176,13 @@ pub fn set_quiet(host: &str, quiet: bool) -> io::Result<()> {
         .ok_or_else(|| io::Error::other(t!("设置里没有 {host} 这台电脑", host)))?;
     save(&specs)
 }
-/// `next` with what `saved` says about 先不管: a list held since before the switch does not
-/// undo it.
+/// `next` with what `saved` says about 先不管 and the way there: a list held since before the
+/// switch or `fibo remote join` does not undo it.
 fn keep_quiet(mut next: Vec<Spec>, saved: &[Spec]) -> Vec<Spec> {
     for spec in &mut next {
         if let Some(s) = saved.iter().find(|s| s.host == spec.host) {
             spec.quiet = s.quiet;
+            spec.via = s.via;
         }
     }
     next
@@ -257,6 +279,7 @@ mod tests {
             host: "mac2".into(),
             path: Some("/opt/My Apps/mooring".into()),
             quiet: false,
+            via: Via::Ssh,
         };
         let argv = named.ssh(&named.find_program());
         assert_eq!(argv[0], "ssh");
@@ -267,6 +290,7 @@ mod tests {
             host: "mac2".into(),
             path: None,
             quiet: false,
+            via: Via::Ssh,
         };
         let probe = unnamed.find_program();
         assert!(probe.contains("command -v fibo || command -v mooring"));
@@ -300,6 +324,16 @@ mod tests {
     #[test]
     fn an_unreadable_file_is_never_written_back_empty() {
         assert_eq!(with_quiet(Vec::new(), "apple", true), None);
+    }
+    #[test]
+    fn settings_saving_its_list_keeps_a_machine_on_the_relay() {
+        let saved: Vec<Spec> = serde_json::from_str(r#"[{"host":"apple","via":"relay"}]"#).unwrap();
+        assert_eq!(saved[0].via, Via::Relay);
+        let next = keep_quiet(vec![spec("apple", false), spec("mac2", false)], &saved);
+        assert_eq!(next[0].via, Via::Relay);
+        assert_eq!(next[1].via, Via::Ssh);
+        let text = serde_json::to_string(&next).unwrap();
+        assert_eq!(text.matches("via").count(), 1, "ssh is not written: {text}");
     }
     #[test]
     fn settings_adding_a_machine_does_not_undo_quiet() {

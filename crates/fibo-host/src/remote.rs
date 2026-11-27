@@ -130,6 +130,8 @@ pub fn run(args: impl Iterator<Item = String>) -> io::Result<()> {
         || a.has("enable")
         || a.has("disable")
         || a.has("status")
+        || a.value("join").is_some()
+        || a.has("dial")
     {
         return crate::relay::run(&a);
     }

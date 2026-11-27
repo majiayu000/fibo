@@ -1,9 +1,9 @@
-use super::bridge::Bridge;
+use super::bridge::{Bridge, Serve};
 use super::live::Live;
 use super::{HANDSHAKE_LIMIT, MAX_SESSIONS, PING, RECHECK, SILENCE};
 use crate::remote::Access;
 use fibo_core::protocol::RemoteState;
-use fibo_host::devices::{self, Device, Role};
+use fibo_host::devices::{self, Device, Kind, Role};
 use fibo_remote::{
     close,
     secure::{self, Code},
@@ -184,7 +184,11 @@ async fn connect(
     eprintln!("fibo remote: 已连上中继 {base:?}");
     live.state(RemoteState::Connected, String::new());
 
-    let (out, mut outbox) = mpsc::channel::<Message>(64);
+    // Unbounded: sessions seal under their channel's lock and enqueue before letting go, so
+    // their order holds; a bounded queue made them wait there while this loop, the only one
+    // draining it, waited on the same lock to open an ACK. Each session's own window
+    // (`secure::WINDOW` unacknowledged) is what bounds it.
+    let (out, mut outbox) = mpsc::unbounded_channel::<Message>();
     let mut writer = tokio::spawn(async move {
         let mut tick = tokio::time::interval(PING);
         tick.tick().await;
@@ -215,7 +219,7 @@ async fn connect(
                 if routes != sent {
                     sent = routes;
                     let (routes, revoked) = sent.clone();
-                    let _ = out.send(Message::text(Frame::Routes { routes, revoked }.to_text())).await;
+                    let _ = out.send(Message::text(Frame::Routes { routes, revoked }.to_text()));
                 }
                 let now = paired.load(socket);
                 let gone: Vec<(String, Dropped)> = sessions
@@ -291,12 +295,27 @@ async fn connect(
                         secure::respond(&key, payload).ok().map(|r| (d, r))
                     });
                     match answered {
+                        // Only the record decides a native session, and only with full
+                        // control: a computer turned down to less is refused, not served
+                        // the phone protocol it never asked for.
+                        Some((d, _)) if d.kind == Kind::Computer && d.role != Role::Full => {
+                            eprintln!("fibo remote: 电脑 {:?} 不是完全控制，已拒绝", d.name);
+                            devices::log(
+                                &log,
+                                json!({ "event": "refused", "device": d.id, "why": "computer without full control" }),
+                            );
+                            close(&out, &id, close::UNPAIRED, "computer needs full control").await;
+                            None
+                        }
                         Some((d, (channel, answer))) => {
-                            let access = Access {
-                                role: d.role,
-                                device: Some((d.id.clone(), d.name.clone())),
-                                log: Some(log.clone()),
-                                observer: Some(live.observer(&id)),
+                            let serve = match d.kind {
+                                Kind::Phone => Serve::Phone(Access {
+                                    role: d.role,
+                                    device: Some((d.id.clone(), d.name.clone())),
+                                    log: Some(log.clone()),
+                                    observer: Some(live.observer(&id)),
+                                }),
+                                Kind::Computer => Serve::Native,
                             };
                             let bridge = match Bridge::start(
                                 &id,
@@ -304,7 +323,7 @@ async fn connect(
                                 out.clone(),
                                 socket,
                                 proto,
-                                access,
+                                serve,
                             ) {
                                 Ok(bridge) => bridge,
                                 Err(e) => {
@@ -313,13 +332,23 @@ async fn connect(
                                     continue;
                                 }
                             };
-                            if out.send(to_phone(proto, &id, &answer)).await.is_err() {
+                            if out.send(to_phone(proto, &id, &answer)).is_err() {
                                 break Ended::Lost(t!("写不进中继").into());
+                            }
+                            // A computer is told first where it has arrived, as `ssh` asks.
+                            if d.kind == Kind::Computer {
+                                let about = super::computer::about(socket);
+                                match bridge.say(&about) {
+                                    Ok(sealed) => {
+                                        let _ = out.send(to_phone(proto, &id, &sealed));
+                                    }
+                                    Err(e) => eprintln!("fibo remote: 电脑 {id:?}：{e:?}"),
+                                }
                             }
                             eprintln!("fibo remote: 「{:?}」已连上（{}）", d.name, d.role.label());
                             devices::log(
                                 &log,
-                                json!({ "event": "connected", "device": d.id, "name": d.name, "role": d.role }),
+                                json!({ "event": "connected", "device": d.id, "name": d.name, "role": d.role, "kind": d.kind }),
                             );
                             live.joined(&id, &d.id);
                             Some(Session::Open {
@@ -399,7 +428,7 @@ async fn connect(
                         );
                         Frame::Wopened { id }
                     };
-                    let _ = out.send(Message::text(reply.to_text())).await;
+                    let _ = out.send(Message::text(reply.to_text()));
                 }
                 Ok(Frame::Wclose { id, .. }) => {
                     if let Some(Session::Open { device, .. }) = sessions.remove(&id) {
@@ -419,8 +448,8 @@ async fn connect(
                         status: 404,
                         headers: Default::default(),
                     };
-                    let _ = out.send(Message::text(head.to_text())).await;
-                    let _ = out.send(Message::text(Frame::Hend { id }.to_text())).await;
+                    let _ = out.send(Message::text(head.to_text()));
+                    let _ = out.send(Message::text(Frame::Hend { id }.to_text()));
                 }
                 _ => (),
             },
@@ -461,13 +490,13 @@ pub(super) fn to_phone(proto: u32, id: &str, bytes: &[u8]) -> Message {
     )
 }
 
-async fn close(out: &mpsc::Sender<Message>, id: &str, code: u16, reason: &str) {
+async fn close(out: &mpsc::UnboundedSender<Message>, id: &str, code: u16, reason: &str) {
     let frame = Frame::Wclose {
         id: id.into(),
         code: Some(code),
         reason: Some(reason.into()),
     };
-    let _ = out.send(Message::text(frame.to_text())).await;
+    let _ = out.send(Message::text(frame.to_text()));
 }
 
 enum Session {

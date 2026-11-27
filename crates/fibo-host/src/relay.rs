@@ -21,8 +21,11 @@ use std::path::Path;
 use std::time::Duration;
 
 mod bridge;
+mod computer;
 mod connect;
+mod dial;
 mod live;
+mod squeeze;
 mod status_text;
 
 use connect::stay_connected;
@@ -46,6 +49,29 @@ const HANDSHAKE_LIMIT: Duration = Duration::from_secs(10);
 pub fn run(a: &Args) -> io::Result<()> {
     if a.has("devices") {
         return list_devices(&a.socket);
+    }
+    if let Some(link) = a.value("join") {
+        let host = computer::join(link, a.value("name"))?;
+        println!(
+            "{}",
+            t!(
+                "已加上「{host}」：经中继连过去，不用 ssh。打开 Fibo 窗口就能在侧栏看到它",
+                host
+            )
+        );
+        return Ok(());
+    }
+    if a.has("dial") {
+        let machine = a
+            .value("machine")
+            .ok_or_else(|| io::Error::other(t!("--dial 需要 --machine <名字>")))?;
+        let listen = a.value("listen").map(Path::new);
+        if listen.is_none() && !a.has("about") {
+            return Err(io::Error::other(t!(
+                "--dial 需要 --listen <socket> 或 --about"
+            )));
+        }
+        return dial::run(machine, listen);
     }
     let root = a.socket.parent().unwrap_or(Path::new("."));
     if a.has("enable") || a.has("disable") {
@@ -157,6 +183,36 @@ pub fn run(a: &Args) -> io::Result<()> {
     let code = devices::machine_code(&a.socket, new)?;
     if new {
         devices::clear(&a.socket)?;
+    }
+    if a.has("pair") && a.has("computer") {
+        if a.value("role").is_some_and(|r| r != "full") {
+            return Err(io::Error::other(t!(
+                "电脑之间只有完全控制：经中继连过来的窗口和 ssh 进来一样，能开终端、打字"
+            )));
+        }
+        let name = a
+            .value("name")
+            .ok_or_else(|| io::Error::other(t!("--computer 需要 --name <那台电脑的名字>")))?;
+        let alts = fibo_host::remote_config(root)
+            .also
+            .into_iter()
+            .map(|r| r.relay);
+        let alts: Vec<String> = alts.collect();
+        let (device, link) = devices::pair_computer_link(&a.socket, relay, &alts, name)?;
+        println!(
+            "{}",
+            t!(
+                "「{name}」（{id}）可以完全控制这台电脑，和 ssh 进来一样。在那台电脑上运行：",
+                name,
+                id = device.id
+            )
+        );
+        println!("fibo remote join '{link}'");
+        println!(
+            "{}",
+            t!("链接要在 10 分钟内用上；它就是这台电脑的钥匙，不要发给别人。随时可以 fibo remote revoke {id} 取消", id = device.id)
+        );
+        return Ok(());
     }
     if a.has("pair") {
         let role = a
