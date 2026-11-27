@@ -22,6 +22,8 @@ mod offline;
 mod overlays;
 #[path = "pane_paste.rs"]
 mod paste;
+#[path = "pane_remote_image.rs"]
+mod remote_image;
 #[path = "pane_render.rs"]
 mod render;
 #[path = "pane_search.rs"]
@@ -372,9 +374,12 @@ impl Pane {
     pub fn program_title(&self) -> Option<String> {
         self.connection.state.lock().ok()?.vt.as_ref()?.title()
     }
-    /// Dropped files arrive as their paths, escaped for a shell, like any terminal.
+    /// Dropped files arrive as their paths, escaped for a shell, like any terminal. On
+    /// another computer those paths name nothing: pictures go there first.
     fn drop_paths(&mut self, paths: &gpui::ExternalPaths, cx: &mut Context<Self>) {
-        if self.refuse_remote_file(cx) {
+        if crate::attach::Host::of(&self.socket).attached() {
+            let files = paths.paths().iter().cloned();
+            self.send_pictures(files.map(remote_image::Picture::File).collect(), cx);
             return;
         }
         let text = crate::terminal::terminal_input::dropped_paths(paths.paths());

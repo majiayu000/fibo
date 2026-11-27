@@ -470,6 +470,14 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             supervisor(shared)?.report(live);
             Ok(Reply::Ok)
         }
+        Request::SaveImage { data } => {
+            use base64::Engine;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .map_err(io::Error::other)?;
+            let path = crate::pictures::save(&supervisor(shared)?.socket(), &bytes)?;
+            Ok(Reply::Text(path.to_string_lossy().into_owned()))
+        }
         Request::TerminalCwd { id } => {
             let host = lock(shared)?;
             let terminal = host
