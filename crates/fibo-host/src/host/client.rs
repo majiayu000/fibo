@@ -487,6 +487,11 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
             let path = crate::pictures::save(&supervisor(shared)?.socket(), &bytes)?;
             Ok(Reply::Text(path.to_string_lossy().into_owned()))
         }
+        Request::ListDirs { path } => Ok(Reply::Dirs(crate::folders::list(&path)?)),
+        Request::MakeDir { path } => {
+            let made = crate::folders::make_dir(&path)?;
+            Ok(Reply::Text(made.to_string_lossy().into_owned()))
+        }
         Request::TerminalCwd { id } => {
             let host = lock(shared)?;
             let terminal = host

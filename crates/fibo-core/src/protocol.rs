@@ -135,6 +135,8 @@ pub enum Reply {
     },
     Ok,
     Text(String),
+    /// Folders by full path (`ListDirs`).
+    Dirs(Vec<String>),
     /// [`Request::AssociateScreen`]: the conversation that terminal now holds; None when
     /// the screen did not say which.
     ScreenAssociated {

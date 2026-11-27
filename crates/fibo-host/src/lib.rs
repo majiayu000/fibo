@@ -12,6 +12,7 @@ mod codex_status;
 mod command_marks;
 pub mod devices;
 mod diagnostics;
+pub mod folders;
 mod host;
 pub mod log_index;
 mod official;

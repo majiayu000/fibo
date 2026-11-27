@@ -401,6 +401,58 @@ pub(super) fn start(
             }
         }
         assert!(!left, "the tab opened on {host} was left there");
+        // 「换目录」 on far: a path there typed, its folders listed by far's host, and a new
+        // folder made there and taken as the space's.
+        if fake {
+            let farhome = std::path::PathBuf::from(std::env::var("MOORING_HOSTS_FARHOME").unwrap());
+            let typed = |text: &'static str, cx: &mut gpui::AsyncApp| {
+                let (far, picked) = (far.clone(), picked.clone());
+                cx.update_window(handle.into(), move |_, window, app| {
+                    far.update(app, |w, cx| w.visual_type_remote_folder(&picked, text, window, cx))
+                })
+                .unwrap();
+            };
+            let offered = |cx: &mut gpui::AsyncApp| far.read_with(cx, |w, _| w.visual_remote_folder());
+            // Drawn, in that space, so the shots show its empty tab and the field.
+            handle
+                .update(cx, |v, window, cx| v.visual_show_host(&host, Some(&picked), window, cx))
+                .unwrap();
+            wait(800).await;
+            typed("~/co", cx);
+            let code = farhome.join("code").to_string_lossy().into_owned();
+            let mut seen = None;
+            for _ in 0..40 {
+                wait(100).await;
+                seen = offered(cx);
+                if seen.as_ref().is_some_and(|s| s.0.contains(&code)) {
+                    break;
+                }
+            }
+            assert!(seen.as_ref().is_some_and(|s| s.0.contains(&code)), "far listed {seen:?}");
+            typed("~/code/new-proj", cx);
+            wait(800).await;
+            let seen = offered(cx);
+            let make = seen.as_ref().and_then(|s| s.1.clone());
+            assert_eq!(make.as_deref(), Some("~/code/new-proj"), "offered {seen:?}");
+            shoot("far-folder-make.png", cx);
+            handle
+                .update(cx, |_, _, cx| far.update(cx, |w, cx| w.visual_choose_remote_folder(true, cx)))
+                .unwrap();
+            let made = farhome.join("code/new-proj");
+            let want = made.to_string_lossy().into_owned();
+            let mut set = None;
+            for _ in 0..40 {
+                wait(100).await;
+                set = far.read_with(cx, |w, _| w.visual_space_folder(&picked));
+                if set.as_deref() == Some(want.as_str()) {
+                    break;
+                }
+            }
+            assert!(made.is_dir(), "no folder made on {host}");
+            assert_eq!(set.as_deref(), Some(want.as_str()), "{picked}'s folder on {host}");
+            shoot("far-folder-set.png", cx);
+            eprintln!("hosts folder PASS: {host}'s folders listed, one made there and set");
+        }
         eprintln!(
             "hosts PASS: {host} beside this sidebar, ⌘T in {picked}, home kept, {host} kept its tab, a space here came back"
         );

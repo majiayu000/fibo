@@ -264,6 +264,7 @@ mod layout;
 mod machines;
 mod menu_bar;
 mod recent_dirs;
+mod remote_folder;
 mod review_queue;
 #[cfg(feature = "visual-test")]
 pub use layout::ChangesProbe;
@@ -561,6 +562,7 @@ impl Workbench {
                 space_menu: None,
                 space_removing: false,
                 choosing_dir: None,
+                folder_field: None,
                 space_quieting: false,
                 adding_machine_space: None,
                 space_switch: false,
