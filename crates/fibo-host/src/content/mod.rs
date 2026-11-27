@@ -790,6 +790,7 @@ pub fn hook_facts(v: &Value) -> HookFacts {
         subagent: v["agent_id"].as_str().is_some_and(|id| !id.is_empty()),
         shells,
         question: hook_question(v),
+        source: v["source"].as_str().map(str::to_owned),
     }
 }
 mod hook_question;

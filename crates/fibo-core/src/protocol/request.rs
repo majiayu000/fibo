@@ -22,6 +22,9 @@ pub struct HookFacts {
     /// `tool_input`: Claude Code writes the call to its log only once it is answered.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub question: Option<(String, Vec<String>)>,
+    /// A SessionStart's `source` (`startup`, `resume`, `clear`, `compact`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HookShell {
