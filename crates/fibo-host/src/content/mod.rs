@@ -233,7 +233,7 @@ pub(crate) struct Call {
     source: Source,
     at: u64,
 }
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Parser {
     pub card: Content,
     /// The paths this turn pushed off the card's list of files, hashed.

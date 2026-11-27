@@ -8,6 +8,8 @@ mod cached_since;
 mod codex_children;
 #[path = "codex_first_turn_tests.rs"]
 mod codex_first_turn;
+#[path = "deletion_tests.rs"]
+mod deletion;
 #[path = "generation_tests.rs"]
 mod generation;
 #[path = "query_perf_tests.rs"]

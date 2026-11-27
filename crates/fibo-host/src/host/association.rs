@@ -61,6 +61,36 @@ pub(super) struct Association {
     pub(super) screened: HashMap<(String, String), u8>,
 }
 impl Association {
+    pub(super) fn apply_removals(
+        shared: &Shared,
+        index: &crate::log_index::Index,
+    ) -> io::Result<()> {
+        index.publish_removals(|paths| {
+            let paths: HashSet<&str> = paths.iter().map(String::as_str).collect();
+            let mut host = lock(shared)?;
+            let mut next = None;
+            for (position, session) in host.workspace.agent_sessions.iter().enumerate() {
+                if !paths.contains(session.transcript.as_str()) {
+                    continue;
+                }
+                // The same path may already have been recreated for a different session.
+                // Release the stale pointer so the previous session cannot read its records.
+                if !index
+                    .paths_for(session.runtime, &session.cli_session_id)?
+                    .contains(&session.transcript)
+                {
+                    let workspace = next.get_or_insert_with(|| host.workspace.clone());
+                    workspace.agent_sessions[position].transcript.clear();
+                    workspace.content.remove(&session.id);
+                }
+            }
+            if let Some(next) = next {
+                host.commit(next)?;
+            }
+            Ok(())
+        })
+    }
+
     pub(super) fn apply(
         &mut self,
         shared: &Shared,
@@ -150,7 +180,7 @@ impl Association {
                     session_position(positions.as_ref(), &next.agent_sessions, t)
                 {
                     let s = &mut next.agent_sessions[position];
-                    if let Some(card) = index.card(&t.path)? {
+                    if let Some(card) = index.card_for(t.runtime, &t.cli_id, &t.path)? {
                         if next.content.get(&s.id).is_some_and(|old| {
                             !card.turn_key.is_empty() && card.turn_key != old.turn_key
                         }) && s.outcome != fibo_core::model::Outcome::Open
@@ -313,6 +343,8 @@ pub(super) fn recover_logs(
     // Asked first: finishing forgets what was in a folder that is gone.
     let lost = index.lost_logs(scopes)?;
     index.finish_recovery(scopes)?;
+    let touched = index.take_touched();
+    association.apply(shared, index, &touched)?;
     // A folder that held logs and went away is repaired once its logs are forgotten:
     // recognition works, so the phase is Healthy and the detail says what went. Left
     // Interrupted, nothing ever cleared it (no later recovery runs for a gone folder),
@@ -428,11 +460,13 @@ pub(super) fn follow_associated(
     // Register first, then close the read/register race using the existing cursor.
     for path in watch.follow(&associated)? {
         if let Some(runtime) = index.runtime(&path) {
-            if let Some(t) = index.update(runtime, &path, true)? {
-                let mut found = vec![t];
-                found.extend(index.take_touched());
-                association.apply(shared, index, &found)?;
+            let changed = index.update(runtime, &path, true)?;
+            let mut found = index.take_touched();
+            if let Some(t) = changed {
+                found.insert(0, t);
             }
+            Association::apply_removals(shared, index)?;
+            association.apply(shared, index, &found)?;
         }
     }
     Ok(())
@@ -458,6 +492,7 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                 let mut watch = fibo_platform::file_watch::Watch::start(&roots, checkpoint)?;
                 lock(&shared)?.log_events = Some(watch.notifier());
                 index.bootstrap()?;
+                Association::apply_removals(&shared, &index)?;
                 publish_recognition(&shared, &index, RecognitionPhase::Healthy, "识别正常", &[])?;
                 let mut association = Association::default();
                 association.apply(&shared, &index, &index.cached()?)?;
@@ -524,9 +559,9 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                         lock(&shared)?.log_events = Some(watch.notifier());
                     }
                     if !scopes.is_empty() {
-                        if let Err(error) =
-                            recover_logs(&shared, &mut index, &mut association, &scopes)
-                        {
+                        let repaired = recover_logs(&shared, &mut index, &mut association, &scopes);
+                        Association::apply_removals(&shared, &index)?;
+                        if let Err(error) = repaired {
                             index.fail(&error)?;
                             publish_recognition(
                                 &shared,
@@ -552,6 +587,9 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                         }
                     }
                     let transcripts = index.update_many(paths, event_id)?;
+                    // Unlike metadata association, a failed removal must wake the
+                    // existing subscription retry even if no more events arrive.
+                    Association::apply_removals(&shared, &index)?;
                     if let Err(error) = association.apply(&shared, &index, &transcripts) {
                         eprintln!("Agent association deferred: {error}");
                     }
@@ -559,9 +597,10 @@ pub(super) fn start_subscription(shared: Shared, mut index: crate::log_index::In
                     // Only a real event drives retries of an earlier incomplete subtree.
                     let pending = index.recovery_scopes()?;
                     if !pending.is_empty() {
-                        if let Err(error) =
-                            recover_logs(&shared, &mut index, &mut association, &pending)
-                        {
+                        let repaired =
+                            recover_logs(&shared, &mut index, &mut association, &pending);
+                        Association::apply_removals(&shared, &index)?;
+                        if let Err(error) = repaired {
                             index.fail(&error)?;
                             publish_recognition(
                                 &shared,

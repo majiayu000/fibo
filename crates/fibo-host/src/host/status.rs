@@ -400,17 +400,33 @@ pub(super) fn apply_official(
         if !polled {
             continue;
         }
-        if let Some(card) = index.card(&session.transcript)? {
-            cards.push((session.id.clone(), card));
-        }
+        cards.push(session);
     }
     if !cards.is_empty() {
         let mut host = lock(shared)?;
         let mut next = host.workspace.clone();
-        for (id, card) in cards {
-            next.content.insert(id, std::sync::Arc::new(card));
+        let mut changed = false;
+        for session in cards {
+            if !next
+                .agent_sessions
+                .iter()
+                .any(|current| current.id == session.id && current.transcript == session.transcript)
+            {
+                continue;
+            }
+            if let Some(card) = index.card_for(
+                session.runtime,
+                &session.cli_session_id,
+                &session.transcript,
+            )? {
+                changed = true;
+                next.content
+                    .insert(session.id.clone(), std::sync::Arc::new(card));
+            }
         }
-        host.commit(next)?;
+        if changed {
+            host.commit(next)?;
+        }
     }
     match errors.is_empty() {
         true => Ok(()),

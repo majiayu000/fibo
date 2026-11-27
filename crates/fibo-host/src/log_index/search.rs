@@ -51,6 +51,24 @@ impl Index {
     }
 }
 
+// Sessions store the registered key ("Codex"); log cursors store the executable ("codex").
+fn register_log_runtime(db: &Connection) -> io::Result<()> {
+    let runtimes: std::collections::HashMap<_, _> = Agent::all()
+        .into_iter()
+        .map(|agent| (agent.key(), agent.executable()))
+        .collect();
+    db.create_scalar_function(
+        "message_log_runtime",
+        1,
+        FunctionFlags::SQLITE_DETERMINISTIC,
+        move |ctx| {
+            let key = ctx.get_raw(0).as_str()?;
+            Ok(runtimes.get(key).copied().unwrap_or(key).to_owned())
+        },
+    )
+    .map_err(err)
+}
+
 fn search(
     db: &Connection,
     query: &str,
@@ -62,6 +80,7 @@ fn search(
         return Ok((Vec::new(), None));
     }
     let sessions = serde_json::to_string(sessions).map_err(err)?;
+    register_log_runtime(db)?;
     let needle = SearchQuery::new(query);
     db.create_scalar_function(
         "message_search_position",
@@ -84,7 +103,10 @@ fn search(
                 SELECT s.id, r.path, r.at, r.kind, r.text, r.inode, r.offset, r.ordinal,
                        CASE WHEN ?9 THEN instr(lower(r.text), lower(?2))
                             ELSE message_search_position(r.text) END AS position
-                FROM agent_sessions s JOIN session_records r ON r.path = s.transcript
+                FROM agent_sessions s
+                JOIN log_files l ON l.path = s.transcript AND l.cli_id = s.cli_session_id
+                                AND l.runtime = message_log_runtime(s.runtime)
+                JOIN session_records r ON r.path = l.path
                 WHERE s.id IN (SELECT value FROM json_each(?1))
                   AND r.kind IN ('user','assistant')
                   AND (?4 IS NULL OR (r.at, s.id, r.inode, r.offset, r.ordinal) < (?4, ?5, ?6, ?7, ?8))
@@ -146,9 +168,13 @@ fn read_message(
     position: &MessagePosition,
     generation: &str,
 ) -> io::Result<Option<String>> {
+    register_log_runtime(db)?;
     db.prepare_cached(
         "SELECT r.text
-         FROM agent_sessions s JOIN session_records r ON r.path = s.transcript
+         FROM agent_sessions s
+         JOIN log_files l ON l.path = s.transcript AND l.cli_id = s.cli_session_id
+                         AND l.runtime = message_log_runtime(s.runtime)
+         JOIN session_records r ON r.path = l.path
          LEFT JOIN log_generations g ON g.path = r.path
          WHERE s.id = ?1 AND r.inode = ?2 AND r.offset = ?3 AND r.ordinal = ?4 AND r.at = ?5
            AND r.kind IN ('user','assistant') AND coalesce(g.generation, '') = ?6",
@@ -177,9 +203,13 @@ mod tests {
         let db = Connection::open_in_memory().unwrap();
         crate::content::schema(&db).unwrap();
         db.execute_batch(
-            "CREATE TABLE agent_sessions(id TEXT PRIMARY KEY, transcript TEXT NOT NULL);
+            "CREATE TABLE agent_sessions(id TEXT PRIMARY KEY, transcript TEXT NOT NULL,
+                                         runtime TEXT NOT NULL, cli_session_id TEXT NOT NULL);
+             CREATE TABLE log_files(path TEXT PRIMARY KEY, runtime TEXT NOT NULL, cli_id TEXT);
              CREATE TABLE log_generations(path TEXT PRIMARY KEY, generation TEXT NOT NULL);
-             INSERT INTO agent_sessions VALUES ('s', 'log'), ('hidden', 'other');
+             INSERT INTO agent_sessions VALUES ('s', 'log', 'Codex', 'old'),
+                                               ('hidden', 'other', 'Claude', 'separate');
+             INSERT INTO log_files VALUES ('log', 'codex', 'old'), ('other', 'claude', 'separate');
              INSERT INTO log_generations VALUES ('log', 'original');",
         )
         .unwrap();
@@ -263,6 +293,60 @@ mod tests {
             ids.into_iter().collect::<Vec<_>>(),
             (1..=207).collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn removed_or_reused_logs_cannot_supply_results_to_the_old_session() {
+        let db = fixture();
+        db.execute(
+            "INSERT INTO session_records VALUES ('log',1,10,0,10,'user','fixture old','',NULL)",
+            [],
+        )
+        .unwrap();
+        let old = ["s".into()];
+        let (hits, _) = search(&db, "fixture", &old, None).unwrap();
+        let previous = &hits[0];
+        assert_eq!(
+            read_message(&db, &previous.position, &previous.generation).unwrap(),
+            Some("fixture old".into())
+        );
+
+        db.execute("DELETE FROM log_files WHERE path='log'", [])
+            .unwrap();
+        assert!(search(&db, "fixture", &old, None).unwrap().0.is_empty());
+        assert!(read_message(&db, &previous.position, &previous.generation)
+            .unwrap()
+            .is_none());
+
+        db.execute_batch(
+            "INSERT INTO log_files VALUES ('log', 'claude', 'old');
+             INSERT INTO agent_sessions VALUES ('replacement', 'log', 'Claude', 'old');
+             UPDATE session_records SET text='fixture replacement' WHERE path='log';",
+        )
+        .unwrap();
+        let visible = ["s".into(), "replacement".into()];
+        let (hits, _) = search(&db, "fixture", &visible, None).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].position.session, "replacement");
+        assert!(read_message(&db, &previous.position, &previous.generation)
+            .unwrap()
+            .is_none());
+
+        db.execute_batch(
+            "UPDATE log_files SET runtime='codex',cli_id='new' WHERE path='log';
+             UPDATE agent_sessions SET runtime='Codex',cli_session_id='new' WHERE id='replacement';",
+        )
+        .unwrap();
+        let (hits, _) = search(&db, "fixture", &visible, None).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].position.session, "replacement");
+        assert_eq!(
+            read_message(&db, &hits[0].position, &hits[0].generation).unwrap(),
+            Some("fixture replacement".into())
+        );
+        assert!(read_message(&db, &previous.position, &previous.generation)
+            .unwrap()
+            .is_none());
     }
 
     #[test]

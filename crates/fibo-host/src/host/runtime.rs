@@ -221,7 +221,7 @@ pub(super) fn serve_runtime(
     let mut index = crate::log_index::Index::open(root, roots)?;
     index.recent_days = recent_days;
     for s in &workspace.agent_sessions {
-        if let Some(card) = index.card(&s.transcript)? {
+        if let Some(card) = index.card_for(s.runtime, &s.cli_session_id, &s.transcript)? {
             workspace
                 .content
                 .insert(s.id.clone(), std::sync::Arc::new(card));

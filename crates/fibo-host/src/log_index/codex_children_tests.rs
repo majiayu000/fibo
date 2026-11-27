@@ -288,3 +288,40 @@ fn an_official_answer_settles_a_running_parent_once_its_childs_dialog_is_over() 
     assert_eq!(card.turn, Turn::Waiting);
     assert!(card.waiting.starts_with("等待审批"), "{}", card.waiting);
 }
+
+#[test]
+fn deleting_a_child_log_ends_its_own_dialog_and_preserves_the_live_sibling() {
+    let f = Fixture::new();
+    let now = fibo_core::content::now();
+    let parent = seed(&f, "parent", None, now - 100);
+    let child = seed(&f, "review", Some("parent"), now - 80);
+    let sibling = seed(&f, "sibling", Some("parent"), now - 80);
+    let mut i = f.index();
+    i.update_many([parent.clone(), child.clone(), sibling.clone()], 1)
+        .unwrap();
+    child_needs_approval(&mut i, &child, now - 60);
+    assert_eq!(turn(&i, &parent), Turn::Waiting);
+
+    i.flush().unwrap();
+    fs::remove_file(&child).unwrap();
+    i.db.execute_batch(
+        "CREATE TRIGGER reject_parent BEFORE UPDATE ON session_content
+         WHEN old.path LIKE '%parent.jsonl'
+         BEGIN SELECT RAISE(ABORT, 'failed to save parent'); END;",
+    )
+    .unwrap();
+    assert!(i.update_many([child.clone()], 2).is_err());
+    assert_eq!(turn(&i, &parent), Turn::Waiting);
+    assert!(i.card(child.to_str().unwrap()).unwrap().is_some());
+    i.db.execute_batch("DROP TRIGGER reject_parent").unwrap();
+
+    let touched = i.update_many([child.clone()], 2).unwrap();
+    assert_eq!(touched[0].path, parent.to_str().unwrap());
+    assert_eq!(turn(&i, &parent), Turn::Running);
+    assert!(i.card(child.to_str().unwrap()).unwrap().is_none());
+    assert!(i.card(sibling.to_str().unwrap()).unwrap().is_some());
+    let restarted = f.index();
+    let card = restarted.card(parent.to_str().unwrap()).unwrap().unwrap();
+    assert_eq!(card.turn, Turn::Running);
+    assert!(card.waiting.is_empty());
+}

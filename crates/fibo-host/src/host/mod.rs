@@ -218,8 +218,10 @@ impl Host {
         if !open || s.transcript.is_empty() {
             return Ok(());
         }
-        self.index.answered(&s.transcript)?;
-        let Some(card) = self.index.card(&s.transcript)? else {
+        let cli = &s.cli_session_id;
+        let log = &s.transcript;
+        self.index.answered(s.runtime, cli, log)?;
+        let Some(card) = self.index.card_for(s.runtime, cli, log)? else {
             return Ok(());
         };
         let mut next = self.workspace.clone();

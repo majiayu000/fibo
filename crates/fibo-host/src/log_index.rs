@@ -10,6 +10,7 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 mod chat;
+mod deletion;
 mod elide;
 mod fork;
 mod recovery;
@@ -72,6 +73,7 @@ pub struct Held {
     entries: std::collections::HashMap<String, Entry>,
     /// The newest event folded into an unflushed entry.
     pending_event: Option<u64>,
+    removed: Vec<String>,
 }
 impl Held {
     fn oldest_dirty(&self) -> Option<std::time::Instant> {
@@ -368,27 +370,33 @@ impl Index {
     /// nothing wrong: it stays that way for as long as that CLI is not installed.
     pub fn lost_logs(&self, scopes: &[PathBuf]) -> io::Result<bool> {
         for scope in scopes.iter().filter(|p| !p.exists()) {
-            if !self.logs_under(scope)?.is_empty() {
+            if self.can_confirm_absence(scope)? && !self.logs_under(scope)?.is_empty() {
                 return Ok(true);
             }
         }
         Ok(false)
     }
     pub fn finish_recovery(&mut self, scopes: &[PathBuf]) -> io::Result<()> {
-        // Reconcile deletions missed during the gap, only inside the repaired subtree.
-        // Removing an index entry never deletes an AgentSession or its user-owned outcome.
+        // A completed scan may have missed deletion events inside its repaired subtree.
+        let gate = self.gate.clone();
+        let mut held = gate
+            .lock()
+            .map_err(|_| io::Error::other("log cursor lock poisoned"))?;
         for scope in scopes {
+            if !self.can_confirm_absence(scope)? {
+                continue;
+            }
             for path in self.logs_under(scope)? {
-                let remove = match fs::symlink_metadata(&path) {
-                    Ok(m) => !m.is_file(),
-                    Err(e) if e.kind() == io::ErrorKind::NotFound => true,
-                    Err(e) => return Err(e),
-                };
-                if remove {
-                    self.db
-                        .execute("DELETE FROM log_files WHERE path=?1", [path])
-                        .map_err(err)?;
-                    self.counts.writes += 1;
+                match fs::symlink_metadata(&path) {
+                    Ok(meta) if meta.is_file() => continue,
+                    Ok(_) => (),
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => (),
+                    Err(error) => return Err(error),
+                }
+                if let Err(error) = self.delete_log(&mut held, &path) {
+                    held.entries.clear();
+                    held.pending_event = None;
+                    return Err(error);
                 }
             }
         }
@@ -572,17 +580,35 @@ impl Index {
         Ok(out)
     }
     pub fn card(&self, path: &str) -> io::Result<Option<fibo_core::content::Content>> {
+        self.card_at(path, None)
+    }
+    pub fn card_for(
+        &self,
+        runtime: Agent,
+        cli_id: &str,
+        path: &str,
+    ) -> io::Result<Option<fibo_core::content::Content>> {
+        self.card_at(path, Some((runtime, cli_id)))
+    }
+    fn card_at(
+        &self,
+        path: &str,
+        owner: Option<(Agent, &str)>,
+    ) -> io::Result<Option<fibo_core::content::Content>> {
         let held = self
             .gate
             .lock()
-            .map_err(|_| io::Error::other("log cursor lock poisoned"))?
-            .entries
-            .get(path)
-            .map(|e| e.parser.card.clone());
-        let mut card = match held {
-            Some(card) => Some(card),
-            None => crate::content::card(&self.db, path)?,
+            .map_err(|_| io::Error::other("log cursor lock poisoned"))?;
+        let mut card = match held.entries.get(path) {
+            Some(e) => owner
+                .is_none_or(|(runtime, id)| {
+                    e.runtime == runtime
+                        && e.cursor.identity.as_ref().is_some_and(|(key, _)| key == id)
+                })
+                .then(|| e.parser.card.clone()),
+            None => crate::content::card(&self.db, path, owner)?,
         };
+        drop(held);
         if let Some(c) = card.as_mut().filter(|c| c.name.is_empty()) {
             let path = Path::new(path);
             if let Some((agent, root)) = self.roots.iter().find(|(_, r)| path.starts_with(r)) {

@@ -1,21 +1,23 @@
 //! The write path: reading a log's new lines into its card and flushing them.
-use super::*;
+use super::{deletion::indexed_inode, *};
 
 impl Index {
     pub fn hook(
         &self,
+        runtime: Agent,
+        cli_id: &str,
         path: &str,
         event: &str,
         facts: &fibo_core::protocol::HookFacts,
     ) -> io::Result<()> {
-        self.amend(path, |parser, at, source| {
+        self.amend(runtime, cli_id, path, |parser, at, source| {
             parser.hook(event, facts, at, source);
             Ok(())
         })
     }
     /// The user's input answered what the session waits on (`Content::answer`).
-    pub fn answered(&self, path: &str) -> io::Result<()> {
-        self.amend(path, |parser, at, _| {
+    pub fn answered(&self, runtime: Agent, cli_id: &str, path: &str) -> io::Result<()> {
+        self.amend(runtime, cli_id, path, |parser, at, _| {
             parser.card.answer(at);
             Ok(())
         })
@@ -33,7 +35,7 @@ impl Index {
         if status.is_none() && !self.waits_on_child(path)? {
             return Ok(false);
         }
-        self.amend(path, |parser, at, source| {
+        self.amend(runtime, cli_id, path, |parser, at, source| {
             if parser.waits_on_child() {
                 let started = parser.card.turn_started;
                 let kids = crate::content::children(&self.db, runtime, cli_id, at, started)?;
@@ -59,6 +61,8 @@ impl Index {
     /// Applies a live signal that has no transcript offset; its source is the arrival time.
     fn amend(
         &self,
+        runtime: Agent,
+        cli_id: &str,
         path: &str,
         apply: impl FnOnce(
             &mut crate::content::Parser,
@@ -80,6 +84,14 @@ impl Index {
         };
         // A log being read: its entry takes the signal and is written with its cursor.
         if let Some(e) = held.entries.get_mut(path) {
+            if e.runtime != runtime
+                || e.cursor
+                    .identity
+                    .as_ref()
+                    .is_none_or(|(id, _)| id != cli_id)
+            {
+                return Ok(());
+            }
             apply(&mut e.parser, fibo_core::content::now(), source)?;
             let tx = self.db.unchecked_transaction().map_err(err)?;
             let written = write_cursor(&tx, path, e.runtime, &e.cursor)
@@ -92,6 +104,9 @@ impl Index {
                 held.entries.remove(path);
             }
             return written;
+        }
+        if indexed_inode(&self.db, runtime, cli_id, path)?.is_none() {
+            return Ok(());
         }
         let mut parser = crate::content::load(&self.db, path)?;
         apply(&mut parser, fibo_core::content::now(), source)?;
@@ -225,6 +240,7 @@ impl Index {
             .lock()
             .map_err(|_| io::Error::other("log cursor lock poisoned"))?;
         self.db.execute_batch("BEGIN IMMEDIATE").map_err(err)?;
+        let previous_removals = held.removed.len();
         let result = (|| {
             let mut found = vec![];
             for path in paths {
@@ -255,7 +271,11 @@ impl Index {
             }
             Ok(found)
         })();
-        self.finish(&mut held, result)
+        let result = self.finish(&mut held, result);
+        if result.is_err() {
+            held.removed.truncate(previous_removals);
+        }
+        result
     }
     /// The adapter maps its own metadata layout back to the parent transcript. A child
     /// can start or finish without appending anything to that parent's log.
@@ -335,6 +355,19 @@ impl Index {
             return Ok(None);
         }
         let key = path.to_string_lossy().into_owned();
+        // Confirm that the log root is available before interpreting an absent file.
+        // The last component is never followed through a symlink.
+        let meta = match fs::symlink_metadata(path) {
+            Ok(meta) => Some(meta),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error),
+        };
+        let Some(meta) = meta.filter(|meta| meta.is_file()) else {
+            if self.can_confirm_absence(path)? {
+                self.delete_log(held, &key)?;
+            }
+            return Ok(None);
+        };
         // The entry, when this log is held, is newer than the database.
         let entry = held.entries.remove(&key);
         let ahead = entry.as_ref().and_then(|e| e.dirty);
@@ -351,19 +384,6 @@ impl Index {
         }).optional().map_err(err)?;
                 cursor.is_some()
             };
-        // No symlink traversal in event handling, just as in the initial directory walk.
-        let meta = match fs::symlink_metadata(path) {
-            Ok(m) if m.is_file() => m,
-            Ok(_) => return Ok(None),
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {
-                self.db
-                    .execute("DELETE FROM log_files WHERE path=?1", [&key])
-                    .map_err(err)?;
-                self.counts.writes += 1;
-                return Ok(None);
-            }
-            Err(e) => return Err(e),
-        };
         let id = fibo_platform::fs::file_id(path, &meta)?;
         let updated = meta
             .modified()?
@@ -613,48 +633,17 @@ impl Index {
         if now_written {
             crate::content::save_state(&tx, &key, &parser)?;
         }
-        if let Some(parent) = parent {
-            let row = tx
-                .prepare_cached("SELECT cli_id,path,cwd,updated FROM log_files WHERE runtime=?2 AND cli_id=?1 LIMIT 1")
-                .map_err(err)?
-                .query_row([parent.as_str(), runtime.executable()], |r| {
-                    Ok(Transcript {
-                        runtime,
-                        cli_id: r.get(0)?,
-                        path: r.get(1)?,
-                        cwd: r.get(2)?,
-                        updated: r.get::<_, i64>(3)? as u64,
-                    })
-                })
-                .optional()
-                .map_err(err)?;
-            if let Some(t) = row.filter(|t| t.path != key) {
-                if let Some(e) = held.entries.get_mut(&t.path) {
-                    let kids = crate::content::children(
-                        &tx,
-                        runtime,
-                        &parent,
-                        now,
-                        e.parser.card.turn_started,
-                    )?;
-                    e.parser.children(&kids, now, live(&t.path));
-                    e.dirty.get_or_insert_with(std::time::Instant::now);
-                } else {
-                    let mut owner = crate::content::load(&tx, &t.path)?;
-                    let kids = crate::content::children(
-                        &tx,
-                        runtime,
-                        &parent,
-                        now,
-                        owner.card.turn_started,
-                    )?;
-                    owner.children(&kids, now, live(&t.path));
-                    crate::content::save(&tx, &t.path, &owner)?;
-                }
-                self.touched.push(t);
-            }
-        }
+        let touched = if let Some(parent) = parent {
+            refresh_parent(&tx, held, runtime, &parent, &key, false)?
+        } else {
+            None
+        };
         tx.commit().map_err(err)?;
+        if replaced {
+            // A replacement can be the only event for a removed path.
+            held.removed.push(key.clone());
+        }
+        self.touched.extend(touched.map(|p| p.publish(held)));
         self.counts.writes += 1;
         let found = c.identity.clone().map(|(cli_id, cwd)| Transcript {
             runtime,
@@ -707,4 +696,80 @@ fn keep_turn_start(
     parser
         .records
         .extend((probe.records.into_iter()).filter(|r| r.kind == "turn" && r.text == "Running"));
+}
+
+pub(super) struct ParentRefresh {
+    transcript: Transcript,
+    parser: Option<crate::content::Parser>,
+}
+
+impl ParentRefresh {
+    pub(super) fn publish(self, held: &mut Held) -> Transcript {
+        if let (Some(parser), Some(e)) = (self.parser, held.entries.get_mut(&self.transcript.path))
+        {
+            e.parser = parser;
+            e.dirty = None;
+        }
+        self.transcript
+    }
+}
+
+/// Rebuild the one parent projection affected by a child log change.
+pub(super) fn refresh_parent(
+    db: &Connection,
+    held: &mut Held,
+    runtime: Agent,
+    parent: &str,
+    child_path: &str,
+    persist: bool,
+) -> io::Result<Option<ParentRefresh>> {
+    let row = db
+        .prepare_cached(
+            "SELECT cli_id,path,cwd,updated FROM log_files WHERE runtime=?2 AND cli_id=?1 LIMIT 1",
+        )
+        .map_err(err)?
+        .query_row([parent, runtime.executable()], |r| {
+            Ok(Transcript {
+                runtime,
+                cli_id: r.get(0)?,
+                path: r.get(1)?,
+                cwd: r.get(2)?,
+                updated: r.get::<_, i64>(3)? as u64,
+            })
+        })
+        .optional()
+        .map_err(err)?;
+    let Some(t) = row.filter(|t| t.path != child_path) else {
+        return Ok(None);
+    };
+    let now = fibo_core::content::now();
+    let source = fibo_core::content::Source {
+        path: t.path.clone(),
+        offset: now,
+        ..Default::default()
+    };
+    let parser = if let Some(e) = held.entries.get_mut(&t.path) {
+        let kids = crate::content::children(db, runtime, parent, now, e.parser.card.turn_started)?;
+        if persist {
+            let mut updated = e.parser.clone();
+            updated.children(&kids, now, source);
+            write_cursor(db, &t.path, e.runtime, &e.cursor)?;
+            crate::content::save_state(db, &t.path, &updated)?;
+            Some(updated)
+        } else {
+            e.parser.children(&kids, now, source);
+            e.dirty.get_or_insert_with(std::time::Instant::now);
+            None
+        }
+    } else {
+        let mut owner = crate::content::load(db, &t.path)?;
+        let kids = crate::content::children(db, runtime, parent, now, owner.card.turn_started)?;
+        owner.children(&kids, now, source);
+        crate::content::save(db, &t.path, &owner)?;
+        None
+    };
+    Ok(Some(ParentRefresh {
+        transcript: t,
+        parser,
+    }))
 }

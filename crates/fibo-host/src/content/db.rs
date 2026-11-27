@@ -23,11 +23,25 @@ pub fn load(db: &Connection, path: &str) -> io::Result<Parser> {
         .map(|s| serde_json::from_str(&s).map_err(db_err))
         .unwrap_or_else(|| Ok(Parser::default()))
 }
-pub fn card(db: &Connection, path: &str) -> io::Result<Option<Content>> {
+pub fn card(
+    db: &Connection,
+    path: &str,
+    owner: Option<(Agent, &str)>,
+) -> io::Result<Option<Content>> {
     let value: Option<String> = db
-        .prepare_cached("SELECT projection FROM session_content WHERE path=?1")
+        .prepare_cached(
+            "SELECT c.projection FROM session_content c JOIN log_files l USING(path)
+             WHERE l.path=?1 AND (?2 IS NULL OR (l.runtime=?2 AND l.cli_id=?3))",
+        )
         .map_err(db_err)?
-        .query_row([path], |r| r.get(0))
+        .query_row(
+            params![
+                path,
+                owner.map(|(runtime, _)| runtime.executable()),
+                owner.map(|(_, id)| id)
+            ],
+            |r| r.get(0),
+        )
         .optional()
         .map_err(db_err)?;
     value

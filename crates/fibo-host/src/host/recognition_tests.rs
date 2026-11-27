@@ -444,6 +444,166 @@ fn large_log_batch_keeps_existing_identities_and_applies_duplicate_paths_in_orde
     fs::remove_dir_all(root).unwrap();
 }
 
+#[test]
+fn a_removed_log_clears_the_published_card_but_keeps_the_session_and_outcome() {
+    let root = std::env::temp_dir().join(format!("fibo-removed-card-{}", uuid::Uuid::new_v4()));
+    let logs = root.join("logs");
+    fs::create_dir_all(&logs).unwrap();
+    let root = root.canonicalize().unwrap();
+    let logs = root.join("logs");
+    let log = logs.join("old.jsonl");
+    let write_log = |path: &std::path::Path, id: &str, text: &str| {
+        let meta = serde_json::json!({
+            "type":"session_meta", "payload":{"id":id,"cwd":"/tmp"}
+        });
+        let message = serde_json::json!({
+            "type":"event_msg", "payload":{"type":"user_message","message":text}
+        });
+        let call = serde_json::json!({
+            "type":"response_item",
+            "payload":{"type":"function_call","name":"list","call_id":id,"arguments":"{}"}
+        });
+        fs::write(path, format!("{meta}\n{message}\n{call}\n")).unwrap();
+    };
+    write_log(&log, "old", "test prompt");
+    let mut index = crate::log_index::Index::open(&root, vec![(Agent::Codex, logs)]).unwrap();
+    let checkpoint = index.initialize().unwrap();
+    let shared = shared_host(&root, &index);
+    let mut association = Association::default();
+    let batch = index.update_many([log.clone()], checkpoint + 1).unwrap();
+    association.apply(&shared, &index, &batch).unwrap();
+    let (id, revision) = {
+        let mut host = lock(&shared).unwrap();
+        let mut next = host.workspace.clone();
+        let session = &mut next.agent_sessions[0];
+        session.outcome = fibo_core::model::Outcome::Completed;
+        let id = session.id.clone();
+        host.commit(next).unwrap();
+        assert_eq!(host.snapshot().content[&id].title, "test prompt");
+        (id, host.workspace.revision)
+    };
+
+    fs::remove_file(&log).unwrap();
+    assert!(index
+        .update_many([log.clone()], checkpoint + 2)
+        .unwrap()
+        .is_empty());
+    // The path is reused before the host receives the removal.
+    write_log(&log, "new", "new prompt");
+    let batch = index.update_many([log.clone()], checkpoint + 3).unwrap();
+    // Model a crash after the index committed, before the host saved its new
+    // workspace. A new index has no Held entries or pending removals.
+    let (cold_store, cold_workspace) = Store::open(&root).unwrap();
+    let cold_index =
+        crate::log_index::Index::open(&root, vec![(Agent::Codex, root.join("logs"))]).unwrap();
+    let stored = cold_workspace
+        .agent_sessions
+        .iter()
+        .find(|s| s.id == id)
+        .unwrap();
+    assert_eq!(stored.transcript, log.to_str().unwrap());
+    assert!(cold_index
+        .card_for(stored.runtime, &stored.cli_session_id, &stored.transcript)
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        cold_index
+            .card_for(Agent::Codex, "new", &stored.transcript)
+            .unwrap()
+            .unwrap()
+            .title,
+        "new prompt",
+    );
+    drop((cold_store, cold_index));
+
+    let chat = super::client::dispatch(
+        &shared,
+        Request::Chat {
+            session: id.clone(),
+            after: None,
+            before: None,
+            limit: 10,
+            tools: true,
+        },
+    )
+    .unwrap();
+    assert!(matches!(chat, Reply::Chat { ref messages, .. } if messages.is_empty()));
+    assert!(index
+        .tool_call(log.to_str().unwrap(), "new")
+        .unwrap()
+        .is_some());
+    assert!(super::client::dispatch(
+        &shared,
+        Request::ToolCall {
+            session: id.clone(),
+            call: "new".into(),
+        }
+    )
+    .is_err());
+    Association::apply_removals(&shared, &index).unwrap();
+    association.apply(&shared, &index, &batch).unwrap();
+    let host = lock(&shared).unwrap();
+    let snapshot = host.snapshot();
+    assert!(!host.workspace.content.contains_key(&id));
+    assert!(!snapshot.content.contains_key(&id));
+    assert!(snapshot.revision > revision);
+    let session = snapshot.agent_sessions.iter().find(|s| s.id == id).unwrap();
+    assert_eq!(session.outcome, fibo_core::model::Outcome::Completed);
+    assert!(session.transcript.is_empty());
+    let new = snapshot
+        .agent_sessions
+        .iter()
+        .find(|s| s.cli_session_id == "new")
+        .unwrap();
+    assert_eq!(new.transcript, log.to_str().unwrap());
+    assert_eq!(snapshot.content[&new.id].title, "new prompt");
+    drop(host);
+
+    // A file can also be replaced between two visits without a separate removal.
+    let replacement = root.join("replacement.jsonl");
+    write_log(&replacement, "replacement", "replacement prompt");
+    fs::rename(replacement, &log).unwrap();
+    let batch = index.update_many([log], checkpoint + 4).unwrap();
+    let db = rusqlite::Connection::open(root.join("workbench.sqlite")).unwrap();
+    db.execute_batch(
+        "CREATE TRIGGER reject_workspace_commit BEFORE UPDATE ON meta
+         BEGIN SELECT RAISE(ABORT, 'failed to publish removal'); END;",
+    )
+    .unwrap();
+    assert!(Association::apply_removals(&shared, &index).is_err());
+    assert_eq!(
+        lock(&shared).unwrap().snapshot().content[&new.id].title,
+        "new prompt"
+    );
+
+    db.execute_batch("DROP TRIGGER reject_workspace_commit")
+        .unwrap();
+    drop(db);
+    // The index checkpoint already includes the deletion. The same index bootstraps
+    // after the subscription error, so it must publish the queued removal unaided.
+    assert_eq!(index.initialize().unwrap(), checkpoint + 4);
+    index.bootstrap().unwrap();
+    Association::apply_removals(&shared, &index).unwrap();
+    association.apply(&shared, &index, &batch).unwrap();
+    let snapshot = lock(&shared).unwrap().snapshot();
+    let previous = snapshot
+        .agent_sessions
+        .iter()
+        .find(|s| s.cli_session_id == "new")
+        .unwrap();
+    assert!(previous.transcript.is_empty());
+    assert!(!snapshot.content.contains_key(&previous.id));
+    let latest = snapshot
+        .agent_sessions
+        .iter()
+        .find(|s| s.cli_session_id == "replacement")
+        .unwrap();
+    assert_eq!(snapshot.content[&latest.id].title, "replacement prompt");
+    drop(shared);
+    drop(index);
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// A host over `root`'s store with nothing running, for driving recognition by hand.
 fn shared_host(root: &std::path::Path, index: &crate::log_index::Index) -> Shared {
     let (store, workspace) = Store::open(root).unwrap();
