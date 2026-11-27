@@ -1,5 +1,6 @@
 use crate::{pty, store::Store};
 use fibo_core::{
+    content::Content,
     model::*,
     protocol::*,
     terminal::{CellPixels, Vt},
@@ -105,9 +106,9 @@ struct Host {
     screen_answered: HashMap<String, std::time::Instant>,
     /// Terminal -> the conversation whose title spins there and since when (seconds since
     /// the epoch). Live evidence only, like `screen_waits`: never stored.
-    title_busy: HashMap<String, (String, u64)>,
+    title_busy: HashMap<String, BusyCue>,
     /// The same read off the screen's ticking working line, for CLIs whose title is off.
-    screen_busy: HashMap<String, (String, u64)>,
+    screen_busy: HashMap<String, BusyCue>,
     /// Session -> last `claude agents --json` run for it, the per-session rate limit.
     reconciled: HashMap<String, Instant>,
     /// What the plugins' hooks last heard, so each state change reaches them once.
@@ -117,14 +118,54 @@ struct Host {
     /// Which background shells of stopped turns are jobs the agent waits for.
     shell_watch: shell_watch::ShellWatch,
 }
+struct BusyCue {
+    session: String,
+    since: u64,
+    seen_end: Option<(u64, String)>,
+}
+impl BusyCue {
+    fn new(session: &str, since: u64, previous: Option<&Content>) -> Self {
+        Self {
+            session: session.into(),
+            since,
+            seen_end: previous
+                .and_then(Content::ended_turn)
+                .map(|(at, key)| (at, key.to_owned())),
+        }
+    }
+
+    fn after(&self, ended: Option<(u64, &str)>) -> bool {
+        ended.is_none_or(|(at, key)| {
+            self.since > at
+                || (self.since == at
+                    && self
+                        .seen_end
+                        .as_ref()
+                        .is_some_and(|(t, k)| *t == at && k == key))
+        })
+    }
+}
+
 /// Records which conversation a live cue says is running on `terminal`, since when;
 /// whether that changed. Only a turn starting or stopping is news.
-fn cue(cues: &mut HashMap<String, (String, u64)>, terminal: &str, busy: Option<String>) -> bool {
-    if cues.get(terminal).map(|(id, _)| id) == busy.as_ref() {
+fn cue(
+    cues: &mut HashMap<String, BusyCue>,
+    terminal: &str,
+    busy: Option<&str>,
+    workspace: &Workspace,
+) -> bool {
+    if cues.get(terminal).map(|cue| cue.session.as_str()) == busy {
         return false;
     }
     match busy {
-        Some(id) => cues.insert(terminal.into(), (id, fibo_core::content::now())),
+        Some(id) => cues.insert(
+            terminal.into(),
+            BusyCue::new(
+                id,
+                fibo_core::content::now(),
+                workspace.content.get(id).map(Arc::as_ref),
+            ),
+        ),
         None => cues.remove(terminal),
     };
     true
@@ -572,9 +613,9 @@ impl Host {
             crate::agents::adapter(s.runtime)
                 .title_busy(title)
                 .filter(|busy| *busy)
-                .map(|_| s.id.clone())
+                .map(|_| s.id.as_str())
         });
-        if cue(&mut self.title_busy, terminal, busy) {
+        if cue(&mut self.title_busy, terminal, busy, &self.workspace) {
             // Nothing to store; a new revision makes clients fetch the overlaid snapshot.
             let next = self.workspace.clone();
             self.commit(next)?;
@@ -593,9 +634,9 @@ impl Host {
             crate::agents::adapter(s.runtime)
                 .screen_busy(tail)
                 .filter(|busy| *busy)
-                .map(|_| s.id.clone())
+                .map(|_| s.id.as_str())
         });
-        if cue(&mut self.screen_busy, terminal, busy) {
+        if cue(&mut self.screen_busy, terminal, busy, &self.workspace) {
             let next = self.workspace.clone();
             self.commit(next)?;
         }

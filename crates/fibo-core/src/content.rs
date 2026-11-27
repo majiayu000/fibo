@@ -262,6 +262,12 @@ impl Content {
     }
 }
 impl Content {
+    /// Identity of the recorded end, used to order live cues within the same second.
+    pub fn ended_turn(&self) -> Option<(u64, &str)> {
+        matches!(self.turn, Turn::Completed | Turn::Interrupted)
+            .then_some((self.signal_at, self.turn_key.as_str()))
+    }
+
     /// The files the current turn touched, oldest first.
     pub fn turn_files(&self) -> impl DoubleEndedIterator<Item = &Touch> {
         self.files.iter().filter(|t| t.at >= self.turn_started)

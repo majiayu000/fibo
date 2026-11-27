@@ -28,14 +28,26 @@ impl Host {
         // the tail of a long turn was read. Never the other way: a still title proves
         // nothing the log has not said.
         for s in w.agent_sessions.iter().filter(|s| s.current) {
-            let busy = |cues: &HashMap<String, (String, u64)>| {
-                s.terminal
-                    .as_ref()
-                    .and_then(|t| cues.get(t))
-                    .filter(|(id, _)| *id == s.id)
-                    .map(|(_, since)| *since)
+            let Some(terminal) = &s.terminal else {
+                continue;
             };
-            let (since, cue, detail) = match (busy(&self.title_busy), busy(&self.screen_busy)) {
+            let title = self.title_busy.get(terminal);
+            let screen = self.screen_busy.get(terminal);
+            if title.is_none() && screen.is_none() {
+                continue;
+            }
+            let Some(c) = w.content.get_mut(&s.id) else {
+                continue;
+            };
+            // In the same second, only cues first seen after the recorded end can start
+            // a new turn. Repeated observations of an old spinner keep its original time.
+            use fibo_core::content::Turn;
+            let ended = c.ended_turn();
+            let since = |cue: Option<&BusyCue>| {
+                cue.filter(|cue| cue.session == s.id && cue.after(ended))
+                    .map(|cue| cue.since)
+            };
+            let (since, cue, detail) = match (since(title), since(screen)) {
                 (Some(since), _) => (since, "标题", "终端标题在转圈，日志里还没看到这一轮"),
                 (None, Some(since)) => (
                     since,
@@ -44,13 +56,8 @@ impl Host {
                 ),
                 (None, None) => continue,
             };
-            let Some(c) = w.content.get_mut(&s.id) else {
-                continue;
-            };
-            let working = matches!(
-                c.turn,
-                fibo_core::content::Turn::Running | fibo_core::content::Turn::Waiting
-            ) || c.background.is_some_and(|b| b.keeps_working());
+            let working = matches!(c.turn, Turn::Running | Turn::Waiting)
+                || c.background.is_some_and(|b| b.keeps_working());
             // A dialog answered on the screen: the prompt is gone and the turn is ticking
             // again, started after the dialog was reported. No hook says so until the
             // approved tool finishes, which can be minutes.
@@ -59,23 +66,22 @@ impl Host {
                 .as_ref()
                 .and_then(|t| self.screen_waits.get(t))
                 .is_some_and(|e| e.question().is_some());
-            let answered =
-                c.turn == fibo_core::content::Turn::Waiting && !asking && since >= c.signal_at;
+            let answered = c.turn == Turn::Waiting && !asking && since >= c.signal_at;
             // A turn already running is left as the host holds it, not copied.
             if working && !answered {
                 continue;
             }
             let c = std::sync::Arc::make_mut(c);
             if !working {
-                c.turn = fibo_core::content::Turn::Running;
+                c.turn = Turn::Running;
                 c.turn_started = since;
                 c.signal = cue.into();
                 c.signal_at = since;
                 c.signal_detail = detail.into();
             }
             if answered {
-                c.turn = fibo_core::content::Turn::Running;
-                c.end_wait(fibo_core::content::Turn::Waiting, since);
+                c.turn = Turn::Running;
+                c.end_wait(Turn::Waiting, since);
                 c.waiting.clear();
                 c.choices.clear();
                 c.signal = cue.into();
