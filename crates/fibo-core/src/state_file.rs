@@ -1,21 +1,30 @@
-//! Reading a JSON state file that is about to be changed and written back. A file that is not
-//! there is empty; one that cannot be read or parsed is unknown, and writing over it would
-//! lose what it holds with no one told. Readers that only look may still take it as empty.
+//! A missing state file is empty. One that cannot be read or parsed is unknown, and
+//! writing over it would lose what it holds.
 use serde::de::DeserializeOwned;
 use std::io;
 use std::path::Path;
 
+/// A genuinely absent file is empty. A dangling link still points to state we cannot read.
+pub(crate) fn read_if_present(path: &Path) -> io::Result<Option<Vec<u8>>> {
+    match std::fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(e)
+            if e.kind() == io::ErrorKind::NotFound
+                && matches!(std::fs::symlink_metadata(path), Err(m) if m.kind() == io::ErrorKind::NotFound) =>
+        {
+            Ok(None)
+        }
+        Err(e) => Err(io::Error::new(
+            e.kind(),
+            t!("读不了 {path}，未改动：{e}", path = path.display(), e),
+        )),
+    }
+}
+
 /// `T::default()` when the file is not there, an error naming it when it cannot be understood.
 pub fn read_for_update<T: DeserializeOwned + Default>(path: &Path) -> io::Result<T> {
-    let bytes = match std::fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(T::default()),
-        Err(e) => {
-            return Err(io::Error::new(
-                e.kind(),
-                t!("读不了 {path}，未改动：{e}", path = path.display(), e),
-            ));
-        }
+    let Some(bytes) = read_if_present(path)? else {
+        return Ok(T::default());
     };
     serde_json::from_slice(&bytes).map_err(|e| {
         io::Error::new(
@@ -33,6 +42,17 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("kl-state-{}-{name}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir.join("state.json")
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_dangling_link_is_unreadable_state() {
+        let file = scratch("dangling");
+        let _ = std::fs::remove_file(&file);
+        std::os::unix::fs::symlink("missing.json", &file).unwrap();
+        let why = read_for_update::<Vec<String>>(&file).unwrap_err();
+        assert!(why.to_string().contains("state.json"), "{why}");
+        std::fs::remove_file(&file).unwrap();
     }
 
     #[test]

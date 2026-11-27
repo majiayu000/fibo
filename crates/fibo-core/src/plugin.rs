@@ -349,6 +349,7 @@ pub fn uninstall(id: &str, force: bool) -> Result<Option<String>, String> {
 
 pub fn uninstall_in(plugins: &Path, id: &str, force: bool) -> Result<Option<String>, String> {
     let _held = lock(plugins)?;
+    let mut off = disabled(plugins).map_err(|e| e.to_string())?;
     let mut warnings = Vec::new();
     let found = discover(plugins);
     let loaded = found
@@ -412,7 +413,6 @@ pub fn uninstall_in(plugins: &Path, id: &str, force: bool) -> Result<Option<Stri
             e
         ));
     }
-    let mut off = disabled(plugins);
     if off.contains(&data_id) {
         off.retain(|d| *d != data_id);
         write_switches(plugins, &off).map_err(|e| t!("没能更新插件开关：{e}", e))?;
@@ -465,25 +465,20 @@ fn declared_id(dir: &Path) -> Option<String> {
 fn switches(plugins: &Path) -> PathBuf {
     plugins.join("disabled.json")
 }
-fn disabled(plugins: &Path) -> Vec<String> {
-    std::fs::read(switches(plugins))
-        .ok()
-        .and_then(|b| serde_json::from_slice(&b).ok())
-        .unwrap_or_default()
-}
-/// For a change that is written back: what is turned off, or why that cannot be known.
-fn disabled_for_update(plugins: &Path) -> std::io::Result<Vec<String>> {
+pub(crate) fn disabled(plugins: &Path) -> std::io::Result<Vec<String>> {
     crate::state_file::read_for_update(&switches(plugins))
 }
-/// Whether the plugin with this id is turned off in the plugins directory `plugins`.
+/// Whether to keep the plugin off, including when its saved switch cannot be read.
 pub fn turned_off(plugins: &Path, id: &str) -> bool {
-    disabled(plugins).iter().any(|d| d == id)
+    disabled(plugins).map_or(true, |off| off.iter().any(|d| d == id))
 }
 /// Whether the plugin will load at the next start: what settings show its switch as.
 pub fn enabled_next_start(id: &str) -> bool {
-    CONFIG
-        .get()
-        .is_none_or(|c| !disabled(&dir(c)).iter().any(|d| d == id))
+    CONFIG.get().is_none_or(|c| !turned_off(&dir(c), id))
+}
+/// Why the saved switches cannot be read, to show beside the installed plugins.
+pub fn switch_error() -> Option<String> {
+    disabled(&dir(CONFIG.get()?)).err().map(|e| e.to_string())
 }
 /// Turns a plugin on or off; `reload` applies it to the running process. A plugin whose
 /// setup fails stays off, with what it managed undone as far as its teardown can. A failing
@@ -501,7 +496,7 @@ pub fn set_enabled_in(
 ) -> Result<Option<String>, String> {
     use crate::setup::Phase;
     let _held = lock(plugins)?;
-    let mut off = disabled_for_update(plugins).map_err(|e| e.to_string())?;
+    let mut off = disabled(plugins).map_err(|e| e.to_string())?;
     let was_on = !off.iter().any(|d| d == id);
     let mut warning = None;
     if was_on != on
@@ -533,7 +528,7 @@ pub fn set_enabled_in(
 /// Marks it off without running anything: its setup just failed, so its teardown has had
 /// its chance and turning it on later runs the setup again.
 pub(crate) fn mark_off(plugins: &Path, id: &str) -> std::io::Result<()> {
-    let mut off = disabled_for_update(plugins)?;
+    let mut off = disabled(plugins)?;
     if !off.iter().any(|d| d == id) {
         off.push(id.to_owned());
     }
@@ -542,9 +537,7 @@ pub(crate) fn mark_off(plugins: &Path, id: &str) -> std::io::Result<()> {
 
 fn write_switches(plugins: &Path, off: &[String]) -> std::io::Result<()> {
     std::fs::create_dir_all(plugins)?;
-    let tmp = plugins.join(".disabled.json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(off)?)?;
-    std::fs::rename(tmp, switches(plugins))
+    fibo_platform::fs::write_private(&switches(plugins), &serde_json::to_vec_pretty(off)?)
 }
 
 /// Every plugin directory's outcome since `install`; empty before it.
@@ -595,6 +588,16 @@ pub fn dir(config: &Path) -> PathBuf {
 
 /// Every plugin directory under `plugins`, by name; a later id already taken is refused.
 pub fn discover(plugins: &Path) -> Vec<Found> {
+    discover_with_switches(plugins, disabled(plugins).ok().as_deref())
+}
+
+/// Selects installed plugins for a manual trial only when the switches can be read.
+pub fn discover_for_trial(plugins: &Path) -> std::io::Result<Vec<Found>> {
+    let off = disabled(plugins)?;
+    Ok(discover_with_switches(plugins, Some(&off)))
+}
+
+fn discover_with_switches(plugins: &Path, off: Option<&[String]>) -> Vec<Found> {
     let mut dirs: Vec<PathBuf> = match std::fs::read_dir(plugins) {
         Ok(entries) => entries
             .filter_map(|e| e.ok().map(|e| e.path()))
@@ -608,11 +611,10 @@ pub fn discover(plugins: &Path) -> Vec<Found> {
         Err(_) => return vec![],
     };
     dirs.sort();
-    let off = disabled(plugins);
     let mut found: Vec<Found> = Vec::new();
     for dir in dirs {
         let mut result = read(&dir).map(|mut p| {
-            p.enabled = !off.contains(&p.id);
+            p.enabled = off.is_some_and(|off| !off.contains(&p.id));
             p
         });
         if let Ok(plugin) = &result

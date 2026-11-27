@@ -115,9 +115,20 @@ pub(super) fn try_run(
     cwd: Option<String>,
     send: bool,
 ) -> io::Result<()> {
+    try_run_in(&plugins_dir()?, id, declaration, event, cwd, send)
+}
+
+fn try_run_in(
+    plugins: &Path,
+    id: &str,
+    declaration: &str,
+    event: Option<String>,
+    cwd: Option<String>,
+    send: bool,
+) -> io::Result<()> {
     use fibo_core::plugin_command::{self, Failed};
     use fibo_core::{decoration, hook, quota};
-    let p = plugin::discover(&plugins_dir()?)
+    let p = plugin::discover_for_trial(plugins)?
         .into_iter()
         .find_map(|f| f.result.ok().filter(|p| p.id == id))
         .ok_or_else(|| io::Error::other(t!("没有装叫 {id} 的插件", id)))?;
@@ -231,4 +242,39 @@ pub(super) fn try_run(
         )));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_unreadable_switch_refuses_a_manual_trial_before_resolving_commands() {
+        let plugins =
+            std::env::temp_dir().join(format!("fibo-trial-switches-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&plugins);
+        let dir = plugins.join("trial-fixture");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("plugin.json"),
+            r#"{"api":1,"id":"trial-fixture","name":"Fixture","provides":["agent"]}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.join("agent.json"), "{}").unwrap();
+        let switches = plugins.join("disabled.json");
+        let request = || try_run_in(&plugins, "trial-fixture", "no-command", None, None, false);
+
+        std::fs::write(&switches, "broken").unwrap();
+        let error = request().unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("disabled.json"), "{error}");
+
+        // With a readable switch, a disabled plugin can still be tried explicitly.
+        // This fixture declares no runnable command, so resolution is the last step.
+        std::fs::write(&switches, r#"["trial-fixture"]"#).unwrap();
+        let error = request().unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::Other);
+        assert!(error.to_string().contains("no-command"), "{error}");
+        let _ = std::fs::remove_dir_all(plugins);
+    }
 }
