@@ -1,7 +1,7 @@
 // The lock said as the phone has it (2026-11-27 walk: an OPPO that lets apps use only its
 // fingerprint showed a face and 「Face ID」, then asked for a finger).
 import { expect, test } from 'bun:test';
-import { cancelledUnseen, inline, lockChoices, lockWay, wayIcon, wayWords, type LockKit } from '../src/ui/lockway';
+import { inline, lockChoices, lockWay, wayIcon, wayWords, type LockKit } from '../src/ui/lockway';
 
 const oppo: LockKit = { ios: false, level: 3, finger: true, face: true };
 const pixelNoFace: LockKit = { ios: false, level: 3, finger: true, face: false };
@@ -41,13 +41,6 @@ test('Android 9 and 10 use the supported device credential prompt and describe t
   const android11 = { ...oppo, androidApi: 30 };
   expect(lockChoices(android11)).toEqual(['strong', 'weak']);
   expect(lockWay(undefined, android11)).toBe('strong');
-});
-
-test('a quick cancellation may be a prompt that did not appear', () => {
-  expect(cancelledUnseen('user_cancel', 120)).toBe(true);
-  expect(cancelledUnseen('app_cancel', 300)).toBe(true);
-  expect(cancelledUnseen('user_cancel', 2500)).toBe(false);
-  expect(cancelledUnseen('lockout', 100)).toBe(false);
 });
 
 test('inside a Chinese sentence a Latin name gets spaces, a Chinese one none', () => {

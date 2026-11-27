@@ -121,8 +121,8 @@ export default function SettingsScreen() {
             <Text style={{ fontSize: 15, color: t.dim }}>{v.language === 'auto' ? tr(LANGUAGE.auto) : LANGUAGE[v.language]}</Text>
             <Icon name="right" size={14} width={2} color={t.dim} />
           </Item>
-          <Item t={t} title={tr('打开时要{way}', { way: look.inline })} sub={tr('别人拿到手机也批不了你的命令')}>
-            <Switch label={tr('打开时要{way}', { way: look.inline })} on={v.lock} onChange={setLock} />
+          <Item t={t} title={tr('批准命令前要{way}', { way: look.inline })} sub={tr('别人拿到手机也批不了你的命令')}>
+            <Switch label={tr('批准命令前要{way}', { way: look.inline })} on={v.lock} onChange={setLock} />
           </Item>
           {v.lock && look.kit && look.choices.length > 1 && (
             <Item t={t} title={tr('验证方式')} sub={wayNote(look.way, look.kit)} onPress={switchWay}>
