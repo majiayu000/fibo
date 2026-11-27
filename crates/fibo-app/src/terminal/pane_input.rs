@@ -122,6 +122,16 @@ impl Pane {
         self.held = bytes;
         cx.notify();
     }
+    /// Another window or machine holds this pane's input, over a link that is up.
+    pub(super) fn held_elsewhere(&self) -> bool {
+        self.connection.state.lock().is_ok_and(|s| {
+            !s.writable
+                && !s.ended
+                && !s.dropped
+                && s.error.is_none()
+                && (self.connection.watch || s.vt.is_some())
+        })
+    }
     /// Deliver the first typed bytes after the writable pane sent its own size.
     pub(super) fn send_held(&mut self) {
         if self.held.is_empty() {
@@ -150,15 +160,7 @@ impl Pane {
         }
         // Mouse reports and focus reports are not wanting the terminal: moving the pointer
         // over a pane must not take it from whoever is typing there.
-        if origin == Origin::Typed
-            && self.connection.state.lock().is_ok_and(|s| {
-                !s.writable
-                    && !s.ended
-                    && !s.dropped
-                    && s.error.is_none()
-                    && (self.connection.watch || s.vt.is_some())
-            })
-        {
+        if origin == Origin::Typed && self.held_elsewhere() {
             self.take_input(bytes, cx);
             return true;
         }

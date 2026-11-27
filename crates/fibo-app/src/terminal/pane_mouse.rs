@@ -156,6 +156,13 @@ impl Pane {
             cx.stop_propagation();
             return;
         }
+        // A click in the text is someone at this machine wanting the pane, unlike scrollbars, pointer
+        // moves and mouse reports; panes only being shown still never take it (`sync_panes`).
+        if self.held_elsewhere() {
+            self.take_input(Vec::new(), cx);
+            cx.stop_propagation();
+            return;
+        }
         if self.report_mouse(
             mouse::Action::Press,
             Some(button),
