@@ -1,12 +1,10 @@
-// The mode that stops asking: a second confirmation and Face ID first, and only then the field
+// The mode that stops asking: a second confirmation first, and only then the field
 // the computer wants. Anything else that goes through here cannot carry it.
 import { beforeEach, expect, mock, test } from 'bun:test';
 import { rn } from './rn';
 
 const sent: any[] = [];
 let answer = true;
-let lock = false;
-let passes = true;
 const asked: string[] = [];
 mock.module('react-native', () =>
   rn({
@@ -19,13 +17,9 @@ mock.module('react-native', () =>
     },
   }),
 );
-mock.module('expo-local-authentication', () => ({
-  hasHardwareAsync: async () => true,
-  authenticateAsync: async () => ({ success: passes }),
-}));
 mock.module('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} }));
 mock.module('../src/store/quota', () => ({ forgetQuota: async () => undefined }));
-mock.module('../src/store/settings', () => ({ settings: { get: () => ({ lock, confirmDanger: true }) }, readSettings: async () => ({ lock, confirmDanger: true }) }));
+mock.module('../src/store/settings', () => ({ settings: { get: () => ({ confirmDanger: true }) }, readSettings: async () => ({ confirmDanger: true }) }));
 const hub = await import('../src/remote/hub');
 const { switchMode } = await import('../src/actions');
 const { FULL_CONFIRM, FULL_WORDS, hasEffort, isFull, kindName, rowSaysFull } = await import('../src/ui/modes');
@@ -52,8 +46,6 @@ beforeEach(async () => {
   sent.length = 0;
   asked.length = 0;
   answer = true;
-  passes = true;
-  lock = false;
   hub.stage([{ machine: 'modes-m', name: 'mac' } as any], async () => new Fake() as any);
   await hub.start();
   await new Promise((go) => setTimeout(go, 5));
@@ -81,15 +73,7 @@ test('the full mode says what it means first, and no is no', async () => {
   expect(asked[0]).toContain(FULL_CONFIRM.title);
 });
 
-test('with the lock on, a failed Face ID sends nothing', async () => {
-  lock = true;
-  passes = false;
-  expect(await switchMode('modes-m', 't', 'permission', FULL)).toBe(false);
-  expect(sent).toEqual([]);
-});
-
-test('confirmed, and through Face ID if on, it carries allow_full', async () => {
-  lock = true;
+test('confirmed, it carries allow_full', async () => {
   expect(await switchMode('modes-m', 't', 'permission', FULL)).toBe(true);
   expect(sent[0].allow_full).toBe(true);
   expect(sent[0].choice).toBe('bypassPermissions');

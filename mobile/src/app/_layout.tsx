@@ -8,23 +8,19 @@ import { Pump } from '@/remote/pump';
 import { cardShelf } from '@/store/cardsCache';
 import { outboxReady, reloadOutbox } from '@/store/outbox';
 import { readSettings, settings } from '@/store/settings';
-import { refreshLockKit } from '@/ui/uselock';
 import { useTheme } from '@/ui/theme';
 
 // A computer away at a cold start still shows the rows it last listed, marked 断开前.
 keepCardsIn(cardShelf);
 
 /** The app opens once the saved settings and outbox are read and the computers loaded. Nothing
- *  asks to unlock it: the phone's own screen lock does that (docs/decisions/2026-11-28-phone-no-open-lock.md);
- *  approving a command still asks when the setting is on (actions.ts `verify`). */
+ *  asks to unlock it: the phone's own screen lock does that (docs/decisions/2026-11-28-phone-no-lock.md). */
 function useOpened() {
   const [opened, setOpened] = useState(false);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
-    // The lock's words in settings follow what this phone has.
-    void refreshLockKit().catch(() => undefined);
     async function initialize() {
       try {
         if (attempt) await Promise.all([settings.reload(), reloadOutbox()]);

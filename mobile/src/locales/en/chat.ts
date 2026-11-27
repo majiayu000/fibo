@@ -7,7 +7,6 @@ export const chat: Record<string, Entry> = {
   // Waits and the strip above the composer
   '先点「看终端」看清楚，再用 ↑ ↓ 移到要的那项、按回车': 'Tap “View terminal” to see it, then use ↑ ↓ to move to the one you want and press Return',
   看终端: 'View terminal',
-  在终端里选这一项: 'Choose this in the terminal',
   收起: 'Show less',
   回车: 'Return',
   '要在电脑的浏览器里完成，手机上做不了': 'This has to be done in the browser on the computer, not on the phone',
@@ -159,8 +158,6 @@ export const chat: Record<string, Entry> = {
   '电脑只读到这些，上面还有。打开终端能看全。': 'The computer only read this much; there’s more above. Open the terminal to see it all.',
   '它刚才说：「{said}」': 'It just said: “{said}”',
   '这台手机的权限是「只看」，不能答审批': 'This phone is View only and can’t answer approvals',
-  '允许要{way}。': (a) => `Allowing needs ${String(a.way).trim()}.`,
-  '允许不用验证；可以在设置里打开验证。': 'Allowing needs no check; you can turn one on in Settings.',
   '拒绝，并告诉它…': 'Deny and tell it…',
   '拒绝，并告诉它': 'Deny and tell it',
   '电脑上这个审批已经答过或者取消了。': 'This approval was already answered or canceled on the computer.',

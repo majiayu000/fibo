@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by 2026-11-28-phone-no-lock
 date: 2026-11-28
 decision-makers: majiayu000
 ---
@@ -41,3 +41,7 @@ cd mobile && bun test && bun run typecheck && bun run lint
 ## More Information
 
 来源：11-05 `d3ac857d`（设计稿里的「打开时要 Face ID」），11-27 #633（按手机实际方式写锁的说法）。
+
+## 2026-11-28 追加
+
+同一天被 [2026-11-28-phone-no-lock](2026-11-28-phone-no-lock.md) 推翻：批准前的验证和开关也一起删掉了。

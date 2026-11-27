@@ -1,5 +1,5 @@
 // One approval, large: what it wants to run in big mono type, what it said just before,
-// 拒绝 and 允许 (Face ID when settings ask), the menu's own 「don't ask again」 option in its
+// 拒绝 and 允许, the menu's own 「don't ask again」 option in its
 // words (none when the menu has none), and 「拒绝，并告诉它…」.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -8,7 +8,6 @@ import { approve, deny, oops } from '@/actions';
 import { remote, supports, useHub } from '@/remote/hub';
 import { useAsk } from '@/remote/useAsk';
 import { PAGE_ANSWERS } from '@/ui/answers';
-import { useSettings } from '@/store/settings';
 import { cardTitle } from '@/ui/format';
 import { SpaceMark } from '@/ui/icons';
 import { Nav, Notice, TITLE_WEIGHT, Wide, mono, useBottom } from '@/ui/kit';
@@ -17,15 +16,11 @@ import { agentName } from '@/ui/status';
 import { SayDialog } from '@/ui/sheets';
 import { ago, useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
-import { useAllowIcon, useLockLook } from '@/ui/uselock';
 import { tr } from '@/i18n';
 
 export default function Approve() {
   const t = useTheme();
   const bottom = useBottom();
-  const { lock } = useSettings();
-  const look = useLockLook();
-  const allowIcon = useAllowIcon();
   const { machine, terminal } = useLocalSearchParams<{ machine: string; terminal: string }>();
   const { machines } = useHub();
   const m = machines.find((x) => x.id === machine);
@@ -125,7 +120,6 @@ export default function Approve() {
                       <Wide
                         label={tr('允许')}
                         kind="allow"
-                        icon={allowIcon}
                         disabled={off}
                         onPress={() => run(() => approve(machine, card, ask))}
                         textStyle={{ fontSize: 17 }}
@@ -137,9 +131,6 @@ export default function Approve() {
             ) : (
               <Notice text={tr('这台手机的权限是「只看」，不能答审批')} />
             )}
-            <Text style={{ fontSize: 12, color: t.dim }}>
-              {lock ? tr('允许要{way}。', { way: look.inline }) : tr('允许不用验证；可以在设置里打开验证。')}
-            </Text>
           </View>
         )}
         {card?.approval && can && (

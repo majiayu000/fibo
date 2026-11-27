@@ -48,12 +48,6 @@
         }
       ],
       [
-        "expo-local-authentication",
-        {
-          "faceIDPermission": "允许审批和打开 Fibo 前用 Face ID 确认是你"
-        }
-      ],
-      [
         "expo-camera",
         {
           "cameraPermission": "扫描电脑上 Fibo 显示的配对二维码",
