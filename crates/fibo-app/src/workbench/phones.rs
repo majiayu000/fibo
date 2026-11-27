@@ -644,6 +644,21 @@ impl Workbench {
         };
         cx.notify();
     }
+    pub(crate) fn visual_focus_phone_name(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<Field> {
+        self.phones.open = true;
+        self.start_pairing(window, cx);
+        let name = self.phones.pairing.as_ref().unwrap().name.clone();
+        name.update(cx, |field, cx| {
+            field.set_text("Test phone");
+            cx.notify();
+        });
+        name
+    }
+
     pub(crate) fn visual_phones_pair(
         &mut self,
         name: &str,

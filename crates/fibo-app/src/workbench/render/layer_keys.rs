@@ -11,23 +11,34 @@ pub(in crate::workbench) enum LayerKey {
     Pass,
     /// The topmost layer closes; the key goes no further.
     Dismiss,
-    /// Swallowed: the close question is open, and nothing typed reaches the terminal.
+    /// Kept by the open layer so it cannot reach the terminal.
     Hold,
 }
 
 /// Esc closes the topmost layer. While the close question is open every other key stops
 /// there too: Return does not pick 停止并关闭 for you, and ⌘W does not close a second
-/// thing behind the first.
+/// thing behind the first. Menus keep unmodified navigation keys while ordinary
+/// typing and shortcuts can still reach their usual targets.
 pub(in crate::workbench) fn layer_key(
     confirm: bool,
     menu: bool,
     keystroke: &gpui::Keystroke,
 ) -> LayerKey {
-    let escape = keystroke.key == "escape" && !keystroke.modifiers.modified();
-    match (confirm, menu, escape) {
-        (true, _, true) | (false, true, true) => LayerKey::Dismiss,
-        (true, _, false) => LayerKey::Hold,
-        _ => LayerKey::Pass,
+    let key = keystroke.key.as_str();
+    let unmodified = !keystroke.modifiers.modified();
+    if (confirm || menu) && unmodified && key == "escape" {
+        LayerKey::Dismiss
+    } else if confirm
+        || (menu
+            && unmodified
+            && matches!(
+                key,
+                "enter" | "space" | "tab" | "up" | "down" | "left" | "right"
+            ))
+    {
+        LayerKey::Hold
+    } else {
+        LayerKey::Pass
     }
 }
 
@@ -78,11 +89,21 @@ impl Workbench {
         if self.self_keyed_layer() {
             return;
         }
-        let fate = layer_key(
-            self.layout.confirm_close.is_some(),
-            self.menu_open(),
-            &event.keystroke,
-        );
+        let confirm = self.layout.confirm_close.is_some();
+        let fate = layer_key(confirm, self.menu_open(), &event.keystroke);
+        // Menus sometimes contain their own focused fields. Keep their navigation
+        // unless the key would land in a terminal pane.
+        if fate == LayerKey::Hold
+            && !confirm
+            && !self
+                .layout
+                .panes
+                .values()
+                .chain(self.peek.iter().map(|peek| &peek.pane))
+                .any(|pane| pane.focus_handle(cx).is_focused(window))
+        {
+            return;
+        }
         if fate == LayerKey::Dismiss {
             self.dismiss_top_layer();
             cx.notify();
@@ -112,10 +133,27 @@ mod tests {
         }
     }
     #[test]
-    fn esc_closes_a_menu_and_other_keys_still_reach_the_terminal() {
+    fn a_menu_holds_navigation_keys_and_passes_typing_and_shortcuts() {
         assert_eq!(layer_key(false, true, &key("escape")), LayerKey::Dismiss);
-        assert_eq!(layer_key(false, true, &key("a")), LayerKey::Pass);
-        assert_eq!(layer_key(false, true, &key("cmd-w")), LayerKey::Pass);
+        for typed in ["enter", "space", "tab", "up", "down", "left", "right"] {
+            assert_eq!(
+                layer_key(false, true, &key(typed)),
+                LayerKey::Hold,
+                "{typed}"
+            );
+            assert_eq!(
+                layer_key(false, false, &key(typed)),
+                LayerKey::Pass,
+                "{typed}"
+            );
+        }
+        for typed in ["a", "cmd-w", "shift-left", "ctrl-space", "shift-tab"] {
+            assert_eq!(
+                layer_key(false, true, &key(typed)),
+                LayerKey::Pass,
+                "{typed}"
+            );
+        }
     }
     #[test]
     fn with_nothing_open_esc_belongs_to_the_terminal() {
