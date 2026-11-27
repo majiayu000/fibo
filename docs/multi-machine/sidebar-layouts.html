@@ -140,7 +140,7 @@ button:focus-visible{outline:2px solid #6aa3ff;outline-offset:1px}
       <span style="padding:0 8px;font-size:17px">+</span>
     </div>
     <div class="panel">
-      <div class="head"><span class="sd" style="width:8px;height:8px;background:var(--green)"></span><span class="name">appledeMacBook-Pro.local · 你好啊</span><span class="word">等你验收</span><span class="close">×</span></div>
+      <div class="head"><span class="sd" style="width:8px;height:8px;background:var(--green)"></span><span class="name">someonedeMacBook-Pro.local · 你好啊</span><span class="word">等你验收</span><span class="close">×</span></div>
       <div class="term"><div>Claude Code <span class="dim">v2.1.300</span></div><div class="dim">Opus 5.5 · Claude Pro</div><div class="dim">~/Desktop/code</div><div class="prompt">❯ 你好啊</div><div>● 你好！有什么需要帮忙的吗？写代码、调试问题、分析项目都可以。</div><div class="dim" style="margin-top:12px">* Brewed for 6s · done 12:32 AM</div><div class="prompt">❯ 嗯嗯</div><div>● 嗯，随时说就行，我在这儿等着。</div><div class="dim" style="margin-top:12px">* Brewed for 6s · done 10:54 AM</div></div>
     </div>
     <div class="status"><span><span class="dot"></span>本机 · 10 个会话</span><span>5h 2% · 周 58% · 周 100% +1 · 本机诊断 · ⌘P 命令</span></div>
@@ -151,17 +151,17 @@ button:focus-visible{outline:2px solid #6aa3ff;outline-offset:1px}
 const G={red:'linear-gradient(135deg,#f59e6b,#d9467a)',blue:'linear-gradient(135deg,#5ab0f0,#4b4fd6)',green:'linear-gradient(135deg,#7bd389,#2f9e66)',purple:'linear-gradient(135deg,#c04f9c,#8a5ad8)',indigo:'linear-gradient(135deg,#3d62c9,#7b8cf0)',gold:'linear-gradient(135deg,#8a6a2a,#b38a3a)'};
 const MACHINES=[
   {id:'local',name:'本机',mark:'',online:true,today:47,older:65,chips:[['工作空间',G.red,2],['code',G.blue],['vsr',G.green,2],['code',G.purple],['litellm-rs',G.indigo],['her',G.gold],['mooring',G.red,1],['新空间',G.blue]]},
-  {id:'apple',name:'apple',mark:'A',online:true,today:0,older:0,chips:[['code',G.blue,2],['mooring',G.red]]},
+  {id:'mac2',name:'mac2',mark:'A',online:true,today:0,older:0,chips:[['code',G.blue,2],['mooring',G.red]]},
   {id:'mini',name:'mac-mini',mark:'M',online:false,today:0,older:0,chips:[['deploy',G.purple]]},
 ];
 const s=(id,m,group,st,title,g,space,time,extra)=>Object.assign({id,m,group,st,title,g:G[g],space,time},extra||{});
 const SESSIONS=[
   s('p1','local','pinned','review','超分炒粉测评','green','vsr','16时'),
   s('p2','local','pinned','running','多终端','red','工作空间','6:05',{sub:'正在运行 python3 -'}),
-  s('a1','apple','needs','review','你好啊','blue','code','刚刚'),
+  s('a1','mac2','needs','review','你好啊','blue','code','刚刚'),
   s('n1','local','needs','review','配色方案选项缺失','red','mooring','刚刚'),
   s('n2','local','needs','review','本机资源占用诊断报告','green','vsr','刚刚'),
-  s('a2','apple','needs','review','w你好','blue','code','7时'),
+  s('a2','mac2','needs','review','w你好','blue','code','7时'),
   s('n3','local','needs','review','Write Me Down方向的AI角色','red','工作空间','14时'),
   s('n4','local','needs','review','Gödel, Escher, Bach 电子书','red','工作空间','23时'),
   s('m1','mini','needs','off','发布脚本检查','purple','deploy','断开'),
@@ -169,7 +169,7 @@ const SESSIONS=[
   s('r2','local','running','running','#1479 价格同步与 cargo 升级','indigo','litellm-rs','3:08'),
   s('r3','local','running','running','插件系统优化空间','red','mooring','7:01'),
   s('r4','local','running','running','Four_agents_write 后台 CPU','red','mooring','8:45'),
-  s('a3','apple','today','idle','codex · 空闲 · 看不到对话','blue','code',''),
+  s('a3','mac2','today','idle','codex · 空闲 · 看不到对话','blue','code',''),
 ];
 const LABEL={pinned:'置顶',needs:'要你处理',running:'在跑',today:'今天'};
 const WORD={review:'等你验收',running:'在跑',idle:'空闲',off:'断开'};

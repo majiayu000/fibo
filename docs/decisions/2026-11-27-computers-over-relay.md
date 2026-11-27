@@ -42,7 +42,7 @@ decision-makers: majiayu000
 - `cargo test -p fibo-host --bin fibo computer`：电脑接到原生 socket、降成只看被拒、手机仍是手机协议、日志写了 `kind`。
 - 实机：被连的电脑 `fibo remote pair --relay <中继> --computer --name <名字>`，另一台 `fibo remote join '<链接>' --name <名字>`，关掉 ssh 也能在侧栏看到并操作那台。
 
-实测（11-27，agentos 经国内中继连 apple，同一时段对照 Tailscale 上的 ssh，各 100 次）：
+实测（11-27，mac1 经国内中继连 mac2，同一时段对照 Tailscale 上的 ssh，各 100 次）：
 
 | | ssh | 中继 |
 |---|---|---|

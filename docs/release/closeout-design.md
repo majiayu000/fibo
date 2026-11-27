@@ -69,7 +69,7 @@ flowchart LR
 
 ## 影响范围
 
-现有实现涉及 `crates/fibo-app` 的 hosts、pane_sync、sidebar、redraw，`fibo-core` 的标签名、内容摘要，`fibo-host` 的识别、审批与设备文件，`mobile/src` 的动作、存储和页面入口。新增设计与验收记录放 `docs/release/`；运行截图和日志放 `~/Documents/claude-pages/fibo/`。
+现有实现涉及 `crates/fibo-app` 的 hosts、pane_sync、sidebar、redraw，`fibo-core` 的标签名、内容摘要，`fibo-host` 的识别、审批与设备文件，`mobile/src` 的动作、存储和页面入口。新增设计与验收记录放 `docs/release/`；运行截图和日志放 `<本机证据目录>/fibo/`。
 
 不引入新的抽象层、协议主版本、文件格式、配置表或依赖。开工时启动上下文工作区只有原型，未直接纳入。施工期间 #368 将它正式合入主线，后续整合主线时沿用其实现和已有证据。
 
@@ -131,7 +131,7 @@ Ubuntu 图形补验：直接安装首轮 CI 的 ARM64 包，在 Ubuntu 24.04 + X
 - Windows：先用组织的 `signtool sign /sha1 <证书指纹> /fd SHA256 /tr <证书商时间戳地址> /td SHA256` 签 stage 中的 exe，再用 Inno Setup 的 `/DSignTool=fibo` 与 `/Sfibo="signtool ... $f"` 签安装器和卸载器；`signtool verify /pa /all` 读回。没有现成证书时保持 unsigned，不称正式签名版。
 - Linux：原生 Ubuntu runner 构建后执行 `python3 packaging/linux/package.py`，用 `sudo apt install ./target/linux-package/*.deb` 安装/更新。容器不证明桌面可用。
 
-当前决定：采用现有产品收尾和上述三平台交付范围；发行结论待验证。完整日志和截图保留在 `~/Documents/claude-pages/fibo/2026-11-16-closeout/`。
+当前决定：采用现有产品收尾和上述三平台交付范围；发行结论待验证。完整日志和截图保留在 `<本机证据目录>/fibo/2026-11-16-closeout/`。
 
 ### 实际换包与 RC2 结论
 

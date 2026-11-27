@@ -30,7 +30,7 @@ decision-makers: 用户、Codex
 
 - `cargo test -p fibo-host --lib`：旧索引、整页与分页首条回复、中断后的下一轮、排队消息、首次空计划、Write 后落盘、重启、审批 Hook、路径来源。
 - `cargo test -p fibo-core --test guard --test file_size --test i18n`
-- 真手机证据另存 `~/Documents/claude-pages/fibo/2026-11-11-phone-regressions-fixed/`，完整清单按 `docs/phone-app/walkthrough.md` 单独报告，不用单测代替。
+- 真手机证据另存 `<本机证据目录>/fibo/2026-11-11-phone-regressions-fixed/`，完整清单按 `docs/phone-app/walkthrough.md` 单独报告，不用单测代替。
 
 ## Alternatives
 
@@ -38,4 +38,4 @@ decision-makers: 用户、Codex
 
 ## More Information
 
-来源是 2026-11-11 真机走查两项不过，原始截图和日志位于 `~/Documents/claude-pages/mooring/2026-11-11-phone-walk-2/`。新 CLI 改变 slug 或计划存储格式时，重新验证其实际首次审批，而非只测重试。
+来源是 2026-11-11 真机走查两项不过，原始截图和日志位于 `<本机证据目录>/mooring/2026-11-11-phone-walk-2/`。新 CLI 改变 slug 或计划存储格式时，重新验证其实际首次审批，而非只测重试。

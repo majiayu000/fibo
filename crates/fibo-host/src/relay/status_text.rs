@@ -153,7 +153,7 @@ mod tests {
                     {"id": "2e4ec1dc1f26", "name": "OPPO Find X9 Ultra", "role": "full",
                      "paired": now - 5 * 86_400, "last_seen": now - 7200},
                     {"id": "aa", "name": "iPad", "role": "view", "paired": now, "last_seen": null},
-                    {"id": "bb", "name": "agentos", "role": "full", "paired": now,
+                    {"id": "bb", "name": "mac1", "role": "full", "paired": now,
                      "last_seen": now - 60, "kind": "computer"}
                 ],
                 "state": "Connected", "detail": "",
@@ -171,7 +171,7 @@ mod tests {
             "{out}"
         );
         let line = |name: &str| out.lines().find(|l| l.contains(name)).unwrap().to_owned();
-        assert!(line("agentos").contains("完全控制（电脑）"), "{out}");
+        assert!(line("mac1").contains("完全控制（电脑）"), "{out}");
         let phone = line("OPPO");
         assert!(
             phone.starts_with("● OPPO Find X9 Ultra  完全控制 "),

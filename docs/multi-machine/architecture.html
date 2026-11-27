@@ -51,7 +51,7 @@
 
     <!-- this machine -->
     <rect class="zone" x="10" y="10" width="520" height="540" rx="12"/>
-    <text class="t" x="26" y="34">本机（Agent-OS）</text>
+    <text class="t" x="26" y="34">本机（mac1）</text>
 
     <rect class="box" x="30" y="50" width="480" height="150" rx="8"/>
     <text class="t" x="44" y="72">窗口 fibo-app</text>
@@ -80,7 +80,7 @@
 
     <rect class="box" x="30" y="382" width="480" height="70" rx="8"/>
     <text class="t" x="44" y="404">ssh 子进程（每台机器一条，全部请求共用）</text>
-    <text class="m" x="44" y="424">ssh -T -o BatchMode=yes apple '…mooring remote --stdio'</text>
+    <text class="m" x="44" y="424">ssh -T -o BatchMode=yes mac2 '…mooring remote --stdio'</text>
     <text class="m" x="44" y="440">JSON 一行一条，按 id 对回复、按 stream 分发流</text>
 
     <rect class="box" x="30" y="472" width="480" height="62" rx="8"/>
@@ -89,7 +89,7 @@
 
     <!-- other machine -->
     <rect class="zone" x="640" y="10" width="430" height="370" rx="12"/>
-    <text class="t" x="656" y="34">另一台（apple）</text>
+    <text class="t" x="656" y="34">另一台（mac2）</text>
     <rect class="box" x="660" y="50" width="390" height="100" rx="8"/>
     <text class="t" x="674" y="72">mooring remote --stdio</text>
     <text class="m" x="674" y="92">远程协议的服务端（remote.rs）</text>
@@ -97,12 +97,12 @@
     <text class="m" x="674" y="124">写操作带 request id → 只执行一次</text>
     <text class="m" x="674" y="140">把每条请求转成对本机后台的 Request</text>
     <rect class="box" x="660" y="172" width="390" height="90" rx="8"/>
-    <text class="t" x="674" y="194">apple 的后台 mooring serve</text>
+    <text class="t" x="674" y="194">mac2 的后台 mooring serve</text>
     <text class="m" x="674" y="214">PTY、会话识别、状态判定（status::of）</text>
     <text class="m" x="674" y="230">requests 表：去重记录保留 1 天</text>
     <text class="m" x="674" y="246">卡片上的状态、标题、turn 都在这里算好</text>
     <rect class="box" x="660" y="284" width="390" height="76" rx="8"/>
-    <text class="t" x="674" y="306">apple 自己的窗口</text>
+    <text class="t" x="674" y="306">mac2 自己的窗口</text>
     <text class="m" x="674" y="326">被接管时：只读 · 可明确接管</text>
     <text class="m" x="674" y="342">点「接管」把终端要回来</text>
 

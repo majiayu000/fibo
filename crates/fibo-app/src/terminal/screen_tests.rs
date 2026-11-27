@@ -141,7 +141,7 @@ fn osc_links_keep_cell_bounds_and_reject_executable_schemes() {
 fn plain_text_urls_become_links_without_the_prose_around_them() {
     let mut vt = Vt::new(80, 6).unwrap();
     vt.feed(
-        "端口：http://100.113.31.23:3002/radar?s=rust。\r\n\
+        "端口：http://198.51.100.23:3002/radar?s=rust。\r\n\
          (see https://en.wikipedia.org/wiki/Rust_(language)).\r\n\
          xhttps://no.example 和 **https://b.example/x**\r\n\
          \x1b]8;;https://osc.example\x1b\\https://shown.example\x1b]8;;\x1b\\"
@@ -149,7 +149,7 @@ fn plain_text_urls_become_links_without_the_prose_around_them() {
     );
     let s = capture(&vt).unwrap();
     let link = s.link_at(0, 6).unwrap();
-    assert_eq!(link.uri, "http://100.113.31.23:3002/radar?s=rust");
+    assert_eq!(link.uri, "http://198.51.100.23:3002/radar?s=rust");
     assert_eq!((link.col, link.cols), (6, 38));
     assert!(s.link_at(0, 44).is_none());
     assert_eq!(

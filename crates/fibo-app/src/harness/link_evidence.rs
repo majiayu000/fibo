@@ -17,7 +17,7 @@ pub(super) fn start(
             let pane = handle.update(cx, |view, _, _| view.visual_shown_pane()).unwrap();
             pane.update(cx, |pane, cx| {
                 pane.visual_type(
-                    "clear; printf '7. Hunter / AI 雷达\\n- 加了 Rust 标签页，已经上线到 3002 端口：http://100.113.31.23:3002/radar?s=rust\\n- 见 (https://en.wikipedia.org/wiki/Rust_(language))。\\n'\r",
+                    "clear; printf '7. Hunter / AI 雷达\\n- 加了 Rust 标签页，已经上线到 3002 端口：http://198.51.100.23:3002/radar?s=rust\\n- 见 (https://en.wikipedia.org/wiki/Rust_(language))。\\n'\r",
                     cx,
                 )
             });
@@ -28,7 +28,7 @@ pub(super) fn start(
                 }
             }
             for (name, prefix, cols) in [
-                ("hover-radar.png", "http://100.113.31.23", 38),
+                ("hover-radar.png", "http://198.51.100.23", 38),
                 ("hover-wiki.png", "https://en.wikipedia.org", 45),
             ] {
                 let (at, found) = pane

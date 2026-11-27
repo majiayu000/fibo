@@ -27,8 +27,8 @@ decision-makers: majiayu000
 
 **原型（分支 `proto/attach-remote-host`，提交 `29c917e1`）**
 
-- 在 agentos 上另起一个临时后台（`/tmp/fibo-proto`），`ssh -L` 把它的 socket 转到本机 `/tmp/fibo-attach/workbench.sock`，窗口加 `--attach --runtime /tmp/fibo-attach` 直连。
-- `MOORING_ATTACH_EVIDENCE` 在挂接窗口里走 ⌘T、⌘D、⇧⌘D、⌘W、运行 Agent：**PASS**。agentos 后台里存下了这个标签和左右分屏，关掉的终端是 Exited，Codex v0.169 在 agentos 上跑起来了。
+- 在 mac1 上另起一个临时后台（`/tmp/fibo-proto`），`ssh -L` 把它的 socket 转到本机 `/tmp/fibo-attach/workbench.sock`，窗口加 `--attach --runtime /tmp/fibo-attach` 直连。
+- `MOORING_ATTACH_EVIDENCE` 在挂接窗口里走 ⌘T、⌘D、⇧⌘D、⌘W、运行 Agent：**PASS**。mac1 后台里存下了这个标签和左右分屏，关掉的终端是 Exited，Codex v0.169 在 mac1 上跑起来了。
 - 原生协议本来就是一个窗格一条连接，`ssh -L` 转发 Unix socket 天然支持多条（两台都是 OpenSSH 10.2）。
 - 跑通前踩到两处「默认是本机」：
   1. 版本不同的后台会被当成旧后台。窗口会去接管它的终端，或者**按那台的 pid 停本机进程**。原型加了挂接模式，这种情况一律不启动、不停止、不替换后台。
@@ -51,14 +51,14 @@ decision-makers: majiayu000
 
 - **连接由窗口自己管。** 每台电脑起一个 `ssh -N -L <本机 socket>:<那台 socket> <host>`，断了按退避重连，ssh 选项沿用 `machines.rs` 现有那组（BatchMode、ConnectTimeout、ServerAlive）。本机 socket 放在 `<runtime>/machines/<host>/workbench.sock`。
 - **挂接的后台不归这个窗口管。** 不启动、不停止、不替换、不当成旧后台。这一条已在原型里，正式版加测试守住。
-- **那台的 socket 在哪由那台说。** 后台新增 `fibo socket`，打印自己正在用的 socket 路径（agentos 用的还是 `~/.local/share/keepline-workbench`）；没有这个命令的旧版提示「先更新那台的 Fibo」。
+- **那台的 socket 在哪由那台说。** 后台新增 `fibo socket`，打印自己正在用的 socket 路径（mac1 用的还是 `~/.local/share/keepline-workbench`）；没有这个命令的旧版提示「先更新那台的 Fibo」。
 - **版本不同就帮着更新那台。** 协议主版本不同不连（和本机现在的规则一样，`Hello { major }`）；不只是提示，给一个「更新 <那台> 上的 Fibo」按钮，经 ssh 让那台走[自己的更新](2026-11-08-self-update.md)，后台交接，终端不断。不照 VS Code / Zed 另装一份服务端：那样它和那台自己的窗口不是同一个后台，两边就又不一致了。
 - **慢了先本地预测回显。** 照 WezTerm：往返延迟超过阈值时，窗口先按本地预测把按键显示出来，再以那台回来的画面为准。第 1 步只测量，不做；测出来慢才做。
 
 **不做的：**
 
 - 不给手机协议补标签和布局。手机继续用它，桌面不再用它画主区域。
-- 不做跨电脑的分屏（一格本机、一格 agentos 在同一个标签里）。一个标签属于一台电脑的一个空间，和 [电脑 → 空间 → 会话](2026-11-07-machines-hold-spaces.md) 一致。
+- 不做跨电脑的分屏（一格本机、一格 mac1 在同一个标签里）。一个标签属于一台电脑的一个空间，和 [电脑 → 空间 → 会话](2026-11-07-machines-hold-spaces.md) 一致。
 - 不同步两台的空间和设置。
 
 ## 本机专属的功能怎么处理
@@ -77,11 +77,11 @@ decision-makers: majiayu000
 
 | 步 | 做什么 | 验收 | 估计 |
 |---|---|---|---|
-| 1 一台一个窗口 | 侧栏机器标题菜单加「在新窗口打开」：窗口自己起 `ssh -L`、挂接、重连；名字改成那台的；上表前三行 | 假 ssh 证据脚本（照 `remote-board-evidence.sh`，再起一个本机后台当另一台）：⌘T / ⌘D / ⇧⌘D / ⌘W / 运行 Agent、断线重连、旧版提示；真 agentos 走一遍 | 1.5–2 天 |
-| 2 一个窗口里，空间带着电脑走 | `store`、`workspace`、`layout.panes`、`nav` 收进按电脑分的结构。不做全局「切换电脑」：点哪台的空间，标签栏和主区域就是哪台的（像 WezTerm 的域，也合[电脑 → 空间 → 会话](2026-11-07-machines-hold-spaces.md)）。其他电脑在侧栏仍用现有卡片摘要 | 本机空间和 agentos 空间来回点，两边的标签、焦点、分屏都在；性能门（`scripts/perf-gate.py`）不退 | 3–4 天 |
+| 1 一台一个窗口 | 侧栏机器标题菜单加「在新窗口打开」：窗口自己起 `ssh -L`、挂接、重连；名字改成那台的；上表前三行 | 假 ssh 证据脚本（照 `remote-board-evidence.sh`，再起一个本机后台当另一台）：⌘T / ⌘D / ⇧⌘D / ⌘W / 运行 Agent、断线重连、旧版提示；真 mac1 走一遍 | 1.5–2 天 |
+| 2 一个窗口里，空间带着电脑走 | `store`、`workspace`、`layout.panes`、`nav` 收进按电脑分的结构。不做全局「切换电脑」：点哪台的空间，标签栏和主区域就是哪台的（像 WezTerm 的域，也合[电脑 → 空间 → 会话](2026-11-07-machines-hold-spaces.md)）。其他电脑在侧栏仍用现有卡片摘要 | 本机空间和 mac1 空间来回点，两边的标签、焦点、分屏都在；性能门（`scripts/perf-gate.py`）不退 | 3–4 天 |
 | 3 侧栏和看板也直接读各台工作区 | 每台的工作区都保持订阅，侧栏、看板、⌘J 跨电脑排序用同一套规则；删掉桌面里的偷看远程分支和卡片摘要 | `crates/fibo-core/tests/guard.rs` 的读数只降；远程会话在看板里和本机一样能拖 | 2–3 天 |
 
-第 1 步做完就能日常用（agentos 一个窗口、本机一个窗口），这正是 VS Code 和 Zed 的默认形态；第 2、3 步做的是 WezTerm 那样「一个窗口看全部」。
+第 1 步做完就能日常用（mac1 一个窗口、本机一个窗口），这正是 VS Code 和 Zed 的默认形态；第 2、3 步做的是 WezTerm 那样「一个窗口看全部」。
 
 ## PR #340 怎么办
 
@@ -98,9 +98,9 @@ decision-makers: majiayu000
 
 ## 放弃条件
 
-- 第 1 步做完，经 Tailscale 连 agentos 打字回显 p95 > 200 ms（手机协议实测是 15–46 ms）：先做本地预测回显；做了还 > 200 ms，说明原生协议过 ssh 太慢 → 回到给手机协议补字段。
+- 第 1 步做完，经 Tailscale 连 mac1 打字回显 p95 > 200 ms（手机协议实测是 15–46 ms）：先做本地预测回显；做了还 > 200 ms，说明原生协议过 ssh 太慢 → 回到给手机协议补字段。
 - 第 2 步发现窗口里按电脑切换要改的地方远超上面的数（`self.workspace` 436 处、`self.store` 66 处），三天收不住 → 停在第 1 步「一台一个窗口」。
-- 你两周内没用第 1 步的窗口连过 agentos → 停在第 1 步，不做第 2、3 步。
+- 你两周内没用第 1 步的窗口连过 mac1 → 停在第 1 步，不做第 2、3 步。
 
 ## 待定问题
 
@@ -113,9 +113,9 @@ decision-makers: majiayu000
 ## Verification
 
 ```sh
-# 原型：agentos 上起临时后台，转发过来，跑挂接场景
-ssh agentos 'mkdir -m 700 -p /tmp/fibo-proto && nohup /opt/homebrew/bin/fibo serve --runtime /tmp/fibo-proto >/tmp/fibo-proto/host.out 2>&1 &'
-ssh -N -o StreamLocalBindUnlink=yes -L /tmp/fibo-attach/workbench.sock:/tmp/fibo-proto/workbench.sock agentos &
+# 原型：mac1 上起临时后台，转发过来，跑挂接场景
+ssh mac1 'mkdir -m 700 -p /tmp/fibo-proto && nohup /opt/homebrew/bin/fibo serve --runtime /tmp/fibo-proto >/tmp/fibo-proto/host.out 2>&1 &'
+ssh -N -o StreamLocalBindUnlink=yes -L /tmp/fibo-attach/workbench.sock:/tmp/fibo-proto/workbench.sock mac1 &
 cargo build -p fibo-app --features fibo-app/visual-test
 MOORING_ATTACH_EVIDENCE=1 target/debug/fibo-app --runtime /tmp/fibo-attach --attach --visual-evidence /tmp/fibo-attach-shots
 ```
@@ -142,6 +142,6 @@ MOORING_ATTACH_EVIDENCE=1 target/debug/fibo-app --runtime /tmp/fibo-attach --att
   - 窗格标题上的上下文圈（`fibo_core::context_fill`，读会话记录）。
   - 空间的 git 领先 / 落后（`workbench/divergence.rs`，读仓库）。
   另外，终端里的文件链接在挂接窗口里关掉了，以后要做就经 ssh 在那台用编辑器打开。第 2 步之前定做不做。
-- 2026-11-14 第 1 步 1c：`scripts/attach-evidence.sh`（假 ssh，本机再起一个后台当另一台）和 agentos 真后台各跑一遍，都 PASS：⌘T、⌘D、⇧⌘D、⌘W、运行 Agent，掐掉 `ssh -L` 后自己重建并继续开得了终端，最后关掉这里开的标签。真后台前后都是 46 个标签、40 个在跑，agentos 自己的窗口和后台进程没换过。agentos 的 Fibo 还没有 `fibo socket`，走的是按旧版运行目录找（`keepline-workbench`）。没做：窗口崩掉时 `ssh -L` 会留下（正常退出会收掉），下次挂接用 `StreamLocalBindUnlink` 顶掉旧 socket，不影响使用。
-- 2026-11-14 第 2 步（一个窗口里，空间带着电脑走）：主窗口侧栏里点另一台的空间小块或会话，就在这个窗口里画那台自己的工作台（`workbench/hosts.rs`），和本机同一套代码；第一次在后台建转发、读工作区，之后切换复用，两边各留各的标签和焦点。那台的侧栏在列其他电脑的位置有「本机」，状态栏有「← 本机」。先把「是不是另一台」从进程级改成每个后台一份（`attach::Host`），每秒一算的缓存加上是哪个工作区。`scripts/hosts-evidence.sh`（假 ssh）和 agentos 真后台（没设目录的 mooring 空间里 ⌘T）都 PASS，真后台前后都是 46 个标签、40 个在跑。没做：那台的侧栏里像本机一样列出所有电脑的会话（现在只有「本机」入口）；插件和 Agent 定义、每个空间的主题、置顶还是各管各的（见第 3 步）。
+- 2026-11-14 第 1 步 1c：`scripts/attach-evidence.sh`（假 ssh，本机再起一个后台当另一台）和 mac1 真后台各跑一遍，都 PASS：⌘T、⌘D、⇧⌘D、⌘W、运行 Agent，掐掉 `ssh -L` 后自己重建并继续开得了终端，最后关掉这里开的标签。真后台前后都是 46 个标签、40 个在跑，mac1 自己的窗口和后台进程没换过。mac1 的 Fibo 还没有 `fibo socket`，走的是按旧版运行目录找（`keepline-workbench`）。没做：窗口崩掉时 `ssh -L` 会留下（正常退出会收掉），下次挂接用 `StreamLocalBindUnlink` 顶掉旧 socket，不影响使用。
+- 2026-11-14 第 2 步（一个窗口里，空间带着电脑走）：主窗口侧栏里点另一台的空间小块或会话，就在这个窗口里画那台自己的工作台（`workbench/hosts.rs`），和本机同一套代码；第一次在后台建转发、读工作区，之后切换复用，两边各留各的标签和焦点。那台的侧栏在列其他电脑的位置有「本机」，状态栏有「← 本机」。先把「是不是另一台」从进程级改成每个后台一份（`attach::Host`），每秒一算的缓存加上是哪个工作区。`scripts/hosts-evidence.sh`（假 ssh）和 mac1 真后台（没设目录的 mooring 空间里 ⌘T）都 PASS，真后台前后都是 46 个标签、40 个在跑。没做：那台的侧栏里像本机一样列出所有电脑的会话（现在只有「本机」入口）；插件和 Agent 定义、每个空间的主题、置顶还是各管各的（见第 3 步）。
 - 2026-11-15：第 2 步实际做成了每台电脑一整份工作台，点另一台的空间时连侧栏一起换掉，侧栏变成单机样子。界面怎么落地改由 [一个窗口只有一套界面，每台电脑只是一个数据来源](2026-11-15-one-ui-many-hosts.md) 决定：侧栏一直是这个窗口的，只有主区域跟着电脑走；连接和协议仍按本条。
