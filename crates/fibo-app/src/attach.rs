@@ -128,7 +128,7 @@ impl Forward {
 /// Every forward this app keeps, found by the folder its socket is in.
 static FORWARDS: Mutex<Vec<Arc<Forward>>> = Mutex::new(Vec::new());
 const BACKOFF_MAX: Duration = Duration::from_secs(30);
-const ABOUT_WAIT: Duration = Duration::from_secs(20);
+const SSH_ABOUT_WAIT: Duration = Duration::from_secs(20);
 const STARTUP_WAIT: Duration = Duration::from_secs(20);
 
 /// The machine a host runs on, as this app reaches it: this one, or another through its
@@ -316,13 +316,17 @@ fn ask_in_background(forward: &Arc<Forward>, via: Via) -> About {
     rx
 }
 
-fn receive_about(rx: About, attempt: &Attempt, until: Instant) -> io::Result<Answer> {
+fn receive_about(rx: About, attempt: &Attempt, until: Option<Instant>) -> io::Result<Answer> {
     loop {
         attempt.check()?;
-        let wait = until.saturating_duration_since(Instant::now());
-        match rx.recv_timeout(wait.min(Duration::from_millis(100))) {
+        let poll = Duration::from_millis(100);
+        let wait = until.map_or(poll, |until| {
+            until.saturating_duration_since(Instant::now()).min(poll)
+        });
+        match rx.recv_timeout(wait) {
             Ok(answer) => return answer,
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) if !wait.is_zero() => continue,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+                if until.is_none_or(|until| Instant::now() < until) => {}
             Err(e) => return Err(io::Error::other(e)),
         }
     }
@@ -330,17 +334,33 @@ fn receive_about(rx: About, attempt: &Attempt, until: Instant) -> io::Result<Ans
 
 /// Ask both together. Establish SSH's identity before the relay can serve a workspace.
 fn prepare_both(forward: &Arc<Forward>, attempt: &Attempt) -> io::Result<Option<About>> {
-    let until = Instant::now() + ABOUT_WAIT;
-    let ssh = ask_in_background(forward, Via::Ssh);
-    let relay = ask_in_background(forward, Via::Relay);
-    match receive_about(ssh, attempt, until) {
+    let ssh_until = Instant::now() + SSH_ABOUT_WAIT;
+    prepare_from_answers(
+        forward,
+        attempt,
+        ask_in_background(forward, Via::Ssh),
+        ask_in_background(forward, Via::Relay),
+        ssh_until,
+    )
+}
+
+fn prepare_from_answers(
+    forward: &Forward,
+    attempt: &Attempt,
+    ssh: About,
+    relay: About,
+    ssh_until: Instant,
+) -> io::Result<Option<About>> {
+    match receive_about(ssh, attempt, Some(ssh_until)) {
         Ok(answer) => {
             forward.learn(Via::Ssh, answer)?;
             Ok(Some(relay))
         }
         Err(ssh) => {
             attempt.check()?;
-            receive_about(relay, attempt, until)
+            // The relay command gives each configured endpoint its own timeout.
+            // Wait for that whole discovery while still honoring settings changes.
+            receive_about(relay, attempt, None)
                 .and_then(|answer| forward.learn(Via::Relay, answer))
                 .map(|()| {
                     forward

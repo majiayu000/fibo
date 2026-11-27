@@ -187,3 +187,66 @@ fn explicit_relay_can_still_use_a_pairing_without_a_machine_id() {
     let args = relay_argv(&forward, Path::new("fibo")).unwrap();
     assert!(!args.iter().any(|arg| arg == "--expect-machine-id"));
 }
+
+#[test]
+fn relay_discovery_can_finish_after_the_ssh_deadline() {
+    let forward = Forward::new(
+        Spec::new("alias".into()),
+        PathBuf::from("/unused/workbench.sock"),
+        true,
+    );
+    let (_ssh_tx, ssh) = std::sync::mpsc::channel();
+    let (relay_tx, relay) = std::sync::mpsc::channel();
+    let ssh_until = Instant::now();
+    let standby = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(25));
+        let _ = relay_tx.send(Ok(answer("standby-machine")));
+    });
+    let pending = prepare_from_answers(&forward, &Attempt::default(), ssh, relay, ssh_until)
+        .expect("the relay owns its standby deadline");
+    assert!(
+        pending.is_none(),
+        "relay already answered when SSH was unavailable"
+    );
+    assert_eq!(
+        forward.info().as_ref().unwrap().machine.0,
+        "standby-machine"
+    );
+    standby.join().unwrap();
+}
+
+#[test]
+fn a_known_ssh_identity_does_not_wait_for_relay_discovery() {
+    let forward = Forward::new(
+        Spec::new("alias".into()),
+        PathBuf::from("/unused/workbench.sock"),
+        true,
+    );
+    let (ssh_tx, ssh) = std::sync::mpsc::channel();
+    ssh_tx.send(Ok(answer("ssh-machine"))).unwrap();
+    let (relay_tx, relay) = std::sync::mpsc::channel();
+    let pending = prepare_from_answers(&forward, &Attempt::default(), ssh, relay, Instant::now())
+        .unwrap()
+        .expect("SSH can proceed with the relay answer still pending");
+    assert_eq!(forward.info().as_ref().unwrap().machine.0, "ssh-machine");
+    relay_tx.send(Ok(answer("relay-finished"))).unwrap();
+    assert_eq!(pending.recv().unwrap().unwrap().3.0, "relay-finished");
+}
+
+#[test]
+fn cancelling_an_attempt_ends_a_pending_relay_discovery() {
+    let attempt = Arc::new(Attempt::default());
+    let (_relay_tx, relay) = std::sync::mpsc::channel();
+    let (done, result) = std::sync::mpsc::channel();
+    let waiting = attempt.clone();
+    let worker = std::thread::spawn(move || {
+        let _ = done.send(receive_about(relay, &waiting, None));
+    });
+    attempt.cancel();
+    let error = result
+        .recv_timeout(Duration::from_secs(2))
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+    worker.join().unwrap();
+}

@@ -146,13 +146,27 @@ fn read_workspace(
     }
     Ok(workspace)
 }
-fn reopen_window(root: &Path, cx: &mut App) {
+/// Standalone attachments must never fall back to opening a local host in their runtime.
+fn load_startup_workspace(
+    root: &Path,
+    attached_host: Option<&str>,
+    start: impl FnOnce(&str, &Path, &attach::Attempt) -> io::Result<attach::Host>,
+) -> io::Result<Workspace> {
+    let Some(host) = attached_host else {
+        return load_workspace(root);
+    };
+    let attempt = attach::Attempt::default();
+    let attached = start(host, root, &attempt)?;
+    load_attached_workspace(&attached, &attempt)
+}
+
+fn reopen_window(root: &Path, attached_host: Option<&str>, cx: &mut App) {
     if let Some(handle) = cx.windows().first().copied() {
         let _ = handle.update(cx, |_, window, _| window.activate_window());
         cx.activate(true);
         return;
     }
-    match load_workspace(root) {
+    match load_startup_workspace(root, attached_host, attach::start) {
         Ok(workspace) => {
             let bounds = Bounds::centered(
                 None,
@@ -341,13 +355,7 @@ fn run() -> io::Result<()> {
         lifecycle::Admission::Forwarded => return Ok(()),
         lifecycle::Admission::Primary(guard, events) => (guard, events),
     };
-    let initial = if let Some(host) = &attach {
-        let attempt = attach::Attempt::default();
-        let attached = attach::start(host, &root, &attempt)?;
-        load_attached_workspace(&attached, &attempt)
-    } else {
-        load_workspace(&root)
-    };
+    let initial = load_startup_workspace(&root, attach.as_deref(), attach::start);
     let icon_file = instance_dir.join("app-icon");
     #[cfg(feature = "visual-test")]
     let evidence = args
@@ -361,7 +369,8 @@ fn run() -> io::Result<()> {
     }
     let app = gpui_platform::application().with_assets(ui::icons::Assets);
     let reopen_root = root.clone();
-    app.on_reopen(move |cx| reopen_window(&reopen_root, cx));
+    let reopen_host = attach.clone();
+    app.on_reopen(move |cx| reopen_window(&reopen_root, reopen_host.as_deref(), cx));
     app.run(move |cx: &mut App| {
         use futures::StreamExt;
         app_menu::install(cx);
@@ -411,9 +420,10 @@ fn run() -> io::Result<()> {
         update::start(cx);
         set_menus(cx);
         let wake_root = root.clone();
+        let wake_host = attach.clone();
         cx.spawn(async move |cx| {
             while reopen.next().await.is_some() {
-                cx.update(|cx| reopen_window(&wake_root, cx));
+                cx.update(|cx| reopen_window(&wake_root, wake_host.as_deref(), cx));
             }
         })
         .detach();
@@ -456,7 +466,7 @@ fn run() -> io::Result<()> {
                         cx.set_global(desktop::Status(message.into()));
                         return;
                     }
-                    reopen_window(&desktop_root, cx);
+                    reopen_window(&desktop_root, attach.as_deref(), cx);
                     if !route.is_empty() {
                         for handle in cx.windows() {
                             if let Some(handle) = handle.downcast::<workbench::Workbench>() {
@@ -504,4 +514,32 @@ fn register_symbols() -> Result<(), &'static str> {
     fibo_platform::desktop::register_font(include_bytes!(
         "../assets/SymbolsNerdFontMono-Regular.ttf"
     ))
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::*;
+
+    #[test]
+    fn standalone_startup_preserves_attachment_errors_and_retries_the_same_target() {
+        // A real file stands in for the given path, so even a broken fallback
+        // cannot start a local host from this test.
+        let runtime = std::env::current_exe().unwrap();
+        for (kind, message) in [
+            (io::ErrorKind::TimedOut, "remote readiness timed out"),
+            (
+                io::ErrorKind::ConnectionRefused,
+                "remote rejected the next try",
+            ),
+        ] {
+            let error = load_startup_workspace(&runtime, Some("chosen-host"), |host, root, _| {
+                assert_eq!(host, "chosen-host");
+                assert_eq!(root, runtime);
+                Err(io::Error::new(kind, message))
+            })
+            .expect_err("startup must report the attach error to the caller");
+            assert_eq!(error.kind(), kind);
+            assert_eq!(error.to_string(), message);
+        }
+    }
 }
