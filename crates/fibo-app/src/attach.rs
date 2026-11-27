@@ -16,8 +16,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+mod paths;
 mod quota;
 mod routes;
+pub use paths::{embedded_root, root};
 pub use routes::{Route, round_trip};
 
 /// What a machine says of itself: home, shell, and its id and name.
@@ -76,7 +78,15 @@ impl Forward {
         }
     }
     /// Keeps what `via` answered.
-    fn learn(&self, via: Via, (remote, home, shell, machine): Answer) {
+    fn learn(&self, via: Via, (remote, home, shell, machine): Answer) -> io::Result<()> {
+        if via == Via::Relay
+            && machine.0.is_empty()
+            && let Some(ways) = &self.ways
+        {
+            let why = t!("中继没有返回机器 ID");
+            ways.reject_relay(why.to_owned(), false);
+            return Err(io::Error::other(why));
+        }
         let mut ids = self.ids.lock().unwrap();
         let relay_was_only_identity =
             ids[slot(Via::Ssh)].is_none() && ids[slot(Via::Relay)].is_some();
@@ -105,6 +115,7 @@ impl Forward {
                 machine,
             });
         }
+        Ok(())
     }
     /// Where the way `via` listens here.
     fn listen(&self, via: Via) -> PathBuf {
@@ -235,49 +246,6 @@ impl Host {
     }
 }
 
-/// Where the standalone window keeps its forward and its per-host instance lock.
-pub fn root(host: &str) -> io::Result<PathBuf> {
-    Ok(machine_root(&runtime()?, host, None))
-}
-
-/// The sidebar's forward is private to this process. The standalone window can run
-/// beside it and its existing instance lock still names the same directory.
-pub fn embedded_root(host: &str) -> io::Result<PathBuf> {
-    Ok(machine_root(&runtime()?, host, Some(std::process::id())))
-}
-
-fn runtime() -> io::Result<PathBuf> {
-    let home = fibo_platform::dirs::home().ok_or_else(|| io::Error::other("HOME unavailable"))?;
-    Ok(fibo_core::legacy::runtime_dir(&home))
-}
-
-fn machine_root(runtime: &Path, host: &str, embedded_pid: Option<u32>) -> PathBuf {
-    let dir = match embedded_pid {
-        // A standalone name cannot contain the underscore. With /workbench.sock this
-        // uses the same maximum path length as the standalone's /client/client.sock.
-        Some(pid) => format!("{pid:x}_{:012x}", host_hash(host) & 0xffff_ffff_ffff),
-        None => dir_name(host),
-    };
-    runtime.join("m").join(dir)
-}
-/// `user@host` or an ssh alias as one short folder name: a readable start and a hash of
-/// the whole destination, so `alice@server` and `alice-server` never share a socket or a
-/// lock, and the socket path stays under the 104-byte limit however long the host is.
-fn dir_name(host: &str) -> String {
-    let start: String = (host.chars())
-        .filter(|c| c.is_ascii_alphanumeric())
-        .take(8)
-        .collect();
-    format!("{start}-{:08x}", host_hash(host) as u32)
-}
-
-fn host_hash(host: &str) -> u64 {
-    // FNV-1a: the same name on every run and every build.
-    host.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
-        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
-}
-
 /// One attempt to reach a machine with the current settings.
 #[derive(Default)]
 pub struct Attempt(AtomicBool);
@@ -317,7 +285,7 @@ pub fn start(host: &str, root: &Path, attempt: &Attempt) -> io::Result<Host> {
         prepare_both(&forward, attempt)?
     } else {
         let via = forward.spec.via;
-        forward.learn(via, forward.ask(via)?);
+        forward.learn(via, forward.ask(via)?)?;
         None
     };
     let kept = register(&forward, root, attempt, relay)?;
@@ -367,23 +335,22 @@ fn prepare_both(forward: &Arc<Forward>, attempt: &Attempt) -> io::Result<Option<
     let relay = ask_in_background(forward, Via::Relay);
     match receive_about(ssh, attempt, until) {
         Ok(answer) => {
-            forward.learn(Via::Ssh, answer);
+            forward.learn(Via::Ssh, answer)?;
             Ok(Some(relay))
         }
         Err(ssh) => {
             attempt.check()?;
-            match receive_about(relay, attempt, until) {
-                Ok(answer) => {
+            receive_about(relay, attempt, until)
+                .and_then(|answer| forward.learn(Via::Relay, answer))
+                .map(|()| {
                     forward
                         .ways
                         .as_ref()
                         .unwrap()
                         .failed(Via::Ssh, ssh.to_string());
-                    forward.learn(Via::Relay, answer);
-                    Ok(None)
-                }
-                Err(relay) => Err(io::Error::other(format!("{ssh}; {relay}"))),
-            }
+                    None
+                })
+                .map_err(|relay| io::Error::other(format!("{ssh}; {relay}")))
         }
     }
 }
@@ -402,6 +369,7 @@ fn register(
         return Ok(kept.clone());
     }
     fibo_platform::fs::create_private_dir(root)?;
+    routes::clear_socket_names(&forward.local, forward.ways.is_some())?;
     if let Some(ways) = &forward.ways {
         let stopped = {
             let forward = forward.clone();
@@ -649,11 +617,11 @@ fn ready(forward: &Forward, via: Via) -> io::Result<()> {
     }
     if via == Via::Ssh && forward.remote.lock().unwrap().is_empty() {
         let answer = forward.ask(via)?;
-        forward.learn(via, answer);
+        forward.learn(via, answer)?;
     }
     if via == Via::Relay && forward.ids.lock().unwrap()[slot(via)].is_none() {
         let answer = forward.ask(via)?;
-        forward.learn(via, answer);
+        forward.learn(via, answer)?;
     }
     Ok(())
 }
@@ -663,7 +631,11 @@ fn ready(forward: &Forward, via: Via) -> io::Result<()> {
 fn supervise(forward: &Forward, via: Via, initial: Option<About>) {
     if let Some(result) = initial.and_then(|rx| rx.recv().ok()) {
         match result {
-            Ok(answer) if !forward.stopped.load(Ordering::Acquire) => forward.learn(via, answer),
+            Ok(answer) if !forward.stopped.load(Ordering::Acquire) => {
+                if forward.learn(via, answer).is_err() {
+                    return;
+                }
+            }
             Err(e) => {
                 if let Some(ways) = &forward.ways {
                     ways.failed(via, e.to_string());

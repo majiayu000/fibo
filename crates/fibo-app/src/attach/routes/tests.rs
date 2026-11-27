@@ -266,3 +266,38 @@ fn a_stale_relay_identity_cannot_redirect_its_existing_workspace_to_ssh() {
         .is_none()
     );
 }
+
+#[test]
+#[cfg(unix)]
+fn removing_stale_socket_names_prevents_connecting_to_live_old_listeners() {
+    let dir = scratch(&format!("{}", line!()));
+    let path = dir.join("workbench.sock");
+    let sockets = [&path, &beside(&path, Via::Ssh), &beside(&path, Via::Relay)];
+    let _old = sockets.map(|p| local::Listener::bind(p).unwrap());
+    for p in sockets {
+        assert!(local::Stream::connect(p).is_ok());
+    }
+
+    clear_socket_names(&path, true).unwrap();
+    for p in sockets {
+        assert!(local::Stream::connect(p).is_err());
+    }
+    let _new = sockets.map(|p| local::Listener::bind(p).unwrap());
+    for p in sockets {
+        assert!(local::Stream::connect(p).is_ok());
+    }
+}
+
+#[test]
+fn occupied_forward_names_are_reported_without_removing_files() {
+    let dir = scratch(&format!("{}", line!()));
+    let path = dir.join("workbench.sock");
+    let _local = local::Listener::bind(&path).unwrap();
+    let relay = beside(&path, Via::Relay);
+    std::fs::write(&relay, b"keep this file").unwrap();
+    let error = clear_socket_names(&path, true).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+    assert!(error.to_string().contains("relay.sock"));
+    assert!(local::Stream::connect(&path).is_ok());
+    assert_eq!(std::fs::read(&relay).unwrap(), b"keep this file");
+}

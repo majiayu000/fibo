@@ -6,6 +6,7 @@
 use crate::machines::Via;
 use fibo_platform::local;
 use std::collections::VecDeque;
+use std::io;
 use std::net::Shutdown;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -293,6 +294,28 @@ pub(super) fn time_ways(
     }
 }
 
+/// Detach old owned listeners before any new splitter, supervisor or probe starts.
+pub(super) fn clear_socket_names(local: &Path, both: bool) -> io::Result<()> {
+    let backends = both.then(|| [beside(local, Via::Ssh), beside(local, Via::Relay)]);
+    let mut owned = Vec::new();
+    for path in std::iter::once(local.to_owned()).chain(backends.into_iter().flatten()) {
+        match local::at_path(&path)? {
+            local::AtPath::Nothing => (),
+            local::AtPath::MySocket => owned.push(path),
+            local::AtPath::Other => {
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    t!("转发套接字路径已被占用：{path}", path = path.display()),
+                ));
+            }
+        }
+    }
+    for path in owned {
+        std::fs::remove_file(path)?;
+    }
+    Ok(())
+}
+
 /// Listens on `local` for this window's connections to that machine and hands each to the
 /// way taken now, or to the other when that one does not answer, until `stopped`.
 pub(super) fn split(
@@ -301,9 +324,6 @@ pub(super) fn split(
     relay: bool,
     stopped: Arc<dyn Fn() -> bool + Send + Sync>,
 ) -> std::io::Result<()> {
-    if matches!(local::at_path(&local)?, local::AtPath::MySocket) {
-        std::fs::remove_file(&local)?;
-    }
     let listener = local::Listener::bind(&local)?;
     local::restrict(&local)?;
     std::thread::spawn(move || {

@@ -176,3 +176,5 @@
 "另一条：{way} {ms} ms" = "Other way: {way} {ms} ms"
 "另一条：{way}：{why}" = "Other way: {way}: {why}"
 "配对的不是这台（重新 fibo remote join）" = "the relay pairing is of another machine (run fibo remote join again)"
+"中继没有返回机器 ID" = "the relay did not return a machine ID"
+"转发套接字路径已被占用：{path}" = "The forward socket path is already in use: {path}"

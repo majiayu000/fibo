@@ -1,3 +1,4 @@
+use super::paths::{dir_name, machine_root};
 use super::*;
 
 #[test]
@@ -50,8 +51,8 @@ fn mismatched_relay_does_not_reject_ssh_or_change_its_identity() {
         PathBuf::from("/unused/workbench.sock"),
         true,
     );
-    forward.learn(Via::Ssh, answer("ssh-id"));
-    forward.learn(Via::Relay, answer("different"));
+    forward.learn(Via::Ssh, answer("ssh-id")).unwrap();
+    forward.learn(Via::Relay, answer("different")).unwrap();
     let ways = forward.ways.as_ref().unwrap();
     assert!(ways.relay_rejected());
     assert!(!ways.is_stopped());
@@ -67,8 +68,10 @@ fn ssh_takes_over_a_mismatched_relay_that_never_served_a_workspace() {
         PathBuf::from("/unused/workbench.sock"),
         true,
     );
-    forward.learn(Via::Relay, answer("paired-before-ssh"));
-    forward.learn(Via::Ssh, answer("different-ssh"));
+    forward
+        .learn(Via::Relay, answer("paired-before-ssh"))
+        .unwrap();
+    forward.learn(Via::Ssh, answer("different-ssh")).unwrap();
     let ways = forward.ways.as_ref().unwrap();
     assert!(ways.relay_rejected());
     assert!(!ways.is_stopped());
@@ -120,12 +123,14 @@ fn embedded_and_standalone_socket_names_do_not_overlap() {
         embedded,
         machine_root(runtime, "lifcc@another-host", Some(u32::MAX))
     );
-    let socket = embedded.join("workbench.sock");
-    assert_eq!(
-        socket.as_os_str().len(),
-        standalone.join("client/client.sock").as_os_str().len()
-    );
-    assert!(socket.as_os_str().len() < 104, "{}", socket.display());
+    let runtime = PathBuf::from(format!("/{}/fibo-workbench", "x".repeat(54)));
+    assert_eq!(runtime.as_os_str().len(), 70);
+    for alias in ["x", "名", host] {
+        let old = machine_root(&runtime, alias, None).join("workbench.sock");
+        let new = machine_root(&runtime, alias, Some(u32::MAX)).join("workbench.sock");
+        assert!(new.as_os_str().len() <= old.as_os_str().len());
+        assert!(new.as_os_str().len() < 104, "{}", new.display());
+    }
 }
 
 #[test]
@@ -137,8 +142,8 @@ fn the_relay_sidecar_keeps_the_machine_id_discovered_for_its_route() {
     );
     let program = Path::new("fibo");
     assert!(relay_argv(&forward, program).is_err());
-    forward.learn(Via::Ssh, answer(""));
-    forward.learn(Via::Relay, answer("machine-a"));
+    forward.learn(Via::Ssh, answer("machine-a")).unwrap();
+    forward.learn(Via::Relay, answer("machine-a")).unwrap();
     for _ in 0..2 {
         let args = relay_argv(&forward, program).unwrap();
         assert!(args.windows(2).any(|kv| kv == ["--machine", "alias"]));
@@ -147,7 +152,38 @@ fn the_relay_sidecar_keeps_the_machine_id_discovered_for_its_route() {
                 .any(|kv| kv == ["--expect-machine-id", "machine-a"])
         );
     }
-    forward.learn(Via::Relay, answer(""));
-    let args = relay_argv(&forward, program).unwrap();
+}
+
+#[test]
+fn automatic_relay_requires_an_identity_without_disabling_ssh() {
+    let forward = Forward::new(
+        Spec::new("alias".into()),
+        PathBuf::from("/unused/workbench.sock"),
+        true,
+    );
+    assert!(forward.learn(Via::Relay, answer("")).is_err());
+    assert!(
+        forward.info().is_none(),
+        "never publish an unidentified relay"
+    );
+    let ways = forward.ways.as_ref().unwrap();
+    assert!(ways.relay_rejected());
+    assert!(!ways.is_stopped());
+    forward.learn(Via::Ssh, answer("ssh-id")).unwrap();
+    assert!(ready(&forward, Via::Ssh).is_ok());
+    assert_eq!(forward.info().as_ref().unwrap().machine.0, "ssh-id");
+    assert!(relay_argv(&forward, Path::new("fibo")).is_err());
+}
+
+#[test]
+fn explicit_relay_can_still_use_a_pairing_without_a_machine_id() {
+    let spec = Spec {
+        via: Via::Relay,
+        ..Spec::new("alias".into())
+    };
+    let forward = Forward::new(spec, PathBuf::from("/unused/workbench.sock"), false);
+    forward.learn(Via::Relay, answer("")).unwrap();
+    assert!(ready(&forward, Via::Relay).is_ok());
+    let args = relay_argv(&forward, Path::new("fibo")).unwrap();
     assert!(!args.iter().any(|arg| arg == "--expect-machine-id"));
 }
