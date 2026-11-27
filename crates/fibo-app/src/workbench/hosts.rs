@@ -6,6 +6,7 @@
 //! sessions in the sidebar, or 「← 本机」, comes back; each keeps its tabs, splits and focus.
 use super::*;
 use crate::machines::Link;
+use std::sync::Arc;
 
 #[derive(Default)]
 pub(super) struct Hosts {
@@ -16,7 +17,7 @@ pub(super) struct Hosts {
     /// The one drawn in this window's place; None draws this workbench.
     pub(super) showing: Option<String>,
     /// Being reached: their forwards and first workspaces come in the background.
-    pub(super) opening: Vec<String>,
+    opening: Vec<(String, Arc<crate::attach::Attempt>)>,
     /// The machine last picked before it was reached, and where to go there: drawn once
     /// it is.
     wanted: Option<(String, Option<Go>)>,
@@ -125,7 +126,8 @@ impl Workbench {
                 let spec = remote.view.lock().unwrap().spec.clone();
                 // A machine whose way changed (路线 in settings) is reached again from scratch.
                 let same = |m: &crate::machines::Spec| {
-                    m.host == spec.host && (m.via, m.auto) == (spec.via, spec.auto)
+                    m.host == spec.host
+                        && (m.via, m.auto, &m.path) == (spec.via, spec.auto, &spec.path)
                 };
                 match old.iter().position(|m| same(&m.view.lock().unwrap().spec)) {
                     Some(i) => {
@@ -144,7 +146,13 @@ impl Workbench {
                 self.leave_host(cx);
             }
             self.hosts.views.retain(|(h, _)| h != &host);
-            self.hosts.opening.retain(|h| h != &host);
+            self.hosts.opening.retain(|(h, attempt)| {
+                if h != &host {
+                    return true;
+                }
+                attempt.cancel();
+                false
+            });
             if self.hosts.wanted.as_ref().is_some_and(|(h, _)| h == &host) {
                 self.hosts.wanted = None;
             }
@@ -160,33 +168,40 @@ impl Workbench {
             return;
         }
         let known = self.hosts.views.iter().any(|(h, _)| *h == host);
-        if known || self.hosts.opening.contains(&host) {
+        if known || self.hosts.opening.iter().any(|(h, _)| *h == host) {
             return;
         }
-        self.hosts.opening.push(host.clone());
+        let attempt = Arc::new(crate::attach::Attempt::default());
+        self.hosts.opening.push((host.clone(), attempt.clone()));
         let reach = cx.background_spawn({
             let host = host.clone();
+            let attempt = attempt.clone();
             async move {
                 let root = crate::attach::root(&host)?;
-                crate::attach::start(&host, &root)?;
-                let workspace = crate::load_workspace(&root).map_err(|e| {
-                    std::io::Error::other(t!(
-                        "无法读取 {host} 的工作区：{e}。请确认那台电脑已打开 Fibo，再重试",
-                        host,
-                        e
-                    ))
-                })?;
+                let attached = crate::attach::start(&host, &root, &attempt)?;
+                let workspace =
+                    crate::load_attached_workspace(&attached, &attempt).map_err(|e| {
+                        std::io::Error::other(t!(
+                            "无法读取 {host} 的工作区：{e}。请确认那台电脑已打开 Fibo，再重试",
+                            host,
+                            e
+                        ))
+                    })?;
                 std::io::Result::Ok((root, workspace))
             }
         });
         cx.spawn_in(window, async move |this, cx| {
             let reached = reach.await;
             let _ = this.update_in(cx, |this, window, cx| {
-                this.hosts.opening.retain(|h| *h != host);
-                if this.machine_of(&host).is_none() {
-                    crate::attach::forget(&host);
+                let Some(i) = this
+                    .hosts
+                    .opening
+                    .iter()
+                    .position(|(_, current)| Arc::ptr_eq(current, &attempt))
+                else {
                     return;
-                }
+                };
+                this.hosts.opening.remove(i);
                 let wanted = (this.hosts.wanted.as_ref())
                     .is_some_and(|(h, _)| *h == host)
                     .then(|| this.hosts.wanted.take())
@@ -525,7 +540,7 @@ impl Workbench {
     pub fn visual_hosts(&self) -> (Option<String>, Option<String>) {
         (
             self.hosts.showing.clone(),
-            self.hosts.opening.first().cloned(),
+            self.hosts.opening.first().map(|(host, _)| host.clone()),
         )
     }
     /// Whether `host` is online here as its own host says, and its spaces there.
