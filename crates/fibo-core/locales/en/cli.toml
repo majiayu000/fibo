@@ -568,3 +568,5 @@
 "{name} 拒绝了这台电脑（{code} {reason}）：可能已取消配对，或不是完全控制" = "{name} refused this computer ({code} {reason}): it may have been unpaired, or lacks full control"
 "{name} 回的不是电脑会话（{e}）：那台的 Fibo 太旧，或这条配对是手机的" = "{name} did not answer as a computer session ({e}): its Fibo is too old, or this pairing is a phone's"
 "{name} 没有按电脑会话回话：那台的 Fibo 太旧，先在那台升级" = "{name} did not answer as a computer session: its Fibo is too old, update it there first"
+"配对的手机 {phones} 台、电脑 {computers} 台，在线 {online} 台" = "{phones} phones and {computers} computers paired, {online} online"
+"{role}（电脑）" = "{role} (computer)"

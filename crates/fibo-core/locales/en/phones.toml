@@ -33,3 +33,5 @@
 "配对新手机…" = "Pair a new phone…"
 "设置 › 手机与远程" = "Settings › Phone & remote"
 "先在 设置 › 手机与远程 里填中继地址" = "Set a relay address in Settings › Phone & remote first"
+"{name} · 电脑 · 完全控制" = "{name} · computer · full control"
+"电脑只能完全控制；不让它连就取消配对" = "A computer only has full control; unpair it to keep it out"

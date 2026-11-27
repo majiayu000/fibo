@@ -189,6 +189,10 @@ impl Supervisor {
                         .and_then(|v| v.as_str().map(str::to_owned))
                         .unwrap_or_default(),
                     paired: d.paired,
+                    kind: match d.kind {
+                        crate::devices::Kind::Computer => "computer".into(),
+                        crate::devices::Kind::Phone => String::new(),
+                    },
                 })
                 .collect(),
             live: inner.live.clone(),

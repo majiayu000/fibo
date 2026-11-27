@@ -47,13 +47,24 @@ pub(super) fn render(s: &RemoteStatus, now: u64) -> String {
         return out;
     }
     let online = s.live.online.len();
+    let computers = s.devices.iter().filter(|d| d.is_computer()).count();
+    let phones = s.devices.len() - computers;
     out.push_str(&format!(
         "{}\n",
-        t!(
-            "配对的手机 {total} 台，在线 {online} 台",
-            total = s.devices.len(),
-            online
-        )
+        if computers == 0 {
+            t!(
+                "配对的手机 {total} 台，在线 {online} 台",
+                total = phones,
+                online
+            )
+        } else {
+            t!(
+                "配对的手机 {phones} 台、电脑 {computers} 台，在线 {online} 台",
+                phones,
+                computers,
+                online
+            )
+        }
     ));
     let name_w = s
         .devices
@@ -64,24 +75,18 @@ pub(super) fn render(s: &RemoteStatus, now: u64) -> String {
     let role_w = s
         .devices
         .iter()
-        .map(|d| {
-            let r = match Role::parse(&d.role) {
-                Some(role) => devices::role_label(role),
-                None => d.role.as_str(),
-            };
-            fibo_core::reason::width(r)
-        })
+        .map(|d| fibo_core::reason::width(&role_of(d)))
         .max()
         .unwrap_or(0)
         .max(8);
     for d in &s.devices {
-        let role = Role::parse(&d.role)
-            .map_or_else(|| d.role.clone(), |r| devices::role_label(r).to_owned());
+        let role = role_of(d);
         let name = format!(
             "{}{}",
             d.name,
             " ".repeat(name_w.saturating_sub(fibo_core::reason::width(&d.name)))
         );
+
         let phone = s.live.online.iter().find(|p| p.device == d.id);
         let when = match (phone, d.last_seen) {
             (Some(p), _) => t!("在线，{when}连上", when = ago(p.since / 1000, now)),
@@ -122,6 +127,16 @@ pub(super) fn render(s: &RemoteStatus, now: u64) -> String {
     out
 }
 
+/// Its role as said here, and that it is a computer when it is one.
+fn role_of(d: &fibo_core::protocol::RemoteDevice) -> String {
+    let role =
+        Role::parse(&d.role).map_or_else(|| d.role.clone(), |r| devices::role_label(r).to_owned());
+    match d.is_computer() {
+        true => t!("{role}（电脑）", role),
+        false => role,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,7 +152,9 @@ mod tests {
                 "devices": [
                     {"id": "2e4ec1dc1f26", "name": "OPPO Find X9 Ultra", "role": "full",
                      "paired": now - 5 * 86_400, "last_seen": now - 7200},
-                    {"id": "aa", "name": "iPad", "role": "view", "paired": now, "last_seen": null}
+                    {"id": "aa", "name": "iPad", "role": "view", "paired": now, "last_seen": null},
+                    {"id": "bb", "name": "agentos", "role": "full", "paired": now,
+                     "last_seen": now - 60, "kind": "computer"}
                 ],
                 "state": "Connected", "detail": "",
                 "online": [{"device": "2e4ec1dc1f26", "since": (now - 7200) * 1000,
@@ -149,9 +166,19 @@ mod tests {
             out.starts_with("中继：已连上 https://relay.example，有密钥\n"),
             "{out}"
         );
-        assert!(out.contains("配对的手机 2 台，在线 1 台"), "{out}");
         assert!(
-            out.contains("● OPPO Find X9 Ultra  完全控制  在线，2 小时前连上"),
+            out.contains("配对的手机 2 台、电脑 1 台，在线 1 台"),
+            "{out}"
+        );
+        let line = |name: &str| out.lines().find(|l| l.contains(name)).unwrap().to_owned();
+        assert!(line("agentos").contains("完全控制（电脑）"), "{out}");
+        let phone = line("OPPO");
+        assert!(
+            phone.starts_with("● OPPO Find X9 Ultra  完全控制 "),
+            "{out}"
+        );
+        assert!(
+            !phone.contains("电脑") && phone.contains("在线，2 小时前连上"),
             "{out}"
         );
         assert!(out.contains("在看：21463-1-5"), "{out}");
