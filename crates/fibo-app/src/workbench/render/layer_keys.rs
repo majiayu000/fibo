@@ -11,23 +11,34 @@ pub(in crate::workbench) enum LayerKey {
     Pass,
     /// The topmost layer closes; the key goes no further.
     Dismiss,
-    /// Swallowed: the close question is open, and nothing typed reaches the terminal.
+    /// Kept by the open layer so it cannot reach the terminal.
     Hold,
 }
 
 /// Esc closes the topmost layer. While the close question is open every other key stops
 /// there too: Return does not pick 停止并关闭 for you, and ⌘W does not close a second
-/// thing behind the first.
+/// thing behind the first. Menus keep unmodified navigation keys while ordinary
+/// typing and shortcuts can still reach their usual targets.
 pub(in crate::workbench) fn layer_key(
     confirm: bool,
     menu: bool,
     keystroke: &gpui::Keystroke,
 ) -> LayerKey {
-    let escape = keystroke.key == "escape" && !keystroke.modifiers.modified();
-    match (confirm, menu, escape) {
-        (true, _, true) | (false, true, true) => LayerKey::Dismiss,
-        (true, _, false) => LayerKey::Hold,
-        _ => LayerKey::Pass,
+    let key = keystroke.key.as_str();
+    let unmodified = !keystroke.modifiers.modified();
+    if (confirm || menu) && unmodified && key == "escape" {
+        LayerKey::Dismiss
+    } else if confirm
+        || (menu
+            && unmodified
+            && matches!(
+                key,
+                "enter" | "space" | "tab" | "up" | "down" | "left" | "right"
+            ))
+    {
+        LayerKey::Hold
+    } else {
+        LayerKey::Pass
     }
 }
 
