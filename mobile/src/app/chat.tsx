@@ -348,7 +348,8 @@ export default function Chat() {
   const suggestion = useSuggestion(machine, terminal, card?.session ?? null, turnEnded ? (card.turn ?? null) : null);
   const toDiff = useCallback(() => router.push({ pathname: '/diff', params: { machine, terminal } }), [machine, terminal]);
   const toTools = useCallback(
-    (seq?: number) => router.push({ pathname: '/tools', params: { machine, terminal, session: shown.current ?? '', ...(seq ? { seq: String(seq) } : {}) } }),
+    (seq?: number, stopped?: boolean) =>
+      router.push({ pathname: '/tools', params: { machine, terminal, session: shown.current ?? '', ...(seq ? { seq: String(seq) } : {}), ...(stopped ? { stopped: '1' } : {}) } }),
     [machine, terminal],
   );
   // What it does since its last message, in the flow where that work's folded line will stand,
@@ -377,7 +378,7 @@ export default function Chat() {
             workflows: workflowLines ? workflowLines.split('\n') : undefined,
             steps: (!!running || stopped) && canLast,
             focused,
-            onOpen: canList ? () => toTools() : undefined,
+            onOpen: canList ? () => toTools(undefined, stopped && !running) : undefined,
           }
         : null,
     [session, workflowLines, running, stopped, card?.doing, card?.running_since, lastAgentAt, machine, focused, toTools, canList, canLast],

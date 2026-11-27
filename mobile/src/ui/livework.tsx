@@ -62,7 +62,8 @@ export const LiveWork = memo(function LiveWork({ machine, session, running, stop
       if (!r || asking) return;
       asking = true;
       try {
-        const page = await r.request('toolcalls', { session, last: STEPS });
+        // Stopped, the stretch after the stop is empty: ask for the one that ended there.
+        const page = await r.request('toolcalls', once ? { session, last: STEPS, stopped: true } : { session, last: STEPS });
         if (!live) return;
         setCalls(page.calls ?? []);
         setSum(page.tools ?? {});
