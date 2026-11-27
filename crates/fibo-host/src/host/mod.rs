@@ -93,6 +93,8 @@ struct Host {
     /// its terminal's start (`launch_probe::cli_exited`).
     started_clis: HashMap<u32, String>,
     deadlines: Option<SyncSender<()>>,
+    /// Reaped or drained terminals whose latest exit state could not be written.
+    pending_terminal_exits: std::collections::HashSet<String>,
     /// This host behind its lock, for work started from inside a commit.
     myself: std::sync::Weak<Mutex<Host>>,
     /// Terminal -> what its last quiet screen showed: the question and the rule that read

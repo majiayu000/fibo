@@ -163,7 +163,10 @@ pub(super) fn hand_over(stream: local::Stream, shared: &Shared) -> io::Result<()
     }
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
-        let host = lock(shared)?;
+        let mut host = lock(shared)?;
+        // The new host takes live terminals. Settle known failed exit writes before
+        // accepting a handoff that would otherwise leave them behind with this host.
+        retry_terminal_exits(&mut host)?;
         let mut held = vec![];
         let mut paused = vec![];
         let mut pending = None;

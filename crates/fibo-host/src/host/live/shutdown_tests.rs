@@ -146,6 +146,106 @@ fn a_failed_hangup_still_force_stops_its_live_terminal() {
     assert!(began.elapsed() >= HANGUP_GRACE);
 }
 
+#[test]
+fn a_failed_final_exit_is_retried_without_another_notification() {
+    let (mut host, root) = crate::host::tests::fixture();
+    let id = "exit-retry";
+    let cwd = root.to_str().unwrap().to_owned();
+    let argv = vec!["/bin/sh".into(), "-c".into(), "exit 7".into()];
+    let (mut child, master) = pty::spawn(&argv, &root, 80, 24, id, "15;0").unwrap();
+    let terminal = terminal(child.id(), master);
+    let exit_code = child.wait().unwrap();
+    assert_eq!(exit_code, Some(7));
+    let mut next = host.workspace.clone();
+    next.spaces.push(Space {
+        id: "s".into(),
+        name: "fixture".into(),
+        cwd: cwd.clone(),
+    });
+    next.terminals.push(Terminal {
+        id: id.into(),
+        space: "s".into(),
+        argv,
+        cwd,
+        pid: Some(lock(&terminal).unwrap().pid),
+        state: ProcessState::Running,
+        exit_code: None,
+        error: None,
+    });
+    let mut agent = crate::host::tests::session("a", 0, Some(id), true);
+    agent.transcript = "fixture.jsonl".into();
+    next.agent_sessions.push(agent);
+    host.commit(next).unwrap();
+
+    let (tx, rx) = sync_channel(4);
+    let (socket, _viewer) = local::Stream::pair().unwrap();
+    {
+        let mut live = lock(&terminal).unwrap();
+        live.subscribers.insert(
+            1,
+            Subscriber {
+                tx,
+                socket,
+                lagged: Default::default(),
+            },
+        );
+        live.exited = true;
+        live.exit_code = exit_code;
+    }
+    host.terminals.insert(id.into(), Arc::clone(&terminal));
+    host.closed.insert(id.into());
+    let shared = Arc::new(Mutex::new(host));
+    super::super::runtime::start_deadlines(&shared).unwrap();
+
+    // The child was reaped first. Its output reader is all that remains.
+    record_exit(&shared, &terminal, id).unwrap();
+    let (kind, status) = rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+    assert_eq!(kind, STATUS);
+    let status: Terminal = serde_json::from_slice(&status).unwrap();
+    assert_eq!(status.state, ProcessState::Draining);
+    assert!(lock(&shared).unwrap().terminals.contains_key(id));
+    record_exit(&shared, &terminal, id).unwrap();
+    assert!(matches!(
+        rx.try_recv(),
+        Err(std::sync::mpsc::TryRecvError::Empty)
+    ));
+
+    // The final notification arrives just once, and SQLite rejects its transaction.
+    lock(&shared).unwrap().store.refuse_next_commit();
+    lock(&terminal).unwrap().drained = true;
+    let er = record_exit(&shared, &terminal, id).unwrap_err();
+    assert!(er.get_ref().unwrap().is::<rusqlite::Error>());
+    let (kind, status) = rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("no more PTY events can trigger this final STATUS");
+    assert_eq!(kind, STATUS);
+    let status: Terminal = serde_json::from_slice(&status).unwrap();
+    assert_eq!(
+        (status.state, status.exit_code),
+        (ProcessState::Exited, Some(7))
+    );
+
+    {
+        let host = lock(&shared).unwrap();
+        assert!(!host.terminals.contains_key(id), "released the closed PTY");
+        assert!(!host.closed.contains(id));
+        assert!(!host.workspace.agent_sessions[0].current);
+    }
+    let (db, _) = Store::open(&root).unwrap();
+    let stored = db.stored_terminal(id).unwrap().unwrap();
+    assert_eq!(
+        (stored.state, stored.exit_code),
+        (ProcessState::Exited, Some(7))
+    );
+    record_exit(&shared, &terminal, id).unwrap();
+    assert!(matches!(
+        rx.try_recv(),
+        Err(std::sync::mpsc::TryRecvError::Empty)
+    ));
+    drop((db, terminal, shared));
+    fs::remove_dir_all(root).unwrap();
+}
+
 fn terminal(pid: u32, master: term::Master) -> LiveTerminal {
     Arc::new(Mutex::new(Live {
         vt: Vt::new(80, 24).unwrap(),

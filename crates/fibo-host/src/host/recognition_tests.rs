@@ -471,6 +471,7 @@ fn shared_host(root: &std::path::Path, index: &crate::log_index::Index) -> Share
         input_probes: Default::default(),
         started_clis: HashMap::new(),
         deadlines: None,
+        pending_terminal_exits: Default::default(),
         myself: std::sync::Weak::new(),
         http_asks: HashMap::new(),
         screen_waits: HashMap::new(),

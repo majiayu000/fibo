@@ -1,8 +1,8 @@
 use super::*;
 use fibo_platform::local;
 
-// One wait until an actual outcome/group deadline. No tick, no directory or process I/O.
-fn start_deadlines(shared: &Shared) -> io::Result<()> {
+// Wait for a deadline or a terminal exit that needs another write. No periodic polling.
+pub(super) fn start_deadlines(shared: &Shared) -> io::Result<()> {
     let (tx, rx) = sync_channel(1);
     lock(shared)?.deadlines = Some(tx);
     let weak = Arc::downgrade(shared);
@@ -15,6 +15,7 @@ fn start_deadlines(shared: &Shared) -> io::Result<()> {
                 };
                 let deadline = {
                     let mut host = lock(&shared)?;
+                    let exit_writes = retry_terminal_exits(&mut host);
                     let now = fibo_core::content::now();
                     if host.workspace.outcomes_due(now) {
                         let mut next = host.workspace.clone();
@@ -32,6 +33,7 @@ fn start_deadlines(shared: &Shared) -> io::Result<()> {
                         }
                         Some(child_dialogs_at)
                     };
+                    exit_writes?;
                     (outcome, check.into_iter().chain(outcome).min())
                 };
                 drop(shared);
@@ -62,8 +64,8 @@ fn start_deadlines(shared: &Shared) -> io::Result<()> {
                 }
             }
         };
-        // A failed commit (a busy or full disk) must not stop outcomes expiring until the
-        // host restarts: start the loop again with the same backoff as the log subscription.
+        // A busy or full disk can stop both kinds of write. Resume with the same
+        // backoff as the log subscription, with no host lock held during the wait.
         let mut retry = SUBSCRIPTION_RETRY_MIN;
         loop {
             let started = Instant::now();
@@ -71,7 +73,7 @@ fn start_deadlines(shared: &Shared) -> io::Result<()> {
             if started.elapsed() > SUBSCRIPTION_RETRY_MAX {
                 retry = SUBSCRIPTION_RETRY_MIN;
             }
-            eprintln!("outcome deadline failed, retrying in {retry:?}: {e}");
+            eprintln!("outcome or terminal exit write failed, retrying in {retry:?}: {e}");
             thread::sleep(retry);
             retry = (retry * 2).min(SUBSCRIPTION_RETRY_MAX);
         }
@@ -251,6 +253,7 @@ pub(super) fn serve_runtime(
         input_probes: Default::default(),
         started_clis: HashMap::new(),
         deadlines: None,
+        pending_terminal_exits: Default::default(),
         myself: std::sync::Weak::new(),
         http_asks: HashMap::new(),
         screen_waits: HashMap::new(),

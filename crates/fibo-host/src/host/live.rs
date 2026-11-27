@@ -222,58 +222,105 @@ fn has_original_member(group: i32, members: &[(u32, u64)]) -> bool {
 /// Long enough for an Agent to save its conversation on hangup.
 const HANGUP_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
 
-pub(super) fn record_exit(host: &Shared, terminal: &LiveTerminal, id: &str) -> io::Result<()> {
-    // Always acquire global state before terminal state; PTY output never takes global state.
-    let mut host = lock(host)?;
-    let mut live = lock(terminal)?;
-    let mut next = host.workspace.clone();
-    let session = next
+fn record_exit(shared: &Shared, terminal: &LiveTerminal, id: &str) -> io::Result<()> {
+    let mut host = lock(shared)?;
+    if !host
         .terminals
-        .iter_mut()
-        .find(|s| s.id == id)
-        .ok_or_else(|| io::Error::other("missing session"))?;
-    session.state = if live.exited && live.drained {
+        .get(id)
+        .is_some_and(|current| Arc::ptr_eq(current, terminal))
+    {
+        return Ok(());
+    }
+    match persist_exit(&mut host, terminal, id) {
+        Ok(()) => {
+            host.pending_terminal_exits.remove(id);
+            Ok(())
+        }
+        Err(e) => {
+            // Each PTY has just two exit notifications. Leave one retry per terminal,
+            // whether its process or its output reader finished first.
+            if host.pending_terminal_exits.insert(id.to_owned()) {
+                if let Some(tx) = &host.deadlines {
+                    let _ = tx.try_send(());
+                }
+            }
+            Err(e)
+        }
+    }
+}
+
+pub(super) fn retry_terminal_exits(host: &mut Host) -> io::Result<()> {
+    let mut pending = std::mem::take(&mut host.pending_terminal_exits);
+    let mut failed = None;
+    pending.retain(|id| {
+        let Some(terminal) = host.terminals.get(id).cloned() else {
+            return false;
+        };
+        match persist_exit(host, &terminal, id) {
+            Ok(()) => false,
+            Err(e) => {
+                failed.get_or_insert_with(|| io::Error::other(format!("terminal {id}: {e}")));
+                true
+            }
+        }
+    });
+    host.pending_terminal_exits = pending;
+    failed.map_or(Ok(()), Err)
+}
+
+fn persist_exit(host: &mut Host, terminal: &LiveTerminal, id: &str) -> io::Result<()> {
+    // Always acquire global state before terminal state; PTY output never takes global state.
+    let mut live = lock(terminal)?;
+    if !live.exited {
+        return Ok(());
+    }
+    let state = if live.drained {
         ProcessState::Exited
-    } else if live.exited {
-        ProcessState::Draining
     } else {
-        ProcessState::Running
+        ProcessState::Draining
     };
+    let Some(position) = host.workspace.terminals.iter().position(|s| s.id == id) else {
+        return Ok(());
+    };
+    let current = &host.workspace.terminals[position];
+    if current.state == state && current.exit_code == live.exit_code {
+        return Ok(());
+    }
+    let mut next = host.workspace.clone();
+    let session = &mut next.terminals[position];
+    session.state = state;
     session.exit_code = live.exit_code;
     let status = serde_json::to_vec(session).map_err(io::Error::other)?;
     let mut released = vec![];
-    if live.exited {
-        for agent in &mut next.agent_sessions {
-            if agent.terminal.as_deref() == Some(id) {
-                if agent.current {
-                    released.push(agent.transcript.clone());
-                }
-                agent.current = false;
+    for agent in &mut next.agent_sessions {
+        if agent.terminal.as_deref() == Some(id) {
+            if agent.current {
+                released.push(agent.transcript.clone());
             }
+            agent.current = false;
         }
     }
     host.commit(next)?;
     host.released_logs.extend(released);
-    if live.exited && host.recognition.terminal_reports.remove(id).is_some() {
-        host.publish_status()?;
+    if host.recognition.terminal_reports.remove(id).is_some() {
+        if let Err(e) = host.publish_status() {
+            eprintln!("publish terminal {id} recognition: {e}");
+        }
     }
-    if live.exited {
-        if let Some(events) = &host.log_events {
-            for agent in host
-                .workspace
-                .agent_sessions
-                .iter()
-                .filter(|a| a.terminal.as_deref() == Some(id))
-            {
-                events.file(std::path::PathBuf::from(&agent.transcript));
-            }
+    if let Some(events) = &host.log_events {
+        for agent in host
+            .workspace
+            .agent_sessions
+            .iter()
+            .filter(|a| a.terminal.as_deref() == Some(id))
+        {
+            events.file(std::path::PathBuf::from(&agent.transcript));
         }
     }
     live.broadcast(STATUS, status);
-    let ended = live.exited && live.drained;
     drop(live);
-    if ended {
-        release_ended(&mut host);
+    if state == ProcessState::Exited {
+        release_ended(host);
     }
     Ok(())
 }
@@ -283,12 +330,18 @@ pub(super) fn record_exit(host: &Shared, terminal: &LiveTerminal, id: &str) -> i
 /// tab or pane was closed goes; one launched and not yet placed may still be shown.
 pub(super) fn release_ended(host: &mut Host) {
     let Host {
-        closed, terminals, ..
+        closed,
+        terminals,
+        workspace,
+        ..
     } = host;
     closed.retain(|id| {
-        let ended = terminals
-            .get(id)
-            .is_none_or(|t| lock(t).is_ok_and(|l| l.exited && l.drained));
+        // A physically ended PTY may still be needed to retry its exit write.
+        let ended = !terminals.contains_key(id)
+            || workspace
+                .terminals
+                .iter()
+                .any(|t| &t.id == id && t.state == ProcessState::Exited);
         if ended {
             terminals.remove(id);
         }
@@ -355,10 +408,11 @@ pub(super) fn run_live(
             });
             match watch.and_then(|w| w.watch(pid)) {
                 Ok(true) => (),
-                // Gone before the watch began, or no watch at all: settle it now.
+                // Gone before the watch began, or no watch at all. Registration holds
+                // the host lock, so settle it after returning instead of locking it twice.
                 _ => {
                     if let Some(ended) = ended.lock().ok().and_then(|mut e| e.take()) {
-                        ended(None);
+                        thread::spawn(move || ended(None));
                     }
                 }
             }
