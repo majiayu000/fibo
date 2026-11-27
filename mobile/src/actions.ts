@@ -32,13 +32,13 @@ export async function lockKit(): Promise<LockKit> {
     ask((): Promise<number[]> => LocalAuthentication.supportedAuthenticationTypesAsync(), []),
   ]);
   // AuthenticationType: 1 fingerprint, 2 face, 3 iris.
-  return { ios, level: Number(level) || 0, finger: types.includes(1), face: types.includes(2) };
+  const androidApi = Platform.OS === 'android' ? Platform.Version : undefined;
+  return { ios, androidApi, level: Number(level) || 0, finger: types.includes(1), face: types.includes(2) };
 }
 
 /** The system's own box, at the strictness the person chose. `error` says why it did not pass. */
-export async function proveIt(reason: string, way?: LockWay): Promise<{ ok: boolean; error?: string }> {
-  const level = way ?? lockWay((await readSettings()).lockWay, await lockKit());
-  const r = await LocalAuthentication.authenticateAsync({ promptMessage: reason, cancelLabel: tr('取消'), biometricsSecurityLevel: level });
+export async function proveIt(reason: string, way: LockWay): Promise<{ ok: boolean; error?: string }> {
+  const r = await LocalAuthentication.authenticateAsync({ promptMessage: reason, cancelLabel: tr('取消'), biometricsSecurityLevel: way });
   return r.success ? { ok: true } : { ok: false, error: r.error };
 }
 
@@ -48,13 +48,14 @@ export async function verify(reason: string): Promise<boolean> {
 }
 
 /** `verify`, saying why a check did not pass: the app returning to the front can cancel it. */
-export async function verifyWhy(reason: string): Promise<{ ok: boolean; error?: string }> {
+export async function verifyWhy(reason: string, kit?: Promise<LockKit>): Promise<{ ok: boolean; error?: string }> {
   try {
     // Unread or unreadable settings are not 「lock off」, and a phone without a fingerprint or
     // face does not skip the lock: the system then asks for the screen lock.
-    if (!(await readSettings()).lock) return { ok: true };
+    const settings = await readSettings();
+    if (!settings.lock) return { ok: true };
     if (Platform.OS === 'web') return { ok: false };
-    return await proveIt(reason);
+    return await proveIt(reason, lockWay(settings.lockWay, await (kit ?? lockKit())));
   } catch {
     return { ok: false };
   }

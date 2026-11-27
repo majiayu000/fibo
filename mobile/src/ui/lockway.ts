@@ -10,23 +10,30 @@ import { tr } from '../i18n';
 export type LockWay = 'strong' | 'weak';
 
 /** What the phone has. `level`: 0 nothing, 1 screen lock only, 2 weak biometric, 3 strong. */
-export type LockKit = { ios: boolean; level: number; finger: boolean; face: boolean };
+export type LockKit = { ios: boolean; androidApi?: number; level: number; finger: boolean; face: boolean };
+
+// Android 9/10 cannot combine Class 3 biometrics with device credentials in one prompt.
+function supportsStrict(k: LockKit): boolean {
+  return k.androidApi !== 28 && k.androidApi !== 29;
+}
 
 /** The ways to offer: two only on an Android phone with face hardware, where lenient may add it. */
 export function lockChoices(k: LockKit): LockWay[] {
-  return !k.ios && k.face && k.level >= 2 ? ['strong', 'weak'] : [];
+  return !k.ios && supportsStrict(k) && k.face && k.level >= 2 ? ['strong', 'weak'] : [];
 }
 
-/** The way in use: what was chosen, while the phone still offers it; else the strict one. */
+/** Keep screen lock fallback on Android 9/10 and use the saved choice where offered. */
 export function lockWay(saved: LockWay | undefined, k: LockKit): LockWay {
+  if (!supportsStrict(k)) return 'weak';
   return saved && lockChoices(k).includes(saved) ? saved : 'strong';
 }
 
 /** What it is called: 「Face ID」 only on an iPhone that has it. */
 export function wayWords(way: LockWay, k: LockKit): string {
   if (k.ios) return k.face ? 'Face ID' : k.finger ? 'Touch ID' : tr('锁屏密码');
-  if (way === 'weak') return k.finger ? tr('指纹或面容') : tr('面容');
-  return k.level >= 3 ? (k.finger ? tr('指纹') : tr('生物识别')) : tr('锁屏密码');
+  if (k.level < 2 || (way === 'strong' && k.level < 3)) return tr('锁屏密码');
+  if (way === 'weak' && k.face) return k.finger ? tr('指纹或面容') : tr('面容');
+  return k.finger ? tr('指纹') : tr('生物识别');
 }
 
 /** One line on what a way means, for the settings page. */
@@ -37,15 +44,15 @@ export function wayNote(way: LockWay, k: LockKit): string {
 
 /** A face only where the phone really looks at one; a lock everywhere else. */
 export function wayIcon(way: LockWay, k: LockKit): 'face' | 'lock' {
-  return (k.ios && k.face) || (way === 'weak' && !k.finger) ? 'face' : 'lock';
+  return k.face && (k.ios || (way === 'weak' && k.level >= 2 && !k.finger)) ? 'face' : 'lock';
 }
 
-/** Under this, a cancel came from the system, not a finger. */
+/** A prompt cancelled this quickly on Android foreground return may not have been shown. */
 export const UNSEEN_MS = 800;
 
 /** Asked as the app comes back to the front, the system's box can be cancelled before it shows:
  *  back from the background on 2026-11-27 there was only 「解锁」 and no box. Android reports
- *  that as the same `user_cancel` a person's 取消 gives, but nobody cancels this fast. */
+ *  that as the same `user_cancel` a person's 取消 gives. Only a foreground attempt retries. */
 export function cancelledUnseen(error: string | undefined, ms: number): boolean {
   return (error === 'user_cancel' || error === 'app_cancel') && ms < UNSEEN_MS;
 }

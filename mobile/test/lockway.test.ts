@@ -29,7 +29,21 @@ test('a choice only where strict and lenient differ, and a choice the phone lost
   expect(lockWay(undefined, oppo)).toBe('strong');
 });
 
-test('a cancel faster than a finger is the system, asked once more', () => {
+test('Android 9 and 10 use the supported device credential prompt and describe the actual options', () => {
+  const android9 = { ...oppo, androidApi: 28 };
+  const android10 = { ...pinOnly, androidApi: 29, face: true };
+  expect(lockChoices(android9)).toEqual([]);
+  expect(lockWay('strong', android9)).toBe('weak');
+  expect([wayWords('weak', android9), wayIcon('weak', android9)]).toEqual(['指纹或面容', 'lock']);
+  expect(lockChoices(android10)).toEqual([]);
+  expect(lockWay(undefined, android10)).toBe('weak');
+  expect([wayWords('weak', android10), wayIcon('weak', android10)]).toEqual(['锁屏密码', 'lock']);
+  const android11 = { ...oppo, androidApi: 30 };
+  expect(lockChoices(android11)).toEqual(['strong', 'weak']);
+  expect(lockWay(undefined, android11)).toBe('strong');
+});
+
+test('a quick cancellation may be a prompt that did not appear', () => {
   expect(cancelledUnseen('user_cancel', 120)).toBe(true);
   expect(cancelledUnseen('app_cancel', 300)).toBe(true);
   expect(cancelledUnseen('user_cancel', 2500)).toBe(false);

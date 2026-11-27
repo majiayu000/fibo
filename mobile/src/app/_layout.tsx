@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Modal, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Modal, Platform, Pressable, Text, View } from 'react-native';
 import { verifyWhy } from '@/actions';
 import { setLanguage, tr, useLang } from '@/i18n';
 import { keepCardsIn, start } from '@/remote/hub';
@@ -11,7 +11,7 @@ import { outboxReady, reloadOutbox } from '@/store/outbox';
 import { readSettings, settings } from '@/store/settings';
 import { Icon } from '@/ui/icons';
 import { cancelledUnseen } from '@/ui/lockway';
-import { useLockLook } from '@/ui/uselock';
+import { refreshLockKit, useLockLook } from '@/ui/uselock';
 import { useTheme } from '@/ui/theme';
 
 // A computer away at a cold start still shows the rows it last listed, marked 断开前.
@@ -30,16 +30,17 @@ function useLocked() {
     let generation = 0;
     let authenticating = false;
     let loaded = false;
-    const open = async () => {
+    let wasBackground = false;
+    const open = async (retryUnseen = false, kit = refreshLockKit()) => {
       if (!loaded || authenticating) return;
       authenticating = true;
       const stamp = generation;
       const asked = Date.now();
-      let r = await verifyWhy(tr('打开 Fibo'));
-      // Cancelled before it could be seen, as the app came back: ask once more (ui/lockway.ts).
-      if (!r.ok && cancelledUnseen(r.error, Date.now() - asked) && live && generation === stamp && AppState.currentState === 'active') {
+      let r = await verifyWhy(tr('打开 Fibo'), kit);
+      // Android can cancel before showing an automatic foreground prompt.
+      if (retryUnseen && !r.ok && cancelledUnseen(r.error, Date.now() - asked) && live && generation === stamp && AppState.currentState === 'active') {
         await new Promise((done) => setTimeout(done, 400));
-        if (live && generation === stamp && AppState.currentState === 'active') r = await verifyWhy(tr('打开 Fibo'));
+        if (live && generation === stamp && AppState.currentState === 'active') r = await verifyWhy(tr('打开 Fibo'), kit);
       }
       const ok = r.ok;
       try {
@@ -73,9 +74,16 @@ function useLocked() {
     }
     void initialize();
     const sub = AppState.addEventListener('change', (s) => {
-      if (s === 'background') generation++;
+      if (s === 'background') {
+        generation++;
+        wasBackground = true;
+      }
       if (s !== 'active' && settings.get().lock) setLocked(true);
-      if (s === 'active') void open();
+      if (s === 'active') {
+        const retryUnseen = Platform.OS === 'android' && wasBackground;
+        wasBackground = false;
+        void open(retryUnseen);
+      }
     });
     return () => {
       live = false;

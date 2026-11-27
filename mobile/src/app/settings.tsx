@@ -9,8 +9,8 @@ import { type Settings, settings, useSettings } from '@/store/settings';
 import { statsWords } from '@/store/suggestionCounts';
 import { useSuggestionStats } from '@/store/suggestions';
 import { Icon } from '@/ui/icons';
-import { inline, wayNote, wayWords } from '@/ui/lockway';
-import { useLockLook } from '@/ui/uselock';
+import { inline, lockWay, wayNote, wayWords } from '@/ui/lockway';
+import { refreshLockKit, useLockLook } from '@/ui/uselock';
 import { Label, Nav, Switch, TITLE_WEIGHT, useBottom } from '@/ui/kit';
 import { type Theme, useTheme } from '@/ui/theme';
 
@@ -59,8 +59,10 @@ export default function SettingsScreen() {
     try {
       if (on) {
         // A screen lock is enough: the system's box falls back to it without a finger or face.
-        if ((look.kit?.level ?? 0) < 1) return oops(tr('这台手机没有设置锁屏密码，先在系统设置里设一个'));
-        if (!(await proveIt(tr('打开{way}锁', { way: look.inline }), look.way)).ok) return;
+        const kit = await refreshLockKit();
+        if (kit.level < 1) return oops(tr('这台手机没有设置锁屏密码，先在系统设置里设一个'));
+        const way = lockWay(v.lockWay, kit);
+        if (!(await proveIt(tr('打开{way}锁', { way: inline(wayWords(way, kit)) }), way)).ok) return;
       }
       await save({ lock: on });
     } catch {
