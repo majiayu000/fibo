@@ -34,8 +34,10 @@ impl Role {
         match op {
             // `dirs` shows the machine's folders, so it is no read for a lesser role.
             "send" | "keys" | "input" | "resize" | "open" | "end" | "outcome" | "dirs"
-            | "mkdir" | "stop" | "lastsession" | "addspace" | "spacequiet" | "trust" | "modes"
-            | "setmode" | "todoadd" | "todooutcome" | "image" | "sendnow" => self == Self::Full,
+            | "mkdir" | "stop" | "lastsession" | "addspace" | "updatespace" | "spacequiet"
+            | "trust" | "modes" | "setmode" | "todoadd" | "todooutcome" | "image" | "sendnow" => {
+                self == Self::Full
+            }
             // Words `hello` lists to say what an op also takes: each goes with its op.
             "steer" | "effort" | "openimages" | "spacename" => self == Self::Full,
             "toolslast" => true,
@@ -62,6 +64,7 @@ pub fn acts(op: &str) -> bool {
             | "mkdir"
             | "stop"
             | "addspace"
+            | "updatespace"
             | "spacequiet"
             | "trust"
             | "setmode"
@@ -116,6 +119,7 @@ mod tests {
             "open",
             "lastsession",
             "addspace",
+            "updatespace",
             "spacequiet",
             "trust",
             "todoadd",
@@ -139,7 +143,13 @@ mod tests {
         }
         assert_eq!(Role::parse("admin"), None);
         assert_eq!(serde_json::to_string(&Role::Answer).unwrap(), r#""answer""#);
-        assert!(acts("keys") && acts("mkdir") && acts("addspace") && !acts("watch"));
+        assert!(
+            acts("keys")
+                && acts("mkdir")
+                && acts("addspace")
+                && acts("updatespace")
+                && !acts("watch")
+        );
         assert!(acts("todoadd") && acts("todooutcome") && acts("image") && acts("sendnow"));
         assert!(!acts("diff") && !acts("dirs") && !acts("quota") && !acts("usage"));
         assert!(!acts("toolcalls") && !acts("toolcall") && !acts("suggestion"));

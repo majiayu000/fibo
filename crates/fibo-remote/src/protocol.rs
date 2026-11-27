@@ -172,6 +172,16 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<String>,
     },
+    /// Renames a space there or sets its folder (a machine listing `updatespace`): [`Space`].
+    UpdateSpace {
+        space: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<String>,
+    },
     /// Tokens each Agent's logs say it used since `since` (Unix secs, phone's midnight): [`Usage`].
     Usage {
         since: u64,
@@ -301,46 +311,6 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         offset: Option<u64>,
     },
-}
-
-impl Op {
-    pub fn name(&self) -> &'static str {
-        match self {
-            Self::Hello { .. } => "hello",
-            Self::List => "list",
-            Self::Read { .. } => "read",
-            Self::Send { .. } => "send",
-            Self::Keys { .. } => "keys",
-            Self::Input { .. } => "input",
-            Self::Answer { .. } => "answer",
-            Self::Ask { .. } => "ask",
-            Self::Trust { .. } => "trust",
-            Self::Chat { .. } => "chat",
-            Self::Events => "events",
-            Self::Watch { .. } => "watch",
-            Self::Resize { .. } => "resize",
-            Self::Open { .. } => "open",
-            Self::End { .. } => "end",
-            Self::Outcome { .. } => "outcome",
-            Self::Close { .. } => "close",
-            Self::Ping => "ping",
-            Self::Diff { .. } => "diff",
-            Self::Dirs { .. } => "dirs",
-            Self::Mkdir { .. } => "mkdir",
-            Self::Stop { .. } => "stop",
-            Self::Quota => "quota",
-            Self::LastSession { .. } => "lastsession",
-            Self::AddSpace { .. } => "addspace",
-            Self::Usage { .. } => "usage",
-            Self::ToolCalls { .. } => "toolcalls",
-            Self::Backfill { .. } => "backfill",
-            Self::ToolCall { .. } => "toolcall",
-            Self::Suggestion { .. } => "suggestion",
-            Self::Cards { .. } => "cards",
-            Self::Modes { .. } => "modes",
-            Self::SetMode { .. } => "setmode",
-        }
-    }
 }
 
 /// A line from the machine.

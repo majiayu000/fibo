@@ -470,10 +470,61 @@ pub(super) fn start(
             "not the space named, without a folder: {made:?}"
         );
         shoot("spaces-named.png", cx);
+        // Right-click: renamed there, then a folder made there and set, each as its host says.
+        let named_id = named.clone().unwrap();
+        let space = |cx: &mut gpui::AsyncApp| {
+            let all = handle.update(cx, |v, _, _| v.visual_machine_spaces(0)).unwrap();
+            all.into_iter().find(|s| s.0 == named_id)
+        };
+        let edit = |cx: &mut gpui::AsyncApp| {
+            handle.update(cx, |v, w, cx| v.visual_begin_edit_machine_space(0, &named_id, w, cx)).unwrap();
+        };
+        edit(cx);
+        handle.update(cx, |v, _, cx| v.visual_type_machine_space("前端", cx)).unwrap();
+        wait(600).await;
+        let words = handle.update(cx, |v, _, cx| v.visual_machine_space_choice(false, cx)).unwrap();
+        assert_eq!(words.as_deref(), Some("改名为「前端」"), "the row said {words:?}");
+        shoot("spaces-rename.png", cx);
+        handle.update(cx, |v, _, cx| v.visual_submit_machine_space(cx)).unwrap();
+        for _ in 0..50 {
+            if adding(cx).is_none() {
+                break;
+            }
+            wait(100).await;
+        }
+        let err = adding(cx);
+        assert!(err.is_none(), "renaming left the panel open: {err:?}");
+        wait(2500).await;
+        let renamed = space(cx);
+        assert!(renamed.as_ref().is_some_and(|s| s.1 == "前端" && s.2.is_empty()), "{renamed:?}");
+        edit(cx);
+        handle.update(cx, |v, _, cx| v.visual_type_machine_space("~/site-new", cx)).unwrap();
+        wait(900).await;
+        let words = handle.update(cx, |v, _, cx| v.visual_machine_space_choice(false, cx)).unwrap();
+        assert_eq!(words.as_deref(), Some("新建文件夹 ~/site-new"), "the row said {words:?}");
+        shoot("spaces-mkdir.png", cx);
+        handle.update(cx, |v, _, cx| v.visual_machine_space_choice(true, cx)).unwrap();
+        for _ in 0..50 {
+            if adding(cx).is_none() {
+                break;
+            }
+            wait(100).await;
+        }
+        let err = adding(cx);
+        assert!(err.is_none(), "making the folder left the panel open: {err:?}");
+        wait(2500).await;
+        let home = std::env::var("HOME").unwrap();
+        let set = space(cx);
+        assert!(
+            set.as_ref().is_some_and(|s| s.1 == "前端" && s.2 == format!("{home}/site-new")),
+            "{set:?}"
+        );
+        assert!(std::path::Path::new(&home).join("site-new").is_dir(), "no folder made there");
+        shoot("spaces-edited.png", cx);
         handle.update(cx, |v, _, cx| v.visual_machine_space(named.as_deref().unwrap(), cx)).unwrap();
         handle.update(cx, |v, _, cx| v.visual_set_space_quiet("other", false, cx)).unwrap();
         wait(900).await;
-        eprintln!("machine spaces PASS: chips, refused, cancelled, made, made again, named");
+        eprintln!("machine spaces PASS: chips, refused, cancelled, made, made again, named, renamed, folder made and set");
 
         // 先不管这台: out of every count, the key and the board, in every layout; looking at
         // its sessions does not end it, and the words and the file follow both ways.

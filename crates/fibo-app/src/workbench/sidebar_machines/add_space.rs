@@ -14,6 +14,8 @@ const ROW: f32 = 24.;
 const SHOWN: usize = 5;
 const OFFERED: usize = 30;
 
+mod edit_space;
+
 /// The panel under a machine's chips while a new space is being chosen.
 pub(in crate::workbench) struct AddingSpace {
     host: String,
@@ -28,6 +30,8 @@ pub(in crate::workbench) struct AddingSpace {
     asked: u64,
     /// Folders there are listed, and the space made, over this short exchange.
     brief: crate::machines::Brief,
+    /// The space there this panel renames or sets the folder of; none makes a new one.
+    editing: Option<Space>,
 }
 
 fn is_path(text: &str) -> bool {
@@ -66,10 +70,12 @@ fn offered(reply: &Dirs, text: &str) -> Vec<String> {
         .take(OFFERED)
         .collect()
 }
-/// What a new space there is made from.
-#[derive(Debug, PartialEq)]
+/// What a new space there is made from, or what an edited one changes to.
+#[derive(Debug, PartialEq, Clone)]
 enum Make {
     Folder(String),
+    /// A folder to make there first, then as `Folder`.
+    NewFolder(String),
     /// A space of this name with no folder, as this machine's 新建空间 makes.
     Named(String),
 }
@@ -85,14 +91,6 @@ fn target(text: &str, offered: &[String], names: bool) -> Result<Make, &'static 
         Ok(Make::Named(text.to_owned()))
     } else {
         (offered.first().cloned().map(Make::Folder)).ok_or(t!("没有找到这个目录"))
-    }
-}
-/// The name Enter makes a space of, when it does.
-fn named(adding: &AddingSpace) -> Option<String> {
-    let names = adding.brief.lists("spacename");
-    match target(&adding.text, &[], names) {
-        Ok(Make::Named(name)) => Some(name),
-        _ => None,
     }
 }
 fn shorter(path: &str, home: &str) -> String {
@@ -129,11 +127,21 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.open_space_panel(index, None, window, cx);
+    }
+    fn open_space_panel(
+        &mut self,
+        index: usize,
+        editing: Option<Space>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(host) = self.machine_host(index) else {
             return;
         };
+        let text = editing.as_ref().map(|s| s.name.clone()).unwrap_or_default();
         let field = cx.new(|cx| {
-            Field::new(t!("目录"), "", cx)
+            Field::new(t!("目录"), &text, cx)
                 .inline()
                 .placeholder(t!("~/code/项目，或名字"))
         });
@@ -165,12 +173,13 @@ impl Workbench {
             host,
             field,
             _watch: [events, changes],
-            text: String::new(),
+            text,
             offered: Vec::new(),
             home: String::new(),
             sending: false,
             error: None,
             asked: 0,
+            editing,
         });
         self.list_machine_dirs(false, cx);
         cx.notify();
@@ -236,8 +245,9 @@ impl Workbench {
         if adding.sending {
             return;
         }
-        let names = adding.brief.lists("spacename");
+        let names = adding.brief.lists("spacename") || adding.editing.is_some();
         let make = chosen.map_or_else(|| target(&adding.text, &adding.offered, names), Ok);
+        let make = make.and_then(|make| edit_space::allowed(adding, make));
         let make = match make {
             Ok(make) => make,
             Err(why) => {
@@ -247,7 +257,7 @@ impl Workbench {
             }
         };
         // A name that already is a space there picks that one rather than a second of it.
-        if let Make::Named(name) = &make {
+        if let (Make::Named(name), None) = (&make, &adding.editing) {
             let host = adding.host.clone();
             if let Some(space) = self.machine_space_named(&host, name) {
                 self.sidebar.machine_space = Some(space.id);
@@ -264,16 +274,20 @@ impl Workbench {
         adding.error = None;
         adding.asked += 1;
         let (asked, host) = (adding.asked, adding.host.clone());
-        let (path, name) = match make {
-            Make::Folder(path) => (Some(path), None),
-            Make::Named(name) => (None, Some(name)),
-        };
-        let op = Op::AddSpace {
-            path,
-            name,
-            request: Some(fibo_core::protocol::RequestId::fresh().id),
-        };
-        let sent = cx.background_spawn(async move { linked.request(op, REPLY) });
+        let editing = adding.editing.as_ref().map(|s| s.id.clone());
+        let sent = cx.background_spawn(async move {
+            let make = match make {
+                // Made there first; the space takes the folder its host says it made.
+                Make::NewFolder(path) => {
+                    let request = Some(fibo_core::protocol::RequestId::fresh().id);
+                    let made = linked.request(Op::Mkdir { path, request }, REPLY)?;
+                    let path = made["path"].as_str().unwrap_or_default().to_owned();
+                    Make::Folder(path)
+                }
+                make => make,
+            };
+            linked.request(edit_space::space_op(make, editing), REPLY)
+        });
         cx.notify();
         cx.spawn(async move |this, cx| {
             let reply = sent.await;
@@ -305,11 +319,13 @@ impl Workbench {
         }
         match made {
             Ok(space) => {
-                // The next list says so too; until then the chip is already there.
+                // The next list says so too; until then the chip is already there, or
+                // already reads as changed.
                 if let Some(remote) = self.machine_index(host).and_then(|i| self.machines.get(i)) {
                     let mut view = remote.view.lock().unwrap();
-                    if !view.spaces.iter().any(|s| s.id == space.id) {
-                        view.spaces.push(space.clone());
+                    match view.spaces.iter_mut().find(|s| s.id == space.id) {
+                        Some(known) => *known = space.clone(),
+                        None => view.spaces.push(space.clone()),
                     }
                 }
                 self.sidebar.machine_space = Some(space.id);
@@ -462,45 +478,7 @@ impl Workbench {
                     this.submit_machine_space(Some(Make::Folder(chosen.clone())), cx);
                 }))
         });
-        // What Enter makes, said first, so a name never quietly turns into a folder's.
-        let named = named(adding).map(|name| {
-            let known = spaces.iter().any(|s| s.name == name);
-            let made = name.clone();
-            div()
-                .id("machine-space-named")
-                .role(gpui::accesskit::Role::Button)
-                .h(px(ROW))
-                .flex_shrink_0()
-                .px(px(T::S6))
-                .flex()
-                .items_center()
-                .rounded(px(T::S4))
-                .bg(T::color(F::selected()))
-                .cursor_pointer()
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .truncate()
-                        .text_size(px(F::TIME))
-                        .text_color(T::color(F::title()))
-                        .child(if known {
-                            t!("已有空间「{name}」", name)
-                        } else {
-                            t!("新建空间「{name}」", name)
-                        }),
-                )
-                .child(
-                    div()
-                        .flex_shrink_0()
-                        .text_size(px(F::TAG))
-                        .text_color(T::color(F::third()))
-                        .child(t!("回车")),
-                )
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.submit_machine_space(Some(Make::Named(made.clone())), cx);
-                }))
-        });
+        let enter = self.enter_row(adding, &spaces, cx);
         let shown = adding.offered.len().min(SHOWN);
         let words = if adding.sending {
             Some((t!("正在 {name} 上建…", name), T::color(F::third())))
@@ -526,7 +504,10 @@ impl Workbench {
                     .text_size(px(T::SMALL))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_color(T::color(F::bright()))
-                    .child(t!("在 {name} 上新建空间", name)),
+                    .child(match &adding.editing {
+                        Some(space) => t!("改 {name} 上的「{space}」", name, space = space.name),
+                        None => t!("在 {name} 上新建空间", name),
+                    }),
             )
             .child(
                 div()
@@ -538,7 +519,7 @@ impl Workbench {
                     .text_size(px(T::SMALL))
                     .child(adding.field.clone()),
             )
-            .when_some(named.filter(|_| !adding.sending), |d, row| d.child(row))
+            .when_some(enter.filter(|_| !adding.sending), |d, row| d.child(row))
             .when(!adding.sending && shown > 0, |d| {
                 // A definite height: docs/performance on wrappers sized by max_h.
                 d.child(
@@ -658,6 +639,40 @@ impl Workbench {
     }
     pub fn visual_submit_machine_space(&mut self, cx: &mut Context<Self>) {
         self.submit_machine_space(None, cx);
+    }
+    /// Right-click on that machine's space `id`.
+    pub fn visual_begin_edit_machine_space(
+        &mut self,
+        index: usize,
+        id: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let space = self.machines[index]
+            .view
+            .lock()
+            .unwrap()
+            .spaces
+            .iter()
+            .find(|s| s.id == id)
+            .cloned();
+        self.begin_edit_machine_space(index, space.expect("no such space"), window, cx);
+    }
+    /// The words of the row above the folders, and a click on it.
+    pub fn visual_machine_space_choice(
+        &mut self,
+        click: bool,
+        cx: &mut Context<Self>,
+    ) -> Option<String> {
+        let adding = self.layout.adding_machine_space.as_ref()?;
+        let host = adding.host.clone();
+        let spaces = (self.machine_index(&host).and_then(|i| self.machines.get(i)))
+            .map_or_else(Vec::new, |m| m.view.lock().unwrap().spaces.clone());
+        let (words, _, make) = edit_space::visual_choice(adding, &spaces)?;
+        if click {
+            self.submit_machine_space(Some(make), cx);
+        }
+        Some(words)
     }
     pub fn visual_cancel_machine_space(&mut self, cx: &mut Context<Self>) {
         self.cancel_machine_space(cx);

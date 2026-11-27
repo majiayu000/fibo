@@ -223,6 +223,10 @@ impl Brief {
             ops: Arc::default(),
         }
     }
+    /// Whether it has said hello, so what it lists is known.
+    pub fn said_hello(&self) -> bool {
+        !self.ops.lock().unwrap().is_empty()
+    }
     /// Whether its hello listed `op`; false before the first request.
     pub fn lists(&self, op: &str) -> bool {
         self.ops.lock().unwrap().iter().any(|o| o == op)

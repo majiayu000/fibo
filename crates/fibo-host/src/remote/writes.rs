@@ -270,6 +270,34 @@ pub(super) fn add_space(socket: &Path, request: &Value, client: Option<&str>) ->
     edit_once(socket, request, client, Edit::AddSpace(space.clone()))?;
     Ok(reply(&space))
 }
+/// `updatespace`: a new `name` for a space, or a `path` for its folder, as the window's
+/// 重命名 and 设置目录… do. Setting what it already has changes nothing, so a resend is fine.
+pub(super) fn update_space(
+    socket: &Path,
+    request: &Value,
+    client: Option<&str>,
+) -> io::Result<Value> {
+    let id = text(request, "space")?;
+    let w = super::held::workspace(socket)?;
+    let mut space = (w.spaces.iter().find(|s| s.id == id).cloned())
+        .ok_or_else(|| io::Error::other(t!("这个空间已经不在了")))?;
+    if let Some(name) = request["name"].as_str() {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(io::Error::other(t!("空间名称不能为空")));
+        }
+        name.clone_into(&mut space.name);
+    }
+    if let Some(path) = request["path"].as_str().filter(|p| !p.is_empty()) {
+        let path = super::dirs::expand(path)?;
+        if !path.is_dir() {
+            return Err(io::Error::other(t!("目录不存在")));
+        }
+        space.cwd = path.to_string_lossy().trim_end_matches('/').to_owned();
+    }
+    edit_once(socket, request, client, Edit::UpdateSpace(space.clone()))?;
+    Ok(reply(&space))
+}
 fn reply(space: &Space) -> Value {
     json!({ "id": space.id, "name": space.name, "cwd": space.cwd })
 }

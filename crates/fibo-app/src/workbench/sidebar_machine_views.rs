@@ -187,6 +187,7 @@ impl Workbench {
             // goes out, though that machine's main area stays on it.
             let on = self.machine_chip_lit(&space.id);
             let pick = space.id.clone();
+            let edit = space.clone();
             div()
                 .id(gpui::SharedString::from(format!(
                     "machine-space-{}",
@@ -229,6 +230,15 @@ impl Workbench {
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.pick_machine_space(index, &pick, window, cx)
                 }))
+                // Renamed or given a folder there, as this machine's own space menu does.
+                .when(add, |d| {
+                    d.on_mouse_down(
+                        gpui::MouseButton::Right,
+                        cx.listener(move |this, _, window, cx| {
+                            this.begin_edit_machine_space(index, edit.clone(), window, cx)
+                        }),
+                    )
+                })
         });
         div()
             .flex()

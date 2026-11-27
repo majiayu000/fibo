@@ -352,6 +352,46 @@ fn addspace_with_a_name_makes_that_space_with_or_without_a_folder() {
     assert!(!answer.ops().contains(&"spacename".into()));
 }
 
+/// 重命名 and 设置目录… from another machine's window: a resend changes nothing more, a missing
+/// folder or an empty name is refused, and a lesser role cannot.
+#[test]
+fn updatespace_renames_a_space_and_sets_its_folder_for_the_full_role_only() {
+    let h = Host::start();
+    let dir = scratch(&h, "site").to_string_lossy().into_owned();
+    let mut r = Remote::open(&h, None, &[]);
+    assert!(r.ops().contains(&"updatespace".into()));
+    let made = r.ok(json!({ "op": "addspace", "name": "brand", "request": "u1" }));
+    let id = made["id"].as_str().unwrap();
+    let rename = json!({ "op": "updatespace", "space": id, "name": " 前端 ", "request": "u2" });
+    let renamed = r.ok(rename.clone());
+    assert_eq!(
+        (&renamed["name"], &renamed["cwd"]),
+        (&json!("前端"), &json!(""))
+    );
+    assert_eq!(r.ok(rename), renamed, "a resend changes nothing more");
+    let set = r.ok(
+        json!({ "op": "updatespace", "space": id, "path": format!("{dir}/"), "request": "u3" }),
+    );
+    assert_eq!((&set["name"], &set["cwd"]), (&json!("前端"), &json!(dir)));
+    let w = h.workspace();
+    let space = w.spaces.iter().find(|s| s.id == id).unwrap();
+    assert_eq!(
+        (space.name.as_str(), space.cwd.as_str()),
+        ("前端", dir.as_str())
+    );
+    let nope = h.root.join("nope").to_string_lossy().into_owned();
+    let e = r.error(json!({ "op": "updatespace", "space": id, "path": nope, "request": "u4" }));
+    assert!(e.contains("目录不存在"), "{e}");
+    let e = r.error(json!({ "op": "updatespace", "space": id, "name": " ", "request": "u5" }));
+    assert!(e.contains("不能为空"), "{e}");
+    let e = r.error(json!({ "op": "updatespace", "space": "gone", "name": "x", "request": "u6" }));
+    assert!(e.contains("不在了"), "{e}");
+    let mut answer = Remote::open(&h, Some("answer"), &[]);
+    assert!(!answer.ops().contains(&"updatespace".into()));
+    let e = answer.error(json!({ "op": "updatespace", "space": id, "name": "x", "request": "u7" }));
+    assert!(e.contains("不能 updatespace"), "{e}");
+}
+
 /// The phone names the space: the tab goes there even when the folder is outside it (it used
 /// to fall into the first space). Without one, as from an older phone, the folder decides.
 #[test]
