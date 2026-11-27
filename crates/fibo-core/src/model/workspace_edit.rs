@@ -305,7 +305,8 @@ impl Workspace {
                 task,
                 session,
                 text,
-            } => self.add_task_note(task, session, text)?,
+                done,
+            } => self.add_task_note(task, session, text, done)?,
             edit @ (Edit::CreateTab { .. }
             | Edit::RenameTab { .. }
             | Edit::MoveTab { .. }

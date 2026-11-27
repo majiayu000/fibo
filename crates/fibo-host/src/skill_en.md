@@ -42,12 +42,12 @@ Every command accepts only its documented flags: a misspelled flag (such as `--t
 
 ### Todos
 
-When the user says "note this down" or you spot follow-up work out of scope for the current turn, record it with `fibo todo add` (Claude Code is told this at session start via `fibo --skill session`; Codex reads `~/.codex/skills/fibo`). Do not record questions answered on the spot. For sessions launched from a todo, write a brief note after each milestone. **You cannot mark a todo done — there is no command for it: record progress as a note and let the user complete it in the window.**
+When the user says "note this down" or you spot follow-up work out of scope for the current turn, record it with `fibo todo add` (Claude Code is told this at session start via `fibo --skill session`; Codex reads `~/.codex/skills/fibo`). Do not record questions answered on the spot. For sessions launched from a todo, write a brief note after each milestone. **You cannot mark a todo done — there is no command for it: when it is done, write the evidence with `fibo todo note --done` and let the user confirm or send it back in the window or on the phone.**
 
 | Command | Purpose |
 |---|---|
-| `fibo todo add <title\|-> [--said <quote>] [--space <space>] [--work] [--json]` | Record a todo and print its ID. `--said` preserves the user's exact words. By default it only records which session noted it; pass `--work` only if this session is actively working on it (otherwise closing the todo also closes the session) |
-| `fibo todo note <text\|-> [--task <todo>]` | Add a progress note (what was done, what remains, what needs a decision; 1–2 sentences, up to 1000 chars). Defaults to the todo linked to the current terminal |
+| `fibo todo add <title\|-> [--said <quote>] [--done-when <criterion>] [--space <space>] [--work] [--json]` | Record a todo and print its ID. `--said` preserves the user's exact words. `--done-when` says what counts as done. By default it only records which session noted it; pass `--work` only if this session is actively working on it (otherwise closing the todo also closes the session) |
+| `fibo todo note <text\|-> [--task <todo>] [--done]` | Add a progress note (what was done, what remains, what needs a decision; 1–2 sentences, up to 1000 chars). `--done` says it is done, with the evidence as text; the todo reads Awaiting your check. Defaults to the todo linked to the current terminal |
 | `fibo todo show [--task <todo>] [--json]` | Inspect a todo: user's words, acceptance criteria, and progress notes |
 | `fibo todo list [--all] [--json]` | Open todos; `--all` includes closed ones |
 

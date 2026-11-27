@@ -24,6 +24,9 @@ export const common: Record<string, Entry> = {
   进行中: 'In progress',
   会话都做完了: 'Sessions done',
   验收齐了: 'All checks met',
+  有进展: 'Has progress',
+  等你确认: 'Awaiting your check',
+  搁着: 'Idle',
   已完成: 'Completed',
   已放弃: 'Abandoned',
 };

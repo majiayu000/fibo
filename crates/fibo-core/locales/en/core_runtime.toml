@@ -131,7 +131,7 @@
 "两个画面不在同一个标签里，不能互换" = "Cannot swap panes across different tabs"
 "这条分隔线刚被别处改掉了，再拖一次" = "This divider just changed elsewhere; drag it again"
 "目前进展：\n{notes}" = "Progress so far:\n{notes}"
-"（这是 Fibo 待办。每做完一段就运行 {note} --task {id} \"做了什么、剩什么、要用户定什么\"，一两句就够。完成由用户标记。）" = "(This is a Fibo to-do. After each step, run {note} --task {id} \"what was done, what remains, what needs a decision\" in one or two sentences. The user marks it done.)"
+"（这是 Fibo 待办。每做完一段就运行 {note} --task {id} \"做了什么、剩什么、要用户定什么\"，一两句就够。完成后加 --done，文字写证据，由用户确认。）" = "(This is a Fibo to-do. After each step, run {note} --task {id} \"what was done, what remains, what needs a decision\" in one or two sentences. When it is done, add --done with the evidence as text; the user confirms it.)"
 "待办不存在" = "To-do does not exist"
 "会话不存在" = "Session does not exist"
 "进展不能为空" = "Progress note cannot be empty"

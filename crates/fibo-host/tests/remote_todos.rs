@@ -46,6 +46,7 @@ fn list_carries_every_unfinished_todo_with_its_state_words_and_progress() {
             task: "t1".into(),
             session: None,
             text: "初稿写好了".into(),
+            done: false,
         },
     );
     edit(

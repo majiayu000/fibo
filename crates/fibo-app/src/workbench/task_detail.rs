@@ -6,6 +6,7 @@ mod criterion;
 mod evidence;
 mod head;
 mod progress;
+mod send_back;
 
 /// See `fibo_core::status::task_state`, the one place a todo's state is decided.
 pub(super) use fibo_core::status::TaskState as TaskStatus;
@@ -68,13 +69,14 @@ fn ring(status: TaskStatus) -> gpui::Div {
         .border_color(ink)
         .overflow_hidden();
     match status {
-        TaskStatus::NotStarted | TaskStatus::Deferred | TaskStatus::Abandoned => {
-            base.border_color(T::color(T::muted()))
-        }
-        TaskStatus::Working | TaskStatus::Settled => {
+        TaskStatus::NotStarted
+        | TaskStatus::Idle
+        | TaskStatus::Deferred
+        | TaskStatus::Abandoned => base.border_color(T::color(T::muted())),
+        TaskStatus::Working | TaskStatus::Settled | TaskStatus::Noted => {
             base.flex().child(div().w_1_2().h_full().bg(ink))
         }
-        TaskStatus::Proven | TaskStatus::Completed => base.bg(ink),
+        TaskStatus::Claimed | TaskStatus::Proven | TaskStatus::Completed => base.bg(ink),
     }
 }
 fn panel() -> gpui::Div {

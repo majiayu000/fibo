@@ -200,12 +200,7 @@ impl Workbench {
             .map(|c| c.waiting + c.errors)
             .sum::<usize>();
         let name = space.map_or_else(|| t!("全部空间").to_owned(), |s| s.name.clone());
-        let todos = self
-            .workspace
-            .tasks
-            .iter()
-            .filter(|t| t.space == self.nav.space)
-            .count();
+        let todos = self.space_todos().0.len();
         let open = self.tasks.todos_open;
         line.when(!all_spaces, |line| {
             line.child(

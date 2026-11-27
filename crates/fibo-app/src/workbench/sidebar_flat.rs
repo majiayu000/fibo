@@ -653,12 +653,7 @@ impl Workbench {
     /// The foot: this machine and what it lists; the space's todos, the view, pairing a
     /// phone and settings.
     pub(super) fn flat_foot(&self, sessions: usize, cx: &Context<Self>) -> gpui::Div {
-        let todos = self
-            .workspace
-            .tasks
-            .iter()
-            .filter(|t| t.space == self.nav.space)
-            .count();
+        let todos = self.space_todos().0.len();
         let todos_open = self.tasks.todos_open;
         let view_open = self.sidebar.view_menu.is_some();
         let icon = |id, path, name| self.flat_icon(id, path, name);

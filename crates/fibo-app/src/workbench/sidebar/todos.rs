@@ -2,6 +2,20 @@
 use super::*;
 
 impl Workbench {
+    /// The space's todos as the column lists them: in front by rank, and the folded
+    /// ones (搁着, closed) apart. What the header counts is the front.
+    pub(in crate::workbench) fn space_todos(&self) -> (Vec<&Task>, Vec<&Task>) {
+        let mut rows: Vec<(&Task, fibo_core::status::TaskState)> = (self.workspace.tasks.iter())
+            .filter(|t| t.space == self.nav.space)
+            .map(|t| (t, super::task_detail::task_status(&self.workspace, t)))
+            .collect();
+        rows.sort_by_key(|(_, s)| s.rank());
+        let (folded, front): (Vec<_>, Vec<_>) = rows.into_iter().partition(|(_, s)| s.folded());
+        (
+            front.into_iter().map(|(t, _)| t).collect(),
+            folded.into_iter().map(|(t, _)| t).collect(),
+        )
+    }
     /// The folded column: a way back, and how many sessions in this space need you.
     /// The space's todos: what is still to be handed to an Agent, above what is running.
     /// In the dense presets the header lives in the space line (`待办 3`), so only the
@@ -13,12 +27,8 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> gpui::Div {
         let mut sidebar = div().flex().flex_col();
-        let todo_count = self
-            .workspace
-            .tasks
-            .iter()
-            .filter(|t| t.space == self.nav.space)
-            .count();
+        let (front, folded) = self.space_todos();
+        let todo_count = front.len();
         let open = self.tasks.todos_open;
         if dense {
             sidebar = sidebar
@@ -96,12 +106,12 @@ impl Workbench {
                     ),
             );
         }
-        for task in self
-            .workspace
-            .tasks
-            .iter()
-            .filter(|t| t.space == self.nav.space)
-        {
+        let folded_open = self.tasks.todos_folded_open;
+        let shown = front.len() + if folded_open { folded.len() } else { 0 };
+        for (i, task) in front.iter().chain(folded.iter()).take(shown).enumerate() {
+            if i == front.len() {
+                sidebar = sidebar.child(self.folded_todos_toggle(&folded, cx));
+            }
             let tid = task.id.clone();
             let start = tid.clone();
             let count = self
@@ -112,6 +122,7 @@ impl Workbench {
                 .count();
             // The detail's word for where it stands, with how many sessions it has.
             let status = super::task_detail::task_status(&self.workspace, task);
+            let claimed = status == fibo_core::status::TaskState::Claimed;
             let state = match status {
                 fibo_core::status::TaskState::Working
                 | fibo_core::status::TaskState::Settled
@@ -157,7 +168,7 @@ impl Workbench {
                     .child(
                         button(
                             gpui::SharedString::from(format!("start-task-{tid}")),
-                            t!("开始"),
+                            if claimed { t!("确认") } else { t!("开始") },
                         )
                         .h(px(T::ICON_HEIGHT))
                         .px(px(T::S6))
@@ -167,7 +178,12 @@ impl Workbench {
                         .text_color(T::color(T::link()))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             cx.stop_propagation();
-                            this.ask_agent(start.clone(), false, cx);
+                            // An Agent said it is done: one click completes it.
+                            if claimed {
+                                this.complete_todo(&start, cx);
+                            } else {
+                                this.ask_agent(start.clone(), false, cx);
+                            }
                         })),
                     )
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -179,6 +195,48 @@ impl Workbench {
                 sidebar = sidebar.child(picker);
             }
         }
+        if !folded.is_empty() && !folded_open {
+            sidebar = sidebar.child(self.folded_todos_toggle(&folded, cx));
+        }
         sidebar
+    }
+
+    /// 搁着 3 · 已收尾 5: the folded part of the list, opened and closed in place.
+    fn folded_todos_toggle(
+        &self,
+        folded: &[&Task],
+        cx: &Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let count = |pick: fn(fibo_core::status::TaskState) -> bool| {
+            (folded.iter())
+                .filter(|t| pick(super::task_detail::task_status(&self.workspace, t)))
+                .count()
+        };
+        let idle = count(|s| s == fibo_core::status::TaskState::Idle);
+        let closed = count(fibo_core::status::TaskState::closed);
+        let mut words = Vec::new();
+        if idle > 0 {
+            words.push(t!("搁着 {idle}", idle).to_owned());
+        }
+        if closed > 0 {
+            words.push(t!("已收尾 {closed}", closed).to_owned());
+        }
+        let open = self.tasks.todos_folded_open;
+        div()
+            .id("todos-folded")
+            .h(px(T::TASK_ROW))
+            .px(px(T::S8))
+            .flex()
+            .items_center()
+            .cursor_pointer()
+            .child(label(format!(
+                "{} {}",
+                if open { "▾" } else { "▸" },
+                words.join(" · ")
+            )))
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.tasks.todos_folded_open = !this.tasks.todos_folded_open;
+                cx.notify();
+            }))
     }
 }
