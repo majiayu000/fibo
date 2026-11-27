@@ -325,6 +325,7 @@ mod visual_unknown;
 mod closing;
 mod launch_slot;
 mod pane_sync;
+mod todo_offer;
 impl Workbench {
     pub fn new(
         socket: PathBuf,

@@ -82,6 +82,21 @@ impl Workspace {
         };
         self.tasks.iter().find(|t| t.id == id)
     }
+    /// The open todos a conversation is tied to: the ones it works for or was noted in.
+    /// What the window offers to complete with it when you mark it done; nothing guessed.
+    pub fn session_todos(&self, session: &str, now: u64) -> Vec<&Task> {
+        let works = (self.agent_sessions.iter())
+            .find(|s| s.id == session)
+            .and_then(|s| s.task.as_deref());
+        (self.tasks.iter())
+            .filter(|t| {
+                works == Some(t.id.as_str())
+                    || (self.task_logs.get(&t.id)).and_then(|l| l.source.as_deref())
+                        == Some(session)
+            })
+            .filter(|t| !crate::status::task_state(self, t, now).closed())
+            .collect()
+    }
     pub(super) fn add_task_note(
         &mut self,
         task: String,
@@ -338,5 +353,37 @@ mod tests {
             TaskState::NotStarted,
             "written before created was kept: unknown is not old"
         );
+    }
+
+    #[test]
+    fn a_conversation_offers_the_todos_it_noted_or_works_for_and_no_other() {
+        let mut w = crate::sample::every_state();
+        let session = w.agent_sessions[0].id.clone();
+        let space = w.spaces[0].id.clone();
+        let now = crate::time::now();
+        let before = w.session_todos(&session, now).len();
+        for id in ["noted", "elsewhere", "closed"] {
+            let mut t = task(id);
+            t.space = space.clone();
+            let from = (id != "elsewhere").then(|| session.clone());
+            w.edit(Edit::AddTaskFrom {
+                task: t,
+                session: from,
+            })
+            .unwrap();
+        }
+        w.edit(Edit::SetTaskOutcome {
+            id: "closed".into(),
+            outcome: Outcome::Completed,
+            seen: None,
+        })
+        .unwrap();
+        let ids: Vec<&str> = (w.session_todos(&session, now).into_iter())
+            .map(|t| t.id.as_str())
+            .collect();
+        assert!(ids.contains(&"noted"));
+        assert!(!ids.contains(&"elsewhere"), "noted in another conversation");
+        assert!(!ids.contains(&"closed"), "already closed");
+        assert_eq!(ids.len(), before + 1);
     }
 }
