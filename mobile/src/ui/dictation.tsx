@@ -12,18 +12,28 @@ import { lang, tr } from '../i18n';
 // One recognizer for the whole phone: only the box that started it hears its events.
 let owner = 0;
 let next = 1;
+// The recognizer said it cannot serve this app: no microphone again until the app restarts.
+let broken = false;
 
 function available(): boolean {
   // Every iPhone has a recognizer, but `isAvailable` is false while offline: there it says so on use instead.
   if (Platform.OS === 'ios') return true;
+  if (broken) return false;
   try {
-    return ExpoSpeechRecognitionModule.isRecognitionAvailable();
+    if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) return false;
+    // A phone can list a service another app keeps to itself (2026-11-28 OPPO: only Claude's, which
+    // refuses others); with no default service set there is nothing this app can use.
+    return Platform.OS !== 'android' || !!ExpoSpeechRecognitionModule.getDefaultRecognitionService().packageName;
   } catch {
     return false;
   }
 }
 
+/** The recognizer itself will not serve this app: asking again gives the same answer. */
+const UNUSABLE = new Set(['service-not-allowed', 'client', 'bad-grammar', 'language-not-supported']);
+
 function why(error: string, message: string): string {
+  if (UNUSABLE.has(error)) return tr('这台手机的系统语音识别用不了，可以用输入法的语音键');
   if (error === 'not-allowed') return tr('没有麦克风权限，到系统设置里给 Fibo 打开');
   if (error === 'network') return tr('语音识别要联网，现在连不上');
   if (error === 'language-not-supported') return tr('系统的语音识别不支持这种语言');
@@ -42,7 +52,7 @@ export type Dictation = {
 export function useDictation(text: string, setText: (text: string) => void, onError?: (why: string) => void): Dictation {
   const id = useRef(0);
   if (!id.current) id.current = next++;
-  const [can] = useState(available);
+  const [can, setCan] = useState(available);
   const [listening, setListening] = useState(false);
   // The box as it was when listening started, plus every phrase heard to the end since.
   const base = useRef('');
@@ -67,6 +77,10 @@ export function useDictation(text: string, setText: (text: string) => void, onEr
     if (!mine()) return;
     owner = 0;
     setListening(false);
+    if (UNUSABLE.has(e.error)) {
+      broken = true;
+      setCan(false);
+    }
     if (!QUIET_ERRORS.has(e.error)) onError?.(why(e.error, e.message));
   });
 

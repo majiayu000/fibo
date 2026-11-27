@@ -16,6 +16,7 @@ export const chat: Record<string, Entry> = {
   '系统的语音识别不支持这种语言': 'The phone’s speech recognition doesn’t support this language',
   '系统的语音识别用不了：{m}': (a) => `The phone’s speech recognition isn’t working: ${a.m}`,
   停止听写: 'Stop dictating',
+  '这台手机的系统语音识别用不了，可以用输入法的语音键': 'This phone’s speech recognition isn’t available to apps. Use your keyboard’s voice key instead',
   收起: 'Show less',
   回车: 'Return',
   '要在电脑的浏览器里完成，手机上做不了': 'This has to be done in the browser on the computer, not on the phone',
