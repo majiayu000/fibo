@@ -496,7 +496,9 @@ export default function Chat() {
           initialNumToRender={8}
           maxToRenderPerBatch={6}
           windowSize={9}
-          onEndReached={older}
+          // A failed read-back waits for a tap: a short list stays "at the top", and the note
+          // changing height between reading and failing would fire this again, for ever.
+          onEndReached={canReadBack && readFailed ? undefined : older}
           onEndReachedThreshold={0.3}
           contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14, gap: 10 }}
           ListFooterComponent={
