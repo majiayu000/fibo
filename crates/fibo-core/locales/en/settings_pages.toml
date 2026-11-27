@@ -233,3 +233,5 @@
 "已开启" = "On"
 "已关闭" = "Off"
 "删除后不能恢复" = "This can't be undone"
+"只走 ssh" = "ssh only"
+"只走中继" = "Relay only"

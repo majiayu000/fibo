@@ -171,3 +171,8 @@
 "{host} 经中继连着，这里不能在那台上运行命令；到那台电脑上操作，或改用 ssh 连它" = "{host} is reached through the relay, so commands cannot run there from here; use that computer, or reach it over ssh"
 "连不上 {host} 上的 Fibo：中继转发没有在 20 秒内接通" = "Cannot reach Fibo on {host}: the relay forward did not connect within 20 seconds"
 "经中继连不上 {host}：{why}" = "Cannot reach {host} through the relay: {why}"
+"中继" = "relay"
+"没配对" = "not paired"
+"另一条：{way} {ms} ms" = "Other way: {way} {ms} ms"
+"另一条：{way}：{why}" = "Other way: {way}: {why}"
+"配对的不是这台（重新 fibo remote join）" = "the relay pairing is of another machine (run fibo remote join again)"
