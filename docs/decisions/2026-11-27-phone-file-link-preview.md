@@ -19,7 +19,7 @@ decision-makers: majiayu000
 已落实：
 
 - 新操作 `file {terminal, path}`，回 `{path, text, markdown, truncated}`（`crates/fibo-host/src/remote/file.rs`）。只给「完全控制」（`fibo-remote` `role.rs`），和 `diff` 的补丁一样；只看、能答审批的手机的 `hello` 不列它。不是写操作，不记日志。
-- 项目目录由电脑定：`terminal` 的 `terminal_cwd`，手机不能指定目录。相对路径从这个目录算，`~/` 和绝对路径照常；目录和文件都 `canonicalize` 后比较，所以 `..`、绝对路径和指向外面的符号链接都被拒绝。扩展名按解析后的真实文件判断。最多读 128 KiB（转成 JSON 仍在一行协议内），含 NUL 的当作不是文本拒绝。
+- 能读的范围由电脑定：`terminal` 的 `terminal_cwd` 所在的 git 仓库（往上找最近的 `.git`），不在仓库里就只是这个目录；手机不能指定目录。11-28 用户确认：Agent `cd` 进子目录后仍要能看仓库里别处的文档。相对路径从终端当前目录算，`~/` 和绝对路径照常；目录和文件都 `canonicalize` 后比较，所以 `..`、绝对路径和指向外面的符号链接都被拒绝。扩展名按解析后的真实文件判断。最多读 128 KiB（转成 JSON 仍在一行协议内），含 NUL 的当作不是文本拒绝。
 - 手机的取舍在 `mobile/src/ui/md/filelink.ts` 的 `tapOf`：网页打开、可预览的文件进预览（去掉 `#L12` 这类锚点）、其他复制。只有聊天页传了 `onFile` 才走预览；预览页里的链接相对当前文件的目录。
 - 旧电脑：`hello` 不列 `file`，预览页说「这台电脑的 Fibo 还不支持，更新后可用」并给「复制电脑路径」。新电脑配旧手机：旧手机不认识 `file`，仍是复制路径。
 
@@ -29,7 +29,7 @@ decision-makers: majiayu000
 
 ## Verification
 
-- `cargo test -p fibo-host --bin fibo remote::file`：项目里的 `.md`、`.txt` 能读；`../`、项目外绝对路径、项目内指向外面的符号链接都回「不在会话的项目文件夹里」；`.rs` 和不存在的文件被拒；超长截断、二进制拒绝。
+- `cargo test -p fibo-host --bin fibo remote::file`：项目里的 `.md`、`.txt` 能读；`../`、项目外绝对路径、项目内指向外面的符号链接都回「不在会话所在的仓库里」；`.rs` 和不存在的文件被拒；超长截断、二进制拒绝。
 - `cargo test -p fibo-remote role`：`file` 只有完全控制有，且不算写操作。
 - `mobile/test/filelink.test.ts`：网页链接打开、`.md`/`.txt`（含 `file://`、URL 转义、`#L12`）进预览、其他文件和没有会话上下文时复制。
 - 真手机待走：`docs/phone-app/walkthrough.md` 的 `chat.filelink`，在真手机点对话里的设计稿，看到正文，返回后仍在原对话位置；核对普通网页、旧电脑端、离线、配对权限不足、项目外路径或符号链接。

@@ -572,7 +572,7 @@
 "配对的手机 {phones} 台、电脑 {computers} 台，在线 {online} 台" = "{phones} phones and {computers} computers paired, {online} online"
 "{role}（电脑）" = "{role} (computer)"
 "{host} 现在有两条路：ssh 和中继，自动选快的。设置 › 手机与远程里可以改成只走一条" = "{host} now has two ways, ssh and the relay, and the faster is taken. Settings › Phone & remote can keep it to one"
-"这个文件不在会话的项目文件夹里" = "This file is not in the conversation's project folder"
+"这个文件不在会话所在的仓库里" = "This file is not in the conversation's repository"
 "文件不存在" = "File not found"
 "只能预览 Markdown 和纯文本文件" = "Only Markdown and plain-text files can be previewed"
 "这个文件不是文本" = "This file is not text"
