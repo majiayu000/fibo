@@ -1,7 +1,7 @@
 //! Other machines the window shows beside this one: what `machines.json` names and what the
 //! window last knew of each. Their rows, name, link and round trip come from each one's own
 //! host, reached natively (`workbench/hosts.rs`, docs/decisions/2026-11-15-one-ui-many-hosts.md
-//! step 3); `ssh <host> <fibo> remote --stdio` only runs for a moment to list folders there.
+//! step 3).
 use fibo_remote::protocol::{Card, Machine, Space};
 use serde::{Deserialize, Serialize};
 use std::io;
@@ -58,12 +58,6 @@ impl Spec {
             path: None,
             quiet: false,
         }
-    }
-    pub fn command(&self) -> Vec<String> {
-        self.ssh(&match &self.path {
-            Some(path) => format!("exec {} remote --stdio", quote(path)),
-            None => format!("{}; exec \"$p\" remote --stdio", self.find_program()),
-        })
     }
     /// Shell that sets `$p` to `fibo` on that machine: the path written down, else on its
     /// PATH (by the new name, then the old), else the app bundle in ~/Applications, else
@@ -204,52 +198,6 @@ pub struct View {
     pub pins: Option<Vec<String>>,
 }
 
-/// A short exchange over `ssh <host> fibo remote --stdio`, for what the native link has no
-/// request for: listing folders there and making a space in one (the add-space form). It
-/// opens on first use and closes with the form.
-#[derive(Clone)]
-pub struct Brief {
-    spec: Spec,
-    client: Arc<Mutex<Option<Arc<fibo_remote::client::Client>>>>,
-}
-
-impl Brief {
-    pub fn new(spec: Spec) -> Self {
-        Self {
-            spec,
-            client: Arc::new(Mutex::new(None)),
-        }
-    }
-    /// `op` there, opening the exchange first if this is its first request.
-    pub fn request(
-        &self,
-        op: fibo_remote::protocol::Op,
-        wait: Duration,
-    ) -> io::Result<serde_json::Value> {
-        use fibo_remote::protocol::Op;
-        let client = {
-            let mut held = self.client.lock().unwrap();
-            match held.as_ref().filter(|c| c.ended().is_none()) {
-                Some(client) => Arc::clone(client),
-                None => {
-                    let client =
-                        Arc::new(fibo_remote::client::Client::spawn(&self.spec.command())?);
-                    client.request(
-                        Op::Hello {
-                            version: Some(fibo_remote::protocol::VERSION),
-                            client: Some(fibo_core::protocol::RequestId::fresh().client),
-                        },
-                        wait,
-                    )?;
-                    *held = Some(Arc::clone(&client));
-                    client
-                }
-            }
-        };
-        client.request(op, wait)
-    }
-}
-
 /// One machine as the window knows it, fed by its own host here (`hosts`).
 pub struct Remote {
     pub view: Arc<Mutex<View>>,
@@ -304,26 +252,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_command_runs_mooring_through_ssh() {
+    fn the_program_there_is_found_through_ssh() {
         let named = Spec {
             host: "mac2".into(),
             path: Some("/opt/My Apps/mooring".into()),
             quiet: false,
         };
-        let argv = named.command();
+        let argv = named.ssh(&named.find_program());
         assert_eq!(argv[0], "ssh");
         assert!(argv.contains(&"BatchMode=yes".to_owned()));
         assert_eq!(argv[argv.len() - 2], "mac2");
-        assert_eq!(
-            argv.last().unwrap(),
-            "exec '/opt/My Apps/mooring' remote --stdio"
-        );
+        assert_eq!(argv.last().unwrap(), "p='/opt/My Apps/mooring'");
         let unnamed = Spec {
             host: "mac2".into(),
             path: None,
             quiet: false,
         };
-        let probe = unnamed.command().last().unwrap().clone();
+        let probe = unnamed.find_program();
         assert!(probe.contains("command -v fibo || command -v mooring"));
         assert!(probe.contains("for a in Fibo Mooring"));
     }
