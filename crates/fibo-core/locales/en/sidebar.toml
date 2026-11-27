@@ -79,14 +79,11 @@
 "{text}，共 {count} 个" = "{text}, {count} in all"
 
 [add_space]
-"先选或写一个目录" = "Pick or type a folder first"
-"没有找到这个目录" = "Folder not found"
-"~/code/项目，或名字" = "~/code/project, or a name"
+"先写一个名字" = "Type a name first"
+"{host} 没连上，连上后再建" = "{host} is not connected; try again once it is"
+"回车建好，目录可以之后在它的标签页里选" = "Enter makes it; pick its folder later in its tab"
 "在这台电脑上新建空间" = "New space on this computer"
 "新建空间" = "New space"
-"{path}，已是空间" = "{path}, already a space"
-"已是空间" = "Already a space"
-"正在 {name} 上建…" = "Creating on {name}…"
 "在 {name} 上新建空间" = "New space on {name}"
 "只看" = "Only"
 "看全部空间" = "Show all spaces"
