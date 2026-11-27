@@ -19,6 +19,24 @@ pub use fibo_remote::role::{acts, Role};
 mod lock;
 use lock::lock;
 
+/// What a paired device is. A phone speaks the remote protocol; a computer's session is
+/// this machine's own native protocol, the same as `ssh -L` to its socket gives, so only
+/// a computer given full control is ever one (docs/decisions/2026-11-27-computers-over-relay.md).
+/// Decided here when it pairs, never by what the device says when it connects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Kind {
+    #[default]
+    Phone,
+    Computer,
+}
+
+impl Kind {
+    fn is_phone(&self) -> bool {
+        *self == Kind::Phone
+    }
+}
+
 pub fn role_label(role: Role) -> &'static str {
     match role {
         Role::View => t!("只看"),
@@ -57,6 +75,9 @@ pub struct Device {
     /// which has to pair again.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     route: String,
+    /// A file from before computers reads as all phones.
+    #[serde(default, skip_serializing_if = "Kind::is_phone")]
+    pub kind: Kind,
 }
 
 /// How long a phone "disconnected" from the computer stays out (plan stage 4).
@@ -240,6 +261,10 @@ fn save(socket: &Path, devices: &[Device]) -> io::Result<()> {
 }
 
 pub fn add(socket: &Path, name: &str, role: Role) -> io::Result<(Device, Code)> {
+    add_kind(socket, name, role, Kind::Phone)
+}
+
+fn add_kind(socket: &Path, name: &str, role: Role, kind: Kind) -> io::Result<(Device, Code)> {
     let key = Code::generate()?;
     let route = Code::generate()?;
     let device = Device {
@@ -251,6 +276,7 @@ pub fn add(socket: &Path, name: &str, role: Role) -> io::Result<(Device, Code)> 
         paired: now(),
         pairing_expires: Some(now() + 10 * 60),
         kicked: 0,
+        kind,
     };
     let _held = lock(socket)?;
     let mut devices = load_for_update(socket)?;
@@ -515,11 +541,32 @@ pub fn pair_link(
     name: &str,
     role: Role,
 ) -> io::Result<(Device, String)> {
+    pair_link_as(socket, relay, alts, name, role, Kind::Phone)
+}
+
+/// Pairs another computer: full control, as `ssh` to this one would give.
+pub fn pair_computer_link(
+    socket: &Path,
+    relay: &str,
+    alts: &[String],
+    name: &str,
+) -> io::Result<(Device, String)> {
+    pair_link_as(socket, relay, alts, name, Role::Full, Kind::Computer)
+}
+
+fn pair_link_as(
+    socket: &Path,
+    relay: &str,
+    alts: &[String],
+    name: &str,
+    role: Role,
+    kind: Kind,
+) -> io::Result<(Device, String)> {
     Link::websocket_base(relay).map_err(io::Error::other)?;
     // Made now so the machine has one to register with; the phone never sees it.
     machine_code(socket, false)?;
     let machine = machine(socket)?;
-    let (device, key) = add(socket, name, role)?;
+    let (device, key) = add_kind(socket, name, role, kind)?;
     let link = Link {
         relay: relay.to_owned(),
         alts: alts.to_vec(),

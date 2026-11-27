@@ -3,7 +3,9 @@
 //! host's socket at `<runtime>/m/<host>/workbench.sock` here; a thread starts it again
 //! whenever it ends, until the app quits. A host there is never started, stopped or replaced
 //! from here. `Host` says, for any socket this app talks to, which machine it is.
-use crate::machines::Spec;
+//! A machine paired through the relay (`via: relay`) is kept the same way by
+//! `fibo remote dial` instead of `ssh -L` (docs/decisions/2026-11-27-computers-over-relay.md).
+use crate::machines::{Spec, Via};
 use fibo_platform::local;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -92,6 +94,12 @@ impl Host {
     /// `fibo <args>` run there over ssh; None for this machine, which runs its own.
     pub fn run(&self, args: &[&str]) -> Option<io::Result<std::process::Output>> {
         let f = self.0.as_ref()?;
+        if f.spec.via == Via::Relay {
+            return Some(Err(io::Error::other(t!(
+                "{host} 经中继连着，这里不能在那台上运行命令；到那台电脑上操作，或改用 ssh 连它",
+                host = &f.spec.host
+            ))));
+        }
         let quoted: Vec<String> = args
             .iter()
             .map(|a| fibo_platform::shell::quote_posix(a))
@@ -141,7 +149,10 @@ pub fn start(host: &str, root: &Path) -> io::Result<Host> {
     let spec = (crate::machines::load().unwrap_or_default().into_iter())
         .find(|s| s.host == host)
         .unwrap_or_else(|| Spec::new(host.to_owned()));
-    let (remote, home, shell, machine) = remote_socket(&spec)?;
+    let (remote, home, shell, machine) = match spec.via {
+        Via::Ssh => remote_socket(&spec)?,
+        Via::Relay => relay_about(&spec)?,
+    };
     fibo_platform::fs::create_private_dir(root)?;
     let forward = Arc::new(Forward {
         spec,
@@ -174,10 +185,16 @@ pub fn ensure(root: &Path) -> io::Result<()> {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    Err(io::Error::other(t!(
-        "连不上 {host} 上的 Fibo：ssh 转发没有在 20 秒内接通",
-        host = &forward.spec.host
-    )))
+    Err(io::Error::other(match forward.spec.via {
+        Via::Ssh => t!(
+            "连不上 {host} 上的 Fibo：ssh 转发没有在 20 秒内接通",
+            host = &forward.spec.host
+        ),
+        Via::Relay => t!(
+            "连不上 {host} 上的 Fibo：中继转发没有在 20 秒内接通",
+            host = &forward.spec.host
+        ),
+    }))
 }
 
 /// 在新窗口打开: this app again, attached to `host`; one already open for it comes forward
@@ -255,25 +272,80 @@ fn remote_socket(spec: &Spec) -> io::Result<(String, String, String, (String, St
     Ok((path.to_owned(), home.to_owned(), shell.to_owned(), machine))
 }
 
+/// What `fibo remote dial --about` says of a machine paired through the relay: as
+/// [`remote_socket`] answers, with no socket path there, since the relay reaches it.
+fn relay_about(spec: &Spec) -> io::Result<(String, String, String, (String, String))> {
+    let mut command = Command::new(crate::lifecycle::host_program()?);
+    command
+        .args(["remote", "dial", "--machine", &spec.host, "--about"])
+        .stdin(Stdio::null());
+    fibo_platform::process::no_console(&mut command);
+    let out = command.output()?;
+    #[derive(serde::Deserialize)]
+    struct About {
+        home: String,
+        shell: String,
+        machine: String,
+        name: String,
+    }
+    match serde_json::from_slice::<About>(&out.stdout) {
+        Ok(a) if out.status.success() => Ok((String::new(), a.home, a.shell, (a.machine, a.name))),
+        _ => {
+            let why = String::from_utf8_lossy(&out.stderr);
+            let why = why.trim().trim_start_matches("fibo: ");
+            Err(io::Error::other(t!(
+                "经中继连不上 {host}：{why}",
+                host = &spec.host,
+                why
+            )))
+        }
+    }
+}
+
+/// What keeps the forward: `ssh -L` to its socket, or `fibo remote dial` through the relay.
+fn forward_argv(forward: &Forward) -> io::Result<Vec<String>> {
+    if forward.spec.via == Via::Relay {
+        let program = crate::lifecycle::host_program()?;
+        return Ok(vec![
+            program.display().to_string(),
+            "remote".into(),
+            "dial".into(),
+            "--machine".into(),
+            forward.spec.host.clone(),
+            "--listen".into(),
+            forward.local.display().to_string(),
+        ]);
+    }
+    let mut argv = forward.spec.ssh_options("-N");
+    argv.extend([
+        // A workspace is JSON and goes whole on each change: compressed, a slow link
+        // carries it several times faster.
+        "-o".into(),
+        "Compression=yes".into(),
+        "-o".into(),
+        "ExitOnForwardFailure=yes".into(),
+        "-o".into(),
+        "StreamLocalBindUnlink=yes".into(),
+        "-L".into(),
+        format!("{}:{}", forward.local.display(), forward.remote),
+        forward.spec.host.clone(),
+    ]);
+    Ok(argv)
+}
+
 /// Runs the `ssh -L` and starts it again after it ends, waiting longer each time it ends
 /// quickly, until `stop` takes it.
 fn supervise(forward: &Forward) {
     let mut backoff = Duration::from_millis(500);
     while !forward.stopped.load(Ordering::Acquire) {
-        let mut argv = forward.spec.ssh_options("-N");
-        argv.extend([
-            // A workspace is JSON and goes whole on each change: compressed, a slow link
-            // carries it several times faster.
-            "-o".into(),
-            "Compression=yes".into(),
-            "-o".into(),
-            "ExitOnForwardFailure=yes".into(),
-            "-o".into(),
-            "StreamLocalBindUnlink=yes".into(),
-            "-L".into(),
-            format!("{}:{}", forward.local.display(), forward.remote),
-            forward.spec.host.clone(),
-        ]);
+        let argv = match forward_argv(forward) {
+            Ok(argv) => argv,
+            Err(e) => {
+                eprintln!("forward {}: {e}", forward.spec.host);
+                std::thread::sleep(BACKOFF_MAX);
+                continue;
+            }
+        };
         let mut command = Command::new(&argv[0]);
         command
             .args(&argv[1..])
@@ -368,6 +440,7 @@ mod tests {
             host: "far".into(),
             path: Some("/opt/fibo".into()),
             quiet: false,
+            via: Via::Ssh,
         };
         let argv = spec.ssh(&format!("{}; \"$p\" socket", spec.find_program()));
         assert_eq!(argv[0], "ssh");

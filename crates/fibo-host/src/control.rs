@@ -150,9 +150,13 @@ fibo todo note <文字|-> [--task <待办>]      写进展：做了什么、剩�
             "device",
             "kick",
             "machine-name",
+            "join",
+            "machine",
+            "listen",
         ],
         switches: &[
             "stdio", "pair", "new-code", "devices", "enable", "disable", "status", "report", "json",
+            "computer", "dial", "about",
         ],
         usage: tk!("\
 fibo remote --stdio [--role view|answer|full]     给另一台机器或手机 App 用：一行一个 JSON 请求和回复（看画面、打字、按键、
@@ -164,6 +168,13 @@ fibo remote --relay <中继地址> [--relay-key <密钥>] [--report]
 fibo remote pair --relay <中继地址> [--name 名字] [--role view|answer|full] [--new-code]
                                              配对一台新手机，打印它的二维码和链接；权限分只看 / 能答审批 / 完全控制（默认）。
                                              加 --new-code 换掉机器码，已配对的手机全部失效
+fibo remote pair --relay <中继地址> --computer --name <那台电脑的名字>
+                                             配对另一台电脑：它的窗口经中继连到这台，等于完全控制这台（和 ssh 进来一样）；
+                                             打印的链接在那台电脑上用 fibo remote join 加进去
+fibo remote join <配对链接> [--name <这台在那边叫什么>]
+                                             把经中继配对的电脑加进这台窗口的电脑列表，不用 ssh
+fibo remote dial --machine <名字> (--listen <socket> | --about)
+                                             窗口自己用：把那台电脑的后台经中继接到本地 socket，或打印那台的信息
 fibo remote enable --relay <中继地址> [--relay-key <密钥>] [--also <另一台中继> [--also-key <密钥>]]
                                              让后台一直挂在中继上（重启后也会自动连回去）；配对保留。
                                              --also 让它同时挂在另一台中继上，手机走先连通的那台；--also \"\" 去掉
@@ -176,7 +187,7 @@ fibo remote device <设备> --role <view|answer|full>
 fibo remote revoke <设备编号或名字>        取消一台手机的配对，它正连着的会话一秒内断开
 fibo remote machine-name <名字>            手机上这台电脑叫什么；给空字符串换回系统主机名，手机重连后显示新名字
                                              旧写法 --pair --status --devices --device --kick --revoke --enable --disable
-                                             --machine-name 照样能用"),
+                                             --machine-name --join --dial 照样能用"),
     },
     Command {
         name: "themes",
@@ -377,6 +388,8 @@ pub(crate) fn verbs(cmd: &Command) -> &'static [&'static str] {
             "enable",
             "disable",
             "machine-name",
+            "join",
+            "dial",
         ],
         _ => &[],
     }
