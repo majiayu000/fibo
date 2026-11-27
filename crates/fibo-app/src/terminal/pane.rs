@@ -84,6 +84,7 @@ pub struct Pane {
     /// Cells at the saved text size; `metrics` are what this frame draws with.
     base_metrics: Option<screen::CellMetrics>,
     fit: Option<fit::Fit>,
+    pan: fit::Pan,
     metrics: Option<screen::CellMetrics>,
     cursor_anchor: screen::CursorAnchor,
     requested_size: (u16, u16),
@@ -271,6 +272,7 @@ impl Pane {
             bounds: None,
             base_metrics: None,
             fit: None,
+            pan: fit::Pan::default(),
             metrics: None,
             cursor_anchor: screen::CursorAnchor::default(),
             requested_size: (0, 0),
@@ -314,7 +316,6 @@ impl Pane {
     /// Attaches again after the host dropped this pane's stream; the snapshot restores
     /// the screen, and input works again once the pane owns the terminal.
     fn recover(&mut self, cx: &mut Context<Self>) {
-        self.send_held();
         let (dropped, settled) = self.connection.state.lock().map_or((false, false), |s| {
             (
                 s.dropped,
@@ -471,7 +472,7 @@ impl Pane {
         })
         .detach();
     }
-    pub fn has_other_owner(&self) -> bool {
+    pub fn is_read_only(&self) -> bool {
         self.connection
             .state
             .lock()

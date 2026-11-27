@@ -148,7 +148,7 @@ impl super::Pane {
     /// The window point at the middle of each shown cell with text, with its color, row
     /// by row. For 标记完成's dissolve, which turns the text into specks.
     pub fn glyph_cells(&self) -> Vec<Glyph> {
-        let (Some(bounds), Some(m)) = (self.bounds, self.metrics) else {
+        let (Some(bounds), Some(m)) = (self.grid_bounds(), self.metrics) else {
             return vec![];
         };
         let mut cells = Vec::new();
@@ -164,14 +164,17 @@ impl super::Pane {
                     .map_or(T::inverse(self.screen.background), |r| r.fg);
                 let x = bounds.left() + m.width * (col as f32 + width.max(1) as f32 / 2.);
                 let y = bounds.top() + m.height * (row as f32 + 0.5);
-                cells.push((gpui::point(x, y), fg));
+                let center = gpui::point(x, y);
+                if self.bounds.is_some_and(|view| view.contains(&center)) {
+                    cells.push((center, fg));
+                }
             }
         }
         cells
     }
     /// Every character on screen in reading order, for the styles that move the text.
     pub fn text_cells(&self) -> Vec<super::super::glyph::TextCell> {
-        let (Some(bounds), Some(m)) = (self.bounds, self.metrics) else {
+        let (Some(bounds), Some(m)) = (self.grid_bounds(), self.metrics) else {
             return vec![];
         };
         super::super::glyph::cells_of(&self.screen.rows, |col, row| {

@@ -6,7 +6,10 @@ use crate::{
     ui::{theme::Theme as T, tone::Tone},
 };
 use fibo_core::{protocol::Request, terminal::libghostty_vt::terminal::ScrollViewport};
-use gpui::{Bounds, Context, ElementInputHandler, Pixels, Window, canvas, div, prelude::*, px};
+use gpui::{
+    Axis, Bounds, ContentMask, Context, ElementInputHandler, Pixels, Window, canvas, div,
+    prelude::*, px,
+};
 use std::{sync::atomic::Ordering, time::Instant};
 
 impl Pane {
@@ -102,7 +105,7 @@ impl Render for Pane {
             && !state.ended
             && !self.tint_note_dismissed
             && self.started_under.is_some_and(|s| s != T::term());
-        // Another window sets the grid's size: draw that grid scaled to fill this pane.
+        // A read-only terminal keeps its grid size, even when this window changes size.
         let grid = state
             .vt
             .as_ref()
@@ -130,11 +133,7 @@ impl Render for Pane {
         } else if state.writable {
             String::new()
         } else if let Some((cols, rows)) = grid {
-            t!(
-                "只读 · 尺寸跟另一个窗口（{cols}×{rows}）· 打字就接管",
-                cols,
-                rows
-            )
+            t!("只读 · 终端尺寸（{cols}×{rows}）· 打字就接管", cols, rows)
         } else {
             t!("只读 · 打字就接管").into()
         };
@@ -211,83 +210,136 @@ impl Render for Pane {
                     let (drawn, metrics) = pane.fit_metrics(base, grid, bounds.size, &font, window);
                     pane.metrics = Some(metrics);
                     let _drawn = screen::DrawnSize::set(drawn);
-                    let focused = pane.focus.is_focused(window);
-                    let look = crate::ui::terminal_text::current();
-                    let cursor = overlays::cursor_paint(
-                        &look,
-                        pane.marked.is_empty(),
-                        focused,
-                        pane.blink_on,
-                    );
-                    pane.layout_cache.align_viewport(pane.viewport.0);
-                    screen::paint_cached(
-                        &pane.screen,
-                        &font,
-                        bounds,
-                        metrics,
-                        cursor,
-                        &mut pane.layout_cache,
-                        window,
-                        cx,
-                    );
-                    if look.cursor_guide && focused {
-                        screen::paint_guide(&pane.screen, bounds, metrics, window);
-                    }
-                    // Underlined only while ⌘ is held, when a click would open it.
-                    let hovered: Vec<&screen::Link> = match pane.links.hover_link {
-                        _ if !pane.links.modifiers.secondary() => Vec::new(),
-                        Some((y, x)) => pane.screen.link_at(y, x).map_or(Vec::new(), |hover| {
-                            pane.screen
-                                .links
-                                .iter()
-                                .filter(|l| l.uri == hover.uri)
-                                .collect()
-                        }),
-                        None => match (pane.shown_target(), pane.links.hover_word.as_ref()) {
-                            (Some(target), Some(word)) if target.whole => pane
-                                .screen
-                                .paths
-                                .iter()
-                                .filter(|l| l.start == word.start && l.uri == word.uri)
-                                .collect(),
-                            (Some(_), Some(word)) => vec![word],
-                            _ => Vec::new(),
+                    let view = bounds;
+                    pane.pan.layout(grid, view.size, metrics);
+                    let bounds = pane.pan.bounds(view, scale);
+                    let clipped =
+                        pane.pan.overflows(Axis::Horizontal) || pane.pan.overflows(Axis::Vertical);
+                    window.with_content_mask(
+                        clipped.then_some(ContentMask { bounds: view }),
+                        |window| {
+                            let focused = pane.focus.is_focused(window);
+                            let look = crate::ui::terminal_text::current();
+                            let cursor = overlays::cursor_paint(
+                                &look,
+                                pane.marked.is_empty(),
+                                focused,
+                                pane.blink_on,
+                            );
+                            pane.layout_cache.align_viewport(pane.viewport.0);
+                            screen::paint_cached(
+                                &pane.screen,
+                                &font,
+                                bounds,
+                                metrics,
+                                cursor,
+                                &mut pane.layout_cache,
+                                window,
+                                cx,
+                            );
+                            if look.cursor_guide && focused {
+                                screen::paint_guide(&pane.screen, bounds, metrics, window);
+                            }
+                            // Underlined only while ⌘ is held, when a click would open it.
+                            let hovered: Vec<&screen::Link> = match pane.links.hover_link {
+                                _ if !pane.links.modifiers.secondary() => Vec::new(),
+                                Some((y, x)) => {
+                                    pane.screen.link_at(y, x).map_or(Vec::new(), |hover| {
+                                        pane.screen
+                                            .links
+                                            .iter()
+                                            .filter(|l| l.uri == hover.uri)
+                                            .collect()
+                                    })
+                                }
+                                None => match (pane.shown_target(), pane.links.hover_word.as_ref())
+                                {
+                                    (Some(target), Some(word)) if target.whole => pane
+                                        .screen
+                                        .paths
+                                        .iter()
+                                        .filter(|l| l.start == word.start && l.uri == word.uri)
+                                        .collect(),
+                                    (Some(_), Some(word)) => vec![word],
+                                    _ => Vec::new(),
+                                },
+                            };
+                            for l in hovered {
+                                window.paint_quad(gpui::fill(
+                                    Bounds::new(
+                                        gpui::point(
+                                            bounds.left() + metrics.width * l.col as f32,
+                                            bounds.top() + metrics.height * (l.row + 1) as f32
+                                                - metrics.stroke,
+                                        ),
+                                        gpui::size(metrics.width * l.cols as f32, metrics.stroke),
+                                    ),
+                                    crate::ui::theme::hsla(
+                                        T::palette().term_link.unwrap_or(T::terminal_fg()),
+                                    ),
+                                ));
+                            }
+                            let (top, _, len) = pane.viewport;
+                            overlays::matches(
+                                &pane.search.matches,
+                                pane.search.current_match,
+                                (top, len),
+                                bounds,
+                                metrics,
+                                window,
+                            );
+                            overlays::selection(&pane.screen, bounds, metrics, window);
+                            screen::paint_selected_text(
+                                &pane.screen,
+                                &font,
+                                bounds,
+                                metrics,
+                                &pane.layout_cache,
+                                window,
+                                cx,
+                            );
+                            let dim = overlays::dim(
+                                &look,
+                                pane.split && !focused,
+                                !window.is_window_active(),
+                            );
+                            if dim > 0. {
+                                window.paint_quad(gpui::fill(
+                                    bounds,
+                                    crate::ui::theme::hsla(pane.screen.background).opacity(dim),
+                                ));
+                            }
+                            if !pane.marked.is_empty()
+                                && let Some(cursor) = pane.cursor_anchor.get()
+                            {
+                                screen::MarkedText::new(
+                                    &pane.marked,
+                                    font,
+                                    metrics.cursor_bounds(bounds, cursor),
+                                    window,
+                                )
+                                .paint(
+                                    pane.screen.background,
+                                    window,
+                                    cx,
+                                );
+                            }
                         },
-                    };
-                    for l in hovered {
-                        window.paint_quad(gpui::fill(
-                            Bounds::new(
-                                gpui::point(
-                                    bounds.left() + metrics.width * l.col as f32,
-                                    bounds.top() + metrics.height * (l.row + 1) as f32
-                                        - metrics.stroke,
-                                ),
-                                gpui::size(metrics.width * l.cols as f32, metrics.stroke),
-                            ),
-                            crate::ui::theme::hsla(
-                                T::palette().term_link.unwrap_or(T::terminal_fg()),
-                            ),
-                        ));
+                    );
+                    if clipped {
+                        pane.pan.paint(view, window);
                     }
                     let (top, total, len) = pane.viewport;
-                    overlays::matches(
-                        &pane.search.matches,
-                        pane.search.current_match,
-                        (top, len),
-                        bounds,
-                        metrics,
-                        window,
-                    );
                     if pane.scrollbar_shown() {
-                        let h = bounds.size.height;
+                        let h = view.size.height;
                         let thumb = (h * (len as f32 / total as f32)).max(px(T::S20));
                         let y = (h - thumb) * (top as f32 / (total - len).max(1) as f32);
                         window.paint_quad(
                             gpui::fill(
                                 Bounds::new(
                                     gpui::point(
-                                        bounds.right() - px(SCROLLBAR_WIDTH + T::S2),
-                                        bounds.top() + y,
+                                        view.right() - px(SCROLLBAR_WIDTH + T::S2),
+                                        view.top() + y,
                                     ),
                                     gpui::size(px(SCROLLBAR_WIDTH), thumb),
                                 ),
@@ -296,35 +348,7 @@ impl Render for Pane {
                             .corner_radii(px(SCROLLBAR_WIDTH / 2.)),
                         );
                     }
-                    overlays::selection(&pane.screen, bounds, metrics, window);
-                    screen::paint_selected_text(
-                        &pane.screen,
-                        &font,
-                        bounds,
-                        metrics,
-                        &pane.layout_cache,
-                        window,
-                        cx,
-                    );
-                    let dim =
-                        overlays::dim(&look, pane.split && !focused, !window.is_window_active());
-                    if dim > 0. {
-                        window.paint_quad(gpui::fill(
-                            bounds,
-                            crate::ui::theme::hsla(pane.screen.background).opacity(dim),
-                        ));
-                    }
-                    if !pane.marked.is_empty()
-                        && let Some(cursor) = pane.cursor_anchor.get()
-                    {
-                        screen::MarkedText::new(
-                            &pane.marked,
-                            font,
-                            metrics.cursor_bounds(bounds, cursor),
-                            window,
-                        )
-                        .paint(pane.screen.background, window, cx);
-                    }
+                    let bounds = view;
                     let dims = (
                         (bounds.size.width / metrics.width).floor().clamp(2., 400.) as u16,
                         (bounds.size.height / metrics.height)
@@ -336,7 +360,8 @@ impl Render for Pane {
                         (f32::from(metrics.width) * scale).round().max(1.) as u32,
                         (f32::from(metrics.height) * scale).round().max(1.) as u32,
                     );
-                    if !pane.peek
+                    if writable
+                        && !pane.peek
                         && (pane.requested_size, pane.requested_cell) != (dims, cell)
                         && pane
                             .connection
@@ -350,6 +375,9 @@ impl Render for Pane {
                     {
                         pane.requested_size = dims;
                         pane.requested_cell = cell;
+                    }
+                    if writable && !pane.peek && pane.requested_size == dims {
+                        pane.send_held();
                     }
                 });
             },

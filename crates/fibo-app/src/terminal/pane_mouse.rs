@@ -7,7 +7,7 @@ use fibo_core::terminal::{
     Vt,
     libghostty_vt::{key::Mods, mouse, selection::gesture::Autoscroll, terminal::ScrollViewport},
 };
-use gpui::{Context, Pixels, Point, Window, px};
+use gpui::{Axis, Context, Pixels, Point, Window, px};
 
 impl Pane {
     /// The program reads the mouse itself, so a plain drag goes to it, not to selection.
@@ -105,6 +105,16 @@ impl Pane {
     ) {
         window.focus(&self.focus, cx);
         self.take_size(cx);
+        if event.button == gpui::MouseButton::Left
+            && let Some(view) = self.bounds
+            && let Some(axis) = self.pan.bar_at(view, event.position)
+        {
+            self.pan.dragging = Some(axis);
+            self.pan.drag_to(view, event.position, axis);
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
         if event.modifiers.secondary()
             && event.button == gpui::MouseButton::Left
             && let Some((y, x)) = self.cell_at(event.position)
@@ -178,6 +188,10 @@ impl Pane {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if event.button == gpui::MouseButton::Left && self.pan.dragging.take().is_some() {
+            cx.stop_propagation();
+            return;
+        }
         // The outside handler sees releases over tabs and other panes too.
         // Only capture a release for a gesture that started in this pane.
         if self.select.pressed_button != Some(event.button) {
@@ -260,6 +274,15 @@ impl Pane {
     }
     /// Window-wide, so a selection drag keeps extending after it leaves the pane.
     pub(super) fn drag_selection(&mut self, event: &gpui::MouseMoveEvent, cx: &mut Context<Self>) {
+        if let Some(axis) = self.pan.dragging {
+            if event.pressed_button == Some(gpui::MouseButton::Left)
+                && let Some(view) = self.bounds
+            {
+                self.pan.drag_to(view, event.position, axis);
+                cx.notify();
+            }
+            return;
+        }
         if self.select.dragging_scrollbar {
             if event.pressed_button == Some(gpui::MouseButton::Left) {
                 self.scroll_to_pointer(event.position, cx);
@@ -342,10 +365,29 @@ impl Pane {
             (self.scroll_cols, self.scroll_lines) = (0., 0.);
         }
         // Trackpad pixels add up across events; a wheel notch moves three rows, like Ghostty.
-        let (dx, dy) = match event.delta {
+        let (mut dx, mut dy) = match event.delta {
             gpui::ScrollDelta::Pixels(p) => (p.x / m.width, p.y / m.height),
             gpui::ScrollDelta::Lines(l) => (l.x * 3., l.y * 3.),
         };
+        if let Some(view) = self.bounds
+            && view.contains(&event.position)
+        {
+            if event.modifiers.shift && dx == 0. && self.pan.overflows(Axis::Horizontal) {
+                (dx, dy) = (dy, 0.);
+            }
+            let x = self.pan.scroll(Axis::Horizontal, m.width * -dx);
+            let y = self.pan.scroll(Axis::Vertical, m.height * -dy);
+            if x || y {
+                cx.stop_propagation();
+                cx.notify();
+            }
+            if self.pan.overflows(Axis::Horizontal) {
+                dx = 0.;
+            }
+            if y {
+                dy = 0.;
+            }
+        }
         // Sums of fractions drift just below whole rows (5 x 0.2 = 0.99999994).
         let whole = |v: f32| (v + v.signum() * 1e-3).trunc().clamp(-100., 100.);
         self.scroll_lines += dy;
@@ -396,14 +438,20 @@ impl Pane {
             }
             let result = {
                 let mut state = self.connection.state.lock().unwrap();
+                let read_only = !state.writable;
                 if let Some(v) = &mut state.vt {
-                    match crate::terminal::terminal_input::alternate_scroll(v, lines > 0) {
-                        Ok(Some(bytes)) if !event.modifiers.shift => Ok(Some(bytes)),
-                        Ok(_) => {
-                            v.scroll(ScrollViewport::Delta(if lines > 0 { -1 } else { 1 }));
-                            Ok(None)
-                        }
-                        Err(e) => Err(e),
+                    let to = ScrollViewport::Delta(if lines > 0 { -1 } else { 1 });
+                    if read_only || event.modifiers.shift {
+                        v.scroll(to);
+                        Ok(None)
+                    } else {
+                        crate::terminal::terminal_input::alternate_scroll(v, lines > 0).inspect(
+                            |bytes| {
+                                if bytes.is_none() {
+                                    v.scroll(to);
+                                }
+                            },
+                        )
                     }
                 } else {
                     Ok(None)
@@ -422,7 +470,7 @@ impl Pane {
     /// The thumb shows while the view is up in history, along the pane's right edge.
     pub(super) fn scrollbar_shown(&self) -> bool {
         let (top, total, len) = self.viewport;
-        total > len && top + len < total
+        !self.pan.overflows(Axis::Vertical) && total > len && top + len < total
     }
     fn on_scrollbar(&self, point: Point<Pixels>) -> bool {
         self.scrollbar_shown()
@@ -493,11 +541,11 @@ impl Pane {
         self.show_toast(note, cx);
     }
     fn cell_at(&self, point: Point<Pixels>) -> Option<(u16, u16)> {
-        let bounds = self.bounds?;
-        let metrics = self.metrics?;
-        if !bounds.contains(&point) {
+        if !self.bounds?.contains(&point) {
             return None;
         }
+        let bounds = self.grid_bounds()?;
+        let metrics = self.metrics?;
         Some((
             ((point.y - bounds.top()) / metrics.height).floor().max(0.) as u16,
             ((point.x - bounds.left()) / metrics.width).floor().max(0.) as u16,
@@ -505,7 +553,7 @@ impl Pane {
     }
     /// A window point relative to the pane, in logical pixels; may lie outside it.
     fn local(&self, point: Point<Pixels>) -> Option<(f32, f32)> {
-        let bounds = self.bounds?;
+        let bounds = self.grid_bounds()?;
         Some((
             f32::from(point.x - bounds.left()),
             f32::from(point.y - bounds.top()),

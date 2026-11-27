@@ -33,6 +33,9 @@ impl Pane {
     /// The Agent was started by hand and may be in the middle of something: the text goes
     /// into its input box and waits for the user's Enter.
     pub fn place_text(&mut self, text: String, cx: &mut Context<Self>) {
+        if self.connection.watch {
+            self.take_input(Vec::new(), cx);
+        }
         self.handoff = Some(Handoff {
             agent: None,
             command: None,

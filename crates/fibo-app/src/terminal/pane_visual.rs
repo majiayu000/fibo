@@ -111,7 +111,7 @@ impl Pane {
     }
     /// The window point at the middle of cell (`row`, `col`).
     pub fn visual_cell(&self, row: u16, col: u16) -> Option<gpui::Point<Pixels>> {
-        let (bounds, metrics) = (self.bounds?, self.metrics?);
+        let (bounds, metrics) = (self.grid_bounds()?, self.metrics?);
         Some(gpui::point(
             bounds.left() + metrics.width * (col as f32 + 0.5),
             bounds.top() + metrics.height * (row as f32 + 0.5),
