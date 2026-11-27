@@ -19,6 +19,8 @@ async fn a_computer_reaches_the_native_socket_and_only_with_full_control() {
     let native = fibo_platform::local::Listener::bind(&socket).unwrap();
     std::thread::spawn(move || {
         while let Ok(mut s) = native.accept() {
+            // Room for whole `secure::CHUNK`s to be read at once there, as on Linux.
+            let _ = s.set_send_buffer(1 << 20);
             std::thread::spawn(move || {
                 let mut buf = [0; 64];
                 let mut seed = 0x9e37_79b9_u32;
@@ -26,8 +28,9 @@ async fn a_computer_reaches_the_native_socket_and_only_with_full_control() {
                     // What a workspace or a busy terminal does: much at once, in small writes.
                     // Noise, so it does not compress away.
                     if &buf[..n] == b"flood" {
-                        for _ in 0..FLOOD / 4096 {
-                            let block: Vec<u8> = (0..4096)
+                        // Big writes, so reads there fill whole `secure::CHUNK`s.
+                        for _ in 0..FLOOD / 65536 {
+                            let block: Vec<u8> = (0..65536)
                                 .map(|_| {
                                     seed ^= seed << 13;
                                     seed ^= seed >> 17;

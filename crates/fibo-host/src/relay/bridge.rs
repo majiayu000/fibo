@@ -202,40 +202,44 @@ impl Pump {
     fn run(&mut self, reader: &mut local::Stream) {
         let (credit, out, id, proto) = (&*self.credit, &self.out, &self.id[..], self.proto);
         let mut buf = vec![0; secure::CHUNK];
-        loop {
+        'read: loop {
             let n = match reader.read(&mut buf) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => n,
             };
             let packed = match self.squeeze.as_mut().map(|s| s.pack(&buf[..n])) {
                 Some(Ok(packed)) => packed,
-                Some(Err(_)) => break,
+                Some(Err(_)) => break 'read,
                 None => buf[..n].to_vec(),
             };
-            let n = packed.len();
-            {
-                let Ok(mut s) = credit.state.lock() else {
-                    return;
-                };
-                while !s.1 && s.0 + n as u64 > secure::WINDOW {
-                    s = match credit.changed.wait(s) {
-                        Ok(s) => s,
-                        Err(_) => return,
+            // Compressed, a piece that does not compress comes out a little longer than
+            // it went in: each message stays within `secure::CHUNK`.
+            for piece in packed.chunks(secure::CHUNK) {
+                let n = piece.len();
+                {
+                    let Ok(mut s) = credit.state.lock() else {
+                        return;
                     };
+                    while !s.1 && s.0 + n as u64 > secure::WINDOW {
+                        s = match credit.changed.wait(s) {
+                            Ok(s) => s,
+                            Err(_) => return,
+                        };
+                    }
+                    if s.1 {
+                        return;
+                    }
+                    s.0 += n as u64;
                 }
-                if s.1 {
+                let Ok(mut channel) = self.channel.lock() else {
+                    break 'read;
+                };
+                let Ok(sealed) = channel.data(piece) else {
+                    break 'read;
+                };
+                if out.send(to_phone(proto, id, &sealed)).is_err() {
                     return;
                 }
-                s.0 += n as u64;
-            }
-            let Ok(mut channel) = self.channel.lock() else {
-                break;
-            };
-            let Ok(sealed) = channel.data(&packed) else {
-                break;
-            };
-            if out.send(to_phone(proto, id, &sealed)).is_err() {
-                return;
             }
         }
         // The session ended on its own, not by a dropped bridge: let the phone know.
