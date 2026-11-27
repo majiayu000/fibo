@@ -342,6 +342,11 @@ pub(super) fn dispatch(shared: &Shared, request: Request) -> io::Result<Reply> {
         | Request::ToolCalls { .. }
         | Request::ToolCall { .. }
         | Request::Backfill { .. }) => tool_rows::dispatch(shared, request),
+        Request::SearchMessages { query, sessions } => {
+            let index = { lock(shared)?.index.forker()? };
+            let (messages, more) = index.open()?.search_messages(&query, &sessions)?;
+            Ok(Reply::MessageMatches { messages, more })
+        }
         Request::TurnChanges { session } => turn_changes::read(shared, &session),
         Request::TurnFile {
             session,

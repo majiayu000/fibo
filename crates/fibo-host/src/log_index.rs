@@ -13,6 +13,7 @@ mod chat;
 mod elide;
 mod fork;
 mod recovery;
+mod search;
 mod tools;
 mod update;
 

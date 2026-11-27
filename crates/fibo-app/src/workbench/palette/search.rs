@@ -112,7 +112,6 @@ impl Workbench {
                     .map(|q| q.text.clone())
             })
         };
-        let mut titled = HashSet::new();
         let sessions: Vec<Hit> = visible
             .iter()
             .filter(|s| {
@@ -130,21 +129,7 @@ impl Workbench {
                     s.cwd
                 ))
             })
-            .map(|s| {
-                titled.insert(s.id.as_str());
-                session(s, latest_ask(s))
-            })
-            .collect();
-        // A session already listed carries its quote on its own row, not twice.
-        let quotes: Vec<Hit> = visible
-            .iter()
-            .filter(|s| !titled.contains(s.id.as_str()))
-            .filter_map(|s| {
-                Some(Hit::Quote {
-                    id: s.id.clone(),
-                    text: latest_ask(s)?,
-                })
-            })
+            .map(|s| session(s, latest_ask(s)))
             .collect();
         let tasks: Vec<Hit> = self
             .workspace
@@ -205,31 +190,90 @@ impl Workbench {
         for (title, hits) in [
             (t!("命令"), commands),
             (t!("会话"), sessions),
-            (t!("原话"), quotes),
             (t!("待办"), tasks),
             (t!("动作"), actions),
             (t!("左栏视图"), views),
             (t!("工具"), tools),
         ] {
             if !hits.is_empty() {
-                let note = match title {
-                    _ if title == t!("原话") && !titled.is_empty() => {
-                        t!("{len} · 来自其他会话", len = hits.len())
-                    }
-                    _ => hits.len().to_string(),
+                sections.push(self.section(title, hits.len().to_string(), hits));
+            }
+        }
+        if let Some((_, messages, more)) = self
+            .search
+            .message_result
+            .as_ref()
+            .filter(|(q, _, _)| q == query)
+        {
+            let ids: HashSet<&str> = visible.iter().map(|s| s.id.as_str()).collect();
+            let hits: Vec<_> = messages
+                .iter()
+                .filter(|hit| ids.contains(hit.session.as_str()))
+                .cloned()
+                .map(Hit::Message)
+                .collect();
+            if !hits.is_empty() {
+                let note = if *more {
+                    t!("显示最近 {n} 条，请缩小搜索范围", n = hits.len())
+                } else {
+                    hits.len().to_string()
                 };
-                sections.push(self.section(title, note, hits));
+                sections.push(self.section(t!("聊天正文"), note, hits));
             }
         }
         sections
     }
+
+    pub(super) fn search_messages(&mut self, query: &str, cx: &mut Context<Self>) {
+        self.search.message_search = None;
+        self.search.message_result = None;
+        self.search.message_failed = false;
+        if query.is_empty() || !self.search.is_open() {
+            return;
+        }
+        let query = query.to_owned();
+        self.search.message_search = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(160))
+                .await;
+            let asked = this.update(cx, |this, _| {
+                let sessions = this
+                    .searchable()
+                    .into_iter()
+                    .map(|s| s.id.clone())
+                    .collect();
+                this.store.send(Request::SearchMessages {
+                    query: query.clone(),
+                    sessions,
+                })
+            });
+            let Ok(asked) = asked else {
+                return;
+            };
+            let reply = cx.background_executor().spawn(asked).await;
+            let _ = this.update(cx, |this, cx| {
+                if !this.search.is_open() || this.search_query(cx) != query {
+                    return;
+                }
+                match reply {
+                    Ok(Reply::MessageMatches { messages, more }) => {
+                        this.search.message_result = Some((query, messages, more));
+                    }
+                    _ => this.search.message_failed = true,
+                }
+                this.search.message_search.take();
+                this.pane_changed(cx);
+            });
+        }));
+    }
+
     /// Where the selection starts: on the first session, so its preview shows at once;
     /// ↑ reaches 新建会话 above it.
     pub(super) fn first_recent_session_row(&self) -> usize {
         self.search_sections("")
             .iter()
             .flat_map(|s| &s.hits)
-            .position(|h| matches!(h, Hit::Session { .. } | Hit::Quote { .. }))
+            .position(|h| matches!(h, Hit::Session { .. }))
             .unwrap_or(0)
     }
     pub(super) fn search_query(&self, cx: &gpui::App) -> String {
@@ -273,7 +317,7 @@ impl Workbench {
             cx.notify();
             return;
         }
-        self.search.open = false;
+        self.search.hide();
         match hit {
             Hit::NewSession => {
                 self.nav.overview = false;
@@ -296,7 +340,7 @@ impl Workbench {
                     self.run_action(&pane, action, cx);
                 }
             }
-            Hit::Session { id, .. } | Hit::Quote { id, .. } => {
+            Hit::Session { id, .. } | Hit::Message(MessageMatch { session: id, .. }) => {
                 if let Some(s) = self.workspace.agent_sessions.iter().find(|s| s.id == id) {
                     let s = s.clone();
                     let space = self.workspace.session_space(&s).map(str::to_owned);
@@ -324,7 +368,12 @@ impl Workbench {
     pub(super) fn open_selected_hit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match self.selected_hit(cx) {
             Some(hit) => self.open_hit(hit, window, cx),
-            None if !self.search_query(cx).is_empty() => self.open_hit(Hit::NewSession, window, cx),
+            None if self.search.message_search.is_none()
+                && !self.search.message_failed
+                && !self.search_query(cx).is_empty() =>
+            {
+                self.open_hit(Hit::NewSession, window, cx)
+            }
             None => {}
         }
     }

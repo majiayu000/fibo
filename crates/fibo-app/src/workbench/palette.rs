@@ -3,7 +3,7 @@
 //! (Keepline repo, specs/terminal-workbench/design/palette-here.html).
 use super::overview::{quiet, solid};
 use super::*;
-use fibo_core::sidebar as presets;
+use fibo_core::{protocol::MessageMatch, sidebar as presets};
 
 mod commands;
 mod parts;
@@ -21,11 +21,7 @@ pub(super) enum Hit {
         id: String,
         quote: Option<String>,
     },
-    /// The user's own words in a session whose title did not match.
-    Quote {
-        id: String,
-        text: String,
-    },
+    Message(MessageMatch),
     Task(String),
     /// A plugin action, by its index in `fibo_core::action::all()`, run for the
     /// focused pane.
@@ -69,11 +65,14 @@ pub(super) struct Search {
     group: Option<Status>,
     /// Rows a group shows past its first few, by group title, after 「再显示」.
     shown: HashMap<&'static str, usize>,
+    message_search: Option<gpui::Task<()>>,
+    message_result: Option<(String, Vec<MessageMatch>, bool)>,
+    message_failed: bool,
 }
 impl Search {
     pub(super) fn new(window: &mut Window, cx: &mut Context<Workbench>) -> Self {
         let search = cx.new(|cx| {
-            Field::new(t!("搜索会话、待办或你说过的话"), "", cx)
+            Field::new(t!("搜索会话、聊天正文或待办"), "", cx)
                 .compact()
                 .bare()
         });
@@ -82,6 +81,7 @@ impl Search {
             let query = field.read(cx).text.clone();
             if query != last_query {
                 last_query = query;
+                this.search_messages(last_query.trim(), cx);
                 this.search.shown.clear();
                 // A status pick narrows the recent list; typing searches everything.
                 this.search.index = if last_query.trim().is_empty() {
@@ -110,6 +110,9 @@ impl Search {
             scroll: gpui::ScrollHandle::new(),
             group: None,
             shown: HashMap::new(),
+            message_search: None,
+            message_result: None,
+            message_failed: false,
         }
     }
     pub(super) fn is_open(&self) -> bool {
@@ -118,6 +121,7 @@ impl Search {
     /// Hides the palette without the refocus that closing it from its own keys does.
     pub(super) fn hide(&mut self) {
         self.open = false;
+        self.message_search = None;
     }
     #[cfg(feature = "visual-test")]
     pub(super) fn field(&self) -> &Entity<Field> {
@@ -174,7 +178,7 @@ impl Workbench {
         }
         let preview = match &selected {
             Some(Hit::Session { id, quote }) => self.hit_preview(id, quote.as_deref(), &query, cx),
-            Some(Hit::Quote { id, text }) => self.hit_preview(id, Some(text), &query, cx),
+            Some(Hit::Message(hit)) => self.hit_preview(&hit.session, Some(&hit.text), &query, cx),
             _ => None,
         };
         let count = |title: &str| {
@@ -185,13 +189,17 @@ impl Workbench {
         };
         let found = if query.is_empty() {
             None
+        } else if self.search.message_search.is_some() {
+            Some(t!("正在搜索聊天正文…").to_owned())
+        } else if self.search.message_failed {
+            Some(t!("聊天正文搜索失败").to_owned())
         } else if total == 0 {
             Some(t!("0 项").to_owned())
         } else {
             Some(t!(
-                "会话 {sessions} · 原话 {quotes} · 待办 {todos}",
+                "会话 {sessions} · 消息 {messages} · 待办 {todos}",
                 sessions = count(t!("会话")),
-                quotes = count(t!("原话")),
+                messages = count(t!("聊天正文")),
                 todos = count(t!("待办"))
             ))
         };
@@ -216,7 +224,8 @@ impl Workbench {
             })
             .child(kbd("esc"));
         let nothing = !query.is_empty() && total == 0;
-        let body = if nothing {
+        let body = if nothing && self.search.message_search.is_none() && !self.search.message_failed
+        {
             self.no_results(&query, cx).into_any_element()
         } else {
             div()
@@ -376,11 +385,6 @@ impl Workbench {
     /// a session to start instead.
     fn no_results(&self, query: &str, cx: &Context<Self>) -> gpui::Div {
         let visible = self.searchable();
-        let asks: usize = visible
-            .iter()
-            .filter_map(|s| self.workspace.content.get(&s.id))
-            .map(|c| c.asks.len())
-            .sum();
         let tries: Vec<String> = split_terms(query)
             .into_iter()
             .filter(|t| !self.search_sections(t).is_empty())
@@ -428,7 +432,7 @@ impl Workbench {
                     .max_w(px(T::FORM_WIDTH))
                     .text_size(px(T::SMALL))
                     .text_color(T::color(T::secondary()))
-                    .child(t!("标题、会话 ID、目录、你说过的话和待办里都没有这几个字。没被索引的旧历史不会出现在这里。")),
+                    .child(t!("已保存的聊天正文、会话信息和待办里都没有找到。")),
             )
             .child(
                 div()
@@ -440,7 +444,6 @@ impl Workbench {
                     .text_color(T::color(T::muted()))
                     .font_features(T::tabular())
                     .child(t!("会话标题 {len}", len = visible.len()))
-                    .child(t!("原话 {asks} 句", asks))
                     .child(t!("待办 {len}", len = self.workspace.tasks.len())),
             )
             .child(suggestions)
@@ -475,7 +478,7 @@ impl Workbench {
         cx.notify();
     }
     pub(super) fn close_search(&mut self, cx: &mut Context<Self>) {
-        self.search.open = false;
+        self.search.hide();
         self.nav.pending_focus = true;
         cx.notify();
     }

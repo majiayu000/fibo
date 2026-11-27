@@ -37,7 +37,7 @@ impl Workbench {
                     String::new(),
                 ),
                 Hit::More { section, hidden } => {
-                    let quotes = *section == t!("原话");
+                    let quotes = *section == t!("聊天正文");
                     return self
                         .more_row(row, selected, (*hidden).min(MORE_STEP), quotes, hit, cx)
                         .into_any_element();
@@ -131,7 +131,7 @@ impl Workbench {
                             .unwrap_or_default(),
                     )
                 }
-                Hit::Session { id, .. } | Hit::Quote { id, .. } => {
+                Hit::Session { id, .. } | Hit::Message(MessageMatch { session: id, .. }) => {
                     let Some(s) = self.workspace.agent_sessions.iter().find(|s| &s.id == id) else {
                         return div().into_any_element();
                     };
@@ -139,34 +139,26 @@ impl Workbench {
                     status = Some(group);
                     let when = ago(self.workspace.session_updated(s), now());
                     match hit {
-                        Hit::Quote { text, .. } => (
+                        Hit::Message(hit) => (
                             glyph("“"),
-                            format!("“{}”", excerpt(text, query, EXCERPT)),
-                            self.session_title(s),
+                            excerpt(&hit.text, query, EXCERPT),
+                            format!(
+                                "{} · {}",
+                                if hit.user {
+                                    t!("你")
+                                } else {
+                                    t!("Agent 回复")
+                                },
+                                self.session_title(s)
+                            ),
                             group.label().into(),
-                            when,
+                            ago(hit.at, now()),
                         ),
                         _ => {
                             let place = (self.workspace.session_space(s))
                                 .and_then(|space| self.space_name(space))
                                 .unwrap_or_else(|| home_relative(&self.host, &s.cwd));
-                            let mut sub = format!("{place} · {}", s.runtime.executable());
-                            if let Some(c) = self.workspace.content.get(&s.id)
-                                && !query.is_empty()
-                            {
-                                let said = c.asks.len();
-                                let needle = SearchQuery::new(query);
-                                let matched =
-                                    c.asks.iter().filter(|q| needle.matches(&q.text)).count();
-                                if matched > 0 {
-                                    sub.push_str(&t!(
-                                        " · 你说过 {said} 句，{matched} 句含「{query}」",
-                                        said,
-                                        matched,
-                                        query
-                                    ));
-                                }
-                            }
+                            let sub = format!("{place} · {}", s.runtime.executable());
                             (
                                 glyph("❯"),
                                 self.session_title(s),
