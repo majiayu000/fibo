@@ -152,7 +152,7 @@ impl Workbench {
             .collect();
         let (today, older) = split_today(history, crate::model::time::now());
         if !today.is_empty() {
-            out.push(self.flat_fold("recent:today", t!("今天停着的"), today.len(), true, cx));
+            out.push(self.flat_fold("recent:today", t!("今天已完成"), today.len(), true, cx));
             self.history_rows("recent:today", true, today, current, out, cx);
         }
         // Older ones a module was not handed are still counted, and open in 鸟瞰.
@@ -164,7 +164,7 @@ impl Workbench {
             let default = self.space_filter().is_some();
             let open = self.sidebar.open("recent:older", default);
             let count = older.len() + unlisted;
-            out.push(self.flat_fold("recent:older", t!("更早停着的"), count, default, cx));
+            out.push(self.flat_fold("recent:older", t!("更早已完成"), count, default, cx));
             self.history_rows("recent:older", default, older, current, out, cx);
             if open && unlisted > 0 {
                 out.push(self.flat_closed_more(unlisted, cx));
