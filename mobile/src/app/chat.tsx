@@ -44,7 +44,7 @@ import { TrustAsk } from '@/ui/trust';
 import { picturesFor, sameWords, sendTarget, shownWords, wordsBeside } from '@/ui/sent';
 import { useTheme } from '@/ui/theme';
 import { useSettled } from '@/ui/useHold';
-import { tr } from '@/i18n';
+import { lang, tr } from '@/i18n';
 
 const POLL_MS = 2000;
 
@@ -563,6 +563,7 @@ export default function Chat() {
           suggestion={suggestion}
           onSend={send}
           canAttach={supports(m, 'image')}
+          onTranscribe={online && supports(m, 'transcribe') ? (audio) => write(machine, 'transcribe', { audio, lang: lang() }).then((r) => String(r?.text ?? '')) : undefined}
           canSteer={supports(m, 'steer') && steerable(card?.controls)}
           onError={setError}
           onStop={() => stop()}

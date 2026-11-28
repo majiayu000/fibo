@@ -44,14 +44,14 @@
         {
           "photosPermission": "选图片发给电脑上的 Agent",
           "cameraPermission": "拍照发给电脑上的 Agent",
-          "microphonePermission": false
+          "microphonePermission": "把你说的话转成文字，发给电脑上的 Agent"
         }
       ],
       [
         "expo-camera",
         {
           "cameraPermission": "扫描电脑上 Fibo 显示的配对二维码",
-          "microphonePermission": false,
+          "microphonePermission": "把你说的话转成文字，发给电脑上的 Agent",
           "recordAudioAndroid": false
         }
       ],
@@ -69,6 +69,19 @@
           "fonts": [
             "./assets/fonts/JetBrainsMonoNL-Regular.ttf"
           ]
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "把你说的话转成文字，发给电脑上的 Agent",
+          "speechRecognitionPermission": "用系统的语音识别把你说的话转成文字"
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "把你说的话转成文字，发给电脑上的 Agent"
         }
       ]
     ],

@@ -75,6 +75,12 @@ const paths = {
     </>
   ),
   shield: <Path d="M12 3l7 3v5c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z" />,
+  mic: (
+    <>
+      <Rect x="9" y="3" width="6" height="11" rx="3" />
+      <Path d="M5.500 11a6.500 6.500 0 0 0 13 0M12 17.500V21" />
+    </>
+  ),
   stop: <Rect x="7" y="7" width="10" height="10" rx="1.5" />,
   camera: (
     <>

@@ -34,6 +34,7 @@ mod quota;
 mod resume;
 mod todos;
 mod tools;
+mod transcribe;
 mod turn_input;
 mod usage;
 mod writes;
@@ -352,7 +353,7 @@ fn hello(socket: &Path, role: Role) -> io::Result<Value> {
         machine: machine(socket)?,
         ops: OPS
             .iter()
-            .filter(|op| role.allows(op))
+            .filter(|op| role.allows(op) && (**op != "transcribe" || transcribe::available(socket)))
             .map(|op| op.to_string())
             .collect(),
         role,
@@ -542,6 +543,7 @@ fn unary(socket: &Path, request: &Value, client: Option<&str>, role: Role) -> io
         "todoadd" => todos::add(socket, request, client),
         "todooutcome" => todos::outcome(socket, request, client),
         "image" => images::upload(socket, request),
+        "transcribe" => transcribe::transcribe(socket, request),
         "sendnow" => turn_input::send_now(socket, request, client),
         op => Err(io::Error::other(t!(
             "不认识的 op {op}",

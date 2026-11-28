@@ -576,3 +576,6 @@
 "文件不存在" = "File not found"
 "只能预览 Markdown 和纯文本文件" = "Only Markdown and plain-text files can be previewed"
 "这个文件不是文本" = "This file is not text"
+"audio 不是 base64：{e}" = "audio is not base64: {e}"
+"这台电脑还没装好语音识别" = "Speech recognition isn't set up on this computer yet"
+"语音识别失败：{last}" = "Speech recognition failed: {last}"
