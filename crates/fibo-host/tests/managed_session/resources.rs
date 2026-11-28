@@ -354,6 +354,9 @@ fn recognition_status_stream_recovers_after_log_root_is_rebuilt() {
         .unwrap()
         .write_all(b"{}\n")
         .unwrap();
+    // Waited for together: the Healthy above may be from a repair that ran while the root
+    // was still gone (Linux sends one per watch restart), and the repair that finds the root
+    // back writes `after` in its scan, before it forgets `before` at its end.
     let deadline = Instant::now() + Duration::from_secs(5);
     let db = rusqlite::Connection::open(h.root.join("workbench.sqlite")).unwrap();
     loop {
@@ -364,20 +367,26 @@ fn recognition_status_stream_recovers_after_log_root_is_rebuilt() {
                 |r| r.get(0),
             )
             .ok();
-        if offset == Some(fs::metadata(&path).unwrap().len() as i64) {
-            assert_eq!(
-                db.query_row(
-                    "SELECT count(*) FROM log_files WHERE cli_id='before'",
-                    [],
-                    |r| r.get::<_, i64>(0)
-                )
-                .unwrap(),
-                0,
-                "missing old paths must be removed from the repaired subtree index"
-            );
+        let resumed = offset == Some(fs::metadata(&path).unwrap().len() as i64);
+        let old: i64 = db
+            .query_row(
+                "SELECT count(*) FROM log_files WHERE cli_id='before'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        if resumed && old == 0 {
             break;
         }
-        assert!(Instant::now() < deadline, "listener did not resume");
+        assert!(
+            Instant::now() < deadline,
+            "{}",
+            if resumed {
+                "missing old paths must be removed from the repaired subtree index"
+            } else {
+                "listener did not resume"
+            }
+        );
         std::thread::sleep(Duration::from_millis(50));
     }
 }
