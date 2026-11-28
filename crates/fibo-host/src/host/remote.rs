@@ -5,7 +5,7 @@
 //! The setting lives in `remote-relay.json` next to the socket (0600: it may hold the
 //! relays' keys). `also` lists more relays the child stays on beside `relay`
 //! (docs/decisions/2026-11-26-two-relays.md); files from before 11-26 have none. `moving`
-//! is a replaced main relay kept on while phones move off it ([`moving`]). A child that
+//! lists replaced main relays kept on while phones move off them ([`moving`]). A child that
 //! exits on its own was taken over (a newer child on this machine) or failed to start, and
 //! is not restarted until the setting changes; a relay refusing it only waits inside it; one killed by a signal it
 //! did not get from here is restarted after a pause. Pushed off its code from elsewhere,
@@ -31,12 +31,16 @@ pub struct Config {
     pub key: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub also: Vec<RemoteRelay>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub moving: Option<Moving>,
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        with = "moving::one_or_many"
+    )]
+    pub moving: Vec<Moving>,
 }
 
 impl Config {
-    /// The relays the child dials beside `relay`: `also`, then the one phones move off.
+    /// The relays the child dials beside `relay`: `also`, then those phones move off.
     fn extra(&self) -> Vec<RemoteRelay> {
         let moving = self.moving.iter().map(|m| RemoteRelay {
             relay: m.relay.clone(),
@@ -152,7 +156,7 @@ impl Supervisor {
                 None => saved.key.clone(),
                 Some(key) => Some(key.trim().to_owned()).filter(|key| !key.is_empty()),
             },
-            moving: None,
+            moving: vec![],
         };
         let paired = !crate::devices::load(&self.root.join("workbench.sock")).is_empty();
         config.moving = moving::after_save(&saved, &config, crate::devices::now(), paired);
@@ -204,10 +208,14 @@ impl Supervisor {
             keyed: inner.config.key.is_some(),
             also: inner.config.also.iter().map(|a| a.relay.clone()).collect(),
             also_keyed: inner.config.also.first().is_some_and(|a| a.key.is_some()),
-            moving: inner.config.moving.as_ref().map(|m| m.relay.clone()),
-            moving_left: inner.config.moving.as_ref().map_or(0, |m| {
+            // The newest move waits for every phone the earlier ones wait for, and more.
+            moving: inner.config.moving.last().map(|m| m.relay.clone()),
+            moving_left: inner.config.moving.last().map_or(0, |m| {
                 moving::left(m, &crate::devices::load(&socket), &seen)
             }),
+            moving_earlier: (inner.config.moving.iter().rev().skip(1))
+                .map(|m| m.relay.clone())
+                .collect(),
             devices: crate::devices::load(&socket)
                 .into_iter()
                 .map(|d| fibo_core::protocol::RemoteDevice {
@@ -375,16 +383,15 @@ impl Drop for Supervisor {
     }
 }
 
-/// Drops `moving` once every device it waited for has connected; says whether it did.
+/// Drops each move once every device it waited for has connected; says whether one went.
 fn settle(root: &Path, config: &mut Config) -> bool {
-    let Some(m) = &config.moving else {
-        return false;
-    };
-    let socket = root.join("workbench.sock");
-    let seen = crate::devices::last_seen(&socket);
-    if moving::left(m, &crate::devices::load(&socket), &seen) > 0 {
+    if config.moving.is_empty() {
         return false;
     }
-    config.moving = None;
-    true
+    let socket = root.join("workbench.sock");
+    let seen = crate::devices::last_seen(&socket);
+    let devices = crate::devices::load(&socket);
+    let before = config.moving.len();
+    (config.moving).retain(|m| moving::left(m, &devices, &seen) > 0);
+    config.moving.len() < before
 }

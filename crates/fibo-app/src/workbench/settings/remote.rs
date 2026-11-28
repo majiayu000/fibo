@@ -50,7 +50,7 @@ impl SettingsView {
             .map(|x| {
                 let (name, note) = if x.relay == r.relay {
                     (t!("主中继"), x.relay.clone())
-                } else if r.moving.as_deref() == Some(&x.relay) {
+                } else if r.moving.as_deref() == Some(&x.relay) || r.moving_earlier.contains(&x.relay) {
                     let note = if r.moving_left > 0 {
                         t!(
                             "{relay}：换地址前配对的 {n} 台还没连过；它们连上一次就会改走新地址，之后这台自动去掉",

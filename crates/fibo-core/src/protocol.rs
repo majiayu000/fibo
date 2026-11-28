@@ -41,6 +41,10 @@ pub struct RemoteStatus {
     pub moving: Option<String>,
     #[serde(default)]
     pub moving_left: usize,
+    /// Relays replaced before `moving`, still kept on for phones that have not connected
+    /// since; `moving_left` counts those too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub moving_earlier: Vec<String>,
     #[serde(flatten)]
     pub live: RemoteLive,
 }
