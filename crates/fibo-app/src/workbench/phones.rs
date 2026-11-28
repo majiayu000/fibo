@@ -92,13 +92,21 @@ fn phone_glyph(color: gpui::Hsla, live: bool) -> gpui::Div {
         })
 }
 
-fn live_color() -> gpui::Hsla {
+pub(super) fn live_color() -> gpui::Hsla {
     Tone::Ok.dot()
 }
 
 /// The connection in a few words, with the color of its dot.
 pub(super) fn state_line(r: &RemoteStatus) -> (gpui::Hsla, String) {
+    let total = r.live.relays.len();
+    let up = (r.live.relays.iter())
+        .filter(|x| x.state == RemoteState::Connected)
+        .count();
     match r.live.state {
+        // Phones still get through, but a relay meant to stand in is down.
+        RemoteState::Connected if up < total => {
+            (Tone::Warn.dot(), t!("{up}/{total} 台中继已连上", up, total))
+        }
         RemoteState::Connected => (live_color(), t!("中继已连上").into()),
         RemoteState::Connecting if r.live.detail.is_empty() => {
             (T::color(T::secondary()), t!("正在连中继…").into())

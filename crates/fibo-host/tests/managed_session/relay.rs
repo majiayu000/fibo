@@ -401,7 +401,7 @@ fn the_host_keeps_phones_on_a_relay_and_shows_the_app_who_is_on() {
     assert_eq!(recognition(&h).remote.live.state, RemoteState::Off);
     cli(&["--enable", "--relay", &base, "--relay-key", "wrong"]);
     let (failed, _) = until("refused", &|s| s.live.state == RemoteState::Failed);
-    assert!(failed.live.detail.contains("拒绝"), "{failed:?}");
+    assert!(failed.live.detail.contains("注册密钥"), "{failed:?}");
     cli(&["--enable", "--relay", &base, "--relay-key", "right"]);
     let (on, took) = until("connected", &|s| s.live.state == RemoteState::Connected);
     eprintln!("enabled → connected in {took:?}");

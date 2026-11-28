@@ -56,10 +56,27 @@ fn the_host_stays_on_two_relays_and_a_phone_gets_through_either() {
         "--also-key",
         "wrong",
     ]);
+    // Each relay on its own: the backup's refusal is named, in words that say what to do.
     let half = until("one up, one refused", &|s| {
-        s.live.state == RemoteState::Connected && s.live.detail.contains("拒绝")
+        s.live.state == RemoteState::Connected
+            && s.live.relays.iter().any(|x| x.state == RemoteState::Failed)
     });
     assert_eq!(half.also, std::slice::from_ref(&b));
+    let states: Vec<_> = (half.live.relays.iter())
+        .map(|x| (x.relay.as_str(), x.state))
+        .collect();
+    assert_eq!(
+        states,
+        [
+            (a.as_str(), RemoteState::Connected),
+            (b.as_str(), RemoteState::Failed)
+        ]
+    );
+    let refused = &half.live.relays[1].detail;
+    assert!(
+        refused.contains("注册密钥") && refused.contains("重新连接"),
+        "{refused}"
+    );
     cli(&["--enable", "--relay", &a, "--also", &b, "--also-key", "kb"]);
     until("both up", &|s| {
         s.live.state == RemoteState::Connected && s.live.detail.is_empty()

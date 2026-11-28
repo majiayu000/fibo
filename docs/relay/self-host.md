@@ -93,7 +93,7 @@ docker rm -f fibo-relay   # 然后用第 1 步同样的 docker run 启动，填�
 
 11-13 之前照这份文档部署的，容器和镜像叫 `mooring-relay`：删旧容器要用 `docker rm -f mooring-relay`，否则新容器会因为端口被占起不来。
 
-这台 Fibo 需要协议 3 以上的中继。中继太旧时，App 会显示「没连上：中继版本太旧（协议 N，这台 Fibo 要 3 以上）：请升级中继」，并且不再重试。升级中继后，在设置里把「让手机连过来」关掉再打开。中继的版本可以用 `docker exec fibo-relay fibo-relay --version` 查看。
+这台 Fibo 需要协议 3 以上的中继。中继太旧时，App 会显示「中继版本太旧（协议 N，这台 Fibo 要 3 以上）：请中继的维护者升级它」，之后每 5 分钟再试一次。升级后不想等，就在 设置 › 手机与远程 点「重新连接」。注册密钥不对时也是这样。中继的版本可以用 `docker exec fibo-relay fibo-relay --version` 查看。
 
 ## 中继能看到什么
 

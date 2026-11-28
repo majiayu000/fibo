@@ -45,6 +45,8 @@ mod program_exits;
 mod real_cli;
 #[path = "managed_session/relay.rs"]
 mod relay;
+#[path = "managed_session/relay_move.rs"]
+mod relay_move;
 #[path = "managed_session/remote.rs"]
 mod remote;
 #[path = "managed_session/resources.rs"]

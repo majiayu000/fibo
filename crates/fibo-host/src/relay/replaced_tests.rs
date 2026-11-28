@@ -77,10 +77,21 @@ async fn pushed_off_from_elsewhere_it_takes_the_code_back_later() {
     assert!(was_up);
     assert!(matches!(ended, Ended::Replaced));
     let mut wait = Duration::from_secs(16);
-    let (pause, why) = after(ended, was_up, &mut wait).expect("被顶掉后不该退出");
+    let (pause, why, _) = after(ended, was_up, &mut wait).expect("被顶掉后不该退出");
     assert_eq!(pause, REPLACED_WAIT);
     assert!(why.contains("顶了下来"), "{why}");
     assert_eq!(wait, Duration::from_secs(1));
+}
+
+/// A relay that turns this machine away is asked again later instead of given up on: the
+/// key may be fixed or the relay upgraded without anyone touching this computer.
+#[test]
+fn a_relay_that_refused_is_asked_again_later() {
+    let mut wait = Duration::from_secs(8);
+    let rejected = Ended::Rejected("中继要求的注册密钥不对或没填".into());
+    let (pause, why, state) = after(rejected, false, &mut wait).expect("被拒后不该退出");
+    assert_eq!((pause, state), (REJECTED_WAIT, RemoteState::Failed));
+    assert!(why.contains("重新连接"), "{why}");
 }
 
 /// A newer process on this machine (a host restarted beside its old child) still has the

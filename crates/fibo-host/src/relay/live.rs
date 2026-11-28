@@ -1,5 +1,7 @@
 use crate::remote::{Activity, Observer};
-use fibo_core::protocol::{rpc, RemoteAct, RemoteLive, RemotePhone, RemoteState, Request};
+use fibo_core::protocol::{
+    rpc, RelayLive, RemoteAct, RemoteLive, RemotePhone, RemoteState, Request,
+};
 use fibo_host::devices;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -10,7 +12,8 @@ use std::time::Duration;
 /// Each relay's state and why it is not connected, and the phones on by relay and session.
 #[derive(Default)]
 struct Now {
-    relays: BTreeMap<String, (RemoteState, String)>,
+    /// In the order [`Live::scoped`] first named them: the setting's order.
+    relays: Vec<(String, RemoteState, String)>,
     phones: BTreeMap<(String, String), RemotePhone>,
 }
 
@@ -46,8 +49,14 @@ impl Live {
             scope: String::new(),
         }
     }
-    /// The same, for the connection to `relay`.
+    /// The same, for the connection to `relay`; it shows as connecting until it says.
     pub(super) fn scoped(&self, relay: &str) -> Self {
+        if let Ok(mut i) = self.inner.lock() {
+            if i.relays.iter().all(|(r, ..)| r != relay) {
+                i.relays
+                    .push((relay.to_owned(), RemoteState::Connecting, String::new()));
+            }
+        }
         Self {
             scope: relay.to_owned(),
             ..self.clone()
@@ -71,7 +80,10 @@ impl Live {
             if state != RemoteState::Connected {
                 i.phones.retain(|(relay, _), _| *relay != scope);
             }
-            i.relays.insert(scope, (state, detail));
+            match i.relays.iter_mut().find(|(r, ..)| *r == scope) {
+                Some(r) => (r.1, r.2) = (state, detail),
+                None => i.relays.push((scope, state, detail)),
+            }
         });
     }
     /// Sends the last state now, before the process ends.
@@ -131,7 +143,7 @@ fn snapshot(inner: &Mutex<Now>) -> RemoteLive {
     let i = inner.lock().unwrap_or_else(|e| e.into_inner());
     let mut online: Vec<_> = i.phones.values().cloned().collect();
     online.sort_by_key(|p| p.since);
-    let states = || i.relays.values().map(|(s, _)| *s);
+    let states = || i.relays.iter().map(|(_, s, _)| *s);
     let state = [RemoteState::Connected, RemoteState::Connecting]
         .into_iter()
         .find(|want| states().any(|s| s == *want))
@@ -142,17 +154,25 @@ fn snapshot(inner: &Mutex<Now>) -> RemoteLive {
         });
     let many = i.relays.len() > 1;
     let detail = (i.relays.iter())
-        .filter(|(_, (s, d))| *s != RemoteState::Connected && !d.is_empty())
-        .map(|(relay, (_, d))| match many {
+        .filter(|(_, s, d)| *s != RemoteState::Connected && !d.is_empty())
+        .map(|(relay, _, d)| match many {
             true => format!("{}：{d}", host(relay)),
             false => d.clone(),
         })
         .collect::<Vec<_>>()
         .join("；");
+    let relays = (i.relays.iter())
+        .map(|(relay, state, detail)| RelayLive {
+            relay: relay.clone(),
+            state: *state,
+            detail: detail.clone(),
+        })
+        .collect();
     RemoteLive {
         state,
         detail,
         online,
+        relays,
     }
 }
 
