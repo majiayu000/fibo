@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fibo 的终端为什么不用 Tauri + xterm.js：一轮测评后换成 GPUI + libghostty-vt 原生绘制 · Fibo 博客</title>
+<meta name="description" content="Fibo 要在一个窗口里挂 40 个 Coding Agent 会话，原计划用 Tauri + React + xterm.js。测评里 WebView 同负载内存约是原生 Ghostty 的 3.5 倍，alacritty_terminal 存 40 个会话要 1.29 GiB。最后后台用 libghostty-vt（405 MiB，空闲可压到 66.5 MiB），窗口用 GPUI 在 GPU 上直接画；代价是 GPUI 空闲 CPU 是 Ghostty 的 8 倍，要靠自己维护的补丁压到 0.07%。附四条路线对比表和测量方法。">
+<link rel="canonical" href="https://fibo.page/blog/why-gpui/zh.html">
+<link rel="alternate" hreflang="en" href="https://fibo.page/blog/why-gpui/">
+<link rel="alternate" hreflang="zh-CN" href="https://fibo.page/blog/why-gpui/zh.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Fibo">
+<meta property="og:title" content="Fibo 的终端为什么不用 Tauri + xterm.js：一轮测评后换成 GPUI + libghostty-vt 原生绘制">
+<meta property="og:description" content="Fibo 要在一个窗口里挂 40 个 Coding Agent 会话，原计划用 Tauri + React + xterm.js。测评里 WebView 同负载内存约是原生 Ghostty 的 3.5 倍，alacritty_terminal 存 40 个会话要 1.29 GiB。最后后台用 libghostty-vt（405 MiB，空闲可压到 66.5 MiB），窗口用 GPUI 在 GPU 上直接画；代价是 GPUI 空闲 CPU 是 Ghostty 的 8 倍，要靠自己维护的补丁压到 0.07%。附四条路线对比表和测量方法。">
+<meta property="og:url" content="https://fibo.page/blog/why-gpui/zh.html">
+<meta property="og:image" content="https://fibo.page/blog/why-gpui/images/00-cover.webp">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1499ad">
+<link rel="icon" type="image/svg+xml" href="../../brand/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../../brand/favicon-32.png">
+<link rel="apple-touch-icon" href="../../brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="alternate" type="application/atom+xml" title="Fibo 博客" href="../feed-zh.xml">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BlogPosting", "headline": "Fibo 的终端为什么不用 Tauri + xterm.js：一轮测评后换成 GPUI + libghostty-vt 原生绘制", "description": "Fibo 要在一个窗口里挂 40 个 Coding Agent 会话，原计划用 Tauri + React + xterm.js。测评里 WebView 同负载内存约是原生 Ghostty 的 3.5 倍，alacritty_terminal 存 40 个会话要 1.29 GiB。最后后台用 libghostty-vt（405 MiB，空闲可压到 66.5 MiB），窗口用 GPUI 在 GPU 上直接画；代价是 GPUI 空闲 CPU 是 Ghostty 的 8 倍，要靠自己维护的补丁压到 0.07%。附四条路线对比表和测量方法。", "image": "https://fibo.page/blog/why-gpui/images/00-cover.webp", "datePublished": "2026-11-28", "dateModified": "2026-11-28", "inLanguage": "zh-CN", "mainEntityOfPage": "https://fibo.page/blog/why-gpui/zh.html", "author": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/"}, "publisher": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/", "logo": {"@type": "ImageObject", "url": "https://fibo.page/brand/apple-touch-icon.png"}}}</script>
+<link rel="stylesheet" href="../post.css">
+
+<script>(()=>{const r=document.documentElement,k='fibo-landing-theme';try{r.dataset.theme=localStorage.getItem(k)==='dark'?'dark':'light';localStorage.setItem('fibo-landing-lang','zh')}catch(e){}
+addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('themebtn');if(b)b.onclick=()=>{const t=r.dataset.theme==='dark'?'light':'dark';r.dataset.theme=t;try{localStorage.setItem(k,t)}catch(e){}}})})()</script>
+</head>
+<body>
+<section class="mast">
+<header class="nav"><div class="wrap">
+  <a class="logo" href="../../" aria-label="Fibo"><img src="../../brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a>
+  <nav class="links" aria-label="Main"><a href="../../#features">功能</a><a href="../../#start">开始使用</a><a href="../../#faq">常见问题</a><a href="https://github.com/majiayu000/fibo/releases">更新记录</a><a class="on" href="../zh.html">博客</a></nav>
+  <div class="right">
+    <button type="button" class="btn glass sm" id="themebtn" aria-label="切换浅色和深色">◐</button><a class="btn glass sm" href="./" hreflang="en" lang="en">EN</a>
+    <a class="btn glass sm gh" href="https://github.com/majiayu000/fibo"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+    <a class="btn white sm" href="https://github.com/majiayu000/fibo/releases/latest">下载</a>
+  </div>
+</div></header>
+<div class="in">
+<span class="pill">技术选型 · 2026 年 11 月</span>
+<h1>Fibo 的终端为什么不用 Tauri + xterm.js：一轮测评后换成 GPUI + libghostty-vt 原生绘制</h1>
+<p class="lede">Fibo 要在一个窗口里同时挂 40 个 Coding Agent 会话，原计划是 Tauri + React + xterm.js，后台用 <code>alacritty_terminal</code>。一天的测评量下来，WebView 同负载内存约是原生 Ghostty 的 3.5 倍，<code>alacritty_terminal</code> 存 40 个会话要 1.29 GiB。<a href="../../">Fibo</a> 因此改成后台用 <code>libghostty-vt</code> 持有终端状态、窗口用 GPUI 在 GPU 上直接画格子，代价是长期维护一个 GPUI 补丁分支。</p>
+</div>
+</section>
+
+<main class="post">
+<blockquote><b>Fibo 是什么</b>：一个给 Claude Code、Codex 这类 Coding Agent 用的原生工作台，开源（MIT）。每个会话是窗口里的一个真实终端，后台进程 <code>fibo serve</code> 持有全部终端，窗口关掉会话也不停。它的前身叫 Mooring，更早叫 Keepline，这篇里的测评发生在 Keepline 时期。安装：<a href="https://github.com/majiayu000/fibo/releases/latest">下载 DMG</a>，或 <code>brew install --cask majiayu000/tap/fibo</code>。</blockquote>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 290" role="img" aria-label="时间线：2025-12 tasker 起步，2026-09 Keepline v1.1.4，10-19 定做终端工作台、原方案 Tauri 加 xterm.js，10-20 一天之内测完并定案 GPUI 加 libghostty-vt，11-02 Fibo 仓库开始">
+  <path class="line" d="M20 145 L740 145"/>
+  <circle class="dot-done" cx="60" cy="145" r="7"/>
+  <text class="t left" x="20" y="62">2025-12-09</text>
+  <text class="s left" x="20" y="84">tasker 起步</text>
+  <text class="s left" x="20" y="104">Claude Code 会话监控</text>
+  <path class="line dash" d="M60 112 L60 136"/>
+
+  <circle class="dot-done" cx="160" cy="145" r="7"/>
+  <text class="t" x="160" y="186">2026-09-26</text>
+  <text class="s" x="160" y="208">Keepline v1.1.4</text>
+  <text class="s" x="160" y="228">Bun 命令行 + 网页面板</text>
+  <text class="s" x="160" y="248">+ Tauri 菜单栏</text>
+  <path class="line dash" d="M160 154 L160 170"/>
+
+  <circle class="dot-wait" cx="262" cy="145" r="7"/>
+  <text class="t" x="262" y="62">10-13</text>
+  <text class="s" x="262" y="84">候选版实测：73 个会话</text>
+  <text class="s" x="262" y="104">常驻约 240 MB，5 秒扫描</text>
+  <path class="line dash" d="M262 112 L262 136"/>
+
+  <circle class="dot-wait" cx="362" cy="145" r="7"/>
+  <text class="t" x="362" y="186">10-19 夜里</text>
+  <text class="s" x="362" y="208">定做终端工作台</text>
+  <text class="s" x="362" y="228">原方案 Tauri + React</text>
+  <text class="s" x="362" y="248">+ xterm.js + alacritty</text>
+  <path class="line dash" d="M362 154 L362 170"/>
+
+  <circle class="dot-wait" cx="455" cy="145" r="7"/>
+  <text class="t" x="455" y="62">10-20 凌晨</text>
+  <text class="s" x="455" y="84">WebView 负对照</text>
+  <text class="bad-t c" x="455" y="104">内存约 3.5 倍</text>
+  <path class="line dash" d="M455 112 L455 136"/>
+
+  <circle class="dot-wait" cx="545" cy="145" r="7"/>
+  <text class="t" x="545" y="186">10-20 白天</text>
+  <text class="s" x="545" y="208">VT 库、3 个原型</text>
+  <text class="s" x="545" y="228">esctest、空闲补丁</text>
+  <path class="line dash" d="M545 154 L545 170"/>
+
+  <circle class="dot-run" cx="635" cy="145" r="9"/>
+  <text class="accent-t c" x="635" y="62">10-20 16:23</text>
+  <text class="ok-t c" x="635" y="84">定案 GPUI</text>
+  <text class="ok-t c" x="635" y="104">+ libghostty-vt</text>
+  <path class="line accent" d="M635 112 L635 134"/>
+
+  <circle class="dot-run" cx="715" cy="145" r="7"/>
+  <text class="t r" x="748" y="186">11-02</text>
+  <text class="s r" x="748" y="208">工作台导入现仓库</text>
+  <text class="s r" x="748" y="228">11-28 仍锁</text>
+  <text class="s r" x="748" y="248">同一版 GPUI</text>
+  <path class="line dash" d="M715 154 L715 170"/>
+</svg>
+<figcaption>时间线（不按比例）。10-19 夜里定下要做终端工作台，第二天一天之内把渲染路线测完并定案。时间按东八区，出处见文末。</figcaption>
+</figure>
+
+
+
+<nav class="toc" aria-label="目录">
+  <a href="#s1">01 要什么：40 个会话、4 个画面、不比 Ghostty 重 1.2 倍</a>
+  <a href="#s2">02 原方案：Tauri + React + xterm.js</a>
+  <a href="#s3">03 WebView 负对照：内存约 3.5 倍，大头在 GPU 进程</a>
+  <a href="#s4">04 后台的终端状态：三个 VT 库</a>
+  <a href="#s5">05 窗口：三个原型对 Ghostty</a>
+  <a href="#s6">06 反直觉的一条：GPUI 空闲时比 Ghostty 费 8 倍 CPU</a>
+  <a href="#s7">07 四条路线放在一起</a>
+  <a href="#s8">08 中文输入法：硬门槛怎么过的</a>
+  <a href="#s9">09 代价：一个月后的补丁分支</a>
+  <a href="#limits">限制：还没测到的</a>
+  <a href="#summary">总结：三条做法</a>
+</nav>
+
+<h2 id="s1">01 要什么：40 个会话、4 个画面、不比 Ghostty 重 1.2 倍</h2>
+
+<p>Fibo 的目标用户同时开 10 到 40 个 Claude Code、Codex 会话。产品形态在 10-19 夜里定下：一个专门跑和管理 Agent 的 App，每个会话是 App 里的一个真实终端，原生 CLI 跑在 App 自己的 PTY 里。当时的要求原话是「需要一个高性能的终端类的产品」。</p>
+
+<p>「高性能」要先变成能测的数。工作视图是「空间 + 标签 + 每个标签 2 到 4 个画面」，所以负载定成 40 个会话、同一标签 4 个画面可见、其余 36 个只在后台解析不绘制。预算定成相对值：同一台机器、同样负载下，总占用不超过 Ghostty 的 1.2 倍。另有两条绝对要求：窗口隐藏时不渲染，空闲时不轮询。</p>
+
+<p>口径上吃过一次亏。最早一轮用 <code>ps</code> 的 RSS 估算，一个长期运行的 Ghostty 只有 121 MB；改用 <code>phys_footprint</code>（把显存和被压缩的内存都算进去）后是 800 MB。RSS 漏掉了 GPU 和压缩内存，比较图形程序时会严重低估。之后所有数字都按 <code>phys_footprint</code> 计，并把 WebKit、XPC、GPU 这些辅助进程算进被测集合；CPU 按累计 CPU 时间除以墙钟时间。</p>
+
+<div class="table">
+<table>
+<thead><tr><th>项目</th><th>测评里的定义</th></tr></thead>
+<tbody>
+<tr><td>负载</td><td>40 个会话，4 个画面可见（2×2），每画面 120×40；窗口 1440×900 pt，Menlo 12 pt</td></tr>
+<tr><td>内存</td><td>被测进程集合的 <code>phys_footprint</code> 之和，每 5 秒采样，报中位数和峰值</td></tr>
+<tr><td>CPU</td><td>被测集合累计 CPU 时间 ÷ 墙钟时间，100% 等于一个核</td></tr>
+<tr><td>预算</td><td>相对同机同负载的 Ghostty ≤ 1.2 倍；两边 CPU 都低于 0.5% 时算「低于噪声」</td></tr>
+<tr><td>重复</td><td>每组 5 次，顺序打乱，报中位数；单次的初测只用来判断方向</td></tr>
+<tr><td>负载来源</td><td>合成输出，加一段 250 秒、1.5 MB 的真实 Codex 录制（4223 个同步输出帧，含大量光标定位和中文）</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="s2">02 原方案：Tauri + React + xterm.js</h2>
+
+<p>上一代 Keepline 是 Bun 命令行、网页面板加一个 Tauri 菜单栏 App，发到 v1.1.4。10-19 写的终端工作台 Spec 顺着这套栈往下走，两条关键决定是：</p>
+
+<ul>
+  <li><b>D01</b>：App 是主入口，沿用 Tauri + React，复用已有的工作台界面、菜单栏和通知。</li>
+  <li><b>D03</b>：Rust 后台用 <code>alacritty_terminal</code> 解析 PTY，持有权威的终端状态；窗口里用 xterm.js 显示一份镜像，借它现成的输入、绘制、选择和输入法能力。</li>
+</ul>
+
+<p>Spec 自己把 D03 标成「本方案最高风险的实现点」：后台要把 alacritty 的状态重新编码成 xterm.js 能吃的 VT 序列，快照要覆盖两套屏幕、滚动区、字素、光标、各种输入模式，还没有现成的序列化接口。</p>
+
+<p>后台也有问题。Keepline 原来的 Bun 服务只观察 73 个会话，就常驻约 240 MB 数据，每 5 秒轮询扫描一次；Bun 运行时本身只有约 22 MB，重的是数据整份放在内存里和定时轮询。这一条和渲染路线无关，换成什么界面都躲不开，所以先定了另一件事：常驻部分全部收进一个 Rust 后台进程，会话记录按偏移增量读、事件驱动，Bun 不再常驻。</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 380" role="img" aria-label="架构对比：左边原方案，WebView 里 React 和 xterm.js 镜像经 Tauri bridge 连到 alacritty 后台和 Bun 业务服务；右边定案，GPUI 窗口只解析可见画面并在 GPU 上画格子，经 Unix socket 连到一个 Rust 后台进程 fibo serve">
+  <text class="h" x="190" y="34">原方案（10-19 的 Spec）</text>
+  <rect class="badbox" x="30" y="52" width="320" height="86" rx="10"/>
+  <text class="t" x="190" y="80">WebView：React 界面</text>
+  <text class="s" x="190" y="102">每个可见画面一个 xterm.js（显示镜像）</text>
+  <text class="s" x="190" y="122">WebKit 页面进程 + GPU 进程</text>
+  <rect class="soft" x="30" y="156" width="320" height="44" rx="8"/>
+  <text class="t" x="190" y="184">Tauri Rust bridge（Channel）</text>
+  <rect class="box" x="30" y="218" width="152" height="120" rx="10"/>
+  <text class="t" x="106" y="246">keeplined</text>
+  <text class="s" x="106" y="270">PTY</text>
+  <text class="s" x="106" y="290">alacritty_terminal</text>
+  <text class="s" x="106" y="310">状态 → VT 序列</text>
+  <rect class="box" x="198" y="218" width="152" height="120" rx="10"/>
+  <text class="t" x="274" y="246">Bun 业务服务</text>
+  <text class="s" x="274" y="270">会话记录、Hook</text>
+  <text class="s" x="274" y="290">SQLite</text>
+  <text class="s" x="274" y="310">每 5 秒扫描</text>
+  <path class="line" d="M190 138 L190 156"/>
+  <path class="line" d="M190 200 L190 218"/>
+
+  <text class="h" x="570" y="34">定案（10-20）</text>
+  <rect class="box accent-box" x="410" y="52" width="320" height="106" rx="10"/>
+  <text class="t" x="570" y="80">GPUI 窗口（Rust）</text>
+  <text class="s" x="570" y="102">界面、标签、分屏、鸟瞰卡片</text>
+  <text class="s" x="570" y="122">libghostty-vt 只解析可见的 ≤ 4 个画面</text>
+  <text class="ok-t c" x="570" y="144">GPU 上直接画单元格</text>
+  <rect class="soft" x="410" y="176" width="320" height="44" rx="8"/>
+  <text class="t" x="570" y="204">Unix socket：先发快照，再转发字节</text>
+  <rect class="box accent-box" x="410" y="238" width="320" height="100" rx="10"/>
+  <text class="t" x="570" y="266">fibo serve（一个 Rust 后台进程）</text>
+  <text class="s" x="570" y="290">PTY、libghostty-vt（全部 40 个会话）</text>
+  <text class="s" x="570" y="310">会话记录增量读、Hook、SQLite，不轮询</text>
+  <path class="line accent" d="M570 158 L570 176"/>
+  <path class="line accent" d="M570 220 L570 238"/>
+</svg>
+<figcaption>左边的 D03 要在两种 VT 实现之间同步状态；右边前后台用同一个引擎，客户端只为看得见的画面再解析一遍。</figcaption>
+</figure>
+
+<h2 id="s3">03 WebView 负对照：内存约 3.5 倍，大头在 GPU 进程</h2>
+
+<p>为了知道 WebView 这条路的底线在哪，先写了一个最小的 macOS 测试程序：系统 WKWebView 里放 xterm.js 6，和一个用独立配置新开的 Ghostty 跑同样的输出（中英混排、带颜色），同样按 <code>phys_footprint</code> 计。</p>
+
+<div class="table">
+<table>
+<thead><tr><th>场景</th><th>内存（phys_footprint）</th><th>CPU</th></tr></thead>
+<tbody>
+<tr><td>Ghostty，1 个窗口，400 KiB/s</td><td>289 MiB</td><td>14%</td></tr>
+<tr><td>WebView + xterm.js（WebGL），1 个画面，400 KiB/s</td><td><b>1029 MiB</b>，3.56 倍</td><td>15%</td></tr>
+<tr><td>WebView + xterm.js（WebGL），4 个画面各 100 KiB/s</td><td>742 MiB，其中 WebKit GPU 进程 466 MiB</td><td>23%</td></tr>
+<tr><td>WebView + xterm.js（DOM 渲染），4 个画面各 100 KiB/s</td><td>452 MiB</td><td>128%，掉帧</td></tr>
+<tr><td>WebView 窗口最小化，4 个画面各 100 KiB/s</td><td>未记录</td><td>0.3%</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>CPU 两边接近，差在内存，而且涨在 WebKit 的 GPU 进程里。这部分由 WebKit 的进程模型决定，跟 xterm.js 写得好不好关系不大：「一个画面一个 WebView」和「一个 WebView 里多个 WebGL 上下文」都绕不开。换 DOM 渲染内存降了，CPU 涨到 128%。最小化时 CPU 降到 0.3%，说明 WebKit 会节流看不见的内容；这一条后来进了所有候选的正确性清单，原生方案也必须做到「看不见就不画」。</p>
+
+<p>这组是单次测量，没有按 5 次重复。测评记录里给的理由是：3.5 倍的差距远大于任何可能的测量噪声，1.2 倍的预算在内存上不可能达成，补测也推翻不了。WebView 路线在这一步否定，D01 和 D03 一起作废。</p>
+
+<h2 id="s4">04 后台的终端状态：三个 VT 库</h2>
+
+<p>后台要同时持有 40 个会话的屏幕和滚动历史，还要能在窗口重新连上时把当前画面完整交出去。测评没有直接拿某个终端的整体，而是按层拆开：PTY、VT 解析与状态、Unicode、字体、GPU 渲染、输入法与键盘、滚动缓存、会话复用协议、界面框架、现成终端组件，一共 10 层，登记了 99 个条目（69 个候选、30 个参照）。VT 这一层进入实测的是三家：<code>libghostty-vt</code>（经 <code>libghostty-rs</code> 绑定）、原方案里的 <code>alacritty_terminal</code> 0.26.0、<code>rio-vt</code> 0.5.28。</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 340" role="img" aria-label="内存条形图：窗口进程 1 画面 400 KiB/s，WebView 1029 MiB，Ghostty 289 MiB；后台 40 会话各 1 万行历史，alacritty_terminal 1.29 GiB，rio-vt 427 MiB，libghostty-vt 405 MiB，压缩后 66.5 MiB">
+  <text class="gh" x="24" y="36">窗口进程 · 1 个画面 · 400 KiB/s 输出</text>
+  <text class="row" x="24" y="66">WebView + xterm.js</text>
+  <rect class="bar0" x="230" y="50" width="356" height="24" rx="4"/>
+  <text class="v" x="594" y="67">1029 MiB</text>
+  <text class="row" x="24" y="100">Ghostty（参照）</text>
+  <rect class="bar1" x="230" y="84" width="100" height="24" rx="4"/>
+  <text class="v" x="338" y="101">289 MiB</text>
+
+  <text class="gh" x="24" y="152">后台 · 40 个会话 × 1 万行历史（120 列，真实文本）</text>
+  <text class="row" x="24" y="182">alacritty_terminal</text>
+  <rect class="bar0" x="230" y="166" width="447" height="24" rx="4"/>
+  <text class="v" x="685" y="183">1.29 GiB</text>
+  <text class="row" x="24" y="216">rio-vt</text>
+  <rect class="bar1" x="230" y="200" width="148" height="24" rx="4"/>
+  <text class="v" x="386" y="217">427 MiB</text>
+  <text class="row" x="24" y="250">libghostty-vt</text>
+  <rect class="bar2" x="230" y="234" width="140" height="24" rx="4"/>
+  <text class="v" x="378" y="251">405 MiB</text>
+  <text class="row" x="24" y="284">libghostty-vt 空闲压缩后</text>
+  <rect class="bar2" x="230" y="268" width="23" height="24" rx="4"/>
+  <text class="v" x="261" y="285">66.5 MiB</text>
+
+  <rect class="bar0" x="24" y="314" width="14" height="10" rx="2"/><text class="s left" x="44" y="324">否定</text>
+  <rect class="bar1" x="96" y="314" width="14" height="10" rx="2"/><text class="s left" x="116" y="324">参照 / 备选</text>
+  <rect class="bar2" x="210" y="314" width="14" height="10" rx="2"/><text class="s left" x="230" y="324">采用</text>
+</svg>
+<figcaption>同一刻度。上面两条是单次测量；下面四条各 5 次，离散度 0%。压缩用的是 libghostty-vt 的 LZ4 空闲压缩，40 个会话一共约 0.05 秒。</figcaption>
+</figure>
+
+<div class="table">
+<table>
+<thead><tr><th>指标（5 次中位数）</th><th>libghostty-vt</th><th>alacritty_terminal</th><th>rio-vt</th></tr></thead>
+<tbody>
+<tr><td>空会话，每个</td><td>0.025 MiB</td><td>0.27 MiB</td><td>0.11 MiB</td></tr>
+<tr><td>1 万行历史，每个会话</td><td>9.8 MiB</td><td>32 MiB</td><td>10.3 MiB</td></tr>
+<tr><td>40 个会话，整个进程</td><td><b>405 MiB</b></td><td>1.29 GiB</td><td>427 MiB</td></tr>
+<tr><td>空闲压缩后</td><td><b>66.5 MiB</b></td><td>没有</td><td>没有</td></tr>
+<tr><td>快照（1 万行历史）</td><td>完整：6.8 MB，编码 2.3 ms，恢复 5.0 ms，首屏可画 0.09 ms</td><td>不支持</td><td>只有可见屏，丢组合字符</td></tr>
+<tr><td>esctest2 通过（共 567 项）</td><td><b>147</b></td><td>101</td><td>101</td></tr>
+<tr><td>真实 Codex 录制解析</td><td><b>4.3 ns/字节</b></td><td>4.58</td><td>4.61</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>几处细节：</p>
+
+<ul>
+  <li><b>esctest 的绝对失败数很高</b>：esctest2 以 xterm 为准，大量用 DECRQCRA 读屏幕校验和，三家都不支持，所以只看相对差。alacritty 和 rio 比 Ghostty 多失败 59 项（DECRQM、DECRQSS、左右边距 DECLRMM 相关的光标移动等），反过来只有 14 项。rio 和 alacritty 的失败集合完全相同，rio 的终端核心派生自 alacritty。</li>
+  <li><b>一条结论被推翻了</b>：合成的随机真彩 TUI 负载下，libghostty-vt 解析比 alacritty 慢 1.9 倍。换成真实 Codex 录制复测，三家差距在 7% 以内，libghostty-vt 最快。慢是负载造成的：每行一个随机 24 位色，样式表一直膨胀，真实 TUI 不这样。这条从结论里删掉，原始数据留着。</li>
+  <li><b>解析 CPU 不构成区分</b>：最坏情况 4 个画面各 100 KiB/s，解析只要约 0.5% 个核。</li>
+</ul>
+
+<p>libghostty-vt 的代价也写在决策记录里：上游没有正式版本，快照接口只在 main 分支，必须锁 commit；绑定库是个人维护；构建要引入 Zig 0.16 工具链，而且 Cargo 的 debug 设置会把 Zig 部分编成 Debug，要显式设 <code>LIBGHOSTTY_VT_SYS_OPTIMIZE=ReleaseFast</code>；它静态带 simdutf，不能和同样带 simdutf 的 rio-vt 链进同一个二进制；要显式开 mode 2027，字形簇宽度才和 Ghostty.app 一致。</p>
+
+<h2 id="s5">05 窗口：三个原型对 Ghostty</h2>
+
+<p>后台定了 libghostty-vt，窗口还要选。客户端和后台之间先写了一个最小的会话复用原型 <code>kl-relay</code>（40 个空闲会话 35 MiB、CPU 0.13%），然后做了三个客户端原型，都连同一个后台：</p>
+
+<ul>
+  <li><b>P1</b>：GPUI + alacritty_terminal，作对照。GPUI 是 Zed 编辑器的 Rust 界面框架，锁 Zed v1.24.3。</li>
+  <li><b>P2</b>：Swift + GhosttyKit（libghostty-spm），终端画面直接用 Ghostty 的整块组件。</li>
+  <li><b>P3</b>：GPUI + libghostty-vt，客户端和后台用同一个 VT 引擎，GPUI 自己画格子。</li>
+</ul>
+
+<p>第一批 3 次的数据作废了。命令行启动、没有 App 包的 GUI 程序，macOS 不保证把窗口放到最前；窗口一被挡住，GPUI 和 GhosttyKit 都停止渲染，同一场景的结果两极分化，比如 P2 空闲一次 284 MiB、一次 58 MiB。之后测试窗口一律设成浮动层级，并把「有负载但 0 帧、或 CPU 低于 1%」的那次自动标成无效。下面是 5 次有效重测：</p>
+
+<div class="table">
+<table>
+<thead><tr><th>客户端</th><th>1 画面真实 Codex：内存 / CPU</th><th>空闲：内存 / CPU</th><th>4 画面真实 Codex</th><th>4 画面合成 100 KiB/s</th></tr></thead>
+<tbody>
+<tr><td>Ghostty.app（参照）</td><td>316 MiB / 9.8%</td><td>76 MiB / 0.10%</td><td>没测</td><td>没测</td></tr>
+<tr><td>P1 GPUI + alacritty</td><td>287 MiB / 5.4%</td><td>42 MiB / <b>0.80%</b></td><td>327 MiB / 11.2%</td><td>448 MiB / 20.6%</td></tr>
+<tr><td>P2 Swift + GhosttyKit</td><td>296 MiB / 3.4%</td><td>58 MiB / 0.07%</td><td>377 MiB / 8.3%</td><td>536 MiB / 39.3%</td></tr>
+<tr><td>P3 GPUI + libghostty-vt</td><td>288 MiB / 5.9%</td><td>42 MiB / <b>0.86%</b></td><td>328 MiB / 13.2%</td><td>374 MiB / 23.7%</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>1 个画面跑真实 Codex，三个原型都在预算内：GPUI 内存是 Ghostty.app 的 0.91 倍，CPU 0.55 到 0.60 倍；帧耗时 p95 1.6 到 1.9 ms，没有超过 16.7 ms 的帧。P1 和 P3 几乎一样，说明客户端用哪个 VT 引擎不是区分项，差别在框架。有输出时 GPUI 从空闲 42 MiB 涨到 287 MiB，Ghostty.app 从 76 涨到 316，推测是 Metal 帧缓冲和字形图集，当时没拆。</p>
+
+<p>不过线的是空闲那一列：GPUI 窗口什么都不画，CPU 也有 0.8%。</p>
+
+<h2 id="s6">06 反直觉的一条：GPUI 空闲时比 Ghostty 费 8 倍 CPU</h2>
+
+<p>空闲 0.80% 对 0.10%，是 Ghostty.app 的 8 倍，超过 0.5% 的可忽略阈值。看源码加 <code>sample</code> 采样，原因在 GPUI 的 macOS 后端：窗口可见时，<code>CVDisplayLink</code> 按屏幕刷新率每帧唤醒一次，检查 <code>invalidator.is_dirty()</code>，没东西画也照样唤醒；只有窗口被遮挡时才停。所以 4 个画面在同一个窗口里只有一条显示链接，但这条链接永远不睡。</p>
+
+<p>办法是给 GPUI 打补丁：连续若干个 vsync 没有新的绘制请求，就停掉显示链接；窗口一被标脏，立刻重启，下一个 vsync 出帧。下面是补丁的核心逻辑（简化过，去掉了锁和字段初始化）：</p>
+
+<pre><code>// 每个 vsync 的回调末尾
+if pause_idle {
+    if frame_demand {
+        idle_frames = 0;
+    } else {
+        idle_frames += 1;
+        if idle_frames &gt;= idle_frames_limit {
+            stop_display_link();
+            paused_for_idle = true;
+        }
+    }
+}
+
+// 窗口被标脏时（新增的 frame_waker）
+frame_demand = true;
+idle_frames = 0;
+if paused_for_idle {
+    paused_for_idle = false;
+    start_display_link();
+}</code></pre>
+
+<p>门槛长短有讲究。第一版设的是 3 帧，空闲确实降下来了，4 个画面阵发输出却变差：</p>
+
+<div class="table">
+<table>
+<thead><tr><th>场景（P3，5 次中位数）</th><th>不打补丁</th><th>补丁，门槛 3 帧 + 60 fps 节流</th></tr></thead>
+<tbody>
+<tr><td>空闲 CPU</td><td>0.86%</td><td><b>0.07%</b>（Ghostty.app 的 0.70 倍）</td></tr>
+<tr><td>1 画面真实 Codex CPU</td><td>5.9%</td><td>7.4%</td></tr>
+<tr><td>4 画面真实 Codex CPU</td><td>13.2%</td><td>17.1%</td></tr>
+<tr><td>4 画面真实 Codex 帧率</td><td>34 fps</td><td>48 fps</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>原因是 Agent 的输出是一阵一阵的：显示链接反复停、启，每次重启立刻出一帧，把原来被 vsync 合并的几次重绘拆成了好几帧。60 fps 节流没起作用，帧率本来就没到 60。结论是方向可行，门槛要放长。补丁的门槛做成了环境变量 <code>GPUI_PAUSE_IDLE_FRAMES</code>，默认 60 帧，在 120 Hz 的屏幕上约 0.5 秒。做决定时 0.5 秒这一档还没测。</p>
+
+<div class="tip">
+<p><b>不用 Fibo，自己比较终端也可以照这几条做</b>：</p>
+<ul>
+  <li>内存用 <code>footprint</code> 看 <code>phys_footprint</code>，不要用 <code>ps</code> 的 RSS；WebView 方案要把 <code>com.apple.WebKit.GPU</code> 等辅助进程加进来。</li>
+  <li>CPU 用累计 CPU 时间的差值除以墙钟时间，不要用 <code>top</code> 的瞬时值。</li>
+  <li>被测窗口要保持在最前、不被遮挡；被挡住的窗口很多框架会停画，测出来的是假的低值。</li>
+  <li>参照终端用独立配置新开一个实例（Ghostty 是 <code>--config-default-files=false</code>），不要测自己天天在用、开了很多窗口的那个。</li>
+</ul>
+<pre><code># 一个进程某一刻的 phys_footprint（字节）
+footprint -f bytes -p &lt;pid&gt;</code></pre>
+</div>
+
+<h2 id="s7">07 四条路线放在一起</h2>
+
+<figure>
+<div class="table">
+<table>
+<thead><tr><th></th><th>Tauri + xterm.js</th><th>P1 GPUI + alacritty</th><th>P2 Swift + GhosttyKit</th><th>P3 GPUI + libghostty-vt</th></tr></thead>
+<tbody>
+<tr><td>内存</td><td>1029 MiB *</td><td>287 MiB</td><td>296 MiB</td><td>288 MiB</td></tr>
+<tr><td>CPU</td><td>15% *</td><td>5.4%</td><td><b>3.4%</b></td><td>5.9%</td></tr>
+<tr><td>空闲</td><td>最小化时 0.3%</td><td>42 MiB / 0.80%</td><td>58 MiB / 0.07%</td><td>42 MiB / 0.86%，补丁后 0.07%</td></tr>
+<tr><td>4 画面真实 Codex</td><td>没测</td><td>327 MiB / 11.2%</td><td>377 MiB / 8.3%</td><td>328 MiB / 13.2%</td></tr>
+<tr><td>esctest2 通过</td><td>101（后台 alacritty）</td><td>101</td><td>147</td><td><b>147</b></td></tr>
+<tr><td>中文输入</td><td>xterm.js 自带，没测</td><td>GPUI 输入法接口，没测</td><td>GhosttyKit 自带，没测</td><td>第一版当天手测通过</td></tr>
+<tr><td>维护成本</td><td>复用已有 Tauri 代码；要自写 alacritty → xterm.js 状态镜像</td><td>GPUI 补丁；后台 40 会话 1.29 GiB，没有快照</td><td>客户端再带一份完整 VT 状态；4 画面合成负载 536 MiB / 39%</td><td>长期维护 GPUI 补丁；两层依赖锁 commit；Zig 进构建</td></tr>
+<tr><td>结论</td><td>否定：内存 3.56 倍，涨在 GPU 进程</td><td>对照组</td><td>备选</td><td><b>采用</b></td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>P1 到 P3 的内存和 CPU 是 1 个画面跑真实 Codex 录制，5 次中位数，参照 Ghostty.app 为 316 MiB / 9.8%。* 这一列负载不同：1 个画面合成输出 400 KiB/s，单次，同批 Ghostty 为 289 MiB / 14%。</figcaption>
+</figure>
+
+<p>P2 在单画面 CPU 上最好，为什么还是选了 P3？当时两条路线各有一项不过或未知：GPUI 空闲 CPU 不过线，要靠补丁；P2 在 4 画面下资源偏高，真实 Codex 比 GPUI 多 15% 内存，合成高吞吐时 536 MiB / 39%。4 画面的 Ghostty 基准一直没测成，所以两边都判不了是否在 1.2 倍以内。剩下的理由是结构上的：</p>
+
+<ul>
+  <li><b>前后台同一个引擎</b>：后台已经用 libghostty-vt 持有全部状态，P3 的客户端只为看得见的 2 到 4 个画面再解析一遍，attach 时直接用 libghostty-vt 的快照，不用在两种实现之间对齐行为。</li>
+  <li><b>全部是 Rust</b>：后台、协议、窗口共用类型和代码，一套 <code>cargo</code> 工具链。GPUI 也有 Linux 后端，Fibo 的 <code>Cargo.toml</code> 在 Linux 上打开了它的 x11 / wayland 特性。</li>
+  <li><b>界面是自写的</b>：鸟瞰卡片、状态栏这些本来就要自己写，GPUI 的输入处理（<code>NSTextInputClient</code>，<code>bounds_for_range</code> 定位候选窗）在社区框架里最完整；winit 系框架的输入法只给一个光标矩形。</li>
+</ul>
+
+<p>10-20 下午测试停在补丁复测这一步，路线定为 GPUI + libghostty-vt。Swift + GhosttyKit 留作备选，写下三个切换条件，任一满足就重新评估：中文输入法清单有项不过、一个迭代内修不好；空闲补丁维护不下去（上游重构显示链接导致补丁失效且没有替代），或调了门槛也无法同时满足空闲 ≤ 0.5% 和 4 画面阵发不变差；补测 4 画面基准后 GPUI 超出 1.2 倍而 P2 不超。</p>
+
+<h2 id="s8">08 中文输入法：硬门槛怎么过的</h2>
+
+<p>定案时输入法一项都没测，原型里根本没实现输入法。这是测评里唯一写明的硬门槛，Zed 当时也有两个没关的中文输入法 issue（<a href="https://github.com/zed-industries/zed/issues/59882">zed#59882</a> 间歇失效、<a href="https://github.com/zed-industries/zed/issues/53537">zed#53537</a> 第三方输入法下快捷键失效）。所以第一版实现当天就得过这一关，过不了就换 P2。</p>
+
+<p>第一版的做法：组字中的文字（marked text）只存在窗口内存里，不进 PTY，画在终端光标处，带下划线，组字时隐藏终端自己的块光标；候选窗位置由 <code>bounds_for_range</code> 返回，它和绘制、PTY 改尺寸用同一份字体实测值，范围按 UTF-16 换算，不拆代理对。实测 Menlo 单格 7.525635 × 20 px，中文字 advance 15.051269 px，两格是 15.051270 px，宽字符按两格对齐，字间不再留缝。</p>
+
+<div class="table">
+<table>
+<thead><tr><th>输入法检查项（10-20）</th><th>结果</th><th>怎么验的</th></tr></thead>
+<tbody>
+<tr><td>候选窗紧贴终端光标</td><td>通过</td><td>人工手测，第三方拼音输入法，窗口里跑真实 <code>cat</code></td></tr>
+<tr><td>两个画面间切换后，拼音进入聚焦的那个</td><td>通过</td><td>同上</td></tr>
+<tr><td>选字只上屏一次，无残留</td><td>通过</td><td>自动操作逐键输入 n/i/h/a/o 后按空格，截图核对</td></tr>
+<tr><td>回车提交字母；组字时退格只删拼音</td><td>通过</td><td>同上</td></tr>
+<tr><td>中日韩输出字距</td><td>通过</td><td>真实窗口截图</td></tr>
+<tr><td>Ctrl-C 退出 <code>cat</code></td><td><b>不通过</b></td><td>人工手测；归为键盘编码问题，进了下一轮修复</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>输入法这道门槛过了，没有触发备选。记录里也写明了没覆盖的部分：苹果自带拼音的全链路，自动操作那一轮没取得合格证据（按键送到了窗口，系统输入法没有接管）；选字、回车、退格在更早一轮有人工确认，候选窗和两画面切换是用第三方拼音输入法手测的。</p>
+
+<h2 id="s9">09 代价：一个月后的补丁分支</h2>
+
+<p>选 GPUI 时就知道要长期维护补丁。到 11-28，Fibo 仍锁在测评时的同一版本：Zed <code>v1.24.3</code>（<code>2a857f5</code>）和 libghostty-rs <code>0ef8041</code>，由 <code>bootstrap.sh</code> 拉取并按顺序打补丁。补丁从测评时的 1 个变成了 6 个：</p>
+
+<div class="table">
+<table>
+<thead><tr><th>补丁</th><th>做什么</th><th>行数</th></tr></thead>
+<tbody>
+<tr><td><code>gpui-idle</code></td><td>就是上面那个空闲停显示链接；Fibo 启动时默认打开（<code>GPUI_PAUSE_IDLE_DISPLAY_LINK=1</code>）</td><td>89</td></tr>
+<tr><td><code>gpui-retained-backbuffer</code></td><td>保留后台缓冲，只重画两帧之间变了的区域，一个转圈的动画只重画几个格子</td><td>820</td></tr>
+<tr><td><code>gpui-present-render-pass</code></td><td>后台缓冲复制到屏幕时，把 blit 换成渲染通道：窗口图形内存 408.4 → 248.4 MB，总占用约 570 → 385 MB</td><td>110</td></tr>
+<tr><td><code>gpui-retained-group-rects</code></td><td>把多处局部损伤合并进一个 Metal 渲染通道</td><td>189</td></tr>
+<tr><td><code>gpui-fit-truncated-row</code></td><td>文字被截断时给省略号</td><td>107</td></tr>
+<tr><td><code>gpui-glyph-dilation</code></td><td>让一段文字用固定的字形加粗值，不按颜色自动加粗；Fibo 的终端绘制里有一处用它关掉加粗</td><td>47</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>6 个补丁文件一共 1362 行，大头是保留后台缓冲。<code>present-render-pass</code> 那条很典型：Metal 驱动在进程第一次用 blit 时多留了 20 块 8 MB 的缓冲，只要窗口一直在画就不还，写一个几十行的最小 Metal 程序也能复现。换成渲染通道后，真实窗口 194 帧里屏幕缓冲和后台缓冲逐字节一致。框架是自己能改的，这类问题才能在自己这一层修掉；代价是每次想升级 GPUI，这 6 个补丁都要重新对一遍，所以至今没升。</p>
+
+<p>为了不让改动悄悄把性能改回去，窗口的重画开销现在有一道 CI 门禁：真机上按每帧退休指令数比基线，超 15% 就失败（CI 的虚拟机读不到指令数，退回比例检查），细节在仓库的 <code>docs/performance/</code>。</p>
+
+<h2 id="limits">限制：还没测到的</h2>
+
+<ul>
+  <li><b>4 画面没有 Ghostty 基准</b>：Ghostty.app 的 4 分屏需要自动化权限，一直没测成。GPUI 4 画面是否在 1.2 倍以内，测评结束时未知。</li>
+  <li><b>GPU 时间、耗电、输入延迟没测</b>：耗电的脚本写了没跑，输入延迟只定了方法。</li>
+  <li><b>Claude Code 的全屏重绘没有真实录制</b>：只录了 Codex，Claude Code 的全屏重绘只有合成负载。</li>
+  <li><b>空闲门槛 0.5 秒那一档</b>：定案时没测，这篇也没找到之后在 4 画面阵发输出下的复测数据。</li>
+  <li><b>WebView 那组是单次</b>：每个场景 1 次、1 个采样点。差距是 3.5 倍，方向不会变，具体数字有误差。</li>
+  <li><b>机器在负载下测的</b>：测评自己的规则是 1 分钟负载均值超过 4 就作废，实际测量时是 8 到 26。比值都在同一批次里算，CPU 用累计时间，但绝对值会偏高。</li>
+  <li><b>原始数据没公开</b>：测评的 <code>results/</code> 原始数据、原型和脚本在旧仓库的本地提交里，这篇的数字取自其中的汇总表和决策记录。</li>
+</ul>
+
+<h2 id="summary">总结：三条做法</h2>
+
+<ul>
+  <li><b>先把「高性能」写成相对预算</b>：同机同负载不超过 Ghostty 的 1.2 倍，内存只认 <code>phys_footprint</code>。这一条让 WebView 路线在一组 1029 对 289 MiB 的数字上就被否定。</li>
+  <li><b>按层测，后台和窗口分开选</b>：10 层、99 个条目。后台选 libghostty-vt 看的是 405 MiB 对 1.29 GiB、可压到 66.5 MiB、有完整快照；窗口选 GPUI 看的是 1 画面 0.91 倍内存、0.55 到 0.60 倍 CPU。合成负载得出的「慢 1.9 倍」用真实录制复测后删掉了。</li>
+  <li><b>自己能改的框架，要准备好一直改下去</b>：空闲 CPU 从 0.8% 降到 0.07% 靠一个 89 行的补丁；一个月后补丁有 6 个、1362 行，GPUI 一直锁在 v1.24.3。中文输入法写成硬门槛并留好 Swift 备选，第一版当天就过了这一关。</li>
+</ul>
+
+<nav class="pn" aria-label="更多文章"><a class="pn-card" href="../waiting-for-you/zh.html"><span class="eyebrow">上一篇</span><b>不改 Agent，Fibo 怎么知道它在等你</b></a></nav>
+<footer class="end">
+  <p>Fibo 是开源项目（MIT 许可）。GPUI 补丁在仓库的 <code>patches/</code>，拉取和打补丁的脚本是 <code>bootstrap.sh</code>，全部源码在 <a href="https://github.com/majiayu000/fibo">GitHub</a>。</p>
+  <p><a href="../zh.html">← 全部文章</a> · <a href="../../">回到 fibo.page</a></p>
+</footer>
+</main>
+
+<footer><div class="wrap">
+  <div class="fcols">
+    <div><a class="logo" href="../../" aria-label="Fibo"><img src="../../brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a><p>一个原生的 macOS 工作台，用来同时跑很多个 Coding Agent。开源，MIT 许可。</p><a class="btn white sm" style="margin-top:22px" href="https://github.com/majiayu000/fibo/releases/latest">下载</a></div>
+    <div><h4>产品</h4><ul><li><a href="../../#features">功能</a></li><li><a href="../../#start">开始使用</a></li><li><a href="https://github.com/majiayu000/fibo/releases">更新记录</a></li><li><a href="../zh.html">博客</a></li></ul></div>
+    <div><h4>资源</h4><ul><li><a href="https://github.com/majiayu000/fibo#readme">文档</a></li><li><a href="../../#faq">常见问题</a></li><li><a href="https://github.com/majiayu000/fibo/issues">反馈问题</a></li></ul></div>
+    <div><h4>项目</h4><ul><li><a href="https://github.com/majiayu000/fibo">GitHub</a></li><li><a href="https://github.com/majiayu000/fibo/blob/main/LICENSE">许可</a></li><li><a href="https://github.com/majiayu000/homebrew-tap">Homebrew 源</a></li></ul></div>
+  </div>
+  <div class="legal"><span>© 2026 Fibo。MIT 许可。</span><span class="formula">Fₙ = Fₙ₋₁ + Fₙ₋₂ · 1, 1, 2, 3, 5, 8, 13, 21 …</span><span>fibo.page</span></div>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Fibo knows an agent is waiting for you, without changing the agent · Fibo Blog</title>
+<meta name="description" content="Claude Code and Codex do not tell other programs they are stuck on an approval prompt. Fibo builds each session’s state from five sources (session logs, hooks, the screen, OSC 7501 and processes), layers them in a fixed order, decides the state only in status::of, and uses a guard test that counts per file to stop a second owner from appearing. With a source comparison, the state machine, cases it got wrong and the baseline over time.">
+<link rel="canonical" href="https://fibo.page/blog/waiting-for-you/">
+<link rel="alternate" hreflang="en" href="https://fibo.page/blog/waiting-for-you/">
+<link rel="alternate" hreflang="zh-CN" href="https://fibo.page/blog/waiting-for-you/zh.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Fibo">
+<meta property="og:title" content="How Fibo knows an agent is waiting for you, without changing the agent">
+<meta property="og:description" content="Claude Code and Codex do not tell other programs they are stuck on an approval prompt. Fibo builds each session’s state from five sources (session logs, hooks, the screen, OSC 7501 and processes), layers them in a fixed order, decides the state only in status::of, and uses a guard test that counts per file to stop a second owner from appearing. With a source comparison, the state machine, cases it got wrong and the baseline over time.">
+<meta property="og:url" content="https://fibo.page/blog/waiting-for-you/">
+<meta property="og:image" content="https://fibo.page/blog/waiting-for-you/images/00-cover-en.webp">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1499ad">
+<link rel="icon" type="image/svg+xml" href="../../brand/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../../brand/favicon-32.png">
+<link rel="apple-touch-icon" href="../../brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="alternate" type="application/atom+xml" title="Fibo Blog" href="../feed.xml">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BlogPosting", "headline": "How Fibo knows an agent is waiting for you, without changing the agent", "description": "Claude Code and Codex do not tell other programs they are stuck on an approval prompt. Fibo builds each session’s state from five sources (session logs, hooks, the screen, OSC 7501 and processes), layers them in a fixed order, decides the state only in status::of, and uses a guard test that counts per file to stop a second owner from appearing. With a source comparison, the state machine, cases it got wrong and the baseline over time.", "image": "https://fibo.page/blog/waiting-for-you/images/00-cover-en.webp", "datePublished": "2026-11-28", "dateModified": "2026-11-28", "inLanguage": "en", "mainEntityOfPage": "https://fibo.page/blog/waiting-for-you/", "author": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/"}, "publisher": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/", "logo": {"@type": "ImageObject", "url": "https://fibo.page/brand/apple-touch-icon.png"}}}</script>
+<link rel="stylesheet" href="../post.css">
+
+<script>(()=>{const r=document.documentElement,k='fibo-landing-theme';try{r.dataset.theme=localStorage.getItem(k)==='dark'?'dark':'light';localStorage.setItem('fibo-landing-lang','en')}catch(e){}
+addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('themebtn');if(b)b.onclick=()=>{const t=r.dataset.theme==='dark'?'light':'dark';r.dataset.theme=t;try{localStorage.setItem(k,t)}catch(e){}}})})()</script>
+</head>
+<body>
+<section class="mast">
+<header class="nav"><div class="wrap">
+  <a class="logo" href="../../" aria-label="Fibo"><img src="../../brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a>
+  <nav class="links" aria-label="Main"><a href="../../#features">Features</a><a href="../../#start">Get started</a><a href="../../#faq">FAQ</a><a href="https://github.com/majiayu000/fibo/releases">Changelog</a><a class="on" href="../">Blog</a></nav>
+  <div class="right">
+    <button type="button" class="btn glass sm" id="themebtn" aria-label="Switch between light and dark">◐</button><a class="btn glass sm" href="zh.html" hreflang="zh-CN" lang="zh-CN">中文</a>
+    <a class="btn glass sm gh" href="https://github.com/majiayu000/fibo"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+    <a class="btn white sm" href="https://github.com/majiayu000/fibo/releases/latest">Download</a>
+  </div>
+</div></header>
+<div class="in">
+<span class="pill">Engineering · November 2026</span>
+<h1>How Fibo knows an agent is waiting for you, without changing the agent</h1>
+<p class="lede">When Claude Code or Codex stops on an approval prompt, it tells nobody. Session logs, hooks, the screen, program reports and processes each have blind spots, and any one alone gets some cases wrong. <a href="../../">Fibo</a> layers all five onto one session card in a fixed order, decides the state in one place, core’s <code>status::of</code>, and keeps it there with a test that counts every other place trying to decide it.</p>
+</div>
+</section>
+
+<main class="post">
+<blockquote><b>What Fibo is</b>: a native, open-source (MIT) workbench for coding agents such as Claude Code and Codex. Agents run in real terminals Fibo opens, and Fibo shows in the sidebar, the board, the menu bar and on your phone which session is waiting for you. Install: <a href="https://github.com/majiayu000/fibo/releases/latest">download the DMG</a>, or <code>brew install --cask majiayu000/tap/fibo</code>.</blockquote>
+
+<nav class="toc" aria-label="Contents">
+  <a href="#s1">01 The problem: there is no API for "waiting on you"</a>
+  <a href="#s2">02 Five sources, each with blind spots</a>
+  <a href="#s3">03 Layering order: whose word counts</a>
+  <a href="#s4">04 A finished turn is ready for review, not done</a>
+  <a href="#s5">05 A server is not waiting: four versions of the background-shell rule</a>
+  <a href="#s6">06 Cases it got wrong</a>
+  <a href="#s7">07 Decided in one place, and kept there by a test</a>
+  <a href="#limits">Limits: what it does not do yet</a>
+  <a href="#summary">Summary: three practices</a>
+</nav>
+
+<h2 id="s1">01 The problem: there is no API for "waiting on you"</h2>
+
+<p>With five or six agents open at once, most of the time goes into flipping through tabs to see who is stuck on an approval prompt and who has already finished. For a workbench to watch them for you, it has to know what each session is doing right now.</p>
+
+<p>Agent CLIs have no interface for this. Claude Code and Codex do not tell other programs "I am sitting on an approval prompt", and Fibo does not change their model or loop; it runs them as they are, in a real terminal (PTY). All it can use are the traces they leave anyway: session logs on disk, hooks the user may choose to install, the text drawn in the terminal, escape sequences a program prints, and processes in the operating system.</p>
+
+<p>Fibo gives every session one of 10 states. Their words, glyphs and grouping are defined once, by <code>Status</code> in <code>crates/fibo-core/src/status.rs</code>, and spelled nowhere else:</p>
+
+<div class="table">
+<table>
+<thead><tr><th>State</th><th>When</th><th>Needs you</th><th>Sounds</th></tr></thead>
+<tbody>
+<tr><td style="white-space:nowrap"><code>◐</code> Running</td><td>A turn is under way, or it ended while a background job or subagent still works for it</td><td>no</td><td>no</td></tr>
+<tr><td style="white-space:nowrap"><code>◆</code> Waiting for you</td><td>An approval, a question or a plan confirmation is on screen</td><td>yes</td><td>yes</td></tr>
+<tr><td style="white-space:nowrap"><code>✕</code> Error</td><td>The turn failed, or the terminal's process exited non-zero</td><td>yes</td><td>yes</td></tr>
+<tr><td style="white-space:nowrap"><code>◇</code> Ready for review</td><td>The turn ended; whether the work is done is yours to judge</td><td>yes</td><td>no</td></tr>
+<tr><td style="white-space:nowrap"><code>◔</code> In background</td><td>The turn ended and only a scheduled wakeup or a monitor is left, which will wake it later</td><td>yes</td><td>no</td></tr>
+<tr><td style="white-space:nowrap"><code>○</code> New</td><td>An agent is open and has not started a turn</td><td>no</td><td>no</td></tr>
+<tr><td style="white-space:nowrap"><code>‖</code> Stopped</td><td>You interrupted it, or the agent left without finishing</td><td>no</td><td>no</td></tr>
+<tr><td style="white-space:nowrap"><code>◷</code> Snoozed</td><td>You snoozed it until a set time</td><td>no</td><td>no</td></tr>
+<tr><td style="white-space:nowrap"><code>·</code> Idle</td><td>Untouched past the configured number of days</td><td>no</td><td>no</td></tr>
+<tr><td style="white-space:nowrap"><code>✓</code> Done</td><td>You marked it complete or abandoned it</td><td>no</td><td>no</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>"Needs you" is a group of states: Waiting for you, Error, Ready for review and In background (<code>Status::needs_you</code>). Only the first two play a sound and color the counter orange or red (<code>Status::blocked</code>), because the agent cannot continue without you. This was settled on 11-03; before that the sidebar counted four states while the top bar and the board counted two, so the same moment could read "Needs you 5" and "Needs you 2".</p>
+
+<h2 id="s2">02 Five sources, each with blind spots</h2>
+
+<p>The background host, <code>fibo serve</code>, owns every terminal and collects five kinds of evidence for each session. Each one alone gets some cases wrong, so it uses all five.</p>
+
+<div class="table">
+<table style="min-width:640px">
+<thead><tr><th>Source</th><th>What it sees</th><th>How fast</th><th>Where it is reliable</th><th>When it fails</th></tr></thead>
+<tbody>
+<tr><td><b>Session log</b><br>jsonl under <code>~/.claude</code>, Codex's logs, etc.</td><td>A turn starting, ending, being interrupted; what was said and which tools ran. All chat content comes from here</td><td>Read when the file changes</td><td>The CLI's own record: an end or an interruption written there is a fact</td><td>Some things are written only after you answer: Claude's question dialog is absent from the log until then. Reading only the tail of a long session misses the start of the current turn</td></tr>
+<tr><td><b>Hooks</b><br>optional; 6 events for Claude</td><td><code>UserPromptSubmit</code> starts a turn, <code>PermissionRequest</code> and <code>Notification</code> wait, <code>Stop</code> ends it and lists background shells</td><td>When the event happens</td><td>Knows about approvals and questions before the log does; Stop carries the background task list</td><td>Nothing at all on machines without hooks; another process that inherited the terminal's environment can send hooks too (see 06)</td></tr>
+<tr><td><b>Screen</b><br>terminal contents and title</td><td>The approval, choice or plan menu on screen now; a spinner in the title, a timer line in the output</td><td>Read once the screen has been quiet for 1 s; while output flows, checked every second for the timer line</td><td>The only source that knows "now" when the log lags</td><td>A CLI that changes its wording or layout is no longer recognized; narrow windows wrap a question onto two lines (see 06)</td></tr>
+<tr><td><b>Program report</b><br>OSC 7501</td><td>A program says <code>working</code>, <code>blocked</code>, <code>done</code> or <code>error</code> with one escape sequence</td><td>As soon as it prints</td><td>The program's own word, not a guess</td><td>Needs the program to print it; scripts and builds get it with one <code>printf</code></td></tr>
+<tr><td><b>Processes</b><br>process tree, listening ports</td><td>Whether shells left after a turn are still alive and whether they listen on a port</td><td>Every 5 s</td><td>Tells jobs that will end from servers that will not</td><td>Only indirect: it reads ports and age, not what a command means (see 05)</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Two more signals only settle dialogs: Claude's <code>claude agents --json</code> and the read-only status interface of Codex's shared daemon. The code notes they can lag both the log and the hooks, so they may end or confirm a wait but never start or end a turn (<code>official</code> in <code>content/mod.rs</code>).</p>
+
+<p>Hooks must not slow the agent down either. The command Fibo writes into <code>settings.json</code> reads stdin into a variable, hands it to <code>fibo hook</code> in the background and exits 0 at once; its 5-second timeout only bounds a stuck shell. Outside a Fibo terminal (the environment variable Fibo sets is missing) the command exits immediately and the CLI is unaffected.</p>
+
+<h2 id="s3">03 Layering order: whose word counts</h2>
+
+<p>The five sources do not each reach a verdict. They are layered onto one session card (<code>Content</code>), which records the turn's phase (<code>turn</code>), what is left in the background (<code>background</code>) and what it waits on (<code>waiting</code>). The log and hooks feed the same parser and form the base; each time the host sends the workspace to the window and phones, it layers runtime observations on top in a fixed order (<code>overlay</code> in <code>host/snapshot.rs</code>).</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 640" role="img" aria-label="Layering order: the log and hooks write the base card, then processes, title and screen busy cues, prompts on screen and program reports are layered in turn, and status::of adds your decisions to give the one state every surface reads">
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tip"/></marker></defs>
+  <rect class="soft" x="40" y="20" width="320" height="64" rx="10"/>
+  <text class="t" x="200" y="46">Session log</text>
+  <text class="s" x="200" y="68">start, end, interrupt, what was said</text>
+  <rect class="soft" x="400" y="20" width="320" height="64" rx="10"/>
+  <text class="t" x="560" y="46">Hooks</text>
+  <text class="s" x="560" y="68">start, approval, question, end + shells</text>
+  <path class="line" d="M200 84 L340 116" marker-end="url(#ar)"/>
+  <path class="line" d="M560 84 L420 116" marker-end="url(#ar)"/>
+  <rect class="box" x="200" y="118" width="360" height="56" rx="10"/>
+  <text class="h" x="380" y="142">Base: the session card, Content</text>
+  <text class="s" x="380" y="162">turn · background · waiting · signal</text>
+  <path class="line" d="M380 174 L380 194" marker-end="url(#ar)"/>
+
+  <rect class="box" x="40" y="196" width="680" height="58" rx="10"/>
+  <circle class="key" cx="72" cy="225" r="14"/><text class="kt c" x="72" y="230">1</text>
+  <text class="l" x="100" y="220">Processes: background shells split into jobs and servers</text>
+  <text class="s left" x="100" y="242">A job (tests, a build) keeps an ended turn running; a server does not</text>
+  <path class="line" d="M380 254 L380 270" marker-end="url(#ar)"/>
+  <rect class="box" x="40" y="272" width="680" height="58" rx="10"/>
+  <circle class="key" cx="72" cy="301" r="14"/><text class="kt c" x="72" y="306">2</text>
+  <text class="l" x="100" y="296">Spinning title, timer line on screen</text>
+  <text class="s left" x="100" y="318">Can only turn "not running" into "running", and only if first seen after the recorded end</text>
+  <path class="line" d="M380 330 L380 346" marker-end="url(#ar)"/>
+  <rect class="box" x="40" y="348" width="680" height="58" rx="10"/>
+  <circle class="key" cx="72" cy="377" r="14"/><text class="kt c" x="72" y="382">3</text>
+  <text class="l" x="100" y="372">Approval, choice or plan menu on screen</text>
+  <text class="s left" x="100" y="394">Waiting for you before the log catches up, marked as read from the screen</text>
+  <path class="line" d="M380 406 L380 422" marker-end="url(#ar)"/>
+  <rect class="box" x="40" y="424" width="680" height="58" rx="10"/>
+  <circle class="key" cx="72" cy="453" r="14"/><text class="kt c" x="72" y="458">4</text>
+  <text class="l" x="100" y="448">Program report, OSC 7501</text>
+  <text class="s left" x="100" y="470">The program's own word outranks every guess above (idle, working start no turn)</text>
+  <path class="line accent" d="M380 482 L380 502" marker-end="url(#ar)"/>
+
+  <rect class="box accent-box" x="160" y="504" width="440" height="58" rx="12"/>
+  <text class="h" x="380" y="530">status::of: the only place a state is decided</text>
+  <text class="s" x="380" y="550">plus your decisions: marked done, snoozed</text>
+  <path class="line" d="M380 562 L380 580" marker-end="url(#ar)"/>
+  <text class="s" x="380" y="604">sidebar · panes · board · menu bar · phone cards · fibo list · plugin events</text>
+  <text class="s" x="380" y="626">all read this one result</text>
+</svg>
+<figcaption>Layering order; later steps outrank earlier ones. Steps 2 and 3 only move a session toward "busier" or "waiting"; step 4 is the program's own word. The order lives in <code>host/snapshot.rs</code>, the decision in <code>fibo-core/src/status.rs</code>.</figcaption>
+</figure>
+
+<p>Three principles sit behind the order:</p>
+
+<ul>
+  <li><b>What is seen can only add</b>. A spinning title proves a turn is running even when only the log's tail was read. A still title proves nothing, so it never turns "running" into anything else.</li>
+  <li><b>Now beats the record</b>. If an approval prompt is on screen and the log has not reached it, the session waits for you, and the card says "prompt on screen" so it is never mistaken for a log record.</li>
+  <li><b>What a program says beats a guess</b>. A program that reports through OSC 7501 is taken at its word. But <code>idle</code> and <code>working</code> start no turn: the code notes that Codex reports a few seconds of <code>working</code> between turns, while a real turn reaches its log within moments.</li>
+</ul>
+
+<p>After layering, a single function decides. This is the branch for a live session (simplified, parameter types left out):</p>
+
+<pre><code>fn live(w, s, c, now) -&gt; Status {
+    match turn {
+        Turn::Waiting =&gt; return Status::Waiting,
+        Turn::Running =&gt; return Status::Running,
+        // subagents or a job still work for it: not over
+        Turn::Completed if background.keeps_working() =&gt; return Status::Running,
+        _ =&gt; (),
+    }
+    if let Some(d) = decided(w, s, now) { return d; } // marked done, snoozed
+    if fresh(c) { return Status::Fresh; }
+    match turn {
+        Turn::Error =&gt; Status::Error,
+        // only what wakes it; a server wakes nothing
+        _ if background.wakes() =&gt; Status::Background,
+        Turn::Interrupted =&gt; Status::Paused,
+        _ =&gt; Status::Review,
+    }
+}</code></pre>
+
+<p>Note the order: your decision comes after "waiting" and "running". If you marked a session done and then woke the agent with another message, it shows Running; only once the turn ends does your decision apply.</p>
+
+<h2 id="s4">04 A finished turn is ready for review, not done</h2>
+
+<p>An agent saying "all done" does not mean the work is done. So the end of a turn only reaches Ready for review, and only you can mark a session Done (settled on 11-02). When the agent's reply claims completion, the card's next-step hint becomes "check each item of the request against mechanical evidence before accepting" (<code>completed_claim</code>); the state stays the same.</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 420" role="img" aria-label="Session state machine: New becomes Running at the first message; Running can enter the four Needs you states, Waiting for you, Error, Ready for review and In background, or be interrupted into Stopped; answering, sending again or being woken go back to Running; Ready for review becomes Done only when you mark it">
+  <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tip"/></marker>
+  <marker id="ar2g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ok-h"/></marker></defs>
+  <rect class="soft" x="20" y="160" width="104" height="56" rx="10"/>
+  <circle class="dot-done" cx="40" cy="188" r="6"/>
+  <text class="t" x="80" y="193">New</text>
+  <path class="line" d="M124 188 L196 188" marker-end="url(#ar2)"/>
+  <text class="s" x="160" y="178">1st message</text>
+  <rect class="box accent-box" x="198" y="160" width="120" height="56" rx="10"/>
+  <circle class="dot-run" cx="220" cy="188" r="6"/>
+  <text class="h" x="266" y="194">Running</text>
+
+  <rect class="badbox" x="392" y="14" width="250" height="288" rx="14"/>
+  <text class="gh" x="408" y="36">Needs you (4 states)</text>
+  <rect class="box" x="408" y="46" width="218" height="52" rx="9"/>
+  <circle class="dot-wait" cx="426" cy="72" r="6"/>
+  <text class="l" x="440" y="68">Waiting for you</text><text class="s left" x="440" y="88">approval, question, plan · sounds</text>
+  <rect class="box" x="408" y="108" width="218" height="52" rx="9"/>
+  <circle class="dot-wait" cx="426" cy="134" r="6"/>
+  <text class="l" x="440" y="130">Error</text><text class="s left" x="440" y="150">failed, non-zero exit · sounds</text>
+  <rect class="box" x="408" y="170" width="218" height="52" rx="9"/>
+  <circle class="dot-done" cx="426" cy="196" r="6"/>
+  <text class="l" x="440" y="192">Ready for review</text><text class="s left" x="440" y="212">turn ended, even with a server left</text>
+  <rect class="box" x="408" y="232" width="218" height="52" rx="9"/>
+  <circle class="dot-done" cx="426" cy="258" r="6"/>
+  <text class="l" x="440" y="254">In background</text><text class="s left" x="440" y="274">a wakeup or monitor is left</text>
+
+  <path class="line" d="M318 172 L406 74" marker-end="url(#ar2)"/>
+  <path class="line" d="M318 182 L406 134" marker-end="url(#ar2)"/>
+  <path class="line" d="M318 194 L406 196" marker-end="url(#ar2)"/>
+  <path class="line" d="M318 206 L406 256" marker-end="url(#ar2)"/>
+  <path class="line dash" d="M392 296 C340 300 300 262 284 218" marker-end="url(#ar2)"/>
+  <text class="s left" x="290" y="326">answered · sent again · woken</text>
+
+  <rect class="soft" x="198" y="344" width="120" height="50" rx="10"/>
+  <text class="t" x="258" y="374">Stopped</text>
+  <path class="line" d="M232 216 L232 342" marker-end="url(#ar2)"/>
+  <text class="s left" x="140" y="290">interrupted</text>
+
+  <rect class="box" x="408" y="344" width="218" height="50" rx="10"/>
+  <text class="ok-t c" x="517" y="374">✓ Done</text>
+  <path class="line accent" d="M626 196 L690 196 L690 369 L628 369" marker-end="url(#ar2g)"/>
+  <text class="ok-t" x="700" y="226" transform="rotate(90 700 226)">only you mark it done</text>
+</svg>
+<figcaption>Session state machine (simplified: Snoozed and Idle are not drawn). A turn that ends while a background job or subagent still runs does not move right; it stays Running.</figcaption>
+</figure>
+
+<p>Keeping Ready for review apart from Done has a practical effect. A session ready for review stays in the Needs you count, so <code>⌘J</code> jumps to it, and it can be walked through in the review queue: read what the agent said last, then mark it done or send it back (sessions with a server left are kept out of the queue, because their Enter would close the terminal). If a finished turn counted as done, this step would disappear and unchecked changes would mix into the done column.</p>
+
+<h2 id="s5">05 A server is not waiting: four versions of the background-shell rule</h2>
+
+<p>The hardest case is a session whose turn ended with background shells still alive. Claude's <code>Stop</code> hook lists them but does not say whether they will end. Some will (tests, builds, CI polling), and Claude is woken when they do; some will not (<code>http.server</code>, a relay, <code>tail -f</code>). The rule went through four versions:</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Version</th><th>Rule</th><th>What it got wrong</th><th>Source</th></tr></thead>
+<tbody>
+<tr><td style="white-space:nowrap">Earliest</td><td>Any background shell means Running</td><td>A session with <code>http.server</code> open spun forever</td><td>11-03 decision record</td></tr>
+<tr><td style="white-space:nowrap">11-03 afternoon</td><td>Background shells only: always In background, counted in Needs you</td><td>Tests and builds still running after the turn were reported as needing you</td><td><code>1058984</code></td></tr>
+<tr><td style="white-space:nowrap">11-03 evening</td><td>Read the process tree: listening on a fixed port (&lt; 49152) or running for 2 hours makes a server, anything else a job; switching takes two looks in a row, 5 s apart</td><td>On 11-04: an ephemeral port a render script opened for headless Chrome; a fixed-port relay a script started for itself</td><td><code>3fb2791</code>, <code>1ab8b0f</code></td></tr>
+<tr><td style="white-space:nowrap">11-07</td><td>Same judgment; a server now shows Ready for review with a note, "1 server left · port 5569"</td><td>(current)</td><td>decision record <code>a-server-is-not-waiting</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The last version came from the label In background holding two things: monitors and scheduled wakeups really do wake the agent; a resident server never brings anything back. A user saw Codex shown as "In background · 1h" and asked what it was waiting for; the answer was a preview server nobody had connected to. Now only what will wake the agent is called In background. A turn that leaves only a server is over: it is Ready for review, with the server in the note.</p>
+
+<p>The current rules are tried in order and the first match decides (<code>judge</code> in <code>background_shells.rs</code>, excerpt):</p>
+
+<div class="table">
+<table>
+<thead><tr><th>What it sees</th><th>Counts as</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Within 2 minutes of a host restart, not looked at yet</td><td style="white-space:nowrap">job</td><td>Showing Running for a few seconds too long beats calling you for nothing</td></tr>
+<tr><td>Running for 2 hours</td><td style="white-space:nowrap">server</td><td>Backstop: no wrong guess spins forever</td></tr>
+<tr><td>Another process in the same tree connects to a fixed port in the tree</td><td style="white-space:nowrap">job</td><td>The server is a part of the script and exits with it</td></tr>
+<tr><td>Listening on a fixed port (&lt; 49152), seen twice in a row</td><td style="white-space:nowrap">server</td><td>It waits for someone outside to connect</td></tr>
+<tr><td>Only an ephemeral port (≥ 49152), or none</td><td style="white-space:nowrap">job</td><td>Ephemeral ports are a tool's own</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Tried and dropped: guessing from the command text (something called relay may be a resident server or a part of a script), and treating anything wrapped in a script as a job (<code>npm run dev</code> is wrapped too). Each misjudgment adds a row to the decision record's case table and to the <code>known_cases</code> test, which has 13 cases now; a rule change may not turn any of them red.</p>
+
+<h2 id="s6">06 Cases it got wrong</h2>
+
+<p>Each of these turned up on a real device or a real CLI; the fake agents in the tests did not expose them. Each left a test that fails when the fix is undone.</p>
+
+<div class="table">
+<table style="min-width:640px">
+<thead><tr><th>Symptom</th><th>Why it was misjudged</th><th>Fix</th><th>Source</th></tr></thead>
+<tbody>
+<tr><td>Tapping Stop on the phone: Claude's log recorded the interruption at 14:43:42; at 14:43:49 Fibo still replied "it did not stop"</td><td>A spinning title and timer line left from before the end outranked the end already written in the log</td><td>A busy cue remembers when it was first seen and which end was known then; only cues first seen after the end can start a new turn, and within one second it checks whether the host had seen that end first</td><td><code>1b25e159</code> (#646)</td></tr>
+<tr><td>Some sessions sat in Ready for review yet dropped out of Needs you</td><td>A memory tool's <code>Stop</code> hook started a <code>claude -p</code> outside the process tree; it inherited the terminal's environment and terminal id, the hook bound it as that terminal's current conversation, and the real one stopped being current</td><td>Refuse the binding when the terminal already has a current conversation of the same kind and the hook cannot be traced to the terminal's process tree; a conversation switch in place is let through by <code>SessionStart</code>'s <code>source</code></td><td><code>bf2a58ca</code> (#640)</td></tr>
+<tr><td>On a machine without hooks, a plan confirmation menu stayed Running and the phone could not approve it</td><td>Claude Code 2.1.326 put a statement before the plan question; the approval rule only took questions starting with "Would you like to"</td><td>A separate "plan" screen rule; kept apart from approvals because the plan menu's option 1 switches to auto-accept everything, so pressing Allow would open up the whole session</td><td><code>46895365</code> (#593)</td></tr>
+<tr><td>Codex stopped on an approval in a 31-column split; the phone did not recognize it, and a second message was typed into the prompt and its Enter approved a command</td><td>The narrow window wrapped the question onto two lines; the rule required it on one line ending in <code>?</code></td><td>Join wrapped lines before reading the screen; and while a cursor menu whose option 1 is Yes or Trust is open at the bottom, no message is typed in, recognized or not</td><td><a href="https://github.com/majiayu000/fibo/pull/387">#387</a></td></tr>
+<tr><td>Claude asked a three-way question; the phone showed only "CLI requests tool approval" and an Esc</td><td>That Claude Code version wrote the question to the log only after it was answered; before that there was only the <code>PermissionRequest</code> hook</td><td>Read the question and choices from the hook's <code>tool_input</code></td><td>11-08 device log</td></tr>
+<tr><td>A session rendering a video was judged In background</td><td>The render script opened a system-assigned ephemeral port for headless Chrome</td><td>Only fixed ports (&lt; 49152) make a server</td><td><code>1ab8b0f</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>That is why screen rules are data, not code: the bundled <code>claude.json</code> has 3 rules (approval, choice, plan) and <code>codex.json</code> has 2. Each hangs on one anchor line and the numbered menu beside it; any other shape counts as no evidence, never a guess. The rules are tested against saved screens: 28 for Claude and 18 for Codex, 19 of them recorded from the real CLI and 17 of them look-alikes that must not match, such as an already answered menu, options mentioned in prose, or text typed into the input box (counted 11-28 in <code>crates/fibo-host/tests/fixtures/screens</code>).</p>
+
+<div class="tip">
+<p><b>Without Fibo, you can still get the "stopped" signal</b>: Claude Code hooks run a command you write when an event happens and pass the event's JSON on stdin. Put this in <code>~/.claude/settings.json</code> to get a system notification when a turn ends or a permission is requested (macOS shown; on Linux use <code>notify-send</code>):</p>
+<pre><code>{
+  "hooks": {
+    "Stop": [{ "hooks": [{
+      "type": "command", "timeout": 5,
+      "command": "osascript -e 'display notification \"Turn finished\"'"
+    }] }],
+    "Notification": [{ "hooks": [{
+      "type": "command", "timeout": 5,
+      "command": "osascript -e 'display notification \"Waiting for you\"'"
+    }] }]
+  }
+}</code></pre>
+<p>stdin carries <code>hook_event_name</code>, <code>session_id</code> and <code>transcript_path</code>; <code>Notification</code> also has <code>notification_type</code> (for example <code>permission_prompt</code>). Two lessons: return at once and push slow work to the background; and <code>Stop</code> only says the turn ended, so check separately whether background shells remain (since Claude Code 2.1.317 the <code>Stop</code> JSON has <code>background_tasks</code>).</p>
+</div>
+
+<h2 id="s7">07 Decided in one place, and kept there by a test</h2>
+
+<p>Layering five sources is complex enough; if every surface also worked the state out on its own, they would disagree. That is what happened in Fibo's predecessor repository: unifying the state words was fixed by hand 4 times, and each time it drifted apart again (<code>docs/single-source</code>, from reading the old repository's 697 commits on 11-03). Two read-only audits on 11-03 found 78 places where one fact had two sources, for example:</p>
+
+<ul>
+  <li>The desktop showed Error or Ready for review while the phone and <code>fibo list</code> showed "idle", and <code>fibo wait --until idle</code> returned even on an error, because the host's outward interfaces read <code>turn</code> and rebuilt the state themselves.</li>
+  <li>The menu bar hard-coded one spelling of Error and the main window used another.</li>
+  <li>The phone, the desktop and the status bar each had their own word for Running.</li>
+</ul>
+
+<p>Unifying by hand drifts back, so a machine guards it now, in two steps:</p>
+
+<ol>
+  <li><b>Let the compiler make the list</b>. Temporarily making the key fields <code>pub(crate)</code>, the compiler reported 420 direct reads and writes outside core: about 200 writes from the observation layer (fine) and 146 reads that made decisions. Those reads were changed one by one to call core's owners: <code>status::of</code>, <code>Status::label</code>, <code>status::needs_you</code>, <code>session_title</code>, <code>session_updated</code>.</li>
+  <li><b>A ratchet against drift</b>. Rust cannot tell reads from writes, so the fields cannot stay private. Instead <code>crates/fibo-core/tests/guard.rs</code> uses regular expressions to count two things per file: raw field reads outside core (<code>.turn</code>, <code>.background</code>, <code>.turn_started</code> and others), and state words written by hand outside <code>status.rs</code> (drifted spellings included). Any difference from <code>tests/guard-baseline.txt</code> fails; up or down, the file has to be rewritten, so a reviewer sees it.</li>
+</ol>
+
+<p>Measured 11-28: adding, at the top of a file in <code>fibo-host</code>, a function that reads <code>c.turn</code> and returns <code>"在跑"</code> (the Chinese word for Running), <code>cargo test -p fibo-core --test guard</code> fails with (the hint in the first line shortened):</p>
+
+<pre><code>raw reads or hand-written state words changed (...):
+field turn	crates/fibo-host/src/pictures.rs: new, 1
+word 在跑	crates/fibo-host/src/pictures.rs: new, 1</code></pre>
+
+<p>The same line added after the inline <code>#[cfg(test)] mod tests</code> at the end of the file is not counted: the guard treats what follows an inline test module as test code.</p>
+
+<p>The baseline does go up. Summing the baseline at every version in git history (measured 11-28 over the 52 commits on <code>git log --first-parent</code> that changed it):</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 320" role="img" aria-label="Line chart of the guard baseline over time: hand-written state words fall from 80 on 11-03 to 63 on 11-12, return to 69 on 11-18 and are 68 on 11-26; raw field reads outside core rise from 66 to 80 on 11-06, fall to 68 on 11-19 and are 70 on 11-26">
+  <line class="lane" x1="70" y1="250" x2="730" y2="250"/>
+  <line class="lane" x1="70" y1="200" x2="730" y2="200"/>
+  <line class="lane" x1="70" y1="150" x2="730" y2="150"/>
+  <line class="lane" x1="70" y1="100" x2="730" y2="100"/>
+  <line class="lane" x1="70" y1="50" x2="730" y2="50"/>
+  <text class="s r" x="60" y="254">50</text>
+  <text class="s r" x="60" y="204">60</text>
+  <text class="s r" x="60" y="154">70</text>
+  <text class="s r" x="60" y="104">80</text>
+  <text class="s r" x="60" y="54">90</text>
+  <text class="s" x="70" y="276">11-03</text>
+  <text class="s" x="180" y="276">11-07</text>
+  <text class="s" x="290" y="276">11-11</text>
+  <text class="s" x="400" y="276">11-15</text>
+  <text class="s" x="510" y="276">11-19</text>
+  <text class="s" x="620" y="276">11-23</text>
+  <text class="s" x="730" y="276">11-27</text>
+  <polyline fill="none" stroke="var(--sky)" stroke-width="2.5" stroke-dasharray="7 4" points="91,170 91,165 93,165 93,155 94,155 94,145 94,150 98,150 98,155 110,155 110,140 111,140 111,135 113,135 113,120 113,125 115,125 115,120 126,120 126,110 152,110 152,130 172,130 172,125 176,125 176,100 182,100 182,110 187,110 187,105 253,105 253,100 302,100 302,105 449,105 449,115 500,115 500,145 533,145 533,160 537,160 537,155 673,155 673,150 730,150"/>
+  <polyline fill="none" stroke="var(--teal)" stroke-width="3" points="91,100 91,115 92,115 92,160 110,160 110,140 111,140 111,150 126,150 126,110 199,110 199,115 232,115 232,140 235,140 235,145 248,145 248,180 340,180 340,185 500,185 500,155 592,155 592,160 730,160"/>
+  <circle class="dot-run" cx="91" cy="100" r="4"/>
+  <text class="accent-t" x="96" y="92" style="text-anchor:start;font-size:13px">80</text>
+  <text class="s left" x="98" y="186">68: Needs you made one group</text>
+  <text class="s left" x="132" y="96">phone v2 merged</text>
+  <text class="s left" x="252" y="200">UI words moved to t!()</text>
+  <text class="s left" x="508" y="140">audit merge</text>
+  <text class="accent-t" x="736" y="164" style="text-anchor:start;font-size:13px">68</text>
+  <text style="fill:var(--sky);font-size:13px;font-weight:600;text-anchor:start" x="736" y="146">70</text>
+  <rect x="430" y="20" width="14" height="4" style="fill:var(--teal)"/><text class="s left" x="450" y="27">hand-written state words</text>
+  <line x1="600" y1="22" x2="616" y2="22" stroke="var(--sky)" stroke-width="2.5" stroke-dasharray="5 3"/><text class="s left" x="620" y="27">raw reads outside core</text>
+</svg>
+<figcaption>The vertical axis starts at 50. Each line is the sum of that category in <code>tests/guard-baseline.txt</code>, drawn as steps by commit time. Two categories added later (shortcut hints, large opaque surfaces) are not shown.</figcaption>
+</figure>
+
+<div class="table">
+<table>
+<thead><tr><th>Category</th><th>First baseline, 11-03</th><th>Latest baseline, 11-26</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>Hand-written state words</td><td>80</td><td>68</td><td>−12</td></tr>
+<tr><td>Raw field reads outside core</td><td>66</td><td>70</td><td>+4 (peak 80)</td></tr>
+<tr><td>Hard-coded <code>⌘</code> shortcut hints (added 11-03)</td><td>24</td><td>26</td><td>+2</td></tr>
+<tr><td>Large opaque surfaces (added 11-04)</td><td>16</td><td>15</td><td>−1</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The biggest single drop in state words came on 11-03, when Needs you became one group: 9 fewer in one commit. Raw field reads went up a few times; on 11-06, for example, splitting Codex's background commands into jobs and servers added 5. The guard does not forbid an increase; it makes each one part of a commit that gets reviewed.</p>
+
+<p>The guard only stops second owners from appearing; it does not check that results agree. That is <code>tests/one_owner.rs</code>: one sample covering 16 states and naming cases, asserting the tab and the sidebar use the same name, then 200 random sequences of edits (renaming a tab, renaming in the sidebar, a new conversation in the same terminal, marking done), each step checked for one name and one state. The host's <code>fibo list</code>, phone cards and plugin events are also compared with core field by field.</p>
+
+<h2 id="limits">Limits: what it does not do yet</h2>
+
+<ul>
+  <li><b>Screen reading follows each CLI's interface</b>. On 11-25 a new Codex started asking questions without waiting for the answer and then <code>sleep</code>ing; the desktop and the phone both showed Running and the phone had no question card. It is recorded, not fixed.</li>
+  <li><b>Without hooks it is slower and more fragile</b>. Approvals and questions can only be read from the screen, after it has been quiet for 1 second, and a change in a CLI's wording goes unrecognized until a rule is added.</li>
+  <li><b>Sessions outside a Fibo terminal</b> have only their log: a log that says running stops counting as Running after 15 minutes without change, and nobody can press keys to answer a question it asks.</li>
+  <li><b>Background shells are a guess</b>. A program that listens on no port and never ends takes the full 2 hours to count as a server; resident servers in one process tree that connect to each other are taken for jobs.</li>
+  <li><b>The guard is regular expressions</b>. A field stored in a variable first, or a state word assembled another way, is not counted; it only keeps the most common spellings from coming back.</li>
+  <li><b>OSC 7501 needs the program's cooperation</b>. The most reliable source, a program speaking for itself, mostly serves scripts and builds today; whether agent CLIs print it is up to them.</li>
+</ul>
+
+<h2 id="summary">Summary: three practices</h2>
+
+<ul>
+  <li><b>Layer five sources onto one card, in a fixed order</b>: the log and hooks form the base, then 4 steps add processes, the screen and program reports; the screen only moves toward "busier" or "waiting", and a program's own word beats a guess.</li>
+  <li><b>Decide the state in one function</b>: 10 states, 4 in Needs you, 2 that sound, all from <code>status::of</code> and <code>Status</code>. After the 420 direct uses the compiler listed were rewritten, a guard counts the rest per file; hand-written state words went from 80 to 68.</li>
+  <li><b>Every misjudgment leaves a case and a test</b>: 4 versions of the background-shell rule and 13 cases in its test; 46 saved screens for the screen rules, 17 of them look-alikes.</li>
+</ul>
+
+<nav class="pn" aria-label="More posts"><a class="pn-card" href="../perf-gate/"><span class="eyebrow">Previous post</span><b>Fibo’s performance gate: count retired instructions, not CPU time, and what sidebar redraws cost</b></a><a class="pn-card" href="../why-gpui/"><span class="eyebrow">Next post</span><b>Why Fibo dropped Tauri + xterm.js and draws its terminals natively with GPUI + libghostty-vt</b></a></nav>
+<footer class="end">
+  <p>Fibo is open source (MIT). The state is decided in <a href="https://github.com/majiayu000/fibo/blob/main/crates/fibo-core/src/status.rs"><code>crates/fibo-core/src/status.rs</code></a> and guarded by <a href="https://github.com/majiayu000/fibo/blob/main/crates/fibo-core/tests/guard.rs"><code>tests/guard.rs</code></a>; all the code is on <a href="https://github.com/majiayu000/fibo">GitHub</a>.</p>
+  <p><a href="../">← All posts</a> · <a href="../../">Back to fibo.page</a></p>
+</footer>
+</main>
+
+<footer><div class="wrap">
+  <div class="fcols">
+    <div><a class="logo" href="../../" aria-label="Fibo"><img src="../../brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a><p>A native macOS workbench for running many coding agents at once. Open source, MIT licensed.</p><a class="btn white sm" style="margin-top:22px" href="https://github.com/majiayu000/fibo/releases/latest">Download</a></div>
+    <div><h4>Product</h4><ul><li><a href="../../#features">Features</a></li><li><a href="../../#start">Get started</a></li><li><a href="https://github.com/majiayu000/fibo/releases">Changelog</a></li><li><a href="../">Blog</a></li></ul></div>
+    <div><h4>Resources</h4><ul><li><a href="https://github.com/majiayu000/fibo#readme">Documentation</a></li><li><a href="../../#faq">FAQ</a></li><li><a href="https://github.com/majiayu000/fibo/issues">Report a problem</a></li></ul></div>
+    <div><h4>Project</h4><ul><li><a href="https://github.com/majiayu000/fibo">GitHub</a></li><li><a href="https://github.com/majiayu000/fibo/blob/main/LICENSE">License</a></li><li><a href="https://github.com/majiayu000/homebrew-tap">Homebrew tap</a></li></ul></div>
+  </div>
+  <div class="legal"><span>© 2026 Fibo. MIT licensed.</span><span class="formula">Fₙ = Fₙ₋₁ + Fₙ₋₂ · 1, 1, 2, 3, 5, 8, 13, 21 …</span><span>fibo.page</span></div>
+</div></footer>
+</body>
+</html>

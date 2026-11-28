@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>关掉窗口、更新 App，终端都不断：Fibo 的常驻后台和终端交接 · Fibo 博客</title>
+<meta name="description" content="终端住在后台常驻进程 fibo serve 里，窗口只是客户端；换新版本时，旧后台用 SCM_RIGHTS 把每个 PTY 文件描述符和画面快照交给新后台，新后台回「taken」之前任何一步失败都由旧后台继续服务。附交接时序图、macOS 上 EMSGSIZE 边界的实测，以及常驻进程踩过的十个坑。">
+<link rel="canonical" href="https://fibo.page/blog/handover/zh.html">
+<link rel="alternate" hreflang="en" href="https://fibo.page/blog/handover/">
+<link rel="alternate" hreflang="zh-CN" href="https://fibo.page/blog/handover/zh.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Fibo">
+<meta property="og:title" content="关掉窗口、更新 App，终端都不断：Fibo 的常驻后台和终端交接">
+<meta property="og:description" content="终端住在后台常驻进程 fibo serve 里，窗口只是客户端；换新版本时，旧后台用 SCM_RIGHTS 把每个 PTY 文件描述符和画面快照交给新后台，新后台回「taken」之前任何一步失败都由旧后台继续服务。附交接时序图、macOS 上 EMSGSIZE 边界的实测，以及常驻进程踩过的十个坑。">
+<meta property="og:url" content="https://fibo.page/blog/handover/zh.html">
+<meta property="og:image" content="https://fibo.page/blog/handover/images/00-cover.webp">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1499ad">
+<link rel="icon" type="image/svg+xml" href="../../brand/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../../brand/favicon-32.png">
+<link rel="apple-touch-icon" href="../../brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="alternate" type="application/atom+xml" title="Fibo 博客" href="../feed-zh.xml">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BlogPosting", "headline": "关掉窗口、更新 App，终端都不断：Fibo 的常驻后台和终端交接", "description": "终端住在后台常驻进程 fibo serve 里，窗口只是客户端；换新版本时，旧后台用 SCM_RIGHTS 把每个 PTY 文件描述符和画面快照交给新后台，新后台回「taken」之前任何一步失败都由旧后台继续服务。附交接时序图、macOS 上 EMSGSIZE 边界的实测，以及常驻进程踩过的十个坑。", "image": "https://fibo.page/blog/handover/images/00-cover.webp", "datePublished": "2026-11-28", "dateModified": "2026-11-28", "inLanguage": "zh-CN", "mainEntityOfPage": "https://fibo.page/blog/handover/zh.html", "author": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/"}, "publisher": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/", "logo": {"@type": "ImageObject", "url": "https://fibo.page/brand/apple-touch-icon.png"}}}</script>
+<link rel="stylesheet" href="../post.css">
+
+<script>(()=>{const r=document.documentElement,k='fibo-landing-theme';try{r.dataset.theme=localStorage.getItem(k)==='dark'?'dark':'light';localStorage.setItem('fibo-landing-lang','zh')}catch(e){}
+addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('themebtn');if(b)b.onclick=()=>{const t=r.dataset.theme==='dark'?'light':'dark';r.dataset.theme=t;try{localStorage.setItem(k,t)}catch(e){}}})})()</script>
+</head>
+<body>
+<section class="mast">
+<header class="nav"><div class="wrap">
+  <a class="logo" href="../../" aria-label="Fibo"><img src="../../brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a>
+  <nav class="links" aria-label="Main"><a href="../../#features">功能</a><a href="../../#start">开始使用</a><a href="../../#faq">常见问题</a><a href="https://github.com/majiayu000/fibo/releases">更新记录</a><a class="on" href="../zh.html">博客</a></nav>
+  <div class="right">
+    <button type="button" class="btn glass sm" id="themebtn" aria-label="切换浅色和深色">◐</button><a class="btn glass sm" href="./" hreflang="en" lang="en">EN</a>
+    <a class="btn glass sm gh" href="https://github.com/majiayu000/fibo"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+    <a class="btn white sm" href="https://github.com/majiayu000/fibo/releases/latest">下载</a>
+  </div>
+</div></header>
+<div class="in">
+<span class="pill">技术架构 · 2026 年 11 月</span>
+<h1>关掉窗口、更新 App，终端都不断：Fibo 的常驻后台和终端交接</h1>
+<p class="lede">终端开在窗口进程里，关掉窗口或更新 App 就会挂断里面跑着的 Agent。<a href="../../">Fibo</a> 把终端放进后台常驻进程 <code>fibo serve</code>，换新版本时，旧后台用 <code>SCM_RIGHTS</code> 把每个终端的 PTY 文件描述符和画面快照交给新后台，新后台回「taken」之前任何一步失败都由旧后台继续服务。常驻也带来一类新坑：一把锁、一次 <code>sendmsg</code> 报错、拉起它的环境，影响的都是所有终端。</p>
+</div>
+</section>
+
+<main class="post">
+
+<blockquote><b>Fibo 是什么</b>：一个给 Claude Code、Codex 这类 Coding Agent 用的原生桌面工作台，开源（MIT）。正式版是 macOS，Windows 和 Ubuntu 有预览版。安装：<a href="https://github.com/majiayu000/fibo/releases/latest">下载 DMG</a>，或 <code>brew install --cask majiayu000/tap/fibo</code>。前两篇讲了<a href="../many-machines/zh.html">跨机终端</a>和<a href="../remote-paste/zh.html">远程贴图</a>，这篇讲它们共同的地基：终端住在哪。</blockquote>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 640" role="img" aria-label="Fibo 后台交接时序图：窗口、旧后台、新后台三条泳道，分 Prepare、READY、COMMIT、SERVING 四段；COMMIT 之前失败时旧后台继续服务">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tip"/></marker>
+    <marker id="arg" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ok-h"/></marker>
+  </defs>
+  <rect class="box" x="130" y="16" width="140" height="40" rx="10"/><text class="h" x="200" y="42">窗口</text>
+  <rect class="box" x="340" y="16" width="140" height="40" rx="10"/><text class="h" x="410" y="42">旧后台</text>
+  <rect class="box accent-box" x="550" y="16" width="140" height="40" rx="10"/><text class="h" x="620" y="42">新后台</text>
+  <path class="lane" d="M200 60 V624 M410 60 V624 M620 60 V624"/>
+
+  <rect class="soft" x="12" y="70" width="736" height="62" rx="8"/>
+  <text class="gh" x="22" y="90">0 启动</text>
+  <path class="line" d="M204 112 L614 112" marker-end="url(#ar)"/>
+  <text class="s" x="410" y="104">发现后台代码和自己不同，起 fibo serve --takeover</text>
+
+  <rect class="soft" x="12" y="142" width="736" height="150" rx="8"/>
+  <text class="gh" x="22" y="162">1 Prepare</text>
+  <path class="line" d="M616 186 L414 186" marker-end="url(#ar)"/>
+  <text class="s" x="515" y="178">Hello + Handoff</text>
+  <rect class="box" x="300" y="200" width="220" height="40" rx="6"/>
+  <text class="t" x="410" y="225">等输入写完，锁住所有终端</text>
+  <path class="line" d="M414 268 L616 268" marker-end="url(#ar)"/>
+  <text class="s" x="515" y="260">终端清单 + 每个终端的画面快照</text>
+
+  <rect class="soft" x="12" y="302" width="736" height="148" rx="8"/>
+  <text class="gh" x="22" y="322">2 READY</text>
+  <path class="line" d="M414 344 L616 344" marker-end="url(#ar)"/>
+  <text class="s" x="515" y="336">READY，然后 PTY 主端 fd（SCM_RIGHTS）</text>
+  <rect class="box" x="510" y="360" width="226" height="56" rx="6"/>
+  <text class="t" x="623" y="382">还原画面、打开数据库</text>
+  <text class="s" x="623" y="404">绑好 .sock-start，先不公开</text>
+  <text class="bad-t left" x="22" y="440">这一步之前出错：新后台断开连接，旧后台恢复输入，照常服务</text>
+
+  <rect class="soft" x="12" y="460" width="736" height="70" rx="8"/>
+  <text class="gh" x="22" y="480">3 COMMIT</text>
+  <path class="line accent" d="M616 498 L414 498" marker-end="url(#arg)"/>
+  <text class="ok-t c" x="515" y="490">ACK「taken」</text>
+  <text class="s" x="410" y="520">旧后台 exit(0)，不给程序发信号</text>
+
+  <rect class="soft" x="12" y="540" width="736" height="88" rx="8"/>
+  <text class="gh" x="22" y="560">4 SERVING</text>
+  <text class="s" x="620" y="566">等旧后台放开 host.lock</text>
+  <text class="s" x="620" y="584">.sock-start 改名为 workbench.sock</text>
+  <path class="line accent" d="M614 598 L206 598" marker-end="url(#arg)"/>
+  <text class="ok-t c" x="410" y="594">窗口问到新版本，重新连上</text>
+  <text class="bad-t left" x="22" y="620">这里再出错终端会断，所以能先查的都挪到 COMMIT 之前</text>
+</svg>
+<figcaption>一次交接的四个阶段。新后台回「taken」之前，旧后台一直握着每个终端，任何一步失败都退回旧后台；之后旧后台退出，新后台接着服务。</figcaption>
+</figure>
+
+<nav class="toc" aria-label="目录">
+  <a href="#s1">01 终端为什么要住在窗口外面</a>
+  <a href="#s2">02 交接：以「taken」为界的四个阶段</a>
+  <a href="#s3">03 自动更新走同一条路</a>
+  <a href="#s4">04 带描述符的 sendmsg 会报 EMSGSIZE</a>
+  <a href="#s5">05 常驻进程踩过的坑</a>
+  <a href="#s6">06 一把锁，卡住所有终端的输入</a>
+  <a href="#s7">07 后台继承了拉起它的人</a>
+  <a href="#limits">限制：还没测到的</a>
+  <a href="#summary">总结：三条做法</a>
+</nav>
+
+<h2 id="s1">01 终端为什么要住在窗口外面</h2>
+
+<p>普通的终端 App 自己持有每个终端的 PTY 主端。App 一退出，主端被关闭，内核给终端里的进程发 <code>SIGHUP</code>，shell 和里面的 Claude Code 跟着退出。跑了半小时的 Agent，会因为关错一个窗口、或者装一次更新就没了。</p>
+
+<p>Fibo 把终端放进一个后台常驻进程 <code>fibo serve</code>。窗口进程 <code>fibo-app</code> 启动时如果找不到后台，就拉起一个：用 <code>setsid</code> 让它脱离窗口的会话，标准输入接空，错误输出写进 <code>host.log</code>。之后窗口只通过一个 Unix socket（<code>workbench.sock</code>）和后台说话，它手里没有任何 PTY。终端的画面状态也在后台：后台用 libghostty-vt 解析输出，窗口连上时先拿一份画面快照，再接着收增量。</p>
+
+<div class="table">
+<table>
+<thead><tr><th>发生了什么</th><th>终端在窗口进程里</th><th>Fibo：终端在 fibo serve 里</th></tr></thead>
+<tbody>
+<tr><td>关掉窗口、退出 App</td><td>主端关闭，<code>SIGHUP</code>，Agent 退出</td><td>后台不受影响；再打开时拿快照接着显示</td></tr>
+<tr><td>App 崩溃</td><td>同上</td><td>同上</td></tr>
+<tr><td>更新 App</td><td>先退出，所以同上</td><td>新后台接过所有终端（下一节），进程号不变</td></tr>
+<tr><td>后台本身退出</td><td>不适用</td><td>所有终端断开。所以后台要尽量不退出（第 05 节）</td></tr>
+<tr><td>重启电脑</td><td>全没了</td><td>终端进程也没了；能做的是把被打断的会话恢复成同一段对话</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>窗口重新打开时，先跟后台握手（<code>Hello</code>），后台报上自己程序文件的指纹：文件内容的 FNV-1a 哈希加长度。和窗口旁边那份后台程序一样，就直接连上；不一样，就说明后台还在跑旧代码。这时有两条路：停掉旧后台再起新的，所有终端断开；或者让新后台把终端接过去。Fibo 走第二条。</p>
+
+<h2 id="s2">02 交接：以「taken」为界的四个阶段</h2>
+
+<p>要让终端不断，新后台必须拿到同一个 PTY 主端，而不是新开一个。Unix 上进程之间传文件描述符的标准办法是 Unix socket 上的 <code>SCM_RIGHTS</code> 控制消息：内核在接收方进程里新建一个指向同一个打开文件的描述符。旧后台把每个终端的主端 fd 发过去，新后台拿着它读写，shell 和 Agent 看不出任何变化。</p>
+
+<p>光传 fd 还不够。屏幕上现在是什么、光标在哪、终端标题，这些在旧后台的内存里，所以旧后台还要发一份画面快照。难点在于顺序：旧后台什么时候可以放手。放早了，新后台万一起不来，终端就没人持有了。Fibo 的规则写在 <code>docs/plan.md</code> 第 5 条：<b>交接两阶段，Prepare → READY → COMMIT → SERVING，READY 之前失败，旧宿主继续服务</b>。代码里，分界点是新后台回的一帧 <code>ACK "taken"</code>。</p>
+
+<div class="table">
+<table>
+<thead><tr><th>阶段</th><th>谁做什么</th><th>超时</th><th>这里失败会怎样</th></tr></thead>
+<tbody>
+<tr><td>0 启动</td><td>窗口带 <code>--takeover</code> 拉起新后台；新后台先查 <code>workbench.sock</code>、<code>.sock-start</code> 两个位置是不是本用户的 socket</td><td>窗口等 20 秒</td><td>新后台退出，窗口提示「新后台没能接手终端，旧后台照常运行」</td></tr>
+<tr><td>1 Prepare</td><td>新后台连上旧后台，发 <code>Hello</code>、<code>Handoff</code>。旧后台等每个终端已接受的输入写完，然后锁住所有终端，发终端清单和每个终端的画面快照</td><td>等输入 10 秒；新后台读 15 秒</td><td>连接断开，旧后台放开锁，照常服务</td></tr>
+<tr><td>2 READY</td><td>每个终端的快照后跟一帧 <code>READY</code>；最后一条消息用 <code>SCM_RIGHTS</code> 带上所有主端 fd。新后台还原画面、打开数据库、在 <code>.sock-start</code> 上监听（还不公开）</td><td>发 fd 等 10 秒</td><td>新后台不回 ACK、直接断开；旧后台读到断开，恢复输入，照常服务</td></tr>
+<tr><td>3 COMMIT</td><td>新后台回 <code>ACK "taken"</code>；旧后台 <code>exit(0)</code>，不给终端里的程序发任何信号</td><td>旧后台等 ACK 10 秒</td><td>等不到 ACK 就算没交接，旧后台继续服务</td></tr>
+<tr><td>4 SERVING</td><td>新后台等旧后台放开 <code>host.lock</code>，接上每个终端的读写线程，把 <code>.sock-start</code> 改名成 <code>workbench.sock</code></td><td>等锁 10 秒</td><td>终端会断。这一段只剩等锁、起线程和一次改名</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>旧后台这边的核心逻辑如下（简化过，去掉了错误处理细节）：</p>
+
+<pre><code>// 旧后台：锁着所有终端时发出快照和 fd
+send(&amp;mut stream, CONTROL, &amp;Reply::Handoff { terminals })?;
+for (_, live) in held.iter_mut() {
+    for chunk in live.vt.snapshot()?.chunks(MAX_FRAME - 1) {
+        write_frame(&amp;mut stream, SNAPSHOT, chunk)?;
+    }
+    write_frame(&amp;mut stream, READY, &amp;[])?;
+}
+term::send_masters(&amp;stream, &amp;masters)?;          // SCM_RIGHTS
+match read_frame(&amp;mut stream) {
+    Ok((ACK, taken)) if taken == b"taken" =&gt; std::process::exit(0),
+    other =&gt; Err(io::Error::other(format!(
+        "handoff not confirmed, still serving: {other:?}"))),
+}</code></pre>
+
+<p>几个细节：</p>
+<ul>
+  <li><b>旧后台退出时不关 fd、不发信号</b>。新后台已经持有每个主端的副本，旧后台的副本随进程消失，终端没有经历「主端全部关闭」那一刻。</li>
+  <li><b>新后台在 ACK 之前就把能出错的事做完</b>：还原每个终端的画面、打开 SQLite、读出工作区、建好监听 socket。只有必须等旧后台退出才能做的（拿 <code>host.lock</code>）留在 COMMIT 之后。</li>
+  <li><b>先绑 <code>.sock-start</code>，最后才改名</b>。<code>bind</code> 在 <code>listen</code> 之前就建出了路径，直接绑 <code>workbench.sock</code> 会让窗口连上一个还没准备好的后台。</li>
+  <li><b>一条消息最多带 200 个 fd</b>（<code>MAX_FDS</code>），一个后台不会开到这么多终端。</li>
+</ul>
+
+<p>失败路径有三条注入测试守着，都起真的 <code>fibo serve</code> 和真 PTY：在 <code>.sock-start</code> 位置放一个普通文件（新后台必须起不来，旧后台的 shell 进程还活着）；在数据库里预先建一张格式不对的表（新后台在 ACK 前报错，旧后台的终端还能收输入、出输出）；用一个代理把画面快照的第一个字节翻转（新后台不能回 ACK）。</p>
+
+<p>真实换包的记录：11-03 一次换包，交接 8 个终端，进程号不变（<code>docs/plan.md</code>）。Windows 的 ConPTY 交不出正在运行的控制台，所以 <code>CAN_HAND_OVER</code> 在 Windows 上是 <code>false</code>：有终端在跑时窗口继续用旧后台，提示「后台有更新 · 重启」，由人决定什么时候重启（<a href="https://github.com/majiayu000/fibo/pull/230">PR #230</a>）。Ubuntu 预览版走和 macOS 同一套交接代码，Linux 的 CI 也跑这组用例，但还没在真机桌面上换过包。</p>
+
+<h2 id="s3">03 自动更新走同一条路</h2>
+
+<p>应用内更新只负责换 App 包，不另写一遍交接（<code>docs/decisions/2026-11-08-self-update.md</code>）。顺序是：</p>
+<ul>
+  <li>zip 下到缓存目录，对 <code>SHA256SUMS</code>；解到正在运行的包旁边的隐藏目录；在那里查包标识、版本、<code>codesign --verify --deep --strict</code>、团队 ID、<code>spctl --assess</code>。</li>
+  <li>全过才换包：旧包先改名成 <code>.retired</code>，新包放进原位，失败就改回去，再删旧包。任何一步失败都清掉解出来的和下载的，原 App 不动。</li>
+  <li>换包后等当前进程退出，再启动新包里的窗口。新窗口握手时发现后台指纹和自己不同、而且后台能交接，就走上一节的 <code>--takeover</code>。</li>
+</ul>
+<p>所以一次自动更新里有两道「失败就退回」：换包靠改名，原包在改名成功前一直完整；终端靠 ACK，旧后台在 ACK 前一直持有。不用把这两件事绑成一个事务。</p>
+
+<h2 id="s4">04 带描述符的 sendmsg 会报 EMSGSIZE</h2>
+
+<p>11-03 换包后，新窗口一片空白。旧后台照常在服务，终端都还在，所以表面上只像窗口出了问题。原因是发 fd 的那次 <code>sendmsg</code> 报了 <code>Message too long</code>。交接失败在 ACK 之前，回滚按设计生效，新后台没起来。</p>
+
+<p>原因在 macOS 的 Unix socket 上：发送方阻塞模式下发一条普通数据，对端缓冲区满了会等；带 <code>SCM_RIGHTS</code> 的消息碰到对端缓冲区快满时，不等，直接返回 <code>EMSGSIZE</code>。交接时，fd 那条消息紧跟在画面快照后面发，快照正好把新后台还没读走的缓冲区填满了。修法（<code>edc88987</code>）是把 <code>EMSGSIZE</code>、<code>ENOBUFS</code> 和 <code>EWOULDBLOCK</code> 当成「暂时没空间」：每 10 ms 重试一次，最多 10 秒。回归测试先写入 8192 字节不读，再发 fd，修之前必挂。</p>
+
+<h3>11-28 实测：边界不是 8192，是 8192 减去控制消息的大小</h3>
+
+<p>提交里写的是「对端缓冲区正好积满 8192 字节」。我们用一个小程序在本机（macOS 27.2，<code>net.local.stream.sendspace</code> 为 8192）把边界量细了：<code>socketpair</code> 建一对阻塞的流式 Unix socket，先写入 N 字节不读，再用 <code>sendmsg</code> 发 1 字节加 1 个 fd；读的一方 300 毫秒后才开始读。每个值跑 5 次，结果一样。</p>
+
+<div class="table">
+<table>
+<thead><tr><th>未读字节 N</th><th>带 1 个 fd 的 sendmsg</th><th>不带 fd 的 1 字节</th></tr></thead>
+<tbody>
+<tr><td>0 ～ 8175</td><td>立刻成功</td><td>立刻成功</td></tr>
+<tr><td>8176</td><td>阻塞约 300 ms，等对方读走后成功</td><td>立刻成功</td></tr>
+<tr><td>8177 ～ 8192</td><td><b>立刻报 EMSGSIZE</b>（Message too long）</td><td>立刻成功（8192 时阻塞约 300 ms）</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>8192 − 8176 = 16，正好是一个 fd 的控制消息大小 <code>CMSG_SPACE(4)</code>。换成多个 fd 再量，第一个报错的位置随控制消息变大而前移，每次都是 <code>8192 − CMSG_SPACE(4n) + 1</code>：</p>
+
+<div class="table">
+<table>
+<thead><tr><th>一次带几个 fd</th><th>CMSG_SPACE</th><th>从多少未读字节起报 EMSGSIZE</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>16</td><td>8177</td></tr>
+<tr><td>2</td><td>20</td><td>8173</td></tr>
+<tr><td>4</td><td>28</td><td>8165</td></tr>
+<tr><td>8</td><td>44</td><td>8149</td></tr>
+<tr><td>200（Fibo 的上限）</td><td>812</td><td>7381</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>看起来规律是：剩余空间放得下控制消息、放不下数据时等；连控制消息都放不下时报错。我们没去对内核源码，这只是测出来的行为。它解释了为什么这个问题难碰到：快照有几 KB 到几十 KB，新后台边读边收，只有 fd 消息发出那一刻缓冲区里恰好剩不到 16 字节（一个终端时）才会出现。终端越多，控制消息越大，窗口越宽。测试用的程序（简化过）：</p>
+
+<pre><code>import os, socket, threading, time
+
+def trial(unread, nfds):
+    a, b = socket.socketpair()              # 阻塞的流式 Unix socket
+    r, w = os.pipe()
+    def reader():                           # 扮演新后台：300 ms 后才读
+        time.sleep(0.3)
+        got = 0
+        while got &lt; unread:
+            got += len(b.recv(unread - got))
+        socket.recv_fds(b, 1, nfds)
+    t = threading.Thread(target=reader); t.start()
+    a.sendall(b"\x07" * unread)             # 扮演还没读走的画面快照
+    try:
+        socket.send_fds(a, [b"\x01"], [r] * nfds)
+        result = "ok"
+    except OSError as e:
+        result = os.strerror(e.errno)       # Message too long
+        a.shutdown(socket.SHUT_WR)
+    t.join()
+    return result</code></pre>
+
+<p>同一天还查到 <code>SCM_RIGHTS</code> 的另一个性质：发送方给 fd 设了 <code>FD_CLOEXEC</code>，接收方拿到的新 fd 上没有（11-28 本机实测：发出去是 1，收到的是 0），macOS 又没有 Linux 的 <code>MSG_CMSG_CLOEXEC</code>。不处理的话，新后台之后起的每个程序都继承所有旧终端的主端，能往别的终端写输入，新后台崩了旧终端也收不到挂断。修法是收到后逐个 <code>fcntl(fd, F_SETFD, FD_CLOEXEC)</code>（<code>24656b96</code>）。</p>
+
+<h2 id="s5">05 常驻进程踩过的坑</h2>
+
+<p>后台一常驻，它的每个错误都按「所有终端」放大。下表是 11-03 到 11-24 修过的、和常驻或交接有关的问题：</p>
+
+<div class="table">
+<table>
+<thead><tr><th>现象</th><th>根因</th><th>为什么难查</th><th>修法</th><th>出处</th></tr></thead>
+<tbody>
+<tr><td>换包后新窗口空白</td><td>带 fd 的 <code>sendmsg</code> 在缓冲区快满时报 <code>EMSGSIZE</code></td><td>回滚生效，旧后台照常服务，只剩窗口空白</td><td>当成暂时没空间，重试最多 10 秒</td><td><code>edc88987</code></td></tr>
+<tr><td>新后台起的程序握着所有旧终端的主端</td><td><code>SCM_RIGHTS</code> 不带 <code>FD_CLOEXEC</code></td><td>没有任何报错</td><td>收到后逐个设上</td><td><code>24656b96</code></td></tr>
+<tr><td>新后台回了 taken 又起不来，所有终端挂断，App 却提示旧后台照常</td><td>socket 位置、数据库的检查排在 ACK 之后</td><td>只在 socket 位置被普通文件占、数据库打不开时出现</td><td>ACK 之前先体检</td><td><code>bf7f2639</code></td></tr>
+<tr><td>换包后旧后台的中继连接活了 6 小时</td><td><code>process::exit</code> 不跑析构，子进程收不到结束信号</td><td>父进程变成 1，没人看见；它重连时可能和新后台互相顶掉</td><td>子进程每秒看一次父进程，变了就退出</td><td><code>50e09bf8</code></td></tr>
+<tr><td>Windows 换新版卡在「新后台没能接手终端」</td><td><code>handoff</code> 写死为 <code>true</code></td><td>只在 Windows 真机上出现</td><td>取平台的 <code>CAN_HAND_OVER</code></td><td><a href="https://github.com/majiayu000/fibo/pull/230">#230</a></td></tr>
+<tr><td>64 KiB 粘贴还没写完，旧后台就发出了交接回执</td><td>交接只锁终端，不等已接受的输入</td><td>要粘贴正好撞上换包；在本机真实 PTY 上对照才测出</td><td>先等已接受的输入写完，等的时候放开锁</td><td><a href="https://github.com/majiayu000/fibo/pull/480">#480</a></td></tr>
+<tr><td>打字丢键，红字「输入队列已满」</td><td>后台每收一个键拿一次全局锁</td><td>锁每隔几秒才被占 0.2–0.37 秒</td><td>按字节合并排队，收键不碰锁</td><td><a href="https://github.com/majiayu000/fibo/pull/371">#371</a></td></tr>
+<tr><td>长粘贴只进去 1022 字节</td><td>写输入和读输出抢同一把终端锁</td><td>只在程序一边刷屏一边收长输入时出现</td><td>每个终端一个写线程，写时不占锁</td><td><a href="https://github.com/majiayu000/fibo/pull/443">#443</a></td></tr>
+<tr><td>新开的 Claude 显示 Not logged in</td><td>后台是在 SSH 里拉起的</td><td>环境变量都对；退出重开 App 不管用</td><td>后台自检启动环境，窗口能按原样重启它</td><td><a href="https://github.com/majiayu000/fibo/pull/368">#368</a></td></tr>
+<tr><td><code>accept</code> 出一次错，后台退出，所有终端挂断</td><td>主循环里一个 <code>?</code></td><td>代码体检时发现，没有真实发生的记录</td><td>记日志，停 100 ms 再试</td><td><a href="https://github.com/majiayu000/fibo/pull/557">#557</a></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>前四条是 11-03 到 11-05 的直接提交，没有 PR 号。#480 是交接本身的；#371、#443、#368 不是交接的问题，是「一个进程服务所有终端」带来的，下面两节展开。</p>
+
+<h2 id="s6">06 一把锁，卡住所有终端的输入</h2>
+
+<h3>丢键（#371）</h3>
+<p>窗口原来给每个按键占队列里的一格，128 格满了就丢。后台那边每收一个键，先拿终端锁写进 PTY，再拿全局锁记一笔「用户在答话」，写完才读下一个键。全局锁每隔几秒会被会话关联占住 0.2–0.37 秒；终端里的程序一时不读输入时，写 PTY 也会等。两样叠起来，窗口的 128 格就满了。</p>
+<p>没选「只把 128 调大」：后台照样每键拿一次锁，只是晚一点丢。最后的改法是窗口和后台共用一个按字节的队列：连着的输入合成一条（每条最多 16 KiB），新的窗口尺寸替换排着的尺寸，鼠标上报有积压就丢，积压过上限（窗口 1 MiB、后台 4 MiB）才拒绝。后台读 socket 的线程只入队，写 PTY 和拿全局锁在另一个线程，一批只拿一次锁。</p>
+
+<h3>长粘贴被截断（#443）</h3>
+<p>macOS 上每个终端的输入缓冲约 1 KB。一个忙着刷屏的程序（比如转圈中的 Codex）要等自己的输出被读走才回来读输入，而后台写输入时一直占着终端锁，读输出也要这把锁。两边互等，5 秒后写入超时，粘贴只进去前 1022 字节。复现用的是一个模仿 Codex 的单线程刷屏程序：塞 4000 字节，程序写输出被卡 5.0 秒，5.2 秒后报错。</p>
+<p>考虑过两个别的办法：写的时候临时放锁、另加一把写锁，读输出的线程回复终端查询时还要等这把写锁，同样会互等；加大超时只是让卡住更久。最后每个终端一个写输入的线程，按顺序写，调用方在锁外排队等结果。</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 272" role="img" aria-label="改前改后对比条形图：3000 个键，改前 3.0 秒，改后要求 1.5 秒内；4000 字节粘贴，改前 5.2 秒后报错只进 1022 字节，改后 28 毫秒全部到达">
+  <text class="gh" x="24" y="34">3000 个键，程序 3 秒不读输入（#371 回归测试）</text>
+  <text class="l" x="24" y="70">改前</text>
+  <rect class="bar0" x="120" y="54" width="300" height="24" rx="4"/>
+  <text class="v" x="430" y="72">3.0 s，测试失败</text>
+  <text class="l" x="24" y="108">改后</text>
+  <rect class="bar2" x="120" y="92" width="150" height="24" rx="4"/>
+  <text class="v" x="280" y="110">&lt; 1.5 s（测试上限），通过</text>
+
+  <text class="gh" x="24" y="164">4000 字节粘贴进刷屏中的程序（#443）</text>
+  <text class="l" x="24" y="200">改前</text>
+  <rect class="bar0" x="120" y="184" width="520" height="24" rx="4"/>
+  <text class="v" x="132" y="202">5.2 s 报错，只进 1022 字节</text>
+  <text class="l" x="24" y="248">改后</text>
+  <rect class="bar2" x="120" y="232" width="4" height="24" rx="2"/>
+  <text class="v" x="134" y="250">28 ms，4000 字节全到（11-28 实测）</text>
+  <text class="s r" x="736" y="34">刻度：100 px = 1 s</text>
+</svg>
+<figcaption>改前的数字来自 PR 说明和测试；改后的 28 ms 是 11-28 在本机跑 <code>paste_into_busy_program</code> 测得（debug 构建，直连和经窗格两条路径分别 28 ms、29 ms）。3000 键那条测试只断言上限，不打印耗时，所以改后只写上限。</figcaption>
+</figure>
+
+<p>两次的共同点：单进程服务所有终端时，任何一处在锁里做慢事，卡住的不是一个终端，是全部。#371 之后的规则是「写 PTY 不在锁里」；交接时要锁住所有终端，所以 #480 先等输入写完，等的时候把锁放开，让读输出的线程继续工作。</p>
+
+<h2 id="s7">07 后台继承了拉起它的人</h2>
+
+<p>11-16，从另一台 Mac 经 SSH 给一台电脑远程换包，执行的是 <code>env -i … nohup fibo serve --takeover &amp;</code>。交接本身成功了，但之后在 Fibo 里新开的 Claude 全部显示 Not logged in。环境变量已经清干净，问题出在 <code>env -i</code> 清不掉的东西：</p>
+
+<div class="table">
+<table>
+<thead><tr><th>继承的东西</th><th>决定什么</th><th>SSH 里拉起</th><th>shell 里 <code>&amp;</code> 拉起</th><th>env -i 清得掉吗</th><th>Fibo 怎么查</th></tr></thead>
+<tbody>
+<tr><td>环境变量</td><td><code>PATH</code>、语言等</td><td>带 SSH 的那套</td><td>带那个 shell 的</td><td>能</td><td>不查</td></tr>
+<tr><td>登录会话（审计会话）</td><td>能不能读登录钥匙串：Claude 登录态、gh、https 的 git、代码签名、插件密钥</td><td>远程会话，读不到</td><td>跟着那个 shell</td><td>不能</td><td>审计会话标志位</td></tr>
+<tr><td>nice 值</td><td>所有终端的调度优先级</td><td>命令里有 <code>&amp;</code> 时同样 +5</td><td>zsh 默认 +5，普通用户调不回来</td><td>不能（11-28 实测仍是 5）</td><td>读 nice 值</td></tr>
+<tr><td>隐私权限的责任进程</td><td>系统弹窗写谁的名字、用谁的权限</td><td>算到 <code>sshd</code> 名下</td><td>算到那个终端程序名下</td><td>不能</td><td>系统的责任进程接口</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>还有两层放大。一是后台开的每个终端都继承后台的这些属性，交接也不改变它们：新后台接过的旧终端还在原来的会话里。二是窗口重新打开时，同一版本的后台会被直接复用（第 01 节的指纹比较），所以退出再打开 App 修不好；当时窗口里的「重启后台」按钮只在版本不同时出现。修的时候还犯了同类的错：从一个终端里用 <code>&amp;</code> 重起后台，又带进了 nice 5，责任进程变成了那个终端程序。</p>
+
+<p>#368 的做法：后台启动时读出这三样（<code>getaudit_addr</code> 的远程、图形会话标志位，<code>getpriority</code>，<code>responsibility_get_pid_responsible_for_pid</code>），写进 <code>host.log</code>，在握手里交给窗口。窗口只提示重启能修好的那些（后台有、窗口自己没有的），状态栏出现原因和「重启后台」，点了走 <code>--takeover</code>，终端不断；窗口自己也是从 SSH 启动的，就提示从程序坞重新打开。正确的远程换包做法写进了 <code>docs/lessons.md</code>：先按进程号退出旧 App，再用 <code>open</code> 打开新包，由窗口拉起后台。这三项检查目前只在 macOS 上有，其他平台什么都不报。</p>
+
+<div class="tip">
+<p><b>不用 Fibo 时，让终端活过窗口</b>：<code>tmux</code> 是同一个思路，会话住在 tmux server 里，终端窗口只是客户端。</p>
+<pre><code>tmux new -s work          # 开一个会话，在里面跑 Agent
+# 按 Ctrl-b 再按 d 分离；关掉终端窗口也没关系
+tmux attach -t work       # 之后重新接上</code></pre>
+<p>tmux server 也是常驻进程，上面那张表同样适用。11-28 本机实测：在 zsh 里 <code>tmux new-session -d … &amp;</code> 拉起的 server，nice 是 5；直接运行是 0；先 <code>setopt NO_BG_NICE</code> 再 <code>&amp;</code> 也是 0。所以第一次拉起 tmux server 最好在本机图形会话的终端里、前台运行，别在 SSH 里或用 <code>&amp;</code>。</p>
+</div>
+
+<h2 id="limits">限制：还没测到的</h2>
+
+<ul>
+  <li><b>EMSGSIZE 的边界只在 macOS 上量过</b>：Linux 没量。Fibo 的重试在两个平台上都生效，CI 在 Linux 上跑同一条回归测试。边界规律是测出来的，没有对照内核源码。</li>
+  <li><b>COMMIT 之后的那一段</b>：等 <code>host.lock</code>、起线程、改名失败时终端会断。现有的三条注入测试都落在 COMMIT 之前。</li>
+  <li><b>200 个终端一次交接</b>：上限写在代码里，没有测过这么多终端时交接要多久。</li>
+  <li><b>Windows 不能交接</b>：更新前要先结束 Fibo 里的终端。</li>
+  <li><b>启动环境的三项检查只在 macOS 上</b>：Linux、Windows 上后台被别的方式拉起时，窗口不会提示。</li>
+  <li><b>3000 键改后的耗时</b>：测试只断言小于 1.5 秒，没有记录实际值。</li>
+  <li><b>launchd</b>：用 launchd 托管 tmux 或类似进程、让它在登录时就起来的做法，这次没试，所以没写进提示框。</li>
+</ul>
+
+<h2 id="summary">总结：三条做法</h2>
+
+<ul>
+  <li><b>以一帧 ACK 为界</b>：新后台回「taken」之前，旧后台一直持有所有 PTY 主端，Prepare、READY 两段任何失败都退回旧后台。三条注入测试守着这条线，11-03 那次 <code>EMSGSIZE</code> 就是被它兜住的。</li>
+  <li><b>能先查的都挪到 ACK 之前</b>：socket 位置、数据库、画面快照都在 ACK 前验证，ACK 之后只剩等锁、起线程和 1 次改名。自动更新的换包也是同一个思路，靠改名，失败时原包不动。</li>
+  <li><b>常驻进程不在锁里做慢事，也不在错误的地方被拉起</b>：按字节合并排队后，4000 字节粘贴从 5.2 秒报错变成 28 ms 到齐；后台启动时自检 3 项继承属性，<code>env -i</code> 清不掉的由窗口按原样重启。</li>
+</ul>
+
+<nav class="pn" aria-label="更多文章"><a class="pn-card" href="../remote-paste/zh.html"><span class="eyebrow">上一篇</span><b>Fibo 如何让 ssh 那头的 Claude Code 也能 ⌘V 贴截图</b></a><a class="pn-card" href="../perf-gate/zh.html"><span class="eyebrow">下一篇</span><b>Fibo 的性能门禁：数退休指令而不看 CPU 时间，以及侧栏重画这本账</b></a></nav>
+<footer class="end">
+  <p>Fibo 是开源项目（MIT 许可）。交接的实现在 <code>crates/fibo-platform/src/terminal/hand_over.rs</code> 和 <code>crates/fibo-host/src/host/runtime.rs</code>，全部源码在 <a href="https://github.com/majiayu000/fibo">GitHub</a>。</p>
+  <p><a href="../zh.html">← 全部文章</a> · <a href="../../">回到 fibo.page</a></p>
+</footer>
+</main>
+
+<footer><div class="wrap">
+  <div class="fcols">
+    <div><a class="logo" href="../../" aria-label="Fibo"><img src="../../brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a><p>一个原生的 macOS 工作台，用来同时跑很多个 Coding Agent。开源，MIT 许可。</p><a class="btn white sm" style="margin-top:22px" href="https://github.com/majiayu000/fibo/releases/latest">下载</a></div>
+    <div><h4>产品</h4><ul><li><a href="../../#features">功能</a></li><li><a href="../../#start">开始使用</a></li><li><a href="https://github.com/majiayu000/fibo/releases">更新记录</a></li><li><a href="../zh.html">博客</a></li></ul></div>
+    <div><h4>资源</h4><ul><li><a href="https://github.com/majiayu000/fibo#readme">文档</a></li><li><a href="../../#faq">常见问题</a></li><li><a href="https://github.com/majiayu000/fibo/issues">反馈问题</a></li></ul></div>
+    <div><h4>项目</h4><ul><li><a href="https://github.com/majiayu000/fibo">GitHub</a></li><li><a href="https://github.com/majiayu000/fibo/blob/main/LICENSE">许可</a></li><li><a href="https://github.com/majiayu000/homebrew-tap">Homebrew 源</a></li></ul></div>
+  </div>
+  <div class="legal"><span>© 2026 Fibo。MIT 许可。</span><span class="formula">Fₙ = Fₙ₋₁ + Fₙ₋₂ · 1, 1, 2, 3, 5, 8, 13, 21 …</span><span>fibo.page</span></div>
+</div></footer>
+</body>
+</html>

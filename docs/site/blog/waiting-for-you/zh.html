@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>不改 Agent，Fibo 怎么知道它在等你 · Fibo 博客</title>
+<meta name="description" content="Claude Code、Codex 不会告诉别的程序自己停在审批框上。Fibo 从会话日志、Hook、屏幕、OSC 7501 和进程五个来源拼出每个会话的状态，按固定顺序叠加，只由 status::of 一处判定，再用守卫测试按文件计数，防止别处另算一遍。附来源对比表、状态机、判错案例和基线变化数据。">
+<link rel="canonical" href="https://fibo.page/blog/waiting-for-you/zh.html">
+<link rel="alternate" hreflang="en" href="https://fibo.page/blog/waiting-for-you/">
+<link rel="alternate" hreflang="zh-CN" href="https://fibo.page/blog/waiting-for-you/zh.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Fibo">
+<meta property="og:title" content="不改 Agent，Fibo 怎么知道它在等你">
+<meta property="og:description" content="Claude Code、Codex 不会告诉别的程序自己停在审批框上。Fibo 从会话日志、Hook、屏幕、OSC 7501 和进程五个来源拼出每个会话的状态，按固定顺序叠加，只由 status::of 一处判定，再用守卫测试按文件计数，防止别处另算一遍。附来源对比表、状态机、判错案例和基线变化数据。">
+<meta property="og:url" content="https://fibo.page/blog/waiting-for-you/zh.html">
+<meta property="og:image" content="https://fibo.page/blog/waiting-for-you/images/00-cover.webp">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1499ad">
+<link rel="icon" type="image/svg+xml" href="../../brand/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../../brand/favicon-32.png">
+<link rel="apple-touch-icon" href="../../brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="alternate" type="application/atom+xml" title="Fibo 博客" href="../feed-zh.xml">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BlogPosting", "headline": "不改 Agent，Fibo 怎么知道它在等你", "description": "Claude Code、Codex 不会告诉别的程序自己停在审批框上。Fibo 从会话日志、Hook、屏幕、OSC 7501 和进程五个来源拼出每个会话的状态，按固定顺序叠加，只由 status::of 一处判定，再用守卫测试按文件计数，防止别处另算一遍。附来源对比表、状态机、判错案例和基线变化数据。", "image": "https://fibo.page/blog/waiting-for-you/images/00-cover.webp", "datePublished": "2026-11-28", "dateModified": "2026-11-28", "inLanguage": "zh-CN", "mainEntityOfPage": "https://fibo.page/blog/waiting-for-you/zh.html", "author": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/"}, "publisher": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/", "logo": {"@type": "ImageObject", "url": "https://fibo.page/brand/apple-touch-icon.png"}}}</script>
+<link rel="stylesheet" href="../post.css">
+
+<script>(()=>{const r=document.documentElement,k='fibo-landing-theme';try{r.dataset.theme=localStorage.getItem(k)==='dark'?'dark':'light';localStorage.setItem('fibo-landing-lang','zh')}catch(e){}
+addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('themebtn');if(b)b.onclick=()=>{const t=r.dataset.theme==='dark'?'light':'dark';r.dataset.theme=t;try{localStorage.setItem(k,t)}catch(e){}}})})()</script>
+</head>
+<body>
+<section class="mast">
+<header class="nav"><div class="wrap">
+  <a class="logo" href="../../" aria-label="Fibo"><img src="../../brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a>
+  <nav class="links" aria-label="Main"><a href="../../#features">功能</a><a href="../../#start">开始使用</a><a href="../../#faq">常见问题</a><a href="https://github.com/majiayu000/fibo/releases">更新记录</a><a class="on" href="../zh.html">博客</a></nav>
+  <div class="right">
+    <button type="button" class="btn glass sm" id="themebtn" aria-label="切换浅色和深色">◐</button><a class="btn glass sm" href="./" hreflang="en" lang="en">EN</a>
+    <a class="btn glass sm gh" href="https://github.com/majiayu000/fibo"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+    <a class="btn white sm" href="https://github.com/majiayu000/fibo/releases/latest">下载</a>
+  </div>
+</div></header>
+<div class="in">
+<span class="pill">工程实践 · 2026 年 11 月</span>
+<h1>不改 Agent，Fibo 怎么知道它在等你</h1>
+<p class="lede">Claude Code、Codex 停在审批框上时，不会通知任何人。会话日志、Hook、屏幕、程序上报和进程这五个来源各有盲区，单看哪一个都会判错。<a href="../../">Fibo</a> 把五路证据按固定顺序叠到同一张会话卡片上，只在 core 的 <code>status::of</code> 一处算出状态，再用一个按文件计数的测试防止别处另算一遍。</p>
+</div>
+</section>
+
+<main class="post">
+<blockquote><b>Fibo 是什么</b>：一个给 Claude Code、Codex 这类 Coding Agent 用的原生工作台，开源（MIT）。Agent 跑在 Fibo 开的真终端里，Fibo 在侧栏、看板、菜单栏和手机上告诉你哪个会话在等你。安装：<a href="https://github.com/majiayu000/fibo/releases/latest">下载 DMG</a>，或 <code>brew install --cask majiayu000/tap/fibo</code>。</blockquote>
+
+<nav class="toc" aria-label="目录">
+  <a href="#s1">01 问题：「在等你」没有接口</a>
+  <a href="#s2">02 五个来源，各有盲区</a>
+  <a href="#s3">03 叠加顺序：谁的话算数</a>
+  <a href="#s4">04 一轮结束是等你验收，不是做完了</a>
+  <a href="#s5">05 服务不算在等：后台 shell 改了四版</a>
+  <a href="#s6">06 判错过的案例</a>
+  <a href="#s7">07 只在一处判定：用测试守住</a>
+  <a href="#limits">限制：还没做到的</a>
+  <a href="#summary">总结：三条做法</a>
+</nav>
+
+<h2 id="s1">01 问题：「在等你」没有接口</h2>
+
+<p>同时开五六个 Agent 时，最费时间的是挨个翻标签，看谁停在审批框上、谁已经答完了。要让工作台替你看，它得知道每个会话此刻在干什么。</p>
+
+<p>Agent CLI 没有为此留接口。Claude Code、Codex 不会主动向别的程序报告「我停在审批框上了」，Fibo 也不改它们的模型和循环，只在真终端（PTY）里原样运行它们。能用的只有它们本来就会留下的痕迹：写到磁盘上的会话日志、用户可以选装的 hook、终端里画出来的字、程序打印的转义序列、操作系统里的进程。</p>
+
+<p>Fibo 给每个会话算出一个状态，一共 10 种。词、符号和归组都由 <code>crates/fibo-core/src/status.rs</code> 里的 <code>Status</code> 定义，别处不再拼写：</p>
+
+<div class="table">
+<table>
+<thead><tr><th>状态</th><th>什么时候</th><th>要你处理</th><th>响铃</th></tr></thead>
+<tbody>
+<tr><td style="white-space:nowrap"><code>◐</code> 在跑</td><td>一轮正在进行，或回合结束但后台任务、子 Agent 还在替它干活</td><td>否</td><td>否</td></tr>
+<tr><td style="white-space:nowrap"><code>◆</code> 等你回答</td><td>审批框、提问、计划确认停在那里</td><td>是</td><td>是</td></tr>
+<tr><td style="white-space:nowrap"><code>✕</code> 出错了</td><td>回合报错，或终端进程非零退出</td><td>是</td><td>是</td></tr>
+<tr><td style="white-space:nowrap"><code>◇</code> 等你验收</td><td>这一轮结束了，做没做完由你看</td><td>是</td><td>否</td></tr>
+<tr><td style="white-space:nowrap"><code>◔</code> 等后台</td><td>回合结束，只剩定时唤醒或监视任务，之后会把它叫醒</td><td>是</td><td>否</td></tr>
+<tr><td style="white-space:nowrap"><code>○</code> 新开的</td><td>Agent 开着，还没开始第一轮</td><td>否</td><td>否</td></tr>
+<tr><td style="white-space:nowrap"><code>‖</code> 停下了</td><td>你中断了，或 Agent 没结束就走了</td><td>否</td><td>否</td></tr>
+<tr><td style="white-space:nowrap"><code>◷</code> 稍后再看</td><td>你推迟到某个时间</td><td>否</td><td>否</td></tr>
+<tr><td style="white-space:nowrap"><code>·</code> 很久没动</td><td>超过设定天数没有动静</td><td>否</td><td>否</td></tr>
+<tr><td style="white-space:nowrap"><code>✓</code> 做完了</td><td>你标记完成或放弃</td><td>否</td><td>否</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>「要你处理」是一组状态：等你回答、出错了、等你验收、等后台 4 种（<code>Status::needs_you</code>）。其中只有前 2 种会响提示音、把计数标成橙色或红色（<code>Status::blocked</code>），因为 Agent 没有你就走不下去。这条在 11-03 定下，之前侧栏数 4 种、顶栏和看板只数 2 种，同一时刻会出现「要你处理 5」和「要你处理 2」。</p>
+
+<h2 id="s2">02 五个来源，各有盲区</h2>
+
+<p>后台进程 <code>fibo serve</code> 持有所有终端，替每个会话收集下面五路证据。单看哪一路都会判错，所以五路都要。</p>
+
+<div class="table">
+<table style="min-width:640px">
+<thead><tr><th>来源</th><th>能看到什么</th><th>多快</th><th>靠得住的地方</th><th>什么时候失效</th></tr></thead>
+<tbody>
+<tr><td><b>会话日志</b><br><code>~/.claude</code> 的 jsonl、Codex 的日志等</td><td>一轮开始、结束、中断；说了什么、调了哪些工具。聊天内容全从这里来</td><td>文件变动时读</td><td>CLI 自己写的记录，结束和中断写下了就是事实</td><td>有些事答完才写：Claude 的提问框在回答前日志里没有；长会话只读到尾巴时，看不到这一轮的开头</td></tr>
+<tr><td><b>Hook</b><br>可选装，Claude 装 6 个事件</td><td><code>UserPromptSubmit</code> 开始，<code>PermissionRequest</code>、<code>Notification</code> 在等，<code>Stop</code> 结束并列出后台 shell</td><td>事件发生时就到</td><td>审批、提问在日志写下之前就知道；Stop 带后台任务清单</td><td>没装 hook 的电脑上全没有；继承了终端环境变量的别的进程也会发 hook（见 06）</td></tr>
+<tr><td><b>屏幕</b><br>终端画面和标题</td><td>此刻弹着的审批框、选择题、计划菜单；标题里的转圈符号、画面上的计时行</td><td>画面安静 1 秒后读一遍；有输出时每秒看一次计时行</td><td>日志还没跟上时，只有它知道「现在」</td><td>CLI 改了措辞或布局就认不出；窄窗口会把问句折成两行（见 06）</td></tr>
+<tr><td><b>程序上报</b><br>OSC 7501</td><td>程序用一行转义序列说自己 <code>working</code>、<code>blocked</code>、<code>done</code>、<code>error</code></td><td>打印出来就到</td><td>是程序自己的话，不是猜的</td><td>要程序自己打印；脚本、构建加一行 <code>printf</code> 就有</td></tr>
+<tr><td><b>进程</b><br>进程树、监听端口</td><td>回合结束后留下的后台 shell 还活着没有、开没开端口</td><td>每 5 秒看一次</td><td>能分出「会结束的任务」和「不会结束的服务」</td><td>只能间接猜：看端口和时长，看不出命令的意图（见 05）</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>另有两个辅助信号只用来确认弹框：Claude 的 <code>claude agents --json</code> 和 Codex 共享守护进程的只读状态接口。代码注释写明它们可能比日志和 hook 都慢，所以只能结束或确认一次等待，不能开始或结束一轮（<code>content/mod.rs</code> 的 <code>official</code>）。</p>
+
+<p>Hook 的写法也要防止拖慢 Agent。Fibo 写进 <code>settings.json</code> 的命令先把 stdin 读进变量，在后台转给 <code>fibo hook</code>，然后立刻 <code>exit 0</code>；超时设 5 秒，只用来兜住卡死的 shell。不在 Fibo 终端里时（找不到 Fibo 设的环境变量），这条命令直接退出，不影响 CLI。</p>
+
+<h2 id="s3">03 叠加顺序：谁的话算数</h2>
+
+<p>五路证据先叠到同一张会话卡片（<code>Content</code>）上，不各自出结论。卡片记着回合在哪个阶段（<code>turn</code>）、后台还剩什么（<code>background</code>）、在等什么（<code>waiting</code>）。日志和 hook 写同一个解析器，形成底稿；后台每次把工作区发给窗口和手机之前，再按固定顺序把运行时的观察叠上去（<code>host/snapshot.rs</code> 的 <code>overlay</code>）。</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 640" role="img" aria-label="状态判定的叠加顺序：日志和 Hook 写出底稿，再依次叠上进程、标题和画面的忙碌信号、画面上的提问、程序上报，最后由 status::of 加上你的决定算出唯一状态，各个界面都读它">
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tip"/></marker></defs>
+  <rect class="soft" x="40" y="20" width="320" height="64" rx="10"/>
+  <text class="t" x="200" y="46">会话日志</text>
+  <text class="s" x="200" y="68">开始、结束、中断、说了什么</text>
+  <rect class="soft" x="400" y="20" width="320" height="64" rx="10"/>
+  <text class="t" x="560" y="46">Hook</text>
+  <text class="s" x="560" y="68">开始、审批、提问、结束 + 后台清单</text>
+  <path class="line" d="M200 84 L340 116" marker-end="url(#ar)"/>
+  <path class="line" d="M560 84 L420 116" marker-end="url(#ar)"/>
+  <rect class="box" x="200" y="118" width="360" height="56" rx="10"/>
+  <text class="h" x="380" y="142">底稿：会话卡片 Content</text>
+  <text class="s" x="380" y="162">turn · background · waiting · signal</text>
+  <path class="line" d="M380 174 L380 194" marker-end="url(#ar)"/>
+
+  <rect class="box" x="40" y="196" width="680" height="58" rx="10"/>
+  <circle class="key" cx="72" cy="225" r="14"/><text class="kt c" x="72" y="230">1</text>
+  <text class="l" x="100" y="220">进程：后台 shell 分任务和服务</text>
+  <text class="s left" x="100" y="242">任务（测试、构建）让结束的回合仍算在跑；服务不算</text>
+  <path class="line" d="M380 254 L380 270" marker-end="url(#ar)"/>
+  <rect class="box" x="40" y="272" width="680" height="58" rx="10"/>
+  <circle class="key" cx="72" cy="301" r="14"/><text class="kt c" x="72" y="306">2</text>
+  <text class="l" x="100" y="296">标题转圈、画面计时行</text>
+  <text class="s left" x="100" y="318">只能把「没在跑」改成「在跑」；结束记录之后才出现的才算</text>
+  <path class="line" d="M380 330 L380 346" marker-end="url(#ar)"/>
+  <rect class="box" x="40" y="348" width="680" height="58" rx="10"/>
+  <circle class="key" cx="72" cy="377" r="14"/><text class="kt c" x="72" y="382">3</text>
+  <text class="l" x="100" y="372">画面上的审批框、选择题、计划菜单</text>
+  <text class="s left" x="100" y="394">日志还没跟上时先记成等你回答，标明来源是画面</text>
+  <path class="line" d="M380 406 L380 422" marker-end="url(#ar)"/>
+  <rect class="box" x="40" y="424" width="680" height="58" rx="10"/>
+  <circle class="key" cx="72" cy="453" r="14"/><text class="kt c" x="72" y="458">4</text>
+  <text class="l" x="100" y="448">程序上报 OSC 7501</text>
+  <text class="s left" x="100" y="470">程序自己说的，压过上面所有猜测（idle、working 不开新回合）</text>
+  <path class="line accent" d="M380 482 L380 502" marker-end="url(#ar)"/>
+
+  <rect class="box accent-box" x="160" y="504" width="440" height="58" rx="12"/>
+  <text class="h" x="380" y="530">status::of：唯一算状态的地方</text>
+  <text class="s" x="380" y="550">再叠上你的决定：标记完成、稍后再看</text>
+  <path class="line" d="M380 562 L380 580" marker-end="url(#ar)"/>
+  <text class="s" x="380" y="604">侧栏 · 窗格 · 看板 · 菜单栏 · 手机卡片 · fibo list · 插件事件</text>
+  <text class="s" x="380" y="626">都只读这一个结果</text>
+</svg>
+<figcaption>叠加顺序，后面的压过前面的。第 2、3 步只往「更忙」或「在等」的方向改，第 4 步是程序自己的话。顺序写在 <code>host/snapshot.rs</code>，判定写在 <code>fibo-core/src/status.rs</code>。</figcaption>
+</figure>
+
+<p>这个顺序背后有三条原则：</p>
+
+<ul>
+  <li><b>看到的只能加，不能减</b>。标题在转圈，说明一定有一轮在跑，哪怕日志只读到了尾巴；标题不转，什么也证明不了，所以不能用它把「在跑」改成别的。</li>
+  <li><b>此刻压过记录</b>。画面上弹着审批框，而日志还没写到这一步，就先记成等你回答，并在卡片上写明「画面上的提示」，免得被当成日志里的记录。</li>
+  <li><b>自己说的压过猜的</b>。程序通过 OSC 7501 报了状态，就按它的来。但 <code>idle</code> 和 <code>working</code> 不开新回合：代码注释记着，Codex 在两轮之间会自己报几秒 <code>working</code>，真正的一轮很快就会出现在日志里。</li>
+</ul>
+
+<p>叠完之后只剩一个函数做判断。下面是活着的会话那一支（简化，省掉了参数类型）：</p>
+
+<pre><code>fn live(w, s, c, now) -&gt; Status {
+    match turn {
+        Turn::Waiting =&gt; return Status::Waiting,
+        Turn::Running =&gt; return Status::Running,
+        // 子 Agent 或它在等的任务还在干活：这一轮没完
+        Turn::Completed if background.keeps_working() =&gt; return Status::Running,
+        _ =&gt; (),
+    }
+    if let Some(d) = decided(w, s, now) { return d; } // 你标的完成、稍后再看
+    if fresh(c) { return Status::Fresh; }
+    match turn {
+        Turn::Error =&gt; Status::Error,
+        // 只有会把它叫醒的才算等后台；服务叫不醒任何东西
+        _ if background.wakes() =&gt; Status::Background,
+        Turn::Interrupted =&gt; Status::Paused,
+        _ =&gt; Status::Review,
+    }
+}</code></pre>
+
+<p>注意顺序：你的决定排在「在等你」和「在跑」后面。你把会话标成做完了，Agent 又被你发的一句话叫起来，它仍然显示在跑；回合结束后，才轮到你的决定。</p>
+
+<h2 id="s4">04 一轮结束是等你验收，不是做完了</h2>
+
+<p>Agent 说「全部完成」，不等于活干完了。所以回合结束只到「等你验收」，「做完了」只有你能标（11-02 定）。Agent 在回复里说做完了，只会把卡片上的下一步提示换成「按用户原话逐项核对机械证据，再决定是否验收」（<code>completed_claim</code>），状态不变。</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 420" role="img" aria-label="会话状态机：新开的发第一句后在跑；在跑可以进入等你回答、出错了、等你验收、等后台四种要你处理的状态，或中断成停下了；答了、又发一句、被唤醒都回到在跑；等你验收只有你标记完成才变成做完了">
+  <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tip"/></marker>
+  <marker id="ar2g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ok-h"/></marker></defs>
+  <rect class="soft" x="20" y="160" width="104" height="56" rx="10"/>
+  <circle class="dot-done" cx="42" cy="188" r="6"/>
+  <text class="t" x="80" y="193">新开的</text>
+  <path class="line" d="M124 188 L196 188" marker-end="url(#ar2)"/>
+  <text class="s" x="160" y="178">发第一句</text>
+  <rect class="box accent-box" x="198" y="160" width="120" height="56" rx="10"/>
+  <circle class="dot-run" cx="222" cy="188" r="6"/>
+  <text class="h" x="264" y="194">在跑</text>
+
+  <rect class="badbox" x="392" y="14" width="250" height="288" rx="14"/>
+  <text class="gh" x="408" y="36">要你处理（4 种）</text>
+  <rect class="box" x="408" y="46" width="218" height="52" rx="9"/>
+  <circle class="dot-wait" cx="426" cy="72" r="6"/>
+  <text class="l" x="440" y="68">等你回答</text><text class="s left" x="440" y="88">审批、提问、计划 · 响铃</text>
+  <rect class="box" x="408" y="108" width="218" height="52" rx="9"/>
+  <circle class="dot-wait" cx="426" cy="134" r="6"/>
+  <text class="l" x="440" y="130">出错了</text><text class="s left" x="440" y="150">报错、非零退出 · 响铃</text>
+  <rect class="box" x="408" y="170" width="218" height="52" rx="9"/>
+  <circle class="dot-done" cx="426" cy="196" r="6"/>
+  <text class="l" x="440" y="192">等你验收</text><text class="s left" x="440" y="212">一轮结束，只留服务也算</text>
+  <rect class="box" x="408" y="232" width="218" height="52" rx="9"/>
+  <circle class="dot-done" cx="426" cy="258" r="6"/>
+  <text class="l" x="440" y="254">等后台</text><text class="s left" x="440" y="274">留着定时唤醒、监视任务</text>
+
+  <path class="line" d="M318 172 L406 74" marker-end="url(#ar2)"/>
+  <path class="line" d="M318 182 L406 134" marker-end="url(#ar2)"/>
+  <path class="line" d="M318 194 L406 196" marker-end="url(#ar2)"/>
+  <path class="line" d="M318 206 L406 256" marker-end="url(#ar2)"/>
+  <path class="line dash" d="M392 296 C340 300 300 262 284 218" marker-end="url(#ar2)"/>
+  <text class="s left" x="300" y="326">答了 · 又发一句 · 被唤醒</text>
+
+  <rect class="soft" x="198" y="344" width="120" height="50" rx="10"/>
+  <text class="t" x="258" y="374">停下了</text>
+  <path class="line" d="M232 216 L232 342" marker-end="url(#ar2)"/>
+  <text class="s left" x="150" y="290">中断</text>
+
+  <rect class="box" x="408" y="344" width="218" height="50" rx="10"/>
+  <text class="ok-t c" x="517" y="374">✓ 做完了</text>
+  <path class="line accent" d="M626 196 L690 196 L690 369 L628 369" marker-end="url(#ar2g)"/>
+  <text class="ok-t" x="700" y="270" transform="rotate(90 700 270)">只有你能标完成</text>
+</svg>
+<figcaption>会话状态机（简化：稍后再看、很久没动没画）。回合结束时后台还有任务或子 Agent 在跑，不进右边，仍算在跑。</figcaption>
+</figure>
+
+<p>分开「等你验收」和「做完了」有实际后果。等你验收的会话留在要你处理的计数里，按 <code>⌘J</code> 跳到下一个，也可以进「逐个验收」一个个过：读 Agent 最后说了什么，再决定标完成还是打回去（留着服务的会话进不了逐个验收，因为它的回车会关掉终端）。如果回合一结束就算做完了，这一步就没了，没检查过的改动会混进做完的那一列。</p>
+
+<h2 id="s5">05 服务不算在等：后台 shell 改了四版</h2>
+
+<p>最难判的是回合结束后还留着后台 shell 的会话。Claude 的 <code>Stop</code> hook 会列出还有哪些 shell，但不说它们会不会自己结束。有的会结束（测试、构建、CI 轮询），结束时 Claude 会被唤醒接着干；有的不会（<code>http.server</code>、中转、<code>tail -f</code>）。这条规则改了四版：</p>
+
+<div class="table">
+<table>
+<thead><tr><th>版本</th><th>规则</th><th>判错的情况</th><th>出处</th></tr></thead>
+<tbody>
+<tr><td style="white-space:nowrap">最早</td><td>后台还有 shell 就算在跑</td><td>开着 <code>http.server</code> 的会话一直转圈</td><td>11-03 决定记录</td></tr>
+<tr><td style="white-space:nowrap">11-03 下午</td><td>只剩后台 shell 一律算「等后台」，进要你处理</td><td>回合结束后还在跑的测试、构建被误报成要你处理</td><td><code>1058984</code></td></tr>
+<tr><td style="white-space:nowrap">11-03 晚上</td><td>看进程树：监听固定端口（&lt; 49152）或跑满 2 小时算服务，其余算任务；换边要连续两次（每次隔 5 秒）</td><td>11-04 渲染脚本开给无头 Chrome 的临时端口；脚本自己起的固定端口中转</td><td><code>3fb2791</code>、<code>1ab8b0f</code></td></tr>
+<tr><td style="white-space:nowrap">11-07</td><td>判定不变，判出服务后显示「等你验收」加一行小字「后台留着 1 个服务 · 端口 5569」</td><td>（现行）</td><td>决定记录 <code>a-server-is-not-waiting</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>最后一版的起因是「等后台」这个词装了两件事：监视任务和定时唤醒真的会把 Agent 叫醒；常驻服务什么都不会带回来。用户看到 Codex 显示「等后台 · 1 时」，问它到底在等什么，答案是一个没人连的预览服务。所以现在只有会把 Agent 叫醒的才叫等后台，只留服务的回合就是结束了，状态是等你验收，服务写在小字里。</p>
+
+<p>现行规则按顺序判断，第一条符合的算数（<code>background_shells.rs</code> 的 <code>judge</code>，节选）：</p>
+
+<div class="table">
+<table>
+<thead><tr><th>看到什么</th><th>算</th><th>为什么</th></tr></thead>
+<tbody>
+<tr><td>宿主刚重启 2 分钟内，还没看过</td><td style="white-space:nowrap">任务</td><td>误报在跑几十秒，好过误叫你来处理</td></tr>
+<tr><td>已跑满 2 小时</td><td style="white-space:nowrap">服务</td><td>兜底：任何猜错的情况都不会永远转圈</td></tr>
+<tr><td>同一棵进程树里另一个进程连着树内的固定端口</td><td style="white-space:nowrap">任务</td><td>服务只是脚本的零件，脚本跑完会一起退出</td></tr>
+<tr><td>监听固定端口（&lt; 49152），连续两次看到</td><td style="white-space:nowrap">服务</td><td>它在等外面的人访问</td></tr>
+<tr><td>只有临时端口（≥ 49152）或没有端口</td><td style="white-space:nowrap">任务</td><td>临时端口是工具给自己用的</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>试过但没用的做法：按命令文字猜（名字叫 relay 的，可能是常驻服务，也可能是脚本的零件）；外层是脚本就算任务（<code>npm run dev</code> 也包着一层）。每次判错都在决定记录的案例表和 <code>known_cases</code> 测试里各加一行，现在测试里有 13 个案例，改规则时任何一行都不能变红。</p>
+
+<h2 id="s6">06 判错过的案例</h2>
+
+<p>下面这些都是在真机或真 CLI 上撞到的，测试里的假 Agent 没有暴露出来。每一条都留了一个撤掉修复就会失败的测试。</p>
+
+<div class="table">
+<table style="min-width:640px">
+<thead><tr><th>现象</th><th>为什么判错</th><th>怎么修</th><th>出处</th></tr></thead>
+<tbody>
+<tr><td>手机上点「停下」，Claude 日志在 14:43:42 已记下中断，Fibo 到 14:43:49 仍回报「它没有停」</td><td>结束前留下的标题转圈、画面计时行，盖掉了已经写下的结束记录</td><td>忙碌信号记下第一次出现的时间和当时已知的结束记录；只有结束之后才出现的信号能开新一轮，同一秒内看宿主有没有先见到那条结束记录</td><td><code>1b25e159</code>（#646）</td></tr>
+<tr><td>一些会话停在等你验收，却掉出了要你处理</td><td>一个记忆工具在 <code>Stop</code> hook 里起了一个脱离进程树的 <code>claude -p</code>，它继承了终端的环境变量和终端编号，hook 把它绑成这个终端的当前对话，真对话变成了「不是当前」</td><td>终端已有同类当前对话、而 hook 追不到终端的进程树时，拒绝绑定；终端里原地换对话靠 <code>SessionStart</code> 的 <code>source</code> 放行</td><td><code>bf2a58ca</code>（#640）</td></tr>
+<tr><td>没装 hook 的电脑上，计划确认菜单一直显示在跑，手机批不了</td><td>Claude Code 2.1.326 的计划问句前多了一句陈述，审批规则只认以「Would you like to」开头的问句</td><td>读屏规则加一条「计划」；不并进审批，因为计划菜单的 1 号是「切到全部放行」，当审批按「允许」会放开整段会话的权限</td><td><code>46895365</code>（#593）</td></tr>
+<tr><td>31 列的窄分屏里 Codex 停在审批，手机没认出来；第二次发消息被打进审批框，回车批准了一条命令</td><td>窄窗口把问句折成两行，规则要求问句在同一行以 <code>?</code> 结尾</td><td>读屏前把折开的行拼回整行；底部开着带光标、1 号是 Yes 或 Trust 的菜单时，不管认没认出问句，消息都不打进去</td><td><a href="https://github.com/majiayu000/fibo/pull/387">#387</a></td></tr>
+<tr><td>Claude 用提问框问三选一，手机只显示「CLI 请求工具审批」和一个 Esc</td><td>这一版 Claude Code 答完才把提问写进日志，答之前只有 <code>PermissionRequest</code> hook</td><td>从 hook 的 <code>tool_input</code> 读出问题和选项</td><td>11-08 真机记录</td></tr>
+<tr><td>正在渲染视频的会话被判成等后台</td><td>渲染脚本给无头 Chrome 开了系统分的临时端口</td><td>只有固定端口（&lt; 49152）才算服务</td><td><code>1ab8b0f</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>读屏规则因此写成数据，不写死在代码里：内置的 <code>claude.json</code> 有 3 条规则（审批、选择题、计划），<code>codex.json</code> 有 2 条，每条只挂在一个锚点行和它旁边的编号菜单上，形状不对就当没看到，不去猜。规则用保存下来的画面做测试：Claude 28 张、Codex 18 张，其中 19 张直接从真 CLI 录下，17 张是「看起来像但不是」的反例，比如已经答过的菜单、正文里提到的选项、输入框里自己打的字（11-28 数 <code>crates/fibo-host/tests/fixtures/screens</code>）。</p>
+
+<div class="tip">
+<p><b>不用 Fibo，自己也能拿到「停下来」的信号</b>：Claude Code 的 hook 会在事件发生时运行你写的命令，并把事件的 JSON 从 stdin 传进来。下面这段写进 <code>~/.claude/settings.json</code>，回合结束或请求权限时发一条系统通知（macOS 的写法；Linux 可换成 <code>notify-send</code>）：</p>
+<pre><code>{
+  "hooks": {
+    "Stop": [{ "hooks": [{
+      "type": "command", "timeout": 5,
+      "command": "osascript -e 'display notification \"这一轮结束了\"'"
+    }] }],
+    "Notification": [{ "hooks": [{
+      "type": "command", "timeout": 5,
+      "command": "osascript -e 'display notification \"在等你\"'"
+    }] }]
+  }
+}</code></pre>
+<p>stdin 里有 <code>hook_event_name</code>、<code>session_id</code>、<code>transcript_path</code>，<code>Notification</code> 还有 <code>notification_type</code>（例如 <code>permission_prompt</code>）。两点经验：命令要立刻返回，慢的活放后台；<code>Stop</code> 只说明这一轮结束了，后台 shell 还在不在要另外看（<code>Stop</code> 的 JSON 里 Claude Code 2.1.317 起有 <code>background_tasks</code>）。</p>
+</div>
+
+<h2 id="s7">07 只在一处判定：用测试守住</h2>
+
+<p>五路证据叠起来已经够复杂，如果每个界面再各算一遍，结果一定对不上。Fibo 的前身仓库就是这样：「统一状态词」这件事手工修过 4 次，每次过一阵又分叉（<code>docs/single-source</code>，11-03 翻了老仓库 697 个提交）。11-03 的两轮只读审计又找出 78 条同一件事有两个来源的地方，例如：</p>
+
+<ul>
+  <li>桌面显示「出错了」或「等你验收」，手机和 <code>fibo list</code> 显示「空闲」，<code>fibo wait --until idle</code> 碰到出错也照样返回。原因是宿主对外的接口只读 <code>turn</code> 自己拼了一遍。</li>
+  <li>菜单栏写死「出错」，主窗口是「出错了」。</li>
+  <li>手机写「干活中」，桌面写「在跑」，状态栏写「工作中」。</li>
+</ul>
+
+<p>手工统一会回退，所以改成让机器守，分两步：</p>
+
+<ol>
+  <li><b>让编译器列名单</b>。把关键字段临时改成 <code>pub(crate)</code>，编译器报出 core 以外 420 处直接读写，其中观测层写入约 200 处（合理），做判断的读取 146 处。这些读取逐个改成调 core 的出口：<code>status::of</code>、<code>Status::label</code>、<code>status::needs_you</code>、<code>session_title</code>、<code>session_updated</code>。</li>
+  <li><b>用棘轮防回退</b>。Rust 分不清读和写，字段没法一直不可见，所以 <code>crates/fibo-core/tests/guard.rs</code> 用正则按文件数两类东西：core 之外读原始字段（<code>.turn</code>、<code>.background</code>、<code>.turn_started</code> 等），和 <code>status.rs</code> 之外手写的状态词（含走样的「出错」「工作中」「干活中」「空闲」「需要你」）。数目和 <code>tests/guard-baseline.txt</code> 不一样就失败，多了少了都要改这个文件，审查时看得见。</li>
+</ol>
+
+<p>11-28 实测：在 <code>fibo-host</code> 的一个文件开头加一行读 <code>c.turn</code> 并返回 <code>"在跑"</code> 的函数，跑 <code>cargo test -p fibo-core --test guard</code>，失败信息是（第一行括号里的提示省略了）：</p>
+
+<pre><code>raw reads or hand-written state words changed (...):
+field turn	crates/fibo-host/src/pictures.rs: new, 1
+word 在跑	crates/fibo-host/src/pictures.rs: new, 1</code></pre>
+
+<p>同样一行加在文件末尾的 <code>#[cfg(test)] mod tests</code> 后面就不会被数到，因为守卫把行内测试模块之后的部分当测试代码跳过。</p>
+
+<p>基线也会涨。从 git 历史里把每个版本的基线加总（11-28 实测，<code>git log --first-parent</code> 上动过基线的 52 个提交）：</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 320" role="img" aria-label="守卫基线随时间变化的折线图：手写状态词从 11-03 的 80 处降到 11-12 的 63 处，11-18 回到 69，11-26 是 68；core 之外的原始字段读取从 66 处升到 11-06 的 80 处，11-19 降到 68，11-26 是 70">
+  <line class="lane" x1="70" y1="250" x2="730" y2="250"/>
+  <line class="lane" x1="70" y1="200" x2="730" y2="200"/>
+  <line class="lane" x1="70" y1="150" x2="730" y2="150"/>
+  <line class="lane" x1="70" y1="100" x2="730" y2="100"/>
+  <line class="lane" x1="70" y1="50" x2="730" y2="50"/>
+  <text class="s r" x="60" y="254">50</text>
+  <text class="s r" x="60" y="204">60</text>
+  <text class="s r" x="60" y="154">70</text>
+  <text class="s r" x="60" y="104">80</text>
+  <text class="s r" x="60" y="54">90</text>
+  <text class="s" x="70" y="276">11-03</text>
+  <text class="s" x="180" y="276">11-07</text>
+  <text class="s" x="290" y="276">11-11</text>
+  <text class="s" x="400" y="276">11-15</text>
+  <text class="s" x="510" y="276">11-19</text>
+  <text class="s" x="620" y="276">11-23</text>
+  <text class="s" x="730" y="276">11-27</text>
+  <polyline fill="none" stroke="var(--sky)" stroke-width="2.5" stroke-dasharray="7 4" points="91,170 91,165 93,165 93,155 94,155 94,145 94,150 98,150 98,155 110,155 110,140 111,140 111,135 113,135 113,120 113,125 115,125 115,120 126,120 126,110 152,110 152,130 172,130 172,125 176,125 176,100 182,100 182,110 187,110 187,105 253,105 253,100 302,100 302,105 449,105 449,115 500,115 500,145 533,145 533,160 537,160 537,155 673,155 673,150 730,150"/>
+  <polyline fill="none" stroke="var(--teal)" stroke-width="3" points="91,100 91,115 92,115 92,160 110,160 110,140 111,140 111,150 126,150 126,110 199,110 199,115 232,115 232,140 235,140 235,145 248,145 248,180 340,180 340,185 500,185 500,155 592,155 592,160 730,160"/>
+  <circle class="dot-run" cx="91" cy="100" r="4"/>
+  <text class="accent-t" x="96" y="92" style="text-anchor:start;font-size:13px">80</text>
+  <text class="s left" x="98" y="186">68：要你处理合成一组</text>
+  <text class="s left" x="132" y="96">手机 v2 合入</text>
+  <text class="s left" x="252" y="200">界面词改走 t!()</text>
+  <text class="s left" x="508" y="140">审计合并</text>
+  <text class="accent-t" x="736" y="164" style="text-anchor:start;font-size:13px">68</text>
+  <text style="fill:var(--sky);font-size:13px;font-weight:600;text-anchor:start" x="736" y="146">70</text>
+  <rect x="430" y="20" width="14" height="4" style="fill:var(--teal)"/><text class="s left" x="450" y="27">手写状态词</text>
+  <line x1="560" y1="22" x2="576" y2="22" stroke="var(--sky)" stroke-width="2.5" stroke-dasharray="5 3"/><text class="s left" x="580" y="27">core 外读原始字段</text>
+</svg>
+<figcaption>纵轴从 50 起。两条线都是 <code>tests/guard-baseline.txt</code> 里该类计数之和，按提交时间画成阶梯。另外两类（按键提示、大块不透明背景）是后来加的，不在图里。</figcaption>
+</figure>
+
+<div class="table">
+<table>
+<thead><tr><th>类别</th><th>11-03 第一版基线</th><th>11-26 最新基线</th><th>变化</th></tr></thead>
+<tbody>
+<tr><td>手写状态词</td><td>80</td><td>68</td><td>−12</td></tr>
+<tr><td>core 之外读原始字段</td><td>66</td><td>70</td><td>+4（最高 80）</td></tr>
+<tr><td>写死的 <code>⌘</code> 按键提示（11-03 加）</td><td>24</td><td>26</td><td>+2</td></tr>
+<tr><td>大块不透明背景（11-04 加）</td><td>16</td><td>15</td><td>−1</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>状态词降得最多的一次是 11-03 把「要你处理」合成一组，一个提交少了 9 处。原始字段读取涨过几次，比如 11-06 让 Codex 的后台命令也分任务和服务，涨了 5 处。守卫不禁止涨，它让每一次涨都写进提交、经过审查。</p>
+
+<p>守卫只防「另起炉灶」，不验证结果一致。另有 <code>tests/one_owner.rs</code>：用一份覆盖 16 种状态和命名情况的样例，断言标签和侧栏同名；再跑 200 组随机操作（改标签名、改侧栏名、同一终端新开对话、标记完成），每一步检查名字和状态只有一个答案。宿主的 <code>fibo list</code>、手机卡片、插件事件也逐字段对照 core 的结果。</p>
+
+<h2 id="limits">限制：还没做到的</h2>
+
+<ul>
+  <li><b>读屏跟着 CLI 的界面走</b>。11-25 新版 Codex 把提问改成先发一个不等回答的问题再 <code>sleep</code>，电脑和手机都显示在跑，手机没有提问卡片。这一条记下了，还没修。</li>
+  <li><b>没装 hook 时更慢也更容易错</b>。审批、提问只能靠读屏，要等画面安静 1 秒；CLI 改了措辞就认不出，直到加规则。</li>
+  <li><b>不在 Fibo 终端里的会话</b>只能读日志：一条「在跑」的日志 15 分钟没动就不再算在跑，在等你的问题也没人能替你按键。</li>
+  <li><b>后台 shell 靠猜</b>。不监听端口、又永远不结束的程序要等满 2 小时才算服务；进程树里互相连接的常驻服务会被当成任务。</li>
+  <li><b>守卫是正则</b>。先把字段存进变量再读、换个写法拼状态词，它都数不到；它只能让最常见的写法回不来。</li>
+  <li><b>OSC 7501 要程序配合</b>。最可靠的「自己说」这一路，现在主要给脚本和构建用，Agent CLI 打不打印由它们自己决定。</li>
+</ul>
+
+<h2 id="summary">总结：三条做法</h2>
+
+<ul>
+  <li><b>五路证据叠在一张卡片上，按固定顺序</b>：日志和 hook 打底，再叠进程、画面、程序上报 4 步；画面只往「更忙」或「在等」改，程序自己说的压过猜测。</li>
+  <li><b>状态只在一个函数里判</b>：10 种状态、4 种算要你处理、2 种响铃，都由 <code>status::of</code> 和 <code>Status</code> 给出；编译器列出的 420 处直接读写改完后，由守卫按文件计数，手写状态词从 80 处降到 68 处。</li>
+  <li><b>每次判错留一个案例和一个测试</b>：后台 shell 规则改了 4 版，测试里有 13 个案例；读屏规则有 46 张保存的画面，其中 17 张是反例。</li>
+</ul>
+
+<nav class="pn" aria-label="更多文章"><a class="pn-card" href="../perf-gate/zh.html"><span class="eyebrow">上一篇</span><b>Fibo 的性能门禁：数退休指令而不看 CPU 时间，以及侧栏重画这本账</b></a><a class="pn-card" href="../why-gpui/zh.html"><span class="eyebrow">下一篇</span><b>Fibo 的终端为什么不用 Tauri + xterm.js：一轮测评后换成 GPUI + libghostty-vt 原生绘制</b></a></nav>
+<footer class="end">
+  <p>Fibo 是开源项目（MIT 许可）。状态判定在 <a href="https://github.com/majiayu000/fibo/blob/main/crates/fibo-core/src/status.rs"><code>crates/fibo-core/src/status.rs</code></a>，守卫在 <a href="https://github.com/majiayu000/fibo/blob/main/crates/fibo-core/tests/guard.rs"><code>tests/guard.rs</code></a>，全部源码在 <a href="https://github.com/majiayu000/fibo">GitHub</a>。</p>
+  <p><a href="../zh.html">← 全部文章</a> · <a href="../../">回到 fibo.page</a></p>
+</footer>
+</main>
+
+<footer><div class="wrap">
+  <div class="fcols">
+    <div><a class="logo" href="../../" aria-label="Fibo"><img src="../../brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a><p>一个原生的 macOS 工作台，用来同时跑很多个 Coding Agent。开源，MIT 许可。</p><a class="btn white sm" style="margin-top:22px" href="https://github.com/majiayu000/fibo/releases/latest">下载</a></div>
+    <div><h4>产品</h4><ul><li><a href="../../#features">功能</a></li><li><a href="../../#start">开始使用</a></li><li><a href="https://github.com/majiayu000/fibo/releases">更新记录</a></li><li><a href="../zh.html">博客</a></li></ul></div>
+    <div><h4>资源</h4><ul><li><a href="https://github.com/majiayu000/fibo#readme">文档</a></li><li><a href="../../#faq">常见问题</a></li><li><a href="https://github.com/majiayu000/fibo/issues">反馈问题</a></li></ul></div>
+    <div><h4>项目</h4><ul><li><a href="https://github.com/majiayu000/fibo">GitHub</a></li><li><a href="https://github.com/majiayu000/fibo/blob/main/LICENSE">许可</a></li><li><a href="https://github.com/majiayu000/homebrew-tap">Homebrew 源</a></li></ul></div>
+  </div>
+  <div class="legal"><span>© 2026 Fibo。MIT 许可。</span><span class="formula">Fₙ = Fₙ₋₁ + Fₙ₋₂ · 1, 1, 2, 3, 5, 8, 13, 21 …</span><span>fibo.page</span></div>
+</div></footer>
+</body>
+</html>

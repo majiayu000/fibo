@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Close the window, update the app, keep every terminal: Fibo’s background host and terminal handover · Fibo Blog</title>
+<meta name="description" content="Terminals live in a long-running host, fibo serve, and the window is only a client. On an update the old host passes each PTY file descriptor and a screen snapshot to the new host over SCM_RIGHTS, and any failure before the new host answers &quot;taken&quot; leaves the old one serving. With a handover sequence diagram, a measured EMSGSIZE edge on macOS, and ten problems a long-running host ran into.">
+<link rel="canonical" href="https://fibo.page/blog/handover/">
+<link rel="alternate" hreflang="en" href="https://fibo.page/blog/handover/">
+<link rel="alternate" hreflang="zh-CN" href="https://fibo.page/blog/handover/zh.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Fibo">
+<meta property="og:title" content="Close the window, update the app, keep every terminal: Fibo’s background host and terminal handover">
+<meta property="og:description" content="Terminals live in a long-running host, fibo serve, and the window is only a client. On an update the old host passes each PTY file descriptor and a screen snapshot to the new host over SCM_RIGHTS, and any failure before the new host answers &quot;taken&quot; leaves the old one serving. With a handover sequence diagram, a measured EMSGSIZE edge on macOS, and ten problems a long-running host ran into.">
+<meta property="og:url" content="https://fibo.page/blog/handover/">
+<meta property="og:image" content="https://fibo.page/blog/handover/images/00-cover-en.webp">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1499ad">
+<link rel="icon" type="image/svg+xml" href="../../brand/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../../brand/favicon-32.png">
+<link rel="apple-touch-icon" href="../../brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="alternate" type="application/atom+xml" title="Fibo Blog" href="../feed.xml">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BlogPosting", "headline": "Close the window, update the app, keep every terminal: Fibo’s background host and terminal handover", "description": "Terminals live in a long-running host, fibo serve, and the window is only a client. On an update the old host passes each PTY file descriptor and a screen snapshot to the new host over SCM_RIGHTS, and any failure before the new host answers \"taken\" leaves the old one serving. With a handover sequence diagram, a measured EMSGSIZE edge on macOS, and ten problems a long-running host ran into.", "image": "https://fibo.page/blog/handover/images/00-cover-en.webp", "datePublished": "2026-11-28", "dateModified": "2026-11-28", "inLanguage": "en", "mainEntityOfPage": "https://fibo.page/blog/handover/", "author": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/"}, "publisher": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/", "logo": {"@type": "ImageObject", "url": "https://fibo.page/brand/apple-touch-icon.png"}}}</script>
+<link rel="stylesheet" href="../post.css">
+
+<script>(()=>{const r=document.documentElement,k='fibo-landing-theme';try{r.dataset.theme=localStorage.getItem(k)==='dark'?'dark':'light';localStorage.setItem('fibo-landing-lang','en')}catch(e){}
+addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('themebtn');if(b)b.onclick=()=>{const t=r.dataset.theme==='dark'?'light':'dark';r.dataset.theme=t;try{localStorage.setItem(k,t)}catch(e){}}})})()</script>
+</head>
+<body>
+<section class="mast">
+<header class="nav"><div class="wrap">
+  <a class="logo" href="../../" aria-label="Fibo"><img src="../../brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a>
+  <nav class="links" aria-label="Main"><a href="../../#features">Features</a><a href="../../#start">Get started</a><a href="../../#faq">FAQ</a><a href="https://github.com/majiayu000/fibo/releases">Changelog</a><a class="on" href="../">Blog</a></nav>
+  <div class="right">
+    <button type="button" class="btn glass sm" id="themebtn" aria-label="Switch between light and dark">◐</button><a class="btn glass sm" href="zh.html" hreflang="zh-CN" lang="zh-CN">中文</a>
+    <a class="btn glass sm gh" href="https://github.com/majiayu000/fibo"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+    <a class="btn white sm" href="https://github.com/majiayu000/fibo/releases/latest">Download</a>
+  </div>
+</div></header>
+<div class="in">
+<span class="pill">Architecture · November 2026</span>
+<h1>Close the window, update the app, keep every terminal: Fibo’s background host and terminal handover</h1>
+<p class="lede">A terminal that lives in the window process takes its running agent down when the window closes or the app updates. <a href="../../">Fibo</a> keeps terminals in a long-running host, <code>fibo serve</code>; on an update the old host passes each PTY file descriptor and a screen snapshot to the new host over <code>SCM_RIGHTS</code>, and any failure before the new host answers "taken" leaves the old one serving. Being long-running brings its own problems: one lock, one failed <code>sendmsg</code>, or how the host was started, affects every terminal at once.</p>
+</div>
+</section>
+
+<main class="post">
+
+<blockquote><b>What Fibo is</b>: a native desktop workbench for coding agents such as Claude Code and Codex, open source (MIT). The release build is for macOS; Windows and Ubuntu have previews. Install: <a href="https://github.com/majiayu000/fibo/releases/latest">download the DMG</a>, or <code>brew install --cask majiayu000/tap/fibo</code>. The previous posts covered <a href="../many-machines/">terminals on other machines</a> and <a href="../remote-paste/">pasting screenshots over ssh</a>; this one is about what both rest on: where the terminals live.</blockquote>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 640" role="img" aria-label="Sequence of a Fibo host handover: window, old host and new host lanes in four phases, Prepare, READY, COMMIT and SERVING; a failure before COMMIT leaves the old host serving">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tip"/></marker>
+    <marker id="arg" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ok-h"/></marker>
+  </defs>
+  <rect class="box" x="130" y="16" width="140" height="40" rx="10"/><text class="h" x="200" y="42">Window</text>
+  <rect class="box" x="340" y="16" width="140" height="40" rx="10"/><text class="h" x="410" y="42">Old host</text>
+  <rect class="box accent-box" x="550" y="16" width="140" height="40" rx="10"/><text class="h" x="620" y="42">New host</text>
+  <path class="lane" d="M200 60 V624 M410 60 V624 M620 60 V624"/>
+
+  <rect class="soft" x="12" y="70" width="736" height="62" rx="8"/>
+  <text class="gh" x="22" y="90">0 START</text>
+  <path class="line" d="M204 112 L614 112" marker-end="url(#ar)"/>
+  <text class="s" x="410" y="104">host runs other code: start fibo serve --takeover</text>
+
+  <rect class="soft" x="12" y="142" width="736" height="150" rx="8"/>
+  <text class="gh" x="22" y="162">1 PREPARE</text>
+  <path class="line" d="M616 186 L414 186" marker-end="url(#ar)"/>
+  <text class="s" x="515" y="178">Hello + Handoff</text>
+  <rect class="box" x="280" y="200" width="260" height="40" rx="6"/>
+  <text class="t" x="410" y="225">drain input, lock every terminal</text>
+  <path class="line" d="M414 268 L616 268" marker-end="url(#ar)"/>
+  <text class="s" x="515" y="260">terminal list + a screen snapshot each</text>
+
+  <rect class="soft" x="12" y="302" width="736" height="148" rx="8"/>
+  <text class="gh" x="22" y="322">2 READY</text>
+  <path class="line" d="M414 344 L616 344" marker-end="url(#ar)"/>
+  <text class="s" x="515" y="336">READY, then the PTY master fds (SCM_RIGHTS)</text>
+  <rect class="box" x="510" y="360" width="226" height="56" rx="6"/>
+  <text class="t" x="623" y="382">restore screens, open the DB</text>
+  <text class="s" x="623" y="404">listen on .sock-start, unpublished</text>
+  <text class="bad-t left" x="22" y="440">Fails before here: the new host hangs up, the old one resumes input and keeps serving</text>
+
+  <rect class="soft" x="12" y="460" width="736" height="70" rx="8"/>
+  <text class="gh" x="22" y="480">3 COMMIT</text>
+  <path class="line accent" d="M616 498 L414 498" marker-end="url(#arg)"/>
+  <text class="ok-t c" x="515" y="490">ACK "taken"</text>
+  <text class="s" x="410" y="520">old host exit(0), no signal to any program</text>
+
+  <rect class="soft" x="12" y="540" width="736" height="88" rx="8"/>
+  <text class="gh" x="22" y="560">4 SERVING</text>
+  <text class="s" x="620" y="566">wait for host.lock to be released</text>
+  <text class="s" x="620" y="584">.sock-start → workbench.sock</text>
+  <path class="line accent" d="M614 598 L206 598" marker-end="url(#arg)"/>
+  <text class="ok-t c" x="380" y="590">window reconnects to the new build</text>
+  <text class="bad-t left" x="22" y="620">A failure here drops the terminals, so every check that can run earlier runs before COMMIT</text>
+</svg>
+<figcaption>The four phases of one handover. Until the new host answers "taken", the old host still holds every terminal and any failure falls back to it; after that the old host exits and the new one serves.</figcaption>
+</figure>
+
+<nav class="toc" aria-label="Contents">
+  <a href="#s1">01 Why terminals live outside the window</a>
+  <a href="#s2">02 Handover: four phases, split at "taken"</a>
+  <a href="#s3">03 Self-update takes the same road</a>
+  <a href="#s4">04 sendmsg with descriptors can fail with EMSGSIZE</a>
+  <a href="#s5">05 What a long-running host ran into</a>
+  <a href="#s6">06 One lock, every terminal's input</a>
+  <a href="#s7">07 The host inherits whoever started it</a>
+  <a href="#limits">Limits: what we have not tested</a>
+  <a href="#summary">Summary: three practices</a>
+</nav>
+
+<h2 id="s1">01 Why terminals live outside the window</h2>
+
+<p>An ordinary terminal app holds each terminal's PTY master itself. When the app quits, the master closes, the kernel sends <code>SIGHUP</code> to the processes in that terminal, and the shell exits with the Claude Code inside it. An agent half an hour into a task is gone because someone closed the wrong window or installed an update.</p>
+
+<p>Fibo keeps terminals in a long-running background process, <code>fibo serve</code>. When the window process <code>fibo-app</code> starts and finds no host, it starts one: <code>setsid</code> detaches it from the window's session, stdin goes to null, stderr goes to <code>host.log</code>. From then on the window talks to the host over one Unix socket (<code>workbench.sock</code>) and holds no PTY at all. The screen state lives in the host too: the host parses output with libghostty-vt, and a window that connects first receives a snapshot of the screen, then the changes.</p>
+
+<div class="table">
+<table>
+<thead><tr><th>What happens</th><th>Terminal inside the window process</th><th>Fibo: terminal inside fibo serve</th></tr></thead>
+<tbody>
+<tr><td>Close the window, quit the app</td><td>master closes, <code>SIGHUP</code>, agent exits</td><td>host unaffected; reopening shows the snapshot and carries on</td></tr>
+<tr><td>App crashes</td><td>same</td><td>same</td></tr>
+<tr><td>Update the app</td><td>quits first, so same</td><td>a new host takes every terminal over (next section), pids unchanged</td></tr>
+<tr><td>The host itself exits</td><td>n/a</td><td>every terminal goes. So the host must try hard not to exit (section 05)</td></tr>
+<tr><td>Reboot</td><td>all gone</td><td>terminal processes gone too; interrupted sessions can be resumed as the same conversation</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>A reopened window first greets the host (<code>Hello</code>), and the host reports a fingerprint of its program file: an FNV-1a hash of its bytes plus its length. If that matches the host program shipped next to the window, the window just connects. If not, the host is running old code, and there are two ways forward: stop it and start a new one, which ends every terminal, or have a new host take the terminals over. Fibo takes the second.</p>
+
+<h2 id="s2">02 Handover: four phases, split at "taken"</h2>
+
+<p>For terminals to survive, the new host has to get the same PTY master, not open a new one. The standard Unix way to pass a file descriptor between processes is an <code>SCM_RIGHTS</code> control message on a Unix socket: the kernel creates a descriptor in the receiving process that refers to the same open file. The old host sends each terminal's master fd, the new host reads and writes through it, and the shell and agent notice nothing.</p>
+
+<p>The fd alone is not enough. What is on screen, where the cursor is, the terminal title: those live in the old host's memory, so the old host also sends a screen snapshot. The hard part is ordering: when may the old host let go? Too early, and if the new host fails to start, nobody holds the terminals. Fibo's rule is item 5 of <code>docs/plan.md</code>: <b>a two-phase handover, Prepare → READY → COMMIT → SERVING; on any failure before READY the old host keeps serving</b>. In code the dividing line is one frame from the new host, <code>ACK "taken"</code>.</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Phase</th><th>Who does what</th><th>Timeout</th><th>A failure here</th></tr></thead>
+<tbody>
+<tr><td>0 Start</td><td>The window starts a new host with <code>--takeover</code>; the new host first checks that <code>workbench.sock</code> and <code>.sock-start</code> are this user's sockets or absent</td><td>window waits 20 s</td><td>new host exits; the window says the new host could not take the terminals and the old host keeps running</td></tr>
+<tr><td>1 Prepare</td><td>The new host connects and sends <code>Hello</code>, <code>Handoff</code>. The old host waits until each terminal's accepted input is written, locks every terminal, and sends the terminal list and a screen snapshot each</td><td>input drain 10 s; new host reads for 15 s</td><td>connection drops, the old host unlocks and keeps serving</td></tr>
+<tr><td>2 READY</td><td>Each snapshot ends with a <code>READY</code> frame; one last message carries every master fd via <code>SCM_RIGHTS</code>. The new host restores screens, opens the database, listens on <code>.sock-start</code> (not yet public)</td><td>sending fds 10 s</td><td>the new host hangs up without an ACK; the old host sees it, resumes input, keeps serving</td></tr>
+<tr><td>3 COMMIT</td><td>The new host answers <code>ACK "taken"</code>; the old host calls <code>exit(0)</code> and signals none of the programs</td><td>old host waits 10 s for the ACK</td><td>no ACK means no handover; the old host keeps serving</td></tr>
+<tr><td>4 SERVING</td><td>The new host waits for the old one to release <code>host.lock</code>, starts each terminal's read and write threads, renames <code>.sock-start</code> to <code>workbench.sock</code></td><td>lock wait 10 s</td><td>terminals drop. Only the lock wait, thread starts and one rename are left here</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The old host's side, simplified (error handling trimmed):</p>
+
+<pre><code>// old host: with every terminal locked, send snapshots, then the fds
+send(&amp;mut stream, CONTROL, &amp;Reply::Handoff { terminals })?;
+for (_, live) in held.iter_mut() {
+    for chunk in live.vt.snapshot()?.chunks(MAX_FRAME - 1) {
+        write_frame(&amp;mut stream, SNAPSHOT, chunk)?;
+    }
+    write_frame(&amp;mut stream, READY, &amp;[])?;
+}
+term::send_masters(&amp;stream, &amp;masters)?;          // SCM_RIGHTS
+match read_frame(&amp;mut stream) {
+    Ok((ACK, taken)) if taken == b"taken" =&gt; std::process::exit(0),
+    other =&gt; Err(io::Error::other(format!(
+        "handoff not confirmed, still serving: {other:?}"))),
+}</code></pre>
+
+<p>A few details:</p>
+<ul>
+  <li><b>The old host exits without closing fds or sending signals</b>. The new host already holds a copy of every master; the old copies vanish with the process, so no terminal ever sees all its masters closed.</li>
+  <li><b>The new host does everything that can fail before the ACK</b>: restoring each screen, opening SQLite, reading the workspace, binding the listening socket. Only what must wait for the old host to leave (taking <code>host.lock</code>) comes after COMMIT.</li>
+  <li><b>Bind <code>.sock-start</code> first, rename last</b>. <code>bind</code> creates the path before <code>listen</code>; binding <code>workbench.sock</code> directly would let a window connect to a host that is not ready.</li>
+  <li><b>At most 200 fds in one message</b> (<code>MAX_FDS</code>); a host never runs that many terminals.</li>
+</ul>
+
+<p>Three fault-injection tests guard the failure paths, each with a real <code>fibo serve</code> and real PTYs: an ordinary file where <code>.sock-start</code> goes (the new host must fail and the old host's shell must still be alive); a malformed table planted in the database (the new host errors before the ACK and the old terminal still takes input and prints output); a proxy that flips the first byte of a snapshot (the new host must not ACK).</p>
+
+<p>From the record: one update on 11-03 handed over 8 terminals with their pids unchanged (<code>docs/plan.md</code>). Windows' ConPTY cannot pass a running console, so <code>CAN_HAND_OVER</code> is <code>false</code> there: while terminals run, the window keeps using the old host and shows "host update · restart", leaving the timing to the person (<a href="https://github.com/majiayu000/fibo/pull/230">PR #230</a>). The Ubuntu preview uses the same handover code as macOS and the Linux CI runs these tests, but no update has been handed over on a real Linux desktop yet.</p>
+
+<h2 id="s3">03 Self-update takes the same road</h2>
+
+<p>The in-app updater only swaps the app bundle; it does not reimplement the handover (<code>docs/decisions/2026-11-08-self-update.md</code>). In order:</p>
+<ul>
+  <li>Download the zip to a cache folder and check it against <code>SHA256SUMS</code>; unpack it into a hidden folder next to the running bundle; there, check the bundle id, version, <code>codesign --verify --deep --strict</code>, team id and <code>spctl --assess</code>.</li>
+  <li>Only if all pass, swap by renaming: the old bundle becomes <code>.retired</code>, the new one moves into place (renamed back on failure), then the old one is deleted. Any failure removes what was unpacked and downloaded and leaves the original app untouched.</li>
+  <li>After the swap, wait for this process to exit, then start the window from the new bundle. Its greeting finds a host fingerprint that differs from its own and a host that can hand over, and takes the <code>--takeover</code> path from the previous section.</li>
+</ul>
+<p>So one self-update has two fall-back points: the bundle swap relies on renames, and the original bundle is whole until a rename succeeds; the terminals rely on the ACK, and the old host holds them until then. The two never need to be one transaction.</p>
+
+<h2 id="s4">04 sendmsg with descriptors can fail with EMSGSIZE</h2>
+
+<p>After an update on 11-03, the new window came up blank. The old host was still serving and every terminal was there, so it only looked like a window problem. The cause: the <code>sendmsg</code> carrying the fds had returned <code>Message too long</code>. The failure came before the ACK, the fallback worked as designed, and the new host never started.</p>
+
+<p>It comes from macOS Unix sockets. A blocking sender writing ordinary data waits when the peer's buffer is full; a message carrying <code>SCM_RIGHTS</code> that meets an almost-full buffer does not wait, it returns <code>EMSGSIZE</code> at once. During a handover the fd message goes right after the snapshots, which had just filled the buffer the new host had not yet read. The fix (<code>edc88987</code>) treats <code>EMSGSIZE</code>, <code>ENOBUFS</code> and <code>EWOULDBLOCK</code> as "no room yet": retry every 10 ms for up to 10 s. The regression test leaves 8192 bytes unread, then sends an fd; it failed every time before the fix.</p>
+
+<h3>Measured 11-28: the edge is not 8192 but 8192 minus the control message</h3>
+
+<p>The commit says the peer's buffer held "exactly a full buffer" of 8192 bytes. We measured the edge more finely with a small program on macOS 27.2 (<code>net.local.stream.sendspace</code> is 8192): a <code>socketpair</code> of blocking stream Unix sockets, N bytes written and left unread, then a <code>sendmsg</code> of 1 byte plus 1 fd, with the reader starting to read after 300 ms. Each value was run 5 times with the same result.</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Unread bytes N</th><th>sendmsg with 1 fd</th><th>1 byte, no fd</th></tr></thead>
+<tbody>
+<tr><td>0 to 8175</td><td>succeeds at once</td><td>succeeds at once</td></tr>
+<tr><td>8176</td><td>blocks about 300 ms until the reader drains, then succeeds</td><td>succeeds at once</td></tr>
+<tr><td>8177 to 8192</td><td><b>EMSGSIZE at once</b> (Message too long)</td><td>succeeds (blocks about 300 ms at 8192)</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>8192 − 8176 = 16, exactly the size of a one-fd control message, <code>CMSG_SPACE(4)</code>. With more fds, the first failing value moves down as the control message grows, every time at <code>8192 − CMSG_SPACE(4n) + 1</code>:</p>
+
+<div class="table">
+<table>
+<thead><tr><th>fds in one message</th><th>CMSG_SPACE</th><th>EMSGSIZE from this many unread bytes</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>16</td><td>8177</td></tr>
+<tr><td>2</td><td>20</td><td>8173</td></tr>
+<tr><td>4</td><td>28</td><td>8165</td></tr>
+<tr><td>8</td><td>44</td><td>8149</td></tr>
+<tr><td>200 (Fibo's limit)</td><td>812</td><td>7381</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The pattern looks like this: if the free space fits the control message but not the data, the send waits; if it cannot even fit the control message, the send fails. We did not check this against the kernel source; it is measured behaviour only. It explains why the bug is rare: snapshots run from a few KB to tens of KB and the new host reads as they arrive, so it shows up only when, at the moment the fd message goes out, fewer than 16 bytes (for one terminal) are free. More terminals mean a bigger control message and a wider window. The test program, simplified:</p>
+
+<pre><code>import os, socket, threading, time
+
+def trial(unread, nfds):
+    a, b = socket.socketpair()              # blocking stream Unix sockets
+    r, w = os.pipe()
+    def reader():                           # the new host: reads after 300 ms
+        time.sleep(0.3)
+        got = 0
+        while got &lt; unread:
+            got += len(b.recv(unread - got))
+        socket.recv_fds(b, 1, nfds)
+    t = threading.Thread(target=reader); t.start()
+    a.sendall(b"\x07" * unread)             # the snapshot, still unread
+    try:
+        socket.send_fds(a, [b"\x01"], [r] * nfds)
+        result = "ok"
+    except OSError as e:
+        result = os.strerror(e.errno)       # Message too long
+        a.shutdown(socket.SHUT_WR)
+    t.join()
+    return result</code></pre>
+
+<p>The same day turned up another property of <code>SCM_RIGHTS</code>: a sender's fd may have <code>FD_CLOEXEC</code> set, but the receiver's new fd does not (measured 11-28: 1 on the way out, 0 on arrival), and macOS has no <code>MSG_CMSG_CLOEXEC</code> like Linux. Left alone, every program the new host starts afterwards inherits every old terminal's master: it can type into other terminals, and if the new host crashes the old terminals never get the hangup. The fix sets <code>fcntl(fd, F_SETFD, FD_CLOEXEC)</code> on each one received (<code>24656b96</code>).</p>
+
+<h2 id="s5">05 What a long-running host ran into</h2>
+
+<p>Once the host is long-running, each of its mistakes is multiplied by "every terminal". These are the problems tied to the long-running host or the handover that were fixed between 11-03 and 11-24:</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Symptom</th><th>Root cause</th><th>Why it was hard to find</th><th>Fix</th><th>Source</th></tr></thead>
+<tbody>
+<tr><td>Blank new window after an update</td><td><code>sendmsg</code> with fds returns <code>EMSGSIZE</code> near a full buffer</td><td>the fallback worked, the old host kept serving, only the blank window was left</td><td>treat it as no room yet, retry up to 10 s</td><td><code>edc88987</code></td></tr>
+<tr><td>Programs the new host starts hold every old terminal's master</td><td><code>SCM_RIGHTS</code> drops <code>FD_CLOEXEC</code></td><td>no error anywhere</td><td>set it on each fd received</td><td><code>24656b96</code></td></tr>
+<tr><td>New host says taken, then fails; every terminal hangs up while the app says the old host is fine</td><td>socket and database checks ran after the ACK</td><td>only when a plain file sits where the socket goes, or the database will not open</td><td>check before the ACK</td><td><code>bf7f2639</code></td></tr>
+<tr><td>Old host's relay connection alive 6 hours after an update</td><td><code>process::exit</code> runs no destructors, so the child gets no termination signal</td><td>its parent becomes 1, nobody sees it; when it reconnects it may knock the new host's link off</td><td>the child checks its parent every second and exits when it changes</td><td><code>50e09bf8</code></td></tr>
+<tr><td>Windows update stuck at "the new host could not take the terminals"</td><td><code>handoff</code> hard-coded to <code>true</code></td><td>only on a real Windows machine</td><td>use the platform's <code>CAN_HAND_OVER</code></td><td><a href="https://github.com/majiayu000/fibo/pull/230">#230</a></td></tr>
+<tr><td>The old host acknowledged a handover with a 64 KiB paste still being written</td><td>the handover locked terminals without waiting for accepted input</td><td>the paste has to coincide with an update; found by comparison on a real local PTY</td><td>wait for accepted input first, with locks released while waiting</td><td><a href="https://github.com/majiayu000/fibo/pull/480">#480</a></td></tr>
+<tr><td>Dropped keys, red "input queue full"</td><td>the host took a global lock for every key</td><td>the lock was held 0.2–0.37 s only every few seconds</td><td>queue by bytes and merge, receive keys without the lock</td><td><a href="https://github.com/majiayu000/fibo/pull/371">#371</a></td></tr>
+<tr><td>A long paste stops at 1022 bytes</td><td>writing input and reading output share one terminal lock</td><td>only when a program redraws while receiving long input</td><td>one writer thread per terminal, no lock held while writing</td><td><a href="https://github.com/majiayu000/fibo/pull/443">#443</a></td></tr>
+<tr><td>New Claude sessions show Not logged in</td><td>the host was started inside SSH</td><td>environment variables all correct; quitting and reopening the app does nothing</td><td>the host checks how it was started; the window can restart it properly</td><td><a href="https://github.com/majiayu000/fibo/pull/368">#368</a></td></tr>
+<tr><td>One failed <code>accept</code> ends the host and hangs up every terminal</td><td>one <code>?</code> in the main loop</td><td>found in a code review, never seen happen</td><td>log, pause 100 ms, try again</td><td><a href="https://github.com/majiayu000/fibo/pull/557">#557</a></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The first four were direct commits from 11-03 to 11-05, without PR numbers. #480 is about the handover itself; #371, #443 and #368 are not handover bugs but come from "one process serves every terminal", covered in the next two sections.</p>
+
+<h2 id="s6">06 One lock, every terminal's input</h2>
+
+<h3>Dropped keys (#371)</h3>
+<p>The window used to give each key one slot in a queue and drop keys once 128 slots were full. On the host, each key meant taking the terminal lock to write it to the PTY, then the global lock to note "the user is answering", and only then reading the next key. Every few seconds session matching held the global lock for 0.2–0.37 s; when the program in the terminal was not reading input, the PTY write waited too. Together they filled the window's 128 slots.</p>
+<p>We did not just raise 128: the host would still take a lock per key and drop later. Instead the window and host share a byte queue: adjacent input merges into one item (up to 16 KiB each), a new window size replaces a queued one, mouse reports are dropped when there is a backlog, and only a backlog past the limit (1 MiB in the window, 4 MiB in the host) is refused. The host's socket-reading thread only enqueues; writing the PTY and taking the global lock happen on another thread, once per batch.</p>
+
+<h3>A long paste cut short (#443)</h3>
+<p>On macOS each terminal's input queue holds about 1 KB. A program busy redrawing (Codex with its spinner, say) only comes back to read input once its own output has been taken, while the host held the terminal lock the whole time it wrote input, and reading output needs that lock. Each waited on the other until the write timed out after 5 s, with only the first 1022 bytes of the paste in. The reproduction used a single-threaded redrawing program modelled on Codex: with 4000 bytes pasted, the program's output was stuck for 5.0 s and the send failed after 5.2 s.</p>
+<p>Two alternatives were considered: dropping the lock during the write and adding a separate write lock fails the same way, since the output thread answering terminal queries would wait on that write lock; a longer timeout only makes the stall longer. The fix is one input-writing thread per terminal, writing in order, with callers queueing and waiting outside the lock.</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 272" role="img" aria-label="Before and after bars: 3000 keys took 3.0 s before, under 1.5 s required after; a 4000-byte paste failed after 5.2 s with 1022 bytes in, after the fix all 4000 arrive in 28 ms">
+  <text class="gh" x="24" y="34">3000 KEYS, PROGRAM NOT READING FOR 3 S (#371 REGRESSION TEST)</text>
+  <text class="l" x="24" y="70">Before</text>
+  <rect class="bar0" x="120" y="54" width="300" height="24" rx="4"/>
+  <text class="v" x="430" y="72">3.0 s, test fails</text>
+  <text class="l" x="24" y="108">After</text>
+  <rect class="bar2" x="120" y="92" width="150" height="24" rx="4"/>
+  <text class="v" x="280" y="110">&lt; 1.5 s (test limit), passes</text>
+
+  <text class="gh" x="24" y="164">4000-BYTE PASTE INTO A REDRAWING PROGRAM (#443)</text>
+  <text class="l" x="24" y="200">Before</text>
+  <rect class="bar0" x="120" y="184" width="520" height="24" rx="4"/>
+  <text class="v" x="132" y="202">fails at 5.2 s, 1022 bytes in</text>
+  <text class="l" x="24" y="248">After</text>
+  <rect class="bar2" x="120" y="232" width="4" height="24" rx="2"/>
+  <text class="v" x="134" y="250">28 ms, all 4000 bytes (measured 11-28)</text>
+  <text class="s r" x="736" y="34">scale: 100 px = 1 s</text>
+</svg>
+<figcaption>The before numbers come from the PR descriptions and tests; the after 28 ms was measured on 11-28 by running <code>paste_into_busy_program</code> locally (debug build; 28 ms direct and 29 ms through an attached pane). The 3000-key test only asserts a limit and prints no time, so only the limit is shown.</figcaption>
+</figure>
+
+<p>What both share: when one process serves every terminal, anything slow done under a lock stalls not one terminal but all of them. Since #371 the rule is "never write a PTY under a lock"; the handover must lock every terminal, so #480 first waits for input to drain, with the locks released meanwhile so output keeps flowing.</p>
+
+<h2 id="s7">07 The host inherits whoever started it</h2>
+
+<p>On 11-16 an update was pushed to a computer from another Mac over SSH, with <code>env -i … nohup fibo serve --takeover &amp;</code>. The handover itself worked, but every Claude opened in Fibo afterwards showed Not logged in. The environment had been wiped; the trouble was in what <code>env -i</code> cannot wipe:</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Inherited</th><th>What it decides</th><th>Started inside SSH</th><th>Started with a shell's <code>&amp;</code></th><th>Cleared by env -i?</th><th>How Fibo checks</th></tr></thead>
+<tbody>
+<tr><td>Environment variables</td><td><code>PATH</code>, locale and so on</td><td>SSH's set</td><td>that shell's</td><td>yes</td><td>not checked</td></tr>
+<tr><td>Login (audit) session</td><td>whether the login keychain is readable: Claude's sign-in, gh, git over https, code signing, plugin secrets</td><td>a remote session, not readable</td><td>follows that shell</td><td>no</td><td>audit session flags</td></tr>
+<tr><td>nice value</td><td>scheduling priority of every terminal</td><td>also +5 when the command uses <code>&amp;</code></td><td>zsh adds 5 by default; a normal user cannot undo it</td><td>no (measured 11-28: still 5)</td><td>reads the nice value</td></tr>
+<tr><td>Responsible process for privacy permissions</td><td>whose name system prompts show, whose permissions apply</td><td><code>sshd</code></td><td>that terminal app</td><td>no</td><td>the system’s responsible-process call</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Two things make it worse. Every terminal the host opens inherits these from the host, and a handover does not change them: terminals the new host took over stay in their original session. And a reopened window simply reuses a host of the same build (the fingerprint check in section 01), so quitting and reopening the app fixed nothing; at the time, the window's "restart host" button only appeared when the builds differed. The repair repeated the mistake once: restarting the host from a terminal with <code>&amp;</code> brought in nice 5 and made that terminal app the responsible process.</p>
+
+<p>#368: the host reads these three at start (the remote and graphic-session flags from <code>getaudit_addr</code>, <code>getpriority</code>, and <code>responsibility_get_pid_responsible_for_pid</code>), writes them to <code>host.log</code>, and hands them to the window in the greeting. The window only offers what a restart would fix (issues the host has and the window itself does not): the status bar shows the reason and "restart host", which goes through <code>--takeover</code> so no terminal ends; if the window itself was started from SSH, it says to reopen it from the Dock. The right way to update remotely went into <code>docs/lessons.md</code>: quit the old app by pid, then <code>open</code> the new bundle and let the window start the host. These three checks exist only on macOS so far; other platforms report nothing.</p>
+
+<div class="tip">
+<p><b>Without Fibo, keeping terminals alive past the window</b>: <code>tmux</code> works the same way; sessions live in the tmux server and the terminal window is only a client.</p>
+<pre><code>tmux new -s work          # open a session, run the agent in it
+# press Ctrl-b then d to detach; closing the terminal window is fine
+tmux attach -t work       # reattach later</code></pre>
+<p>The tmux server is a long-running process too, so the table above applies. Measured 11-28: a server started from zsh with <code>tmux new-session -d … &amp;</code> runs at nice 5; started directly, 0; with <code>setopt NO_BG_NICE</code> before the <code>&amp;</code>, also 0. So start the first tmux server in the foreground, from a terminal in the local graphical session, not inside SSH or with <code>&amp;</code>.</p>
+</div>
+
+<h2 id="limits">Limits: what we have not tested</h2>
+
+<ul>
+  <li><b>The EMSGSIZE edge was measured on macOS only</b>, not on Linux. Fibo's retry applies on both, and the Linux CI runs the same regression test. The edge rule is measured, not checked against the kernel source.</li>
+  <li><b>The stretch after COMMIT</b>: if waiting for <code>host.lock</code>, starting threads or the rename fails, terminals drop. All three fault-injection tests sit before COMMIT.</li>
+  <li><b>200 terminals in one handover</b>: the limit is in the code, but how long such a handover takes has not been measured.</li>
+  <li><b>Windows cannot hand over</b>: end the terminals in Fibo before updating.</li>
+  <li><b>The three start-up checks are macOS only</b>: on Linux and Windows the window says nothing when the host was started some other way.</li>
+  <li><b>The 3000-key time after the fix</b>: the test only asserts under 1.5 s and records no value.</li>
+  <li><b>launchd</b>: having launchd keep tmux or a similar process running from login was not tried, so it is not in the tip.</li>
+</ul>
+
+<h2 id="summary">Summary: three practices</h2>
+
+<ul>
+  <li><b>Split at one ACK frame</b>: until the new host answers "taken", the old host holds every PTY master, and any failure in Prepare or READY falls back to it. Three fault-injection tests hold that line, and it is what caught the 11-03 <code>EMSGSIZE</code>.</li>
+  <li><b>Move every check that can run early to before the ACK</b>: sockets, the database and the screen snapshots are verified before it, leaving only a lock wait, thread starts and 1 rename after. The self-update's bundle swap follows the same idea with renames, leaving the original bundle untouched on failure.</li>
+  <li><b>A long-running host does nothing slow under a lock and is not started from the wrong place</b>: with byte-merged queues a 4000-byte paste went from failing at 5.2 s to arriving whole in 28 ms; the host checks 3 inherited properties at start, and what <code>env -i</code> cannot clear the window fixes by restarting it properly.</li>
+</ul>
+
+<nav class="pn" aria-label="More posts"><a class="pn-card" href="../remote-paste/"><span class="eyebrow">Previous post</span><b>How Fibo lets Claude Code on the other end of ssh take a pasted screenshot</b></a><a class="pn-card" href="../perf-gate/"><span class="eyebrow">Next post</span><b>Fibo’s performance gate: count retired instructions, not CPU time, and what sidebar redraws cost</b></a></nav>
+<footer class="end">
+  <p>Fibo is open source (MIT). The handover lives in <code>crates/fibo-platform/src/terminal/hand_over.rs</code> and <code>crates/fibo-host/src/host/runtime.rs</code>; all the source is on <a href="https://github.com/majiayu000/fibo">GitHub</a>.</p>
+  <p><a href="../">← All posts</a> · <a href="../../">Back to fibo.page</a></p>
+</footer>
+</main>
+
+<footer><div class="wrap">
+  <div class="fcols">
+    <div><a class="logo" href="../../" aria-label="Fibo"><img src="../../brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a><p>A native macOS workbench for running many coding agents at once. Open source, MIT licensed.</p><a class="btn white sm" style="margin-top:22px" href="https://github.com/majiayu000/fibo/releases/latest">Download</a></div>
+    <div><h4>Product</h4><ul><li><a href="../../#features">Features</a></li><li><a href="../../#start">Get started</a></li><li><a href="https://github.com/majiayu000/fibo/releases">Changelog</a></li><li><a href="../">Blog</a></li></ul></div>
+    <div><h4>Resources</h4><ul><li><a href="https://github.com/majiayu000/fibo#readme">Documentation</a></li><li><a href="../../#faq">FAQ</a></li><li><a href="https://github.com/majiayu000/fibo/issues">Report a problem</a></li></ul></div>
+    <div><h4>Project</h4><ul><li><a href="https://github.com/majiayu000/fibo">GitHub</a></li><li><a href="https://github.com/majiayu000/fibo/blob/main/LICENSE">License</a></li><li><a href="https://github.com/majiayu000/homebrew-tap">Homebrew tap</a></li></ul></div>
+  </div>
+  <div class="legal"><span>© 2026 Fibo. MIT licensed.</span><span class="formula">Fₙ = Fₙ₋₁ + Fₙ₋₂ · 1, 1, 2, 3, 5, 8, 13, 21 …</span><span>fibo.page</span></div>
+</div></footer>
+</body>
+</html>

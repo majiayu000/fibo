@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why Fibo dropped Tauri + xterm.js and draws its terminals natively with GPUI + libghostty-vt · Fibo Blog</title>
+<meta name="description" content="Fibo runs 40 coding-agent sessions in one window. The plan was Tauri + React + xterm.js; measured under the same load, the WebView used about 3.5x the memory of a native Ghostty, and alacritty_terminal needed 1.29 GiB for 40 sessions. Fibo now keeps terminal state in libghostty-vt (405 MiB, 66.5 MiB once idle sessions are compressed) and draws with GPUI on the GPU. The price: an idle GPUI window used 8x Ghostty's CPU until a GPUI patch we maintain brought it to 0.07%. With a four-way comparison and how we measured.">
+<link rel="canonical" href="https://fibo.page/blog/why-gpui/">
+<link rel="alternate" hreflang="en" href="https://fibo.page/blog/why-gpui/">
+<link rel="alternate" hreflang="zh-CN" href="https://fibo.page/blog/why-gpui/zh.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Fibo">
+<meta property="og:title" content="Why Fibo dropped Tauri + xterm.js and draws its terminals natively with GPUI + libghostty-vt">
+<meta property="og:description" content="Fibo runs 40 coding-agent sessions in one window. The plan was Tauri + React + xterm.js; measured under the same load, the WebView used about 3.5x the memory of a native Ghostty, and alacritty_terminal needed 1.29 GiB for 40 sessions. Fibo now keeps terminal state in libghostty-vt (405 MiB, 66.5 MiB once idle sessions are compressed) and draws with GPUI on the GPU. The price: an idle GPUI window used 8x Ghostty's CPU until a GPUI patch we maintain brought it to 0.07%. With a four-way comparison and how we measured.">
+<meta property="og:url" content="https://fibo.page/blog/why-gpui/">
+<meta property="og:image" content="https://fibo.page/blog/why-gpui/images/00-cover-en.webp">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1499ad">
+<link rel="icon" type="image/svg+xml" href="../../brand/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../../brand/favicon-32.png">
+<link rel="apple-touch-icon" href="../../brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="alternate" type="application/atom+xml" title="Fibo Blog" href="../feed.xml">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BlogPosting", "headline": "Why Fibo dropped Tauri + xterm.js and draws its terminals natively with GPUI + libghostty-vt", "description": "Fibo runs 40 coding-agent sessions in one window. The plan was Tauri + React + xterm.js; measured under the same load, the WebView used about 3.5x the memory of a native Ghostty, and alacritty_terminal needed 1.29 GiB for 40 sessions. Fibo now keeps terminal state in libghostty-vt (405 MiB, 66.5 MiB once idle sessions are compressed) and draws with GPUI on the GPU. The price: an idle GPUI window used 8x Ghostty's CPU until a GPUI patch we maintain brought it to 0.07%. With a four-way comparison and how we measured.", "image": "https://fibo.page/blog/why-gpui/images/00-cover-en.webp", "datePublished": "2026-11-28", "dateModified": "2026-11-28", "inLanguage": "en", "mainEntityOfPage": "https://fibo.page/blog/why-gpui/", "author": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/"}, "publisher": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/", "logo": {"@type": "ImageObject", "url": "https://fibo.page/brand/apple-touch-icon.png"}}}</script>
+<link rel="stylesheet" href="../post.css">
+
+<script>(()=>{const r=document.documentElement,k='fibo-landing-theme';try{r.dataset.theme=localStorage.getItem(k)==='dark'?'dark':'light';localStorage.setItem('fibo-landing-lang','en')}catch(e){}
+addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('themebtn');if(b)b.onclick=()=>{const t=r.dataset.theme==='dark'?'light':'dark';r.dataset.theme=t;try{localStorage.setItem(k,t)}catch(e){}}})})()</script>
+</head>
+<body>
+<section class="mast">
+<header class="nav"><div class="wrap">
+  <a class="logo" href="../../" aria-label="Fibo"><img src="../../brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a>
+  <nav class="links" aria-label="Main"><a href="../../#features">Features</a><a href="../../#start">Get started</a><a href="../../#faq">FAQ</a><a href="https://github.com/majiayu000/fibo/releases">Changelog</a><a class="on" href="../">Blog</a></nav>
+  <div class="right">
+    <button type="button" class="btn glass sm" id="themebtn" aria-label="Switch between light and dark">◐</button><a class="btn glass sm" href="zh.html" hreflang="zh-CN" lang="zh-CN">中文</a>
+    <a class="btn glass sm gh" href="https://github.com/majiayu000/fibo"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+    <a class="btn white sm" href="https://github.com/majiayu000/fibo/releases/latest">Download</a>
+  </div>
+</div></header>
+<div class="in">
+<span class="pill">Technical choices · November 2026</span>
+<h1>Why Fibo dropped Tauri + xterm.js and draws its terminals natively with GPUI + libghostty-vt</h1>
+<p class="lede">Fibo keeps up to 40 coding-agent sessions in one window. The plan was Tauri + React + xterm.js, with <code>alacritty_terminal</code> in the background. A day of measurements showed the WebView using about 3.5x the memory of a native Ghostty under the same load, and <code>alacritty_terminal</code> needing 1.29 GiB for 40 sessions, so <a href="../../">Fibo</a> keeps terminal state in <code>libghostty-vt</code> and draws the cells with GPUI directly on the GPU, at the cost of maintaining a GPUI patch set.</p>
+</div>
+</section>
+
+<main class="post">
+<blockquote><b>What Fibo is</b>: a native workbench for coding agents such as Claude Code and Codex, open source under MIT. Every session is a real terminal inside the window; a background process, <code>fibo serve</code>, owns all of them, so closing the window does not stop a session. Fibo used to be called Mooring, and before that Keepline; the evaluation below happened in the Keepline days. Install: <a href="https://github.com/majiayu000/fibo/releases/latest">download the DMG</a> or <code>brew install --cask majiayu000/tap/fibo</code>.</blockquote>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 290" role="img" aria-label="Timeline: tasker starts in December 2025, Keepline v1.1.4 in September 2026, on October 19 the terminal workbench is planned on Tauri and xterm.js, on October 20 the stack is measured and GPUI with libghostty-vt is chosen, the workbench moves into the current repository on November 2">
+  <path class="line" d="M20 145 L740 145"/>
+  <circle class="dot-done" cx="60" cy="145" r="7"/>
+  <text class="t left" x="20" y="62">2025-12-09</text>
+  <text class="s left" x="20" y="84">tasker begins</text>
+  <text class="s left" x="20" y="104">a Claude Code monitor</text>
+  <path class="line dash" d="M60 112 L60 136"/>
+
+  <circle class="dot-done" cx="160" cy="145" r="7"/>
+  <text class="t" x="160" y="186">2026-09-26</text>
+  <text class="s" x="160" y="208">Keepline v1.1.4</text>
+  <text class="s" x="160" y="228">Bun CLI + web dashboard</text>
+  <text class="s" x="160" y="248">+ Tauri menu bar</text>
+  <path class="line dash" d="M160 154 L160 170"/>
+
+  <circle class="dot-wait" cx="262" cy="145" r="7"/>
+  <text class="t" x="262" y="62">10-13</text>
+  <text class="s" x="262" y="84">73 sessions observed:</text>
+  <text class="s" x="262" y="104">~240 MB resident, 5 s scans</text>
+  <path class="line dash" d="M262 112 L262 136"/>
+
+  <circle class="dot-wait" cx="362" cy="145" r="7"/>
+  <text class="t" x="362" y="186">10-19, night</text>
+  <text class="s" x="362" y="208">terminal workbench planned</text>
+  <text class="s" x="362" y="228">on Tauri + React</text>
+  <text class="s" x="362" y="248">+ xterm.js + alacritty</text>
+  <path class="line dash" d="M362 154 L362 170"/>
+
+  <circle class="dot-wait" cx="455" cy="145" r="7"/>
+  <text class="t" x="455" y="62">10-20, 1 a.m.</text>
+  <text class="s" x="455" y="84">WebView control run</text>
+  <text class="bad-t c" x="455" y="104">~3.5x the memory</text>
+  <path class="line dash" d="M455 112 L455 136"/>
+
+  <circle class="dot-wait" cx="548" cy="145" r="7"/>
+  <text class="t" x="548" y="186">10-20, daytime</text>
+  <text class="s" x="548" y="208">VT libraries, 3 prototypes</text>
+  <text class="s" x="548" y="228">esctest, idle patch</text>
+  <path class="line dash" d="M548 154 L548 170"/>
+
+  <circle class="dot-run" cx="640" cy="145" r="9"/>
+  <text class="accent-t c" x="640" y="62">10-20, 16:23</text>
+  <text class="ok-t c" x="640" y="84">GPUI</text>
+  <text class="ok-t c" x="640" y="104">+ libghostty-vt</text>
+  <path class="line accent" d="M640 112 L640 134"/>
+
+  <circle class="dot-run" cx="715" cy="145" r="7"/>
+  <text class="t r" x="748" y="186">11-02</text>
+  <text class="s r" x="748" y="208">moves to this repo;</text>
+  <text class="s r" x="748" y="228">on 11-28 still on</text>
+  <text class="s r" x="748" y="248">the same GPUI</text>
+  <path class="line dash" d="M715 154 L715 170"/>
+</svg>
+<figcaption>Timeline, not to scale. The terminal workbench was decided on the night of October 19; the rendering stack was measured and settled the next day. Times are UTC+8; sources at the end.</figcaption>
+</figure>
+
+<nav class="toc" aria-label="Contents">
+  <a href="#s1">01 The target: 40 sessions, 4 panes, no heavier than 1.2x Ghostty</a>
+  <a href="#s2">02 The original plan: Tauri + React + xterm.js</a>
+  <a href="#s3">03 The WebView control: ~3.5x the memory, mostly in the GPU process</a>
+  <a href="#s4">04 Terminal state in the background: three VT libraries</a>
+  <a href="#s5">05 The window: three prototypes against Ghostty</a>
+  <a href="#s6">06 The surprise: idle GPUI used 8x Ghostty's CPU</a>
+  <a href="#s7">07 All four routes side by side</a>
+  <a href="#s8">08 Chinese input: the one hard gate</a>
+  <a href="#s9">09 The price: a patch set, a month later</a>
+  <a href="#limits">Limits: what was not measured</a>
+  <a href="#summary">Summary: three practices</a>
+</nav>
+
+<h2 id="s1">01 The target: 40 sessions, 4 panes, no heavier than 1.2x Ghostty</h2>
+
+<p>Fibo is for people who keep 10 to 40 Claude Code and Codex sessions open at once. The shape of the product was settled on the night of October 19: an app made for running and managing agents, where every session is a real terminal and the native CLI runs in the app's own PTY. The requirement, as it was put then, was "a high-performance terminal-type product".</p>
+
+<p>"High performance" first had to become something measurable. The work view is spaces, tabs, and 2 to 4 panes per tab, so the load became 40 sessions with 4 panes visible in one tab and the other 36 parsed in the background without being drawn. The budget is relative: on the same machine under the same load, the total must stay within 1.2x of Ghostty. Two absolute rules sit next to it: nothing renders while the window is hidden, and nothing polls while idle.</p>
+
+<p>The unit of measure cost us once. The first estimate used RSS from <code>ps</code>, which put a long-running Ghostty at 121 MB; <code>phys_footprint</code>, which counts GPU memory and compressed memory, put the same process at 800 MB. RSS misses exactly the parts a graphical program spends, so every number from then on is <code>phys_footprint</code>, with WebKit, XPC and GPU helper processes added to the measured set, and CPU is cumulative CPU time divided by wall-clock time.</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Item</th><th>Definition in the evaluation</th></tr></thead>
+<tbody>
+<tr><td>Load</td><td>40 sessions, 4 panes visible (2x2), 120x40 cells per pane; 1440x900 pt window, Menlo 12 pt</td></tr>
+<tr><td>Memory</td><td>Sum of <code>phys_footprint</code> over the measured process set, sampled every 5 s, median and peak</td></tr>
+<tr><td>CPU</td><td>Cumulative CPU time of the set divided by wall-clock time; 100% is one core</td></tr>
+<tr><td>Budget</td><td>At most 1.2x Ghostty on the same machine and load; when both sides use under 0.5% CPU it counts as noise</td></tr>
+<tr><td>Repeats</td><td>5 runs per cell in shuffled order, median reported; single first runs only set direction</td></tr>
+<tr><td>Workload</td><td>Synthetic output plus a real Codex recording: 250 s, 1.5 MB, 4223 synchronized-output frames with heavy cursor addressing and Chinese text</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="s2">02 The original plan: Tauri + React + xterm.js</h2>
+
+<p>The previous generation of Keepline was a Bun CLI, a web dashboard and a Tauri menu-bar app, released up to v1.1.4. The terminal-workbench spec written on October 19 continued that stack. Its two key decisions:</p>
+
+<ul>
+  <li><b>D01</b>: the app is the main entry point and stays on Tauri + React, reusing the existing workbench UI, menu bar and notifications.</li>
+  <li><b>D03</b>: a Rust background process parses the PTY with <code>alacritty_terminal</code> and owns the authoritative terminal state; the window shows a mirror of it in xterm.js, borrowing xterm.js's input, drawing, selection and IME support.</li>
+</ul>
+
+<p>The spec itself called D03 "the highest-risk point of the plan": the background would have to re-encode alacritty's state as VT sequences xterm.js can consume, with snapshots covering both screens, scroll regions, graphemes, the cursor and every input mode, and there was no serialization API to start from.</p>
+
+<p>The background had its own problem. Keepline's Bun service held about 240 MB of data while watching only 73 sessions, and rescanned every 5 seconds; the Bun runtime itself was about 22 MB, so the weight came from keeping the data in memory and polling. That holds whatever draws the window, so it was settled first: everything resident moves into one Rust background process, transcripts are read incrementally from an offset and driven by events, and Bun no longer stays running.</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 380" role="img" aria-label="Architecture before and after: on the left, React and an xterm.js mirror in a WebView, through a Tauri bridge, to an alacritty background and a Bun service; on the right, a GPUI window that parses only visible panes and draws cells on the GPU, over a Unix socket to one Rust background process, fibo serve">
+  <text class="h" x="190" y="34">Original plan (10-19 spec)</text>
+  <rect class="badbox" x="30" y="52" width="320" height="86" rx="10"/>
+  <text class="t" x="190" y="80">WebView: React UI</text>
+  <text class="s" x="190" y="102">one xterm.js per visible pane (a mirror)</text>
+  <text class="s" x="190" y="122">WebKit web process + GPU process</text>
+  <rect class="soft" x="30" y="156" width="320" height="44" rx="8"/>
+  <text class="t" x="190" y="184">Tauri Rust bridge (Channel)</text>
+  <rect class="box" x="30" y="218" width="152" height="120" rx="10"/>
+  <text class="t" x="106" y="246">keeplined</text>
+  <text class="s" x="106" y="270">PTY</text>
+  <text class="s" x="106" y="290">alacritty_terminal</text>
+  <text class="s" x="106" y="310">state → VT bytes</text>
+  <rect class="box" x="198" y="218" width="152" height="120" rx="10"/>
+  <text class="t" x="274" y="246">Bun service</text>
+  <text class="s" x="274" y="270">transcripts, hooks</text>
+  <text class="s" x="274" y="290">SQLite</text>
+  <text class="s" x="274" y="310">rescans every 5 s</text>
+  <path class="line" d="M190 138 L190 156"/>
+  <path class="line" d="M190 200 L190 218"/>
+
+  <text class="h" x="570" y="34">Chosen (10-20)</text>
+  <rect class="box accent-box" x="410" y="52" width="320" height="106" rx="10"/>
+  <text class="t" x="570" y="80">GPUI window (Rust)</text>
+  <text class="s" x="570" y="102">UI, tabs, splits, overview cards</text>
+  <text class="s" x="570" y="122">libghostty-vt for the ≤ 4 visible panes only</text>
+  <text class="ok-t c" x="570" y="144">cells drawn directly on the GPU</text>
+  <rect class="soft" x="410" y="176" width="320" height="44" rx="8"/>
+  <text class="t" x="570" y="204">Unix socket: snapshot first, then bytes</text>
+  <rect class="box accent-box" x="410" y="238" width="320" height="100" rx="10"/>
+  <text class="t" x="570" y="266">fibo serve (one Rust process)</text>
+  <text class="s" x="570" y="290">PTYs, libghostty-vt for all 40 sessions</text>
+  <text class="s" x="570" y="310">incremental transcripts, hooks, SQLite, no polling</text>
+  <path class="line accent" d="M570 158 L570 176"/>
+  <path class="line accent" d="M570 220 L570 238"/>
+</svg>
+<figcaption>D03 on the left keeps two VT implementations in sync. On the right both ends run the same engine, and the client parses again only for the panes you can see.</figcaption>
+</figure>
+
+<h2 id="s3">03 The WebView control: ~3.5x the memory, mostly in the GPU process</h2>
+
+<p>To find the floor of the WebView route, we first wrote a minimal macOS test program: xterm.js 6 inside the system WKWebView, fed the same output (mixed Chinese and English, colored) as a freshly started Ghostty with its own config, both measured with <code>phys_footprint</code>.</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Scenario</th><th>Memory (phys_footprint)</th><th>CPU</th></tr></thead>
+<tbody>
+<tr><td>Ghostty, 1 window, 400 KiB/s</td><td>289 MiB</td><td>14%</td></tr>
+<tr><td>WebView + xterm.js (WebGL), 1 pane, 400 KiB/s</td><td><b>1029 MiB</b>, 3.56x</td><td>15%</td></tr>
+<tr><td>WebView + xterm.js (WebGL), 4 panes at 100 KiB/s each</td><td>742 MiB, of which the WebKit GPU process 466 MiB</td><td>23%</td></tr>
+<tr><td>WebView + xterm.js (DOM renderer), 4 panes at 100 KiB/s</td><td>452 MiB</td><td>128%, dropped frames</td></tr>
+<tr><td>WebView window minimized, 4 panes at 100 KiB/s</td><td>not recorded</td><td>0.3%</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>CPU was about even; memory was not, and the growth was in WebKit's GPU process. That comes from WebKit's process model, not from xterm.js, so one WebView per pane and several WebGL contexts in one WebView both hit it. The DOM renderer saves memory and spends 128% CPU instead. Minimized, CPU fell to 0.3%, so WebKit throttles content you cannot see; that went onto every candidate's correctness list, since a native route has to stop drawing when hidden too.</p>
+
+<p>These were single runs, not five. The evaluation notes why that was enough: a 3.5x gap dwarfs any plausible measurement noise, and a 1.2x memory budget cannot be met from there, so more runs could not change the answer. The WebView route was rejected at this step, and D01 and D03 with it.</p>
+
+<h2 id="s4">04 Terminal state in the background: three VT libraries</h2>
+
+<p>The background has to hold the screen and scrollback of 40 sessions and hand the current screen over in full whenever a window reconnects. The evaluation did not pick a whole terminal; it split the stack into 10 layers (PTY, VT parsing and state, Unicode, fonts, GPU rendering, IME and keyboard, scrollback, the session-sharing protocol, the UI framework, ready-made terminal widgets) and recorded 99 entries: 69 candidates and 30 references. Three VT libraries reached measurement: <code>libghostty-vt</code> (through the <code>libghostty-rs</code> bindings), the original plan's <code>alacritty_terminal</code> 0.26.0, and <code>rio-vt</code> 0.5.28.</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 340" role="img" aria-label="Memory bar chart. Window process, one pane at 400 KiB/s: WebView 1029 MiB, Ghostty 289 MiB. Background, 40 sessions with 10,000 lines each: alacritty_terminal 1.29 GiB, rio-vt 427 MiB, libghostty-vt 405 MiB, 66.5 MiB after compression">
+  <text class="gh" x="24" y="36">WINDOW PROCESS · 1 PANE · 400 KiB/s OUTPUT</text>
+  <text class="row" x="24" y="66">WebView + xterm.js</text>
+  <rect class="bar0" x="230" y="50" width="356" height="24" rx="4"/>
+  <text class="v" x="594" y="67">1029 MiB</text>
+  <text class="row" x="24" y="100">Ghostty (reference)</text>
+  <rect class="bar1" x="230" y="84" width="100" height="24" rx="4"/>
+  <text class="v" x="338" y="101">289 MiB</text>
+
+  <text class="gh" x="24" y="152">BACKGROUND · 40 SESSIONS × 10,000 LINES (120 COLUMNS, REAL TEXT)</text>
+  <text class="row" x="24" y="182">alacritty_terminal</text>
+  <rect class="bar0" x="230" y="166" width="447" height="24" rx="4"/>
+  <text class="v" x="685" y="183">1.29 GiB</text>
+  <text class="row" x="24" y="216">rio-vt</text>
+  <rect class="bar1" x="230" y="200" width="148" height="24" rx="4"/>
+  <text class="v" x="386" y="217">427 MiB</text>
+  <text class="row" x="24" y="250">libghostty-vt</text>
+  <rect class="bar2" x="230" y="234" width="140" height="24" rx="4"/>
+  <text class="v" x="378" y="251">405 MiB</text>
+  <text class="row" x="24" y="284">libghostty-vt, compressed</text>
+  <rect class="bar2" x="230" y="268" width="23" height="24" rx="4"/>
+  <text class="v" x="261" y="285">66.5 MiB</text>
+
+  <rect class="bar0" x="24" y="314" width="14" height="10" rx="2"/><text class="s left" x="44" y="324">rejected</text>
+  <rect class="bar1" x="110" y="314" width="14" height="10" rx="2"/><text class="s left" x="130" y="324">reference / fallback</text>
+  <rect class="bar2" x="270" y="314" width="14" height="10" rx="2"/><text class="s left" x="290" y="324">chosen</text>
+</svg>
+<figcaption>One scale for all bars. The top two are single runs; the bottom four are 5 runs each with 0% spread. Compression is libghostty-vt's LZ4 idle compression, about 0.05 s for all 40 sessions.</figcaption>
+</figure>
+
+<div class="table">
+<table>
+<thead><tr><th>Metric (median of 5)</th><th>libghostty-vt</th><th>alacritty_terminal</th><th>rio-vt</th></tr></thead>
+<tbody>
+<tr><td>Empty session, each</td><td>0.025 MiB</td><td>0.27 MiB</td><td>0.11 MiB</td></tr>
+<tr><td>10,000 lines of history, per session</td><td>9.8 MiB</td><td>32 MiB</td><td>10.3 MiB</td></tr>
+<tr><td>40 sessions, whole process</td><td><b>405 MiB</b></td><td>1.29 GiB</td><td>427 MiB</td></tr>
+<tr><td>After idle compression</td><td><b>66.5 MiB</b></td><td>none</td><td>none</td></tr>
+<tr><td>Snapshot (10,000 lines)</td><td>full: 6.8 MB, encode 2.3 ms, restore 5.0 ms, first screen drawable after 0.09 ms</td><td>not supported</td><td>visible screen only, drops combining marks</td></tr>
+<tr><td>esctest2 passes (of 567)</td><td><b>147</b></td><td>101</td><td>101</td></tr>
+<tr><td>Parsing the real Codex recording</td><td><b>4.3 ns/byte</b></td><td>4.58</td><td>4.61</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>A few details:</p>
+
+<ul>
+  <li><b>esctest's absolute failure counts are high</b>: esctest2 treats xterm as the reference and reads screen contents through DECRQCRA checksums, which none of the three support, so only the relative gap means anything. alacritty and rio fail 59 more tests than Ghostty (DECRQM, DECRQSS, cursor movement under DECLRMM left/right margins and more); the reverse is 14. rio and alacritty fail exactly the same set, since rio's terminal core derives from alacritty.</li>
+  <li><b>One finding was overturned</b>: on a synthetic TUI load of random true colors, libghostty-vt parsed 1.9x slower than alacritty. Rerun on the real Codex recording, the three were within 7% of each other and libghostty-vt was fastest. The slowdown came from the load: a random 24-bit color per line keeps growing the style table, which real TUIs do not do. The finding was struck; the raw data stays.</li>
+  <li><b>Parsing CPU does not separate them</b>: the worst case, 4 panes at 100 KiB/s each, costs about 0.5% of one core.</li>
+</ul>
+
+<p>The decision record lists libghostty-vt's costs too: upstream has no releases and the snapshot API lives only on main, so it is pinned to a commit; the bindings are maintained by one person; the build pulls in the Zig 0.16 toolchain, and Cargo's debug profile builds the Zig part in Debug unless <code>LIBGHOSTTY_VT_SYS_OPTIMIZE=ReleaseFast</code> is set; it statically includes simdutf, so it cannot be linked into one binary with rio-vt, which does the same; and mode 2027 has to be turned on for grapheme widths to match Ghostty.app.</p>
+
+<h2 id="s5">05 The window: three prototypes against Ghostty</h2>
+
+<p>With libghostty-vt chosen for the background, the window was next. A minimal session-sharing prototype, <code>kl-relay</code>, sat between them (40 idle sessions: 35 MiB, 0.13% CPU), and three client prototypes connected to it:</p>
+
+<ul>
+  <li><b>P1</b>: GPUI + alacritty_terminal, as the control. GPUI is the Rust UI framework of the Zed editor, pinned at Zed v1.24.3.</li>
+  <li><b>P2</b>: Swift + GhosttyKit (libghostty-spm), using Ghostty's complete terminal widget for each pane.</li>
+  <li><b>P3</b>: GPUI + libghostty-vt: the same VT engine as the background, with GPUI drawing the cells.</li>
+</ul>
+
+<p>The first batch of 3 runs was thrown out. macOS does not promise to bring a GUI program launched from the command line without an app bundle to the front; once its window is covered, GPUI and GhosttyKit both stop rendering, and the same scenario split into two clusters, for example P2 idle at 284 MiB once and 58 MiB another time. From then on the test windows used a floating window level, and any run with load but zero frames, or under 1% CPU, was marked invalid automatically. The 5 valid runs:</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Client</th><th>1 pane, real Codex: memory / CPU</th><th>Idle: memory / CPU</th><th>4 panes, real Codex</th><th>4 panes, synthetic 100 KiB/s</th></tr></thead>
+<tbody>
+<tr><td>Ghostty.app (reference)</td><td>316 MiB / 9.8%</td><td>76 MiB / 0.10%</td><td>not measured</td><td>not measured</td></tr>
+<tr><td>P1 GPUI + alacritty</td><td>287 MiB / 5.4%</td><td>42 MiB / <b>0.80%</b></td><td>327 MiB / 11.2%</td><td>448 MiB / 20.6%</td></tr>
+<tr><td>P2 Swift + GhosttyKit</td><td>296 MiB / 3.4%</td><td>58 MiB / 0.07%</td><td>377 MiB / 8.3%</td><td>536 MiB / 39.3%</td></tr>
+<tr><td>P3 GPUI + libghostty-vt</td><td>288 MiB / 5.9%</td><td>42 MiB / <b>0.86%</b></td><td>328 MiB / 13.2%</td><td>374 MiB / 23.7%</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>With one pane of real Codex output all three prototypes were within budget: GPUI used 0.91x Ghostty.app's memory and 0.55 to 0.60x its CPU, with p95 frame times of 1.6 to 1.9 ms and no frame over 16.7 ms. P1 and P3 were nearly identical, so the client's VT engine did not separate them; the framework did. With output, GPUI grew from 42 MiB idle to 287 MiB and Ghostty.app from 76 to 316, probably Metal frame buffers and glyph atlases, which were not broken down at the time.</p>
+
+<p>The idle column is where GPUI missed: a GPUI window drawing nothing still used 0.8% CPU.</p>
+
+<h2 id="s6">06 The surprise: idle GPUI used 8x Ghostty's CPU</h2>
+
+<p>0.80% against 0.10% is 8x Ghostty.app, above the 0.5% noise line. Reading the source and a <code>sample</code> profile showed why. In GPUI's macOS backend, while a window is visible a <code>CVDisplayLink</code> wakes it on every screen refresh to check <code>invalidator.is_dirty()</code>, whether or not anything needs drawing, and it only stops when the window is covered. Four panes in one window share a single display link, but that link never sleeps.</p>
+
+<p>The fix was a GPUI patch: after a number of vsyncs with no new draw request, stop the display link; the moment the window is marked dirty, start it again so the next vsync draws. The core of the patch, simplified (locking and field setup removed):</p>
+
+<pre><code>// at the end of every vsync callback
+if pause_idle {
+    if frame_demand {
+        idle_frames = 0;
+    } else {
+        idle_frames += 1;
+        if idle_frames &gt;= idle_frames_limit {
+            stop_display_link();
+            paused_for_idle = true;
+        }
+    }
+}
+
+// when the window is marked dirty (the new frame_waker)
+frame_demand = true;
+idle_frames = 0;
+if paused_for_idle {
+    paused_for_idle = false;
+    start_display_link();
+}</code></pre>
+
+<p>The threshold matters. The first version paused after 3 frames: idle CPU dropped, and 4 panes of bursty output got worse.</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Scenario (P3, median of 5)</th><th>Unpatched</th><th>Patched, 3-frame threshold + 60 fps cap</th></tr></thead>
+<tbody>
+<tr><td>Idle CPU</td><td>0.86%</td><td><b>0.07%</b> (0.70x Ghostty.app)</td></tr>
+<tr><td>1 pane, real Codex, CPU</td><td>5.9%</td><td>7.4%</td></tr>
+<tr><td>4 panes, real Codex, CPU</td><td>13.2%</td><td>17.1%</td></tr>
+<tr><td>4 panes, real Codex, frame rate</td><td>34 fps</td><td>48 fps</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Agent output arrives in bursts. The display link kept stopping and restarting, and each restart drew a frame right away, splitting redraws that vsync used to merge into several frames. The 60 fps cap did nothing because the rate never reached 60. The direction worked; the threshold needed to be longer. It became the environment variable <code>GPUI_PAUSE_IDLE_FRAMES</code>, defaulting to 60 frames, about 0.5 s on a 120 Hz display. The 0.5 s setting had not been measured when the decision was made.</p>
+
+<div class="tip">
+<p><b>Comparing terminals yourself, with or without Fibo</b>:</p>
+<ul>
+  <li>Read memory as <code>phys_footprint</code> with <code>footprint</code>, not RSS from <code>ps</code>; for a WebView include helpers such as <code>com.apple.WebKit.GPU</code>.</li>
+  <li>Take CPU as the difference in cumulative CPU time over wall-clock time, not an instantaneous <code>top</code> reading.</li>
+  <li>Keep the window under test in front and uncovered; many frameworks stop drawing a covered window, and you measure a false low.</li>
+  <li>Start the reference terminal as a fresh instance with its own config (for Ghostty, <code>--config-default-files=false</code>), not the one you use all day with many windows open.</li>
+</ul>
+<pre><code># phys_footprint of one process at this moment, in bytes
+footprint -f bytes -p &lt;pid&gt;</code></pre>
+</div>
+
+<h2 id="s7">07 All four routes side by side</h2>
+
+<figure>
+<div class="table">
+<table>
+<thead><tr><th></th><th>Tauri + xterm.js</th><th>P1 GPUI + alacritty</th><th>P2 Swift + GhosttyKit</th><th>P3 GPUI + libghostty-vt</th></tr></thead>
+<tbody>
+<tr><td>Memory</td><td>1029 MiB *</td><td>287 MiB</td><td>296 MiB</td><td>288 MiB</td></tr>
+<tr><td>CPU</td><td>15% *</td><td>5.4%</td><td><b>3.4%</b></td><td>5.9%</td></tr>
+<tr><td>Idle</td><td>0.3% when minimized</td><td>42 MiB / 0.80%</td><td>58 MiB / 0.07%</td><td>42 MiB / 0.86%, 0.07% patched</td></tr>
+<tr><td>4 panes, real Codex</td><td>not measured</td><td>327 MiB / 11.2%</td><td>377 MiB / 8.3%</td><td>328 MiB / 13.2%</td></tr>
+<tr><td>esctest2 passes</td><td>101 (alacritty in the background)</td><td>101</td><td>147</td><td><b>147</b></td></tr>
+<tr><td>Chinese input</td><td>built into xterm.js, not tested</td><td>GPUI's IME interface, not tested</td><td>built into GhosttyKit, not tested</td><td>passed a hand test on the first build's day</td></tr>
+<tr><td>Upkeep</td><td>reuses the Tauri code; needs a hand-written alacritty → xterm.js state mirror</td><td>GPUI patches; 1.29 GiB for 40 sessions in the background, no snapshots</td><td>the client carries its own full VT state; 536 MiB / 39% on 4 synthetic panes</td><td>a GPUI patch set to maintain; two dependencies pinned to commits; Zig in the build</td></tr>
+<tr><td>Verdict</td><td>rejected: 3.56x memory, in the GPU process</td><td>control</td><td>fallback</td><td><b>chosen</b></td></tr>
+</tbody>
+</table>
+</div>
+<figcaption>P1 to P3: one pane of the real Codex recording, median of 5; Ghostty.app measured 316 MiB / 9.8%. * Different load: one pane of synthetic output at 400 KiB/s, a single run; Ghostty in the same batch measured 289 MiB / 14%.</figcaption>
+</figure>
+
+<p>P2 had the lowest single-pane CPU, so why P3? Each route had one item that failed or was unknown: GPUI's idle CPU missed the line and needed a patch; P2 used the most resources under heavy 4-pane output, 15% more memory than GPUI on real Codex. The 4-pane Ghostty baseline was never measured, so neither could be judged against 1.2x. What decided it was structure:</p>
+
+<ul>
+  <li><b>One engine at both ends</b>: the background already keeps all state in libghostty-vt. P3's client parses again only for the 2 to 4 visible panes and attaches from a libghostty-vt snapshot, with no second implementation to keep in step.</li>
+  <li><b>All Rust</b>: background, protocol and window share types and code under one <code>cargo</code> toolchain. GPUI also has a Linux backend, and Fibo's <code>Cargo.toml</code> enables its x11 and wayland features on Linux.</li>
+  <li><b>The UI is ours to write anyway</b>: overview cards and status bars have to be built either way, and GPUI's input handling (<code>NSTextInputClient</code>, with <code>bounds_for_range</code> placing the candidate window) was the most complete among the open frameworks; winit-based frameworks give the IME a single cursor rectangle.</li>
+</ul>
+
+<p>On the afternoon of October 20 the testing stopped at the patch rerun, and the route was set as GPUI + libghostty-vt. Swift + GhosttyKit stayed as the fallback, with three written conditions, any one of which would reopen the question: an item on the Chinese input checklist fails and cannot be fixed within one iteration; the idle patch cannot be maintained (upstream reworks the display link and the patch has no replacement), or no threshold gives both idle ≤ 0.5% and unharmed 4-pane bursts; or a 4-pane baseline shows GPUI over 1.2x while P2 is not.</p>
+
+<h2 id="s8">08 Chinese input: the one hard gate</h2>
+
+<p>When the route was chosen, none of the input-method checks had run; the prototypes had no IME at all. It was the only gate the evaluation called hard, and Zed had two open Chinese IME issues at the time (<a href="https://github.com/zed-industries/zed/issues/59882">zed#59882</a>, intermittent failure; <a href="https://github.com/zed-industries/zed/issues/53537">zed#53537</a>, shortcuts failing under third-party IMEs). So the first real build had to pass it the same day, or the plan would switch to P2.</p>
+
+<p>How the first build does it: text being composed (marked text) lives only in the window's memory and never enters the PTY; it is drawn at the terminal cursor with an underline, and the terminal's own block cursor is hidden meanwhile. The candidate window's position comes from <code>bounds_for_range</code>, which uses the same measured font metrics as drawing and PTY resizing, with ranges converted as UTF-16 so surrogate pairs are never split. Measured Menlo cells were 7.525635 × 20 px; a Chinese character's advance was 15.051269 px against 15.051270 px for two cells, so wide characters align to two cells with no gap between them.</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Input check (10-20)</th><th>Result</th><th>How it was checked</th></tr></thead>
+<tbody>
+<tr><td>Candidate window hugs the terminal cursor</td><td>pass</td><td>hand test with a third-party pinyin IME, real <code>cat</code> in the window</td></tr>
+<tr><td>After switching between two panes, pinyin goes to the focused one</td><td>pass</td><td>same</td></tr>
+<tr><td>A chosen word is committed once, nothing left over</td><td>pass</td><td>automated keystrokes n/i/h/a/o then Space, checked by screenshot</td></tr>
+<tr><td>Return commits Latin letters; Backspace during composition only removes pinyin</td><td>pass</td><td>same</td></tr>
+<tr><td>Spacing of Chinese, Japanese and Korean output</td><td>pass</td><td>screenshot of a real window</td></tr>
+<tr><td>Ctrl-C exits <code>cat</code></td><td><b>fail</b></td><td>hand test; filed as a key-encoding bug and fixed in the next round</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The gate was passed and the fallback was not triggered. The record also states what was not covered: the full path with Apple's built-in pinyin got no valid evidence from the automated round (keys reached the window, but the system IME did not take over). Choosing words, Return and Backspace had been confirmed by hand in an earlier round, and the candidate window and pane switching were hand-tested with a third-party pinyin IME.</p>
+
+<h2 id="s9">09 The price: a patch set, a month later</h2>
+
+<p>Choosing GPUI meant maintaining patches from the start. As of November 28, Fibo is still pinned to the versions the evaluation used, Zed <code>v1.24.3</code> (<code>2a857f5</code>) and libghostty-rs <code>0ef8041</code>, fetched and patched in order by <code>bootstrap.sh</code>. The one patch from the evaluation has become six:</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Patch</th><th>What it does</th><th>Lines</th></tr></thead>
+<tbody>
+<tr><td><code>gpui-idle</code></td><td>the idle display-link pause above; Fibo turns it on at startup (<code>GPUI_PAUSE_IDLE_DISPLAY_LINK=1</code>)</td><td>89</td></tr>
+<tr><td><code>gpui-retained-backbuffer</code></td><td>keeps the back buffer and redraws only what changed between frames, so a spinner repaints a few cells</td><td>820</td></tr>
+<tr><td><code>gpui-present-render-pass</code></td><td>copies the back buffer to the screen with a render pass instead of a blit: window graphics memory 408.4 → 248.4 MB, total about 570 → 385 MB</td><td>110</td></tr>
+<tr><td><code>gpui-retained-group-rects</code></td><td>merges several damaged regions into one Metal render pass</td><td>189</td></tr>
+<tr><td><code>gpui-fit-truncated-row</code></td><td>adds an ellipsis when text is cut off</td><td>107</td></tr>
+<tr><td><code>gpui-glyph-dilation</code></td><td>lets a run of text use a fixed glyph dilation instead of the color-based default; one place in Fibo's terminal drawing uses it to turn thickening off</td><td>47</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The six patch files add up to 1362 lines, most of it the retained back buffer. <code>present-render-pass</code> is a typical case: the first time a process used a blit, the Metal driver kept 20 extra 8 MB buffers and never returned them while the window kept drawing, and a minimal Metal program of a few dozen lines did the same. With a render pass instead, the screen buffer and back buffer matched byte for byte over 194 frames of a real window. Problems like this can be fixed at our own layer only because the framework is ours to patch; the cost is that every GPUI upgrade means reworking all six patches, which is why there has not been one.</p>
+
+<p>To keep later changes from quietly undoing this, window redraw cost now has a CI gate: on real hardware it compares retired instructions per frame with a baseline and fails above 15% (CI's virtual machines cannot read instruction counts and fall back to ratio checks). Details are in the repository's <code>docs/performance/</code>.</p>
+
+<h2 id="limits">Limits: what was not measured</h2>
+
+<ul>
+  <li><b>No 4-pane Ghostty baseline</b>: splitting Ghostty.app into 4 panes needed automation permission and never happened. Whether 4 GPUI panes stay within 1.2x was unknown when the evaluation ended.</li>
+  <li><b>No GPU time, power or input latency</b>: the power script was written but not run; input latency only has a method.</li>
+  <li><b>No real recording of Claude Code's full-screen redraws</b>: only Codex was recorded; Claude Code's full-screen redraw exists only as a synthetic load.</li>
+  <li><b>The 0.5 s idle threshold</b>: not measured at decision time, and we found no later rerun under bursty 4-pane output for this post.</li>
+  <li><b>The WebView runs were single</b>: one run and one sample per scenario. At 3.5x the direction will not change, but the exact numbers carry error.</li>
+  <li><b>The machine was busy</b>: the evaluation's own rule voids a batch when the 1-minute load average exceeds 4; during measurement it was 8 to 26. Ratios were computed within a batch and CPU is cumulative, but absolute values run high.</li>
+  <li><b>The raw data is not public</b>: the evaluation's <code>results/</code>, prototypes and scripts are in local commits of the old repository; the numbers here come from its summary tables and decision records.</li>
+</ul>
+
+<h2 id="summary">Summary: three practices</h2>
+
+<ul>
+  <li><b>Turn "high performance" into a relative budget first</b>: at most 1.2x Ghostty on the same machine and load, with memory counted only as <code>phys_footprint</code>. That rule rejected the WebView route on a single pair of numbers, 1029 against 289 MiB.</li>
+  <li><b>Measure by layer, and pick the background and the window separately</b>: 10 layers, 99 entries. libghostty-vt won the background on 405 MiB against 1.29 GiB, 66.5 MiB after compression and full snapshots; GPUI won the window on 0.91x memory and 0.55 to 0.60x CPU for one pane. The synthetic "1.9x slower" result was struck after a rerun on a real recording.</li>
+  <li><b>A framework you can patch is one you keep patching</b>: an 89-line patch took idle CPU from 0.8% to 0.07%; a month later there are 6 patches and 1362 lines, and GPUI is still pinned at v1.24.3. Chinese input was a hard gate with Swift kept as the fallback, and the first build passed it the same day.</li>
+</ul>
+
+<nav class="pn" aria-label="More posts"><a class="pn-card" href="../waiting-for-you/"><span class="eyebrow">Previous post</span><b>How Fibo knows an agent is waiting for you, without changing the agent</b></a></nav>
+<footer class="end">
+  <p>Fibo is open source (MIT). The GPUI patches are in the repository's <code>patches/</code>, fetched and applied by <code>bootstrap.sh</code>; all the code is on <a href="https://github.com/majiayu000/fibo">GitHub</a>.</p>
+  <p><a href="../">← All posts</a> · <a href="../../">Back to fibo.page</a></p>
+</footer>
+</main>
+
+<footer><div class="wrap">
+  <div class="fcols">
+    <div><a class="logo" href="../../" aria-label="Fibo"><img src="../../brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a><p>A native macOS workbench for running many coding agents at once. Open source, MIT licensed.</p><a class="btn white sm" style="margin-top:22px" href="https://github.com/majiayu000/fibo/releases/latest">Download</a></div>
+    <div><h4>Product</h4><ul><li><a href="../../#features">Features</a></li><li><a href="../../#start">Get started</a></li><li><a href="https://github.com/majiayu000/fibo/releases">Changelog</a></li><li><a href="../">Blog</a></li></ul></div>
+    <div><h4>Resources</h4><ul><li><a href="https://github.com/majiayu000/fibo#readme">Documentation</a></li><li><a href="../../#faq">FAQ</a></li><li><a href="https://github.com/majiayu000/fibo/issues">Report a problem</a></li></ul></div>
+    <div><h4>Project</h4><ul><li><a href="https://github.com/majiayu000/fibo">GitHub</a></li><li><a href="https://github.com/majiayu000/fibo/blob/main/LICENSE">License</a></li><li><a href="https://github.com/majiayu000/homebrew-tap">Homebrew tap</a></li></ul></div>
+  </div>
+  <div class="legal"><span>© 2026 Fibo. MIT licensed.</span><span class="formula">Fₙ = Fₙ₋₁ + Fₙ₋₂ · 1, 1, 2, 3, 5, 8, 13, 21 …</span><span>fibo.page</span></div>
+</div></footer>
+</body>
+</html>

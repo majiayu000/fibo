@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fibo’s performance gate: count retired instructions, not CPU time, and what sidebar redraws cost · Fibo Blog</title>
+<meta name="description" content="The same frame’s CPU time moves 2.5x with machine load; its retired instructions move under 1%. So Fibo’s performance gate holds instructions to a 15% budget on real hardware and falls back to a same-process ratio on GitHub’s macOS VMs, which count no instructions. With every step that took a terminal frame from 74.3 M instructions to 4.52 M, ten rules, and measurements from Nov 28.">
+<link rel="canonical" href="https://fibo.page/blog/perf-gate/">
+<link rel="alternate" hreflang="en" href="https://fibo.page/blog/perf-gate/">
+<link rel="alternate" hreflang="zh-CN" href="https://fibo.page/blog/perf-gate/zh.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Fibo">
+<meta property="og:title" content="Fibo’s performance gate: count retired instructions, not CPU time, and what sidebar redraws cost">
+<meta property="og:description" content="The same frame’s CPU time moves 2.5x with machine load; its retired instructions move under 1%. So Fibo’s performance gate holds instructions to a 15% budget on real hardware and falls back to a same-process ratio on GitHub’s macOS VMs, which count no instructions. With every step that took a terminal frame from 74.3 M instructions to 4.52 M, ten rules, and measurements from Nov 28.">
+<meta property="og:url" content="https://fibo.page/blog/perf-gate/">
+<meta property="og:image" content="https://fibo.page/blog/perf-gate/images/00-cover-en.webp">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1499ad">
+<link rel="icon" type="image/svg+xml" href="../../brand/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../../brand/favicon-32.png">
+<link rel="apple-touch-icon" href="../../brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="alternate" type="application/atom+xml" title="Fibo Blog" href="../feed.xml">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BlogPosting", "headline": "Fibo’s performance gate: count retired instructions, not CPU time, and what sidebar redraws cost", "description": "The same frame’s CPU time moves 2.5x with machine load; its retired instructions move under 1%. So Fibo’s performance gate holds instructions to a 15% budget on real hardware and falls back to a same-process ratio on GitHub’s macOS VMs, which count no instructions. With every step that took a terminal frame from 74.3 M instructions to 4.52 M, ten rules, and measurements from Nov 28.", "image": "https://fibo.page/blog/perf-gate/images/00-cover-en.webp", "datePublished": "2026-11-28", "dateModified": "2026-11-28", "inLanguage": "en", "mainEntityOfPage": "https://fibo.page/blog/perf-gate/", "author": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/"}, "publisher": {"@type": "Organization", "name": "Fibo", "url": "https://fibo.page/", "logo": {"@type": "ImageObject", "url": "https://fibo.page/brand/apple-touch-icon.png"}}}</script>
+<link rel="stylesheet" href="../post.css">
+
+<script>(()=>{const r=document.documentElement,k='fibo-landing-theme';try{r.dataset.theme=localStorage.getItem(k)==='dark'?'dark':'light';localStorage.setItem('fibo-landing-lang','en')}catch(e){}
+addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('themebtn');if(b)b.onclick=()=>{const t=r.dataset.theme==='dark'?'light':'dark';r.dataset.theme=t;try{localStorage.setItem(k,t)}catch(e){}}})})()</script>
+</head>
+<body>
+<section class="mast">
+<header class="nav"><div class="wrap">
+  <a class="logo" href="../../" aria-label="Fibo"><img src="../../brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a>
+  <nav class="links" aria-label="Main"><a href="../../#features">Features</a><a href="../../#start">Get started</a><a href="../../#faq">FAQ</a><a href="https://github.com/majiayu000/fibo/releases">Changelog</a><a class="on" href="../">Blog</a></nav>
+  <div class="right">
+    <button type="button" class="btn glass sm" id="themebtn" aria-label="Switch between light and dark">◐</button><a class="btn glass sm" href="zh.html" hreflang="zh-CN" lang="zh-CN">中文</a>
+    <a class="btn glass sm gh" href="https://github.com/majiayu000/fibo"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+    <a class="btn white sm" href="https://github.com/majiayu000/fibo/releases/latest">Download</a>
+  </div>
+</div></header>
+<div class="in">
+<span class="pill">Engineering · November 2026</span>
+<h1>Fibo’s performance gate: count retired instructions, not CPU time, and what sidebar redraws cost</h1>
+<p class="lede">While an agent prints, the window draws a frame for every line, yet the same frame’s CPU time moves 2.5x with machine load, so a gate on it either cries wolf or sleeps. Retired instructions for the same frame move less than 1% across loads, so Fibo’s gate holds them to a 15% budget on real hardware and checks a same-process ratio on CI virtual machines, which count none. With that ruler, a terminal output frame went from 74.3 M instructions to 4.52 M, most of it saved in the sidebar.</p>
+</div>
+</section>
+
+<main class="post">
+<blockquote><b>What Fibo is</b>: a native Mac workbench for coding agents such as Claude Code and Codex, open source (MIT), written in Rust with GPUI and libghostty-vt. Sessions are in a sidebar on the left, terminals on the right. Every time an agent prints, the terminal draws a frame, so what one frame costs decides how much CPU the window takes. Install: <a href="https://github.com/majiayu000/fibo/releases/latest">download the DMG</a>, or <code>brew install --cask majiayu000/tap/fibo</code>.</blockquote>
+
+<nav class="toc" aria-label="Contents">
+  <a href="#s1">01 The problem: CPU time is not a ruler</a>
+  <a href="#s2">02 What we count: retired instructions per frame</a>
+  <a href="#s3">03 The gate: instructions on hardware, a ratio on VMs</a>
+  <a href="#s4">04 What sidebar redraws cost</a>
+  <a href="#s5">05 Ten rules that came out of it</a>
+  <a href="#s6">06 Measured on Nov 28</a>
+  <a href="#limits">Limits: what we have not measured</a>
+  <a href="#summary">Summary: three practices</a>
+</nav>
+
+<h2 id="s1">01 The problem: CPU time is not a ruler</h2>
+
+<p>To make "the window must not get slower" a check every PR passes, you first need a ruler that holds still. The obvious one is CPU time: draw 300 frames, take milliseconds per frame. That is how we started, and it soon turned out to follow how busy the machine was. Fibo's development machines often have several agents compiling Rust at once, with load anywhere from single digits to over a hundred.</p>
+
+<p>The same build drawing the same frame took 2.5 times as much CPU time at load 40 as at load 6 (the probe's code comment records 1.1 ms and 2.7 ms for one frame). The cause is ordinary: on a busy machine the process lands on efficiency cores and clocks drop, so the same work takes longer. The number of machine instructions the CPU actually completed, the <b>retired instructions</b>, barely moves. The table puts the repository's records next to a remeasurement:</p>
+
+<div class="table">
+<table>
+<thead><tr><th>What</th><th>Conditions</th><th>CPU time</th><th>Retired instructions</th><th>Source</th></tr></thead>
+<tbody>
+<tr><td>One window frame</td><td>Load 6 vs load 40</td><td>2.5x apart (1.1 / 2.7 ms)</td><td>Under 1% apart</td><td>Performance guide §2; comment in <code>cpu_probe_evidence.rs</code></td></tr>
+<tr><td>Opening settings (median of opens 2–6)</td><td>Load 45 to 72</td><td>Moves with load</td><td>4.86–5.03 M, does not move</td><td>Performance guide §5</td></tr>
+<tr><td>Opening settings (first open, cold files)</td><td>Same build, several runs</td><td>Moves with load</td><td>9–12 M, and moves at high load</td><td>Performance guide §5 (so the gate does not set a line on it)</td></tr>
+<tr><td>The same Python computation (measured Nov 28)</td><td>Normal scheduling, load 217</td><td>1.49–1.68 s</td><td>34.22–34.33 billion</td><td><code>/usr/bin/time -l</code>, 5 runs</td></tr>
+<tr><td>Same (measured Nov 28)</td><td>Background priority via <code>taskpolicy -b</code>, load 94–174</td><td>4.77–5.71 s (about 3.2–3.8x)</td><td>34.70–34.95 billion (+1.1% to +2.1%)</td><td>Same, 3 runs</td></tr>
+<tr><td>One window frame on a GitHub macOS runner</td><td>CI VM, one main CI run on Nov 27</td><td>Terminal frame 0.65 ms, full redraw 7.03 ms</td><td><b>Always 0</b></td><td>CI log <code>frames-pane: … 0.00 M instructions</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The last row is the second problem: GitHub's macOS runners are virtual machines with no hardware counters, so <code>ri_instructions</code> is always 0. An instruction-count assertion on CI compares as −100% every time, which means it always passes. The gate has to notice that case first and then measure some other way.</p>
+
+<h2 id="s2">02 What we count: retired instructions per frame</h2>
+
+<p>On macOS a process can ask <code>proc_pid_rusage</code> how many instructions it has retired so far. Fibo's window has a module compiled only into the probe build that reads it before and after a run of frames and divides the difference by the frame count (simplified):</p>
+
+<pre><code>/// Instructions this process retired: unlike CPU time, the same work
+/// counts the same on a busy machine, on an efficiency core or at a lower clock.
+fn instructions() -&gt; u64 {
+    if std::env::var_os("MOORING_PERF_NO_COUNTER").is_some() {
+        return 0; // take the VM's path on real hardware, to test the fallback
+    }
+    let mut info: libc::rusage_info_v4 = unsafe { std::mem::zeroed() };
+    let ok = unsafe {
+        libc::proc_pid_rusage(std::process::id() as i32,
+                              libc::RUSAGE_INFO_V4, (&amp;raw mut info).cast())
+    };
+    if ok == 0 { info.ri_instructions } else { 0 }
+}
+
+// One stage: draw 300 frames, report CPU time and instructions per frame
+let (cpu, ins) = (cpu_secs(), instructions());
+/* ...draw 300 frames... */
+let per_frame = (instructions() - ins) as f64 / 300. / 1e6; // M per frame</code></pre>
+
+<p>What gets measured is fixed too. The probe runs on a generated workspace: 2000 sessions, 8 spaces, 60 terminals each bound to a session, about 45 sidebar rows, close to a long-used real install (<code>scripts/perf-fixture.py</code>; it calls no model and touches no user data). The window stays off screen and each stage draws 300 frames. The two that matter most:</p>
+
+<ul>
+  <li><b><code>frames-pane</code></b>: a frame where only a terminal changed. Every frame while an agent prints is one of these.</li>
+  <li><b><code>frames-main</code></b>: a forced full redraw. Each workspace change (about 1.4 a second in real use) redraws the whole sidebar, which costs close to this.</li>
+</ul>
+
+<p>Other stages cover scrolling a line of Chinese (<code>frames-scroll</code>), sidebar motion, the machine rail, the plugins page, settings pages and startup to first frame: 25 numbers in the baseline file <code>crates/fibo-app/perf-baseline.txt</code>.</p>
+
+<h3>Two ways to find the big cost</h3>
+
+<p>Once the number holds still, finding causes gets simpler too:</p>
+
+<ul>
+  <li><b>Take a piece out and measure</b>: temporarily stop drawing one part (have the sidebar return nothing, say) and see how far the count drops. "The sidebar is 88% of a terminal frame" and "without the 50 rows under Today, a full redraw goes from 96 M to 16.5 M" were both found this way.</li>
+  <li><b>Bisect commits</b>: when the gate fires, build commit by commit in a separate worktree and run one stage. A few rounds find it. The "sidebar inside a horizontal flex, full redraw 75 → 130 M" case in section 04 was found this way.</li>
+</ul>
+
+<p>Once the view is known, <code>sample</code> shows where: self time in <code>taffy::compute_flexbox_layout</code> or <code>line_wrapper</code> means layout; self time in app functions and SipHash means repeated per-frame computation.</p>
+
+<h3>Traps in the measuring itself</h3>
+
+<div class="table">
+<table>
+<thead><tr><th>Trap</th><th>What it looked like</th><th>What we do now</th></tr></thead>
+<tbody>
+<tr><td>Test data too fake</td><td>The first workspace had no sessions bound to terminals; the sidebar was empty and nothing showed up</td><td>Sessions bound to terminals, quota readings in the logs</td></tr>
+<tr><td>The probe dirties its fixture</td><td>Each run opened one more tab; after dozens there were 91, and the terminal frame grew from 7.8 M to 27 M</td><td>Old and new builds run alternately on the same state; rebuild the fixture before reporting</td></tr>
+<tr><td>Terminal frames are bimodal</td><td>The same build jumps between about 6.3 M and 7.0 M</td><td>The baseline takes the higher one</td></tr>
+<tr><td>The CI image has Reduce Motion on</td><td>Animations were skipped and the gate measured a still picture; it went red 11 times in a row over this</td><td>The probe turns it off for every stage</td></tr>
+<tr><td>A locked screen</td><td>No display link, <code>on_next_frame</code> never fires, a real window cannot be measured</td><td>The gate uses only the off-screen probe</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="s3">03 The gate: instructions on hardware, a ratio on VMs</h2>
+
+<p>The gate is <code>scripts/perf-gate.py</code>. On CI it builds its own probe release, runs every stage and compares with the baseline. It first decides whether this machine counts instructions (every stage read more than 0, and <code>MOORING_PERF_NO_COUNTER</code> is not set), then takes one of two paths.</p>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 520" role="img" aria-label="How the performance gate decides: after the probe, it checks whether instructions were counted. If so, each number must stay within 15% of its baseline; if every reading is 0, it checks the ratio of two CPU times measured in the same process, within 2x of its baseline. Both paths must pass checks based on counts and pixels.">
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tip"/></marker></defs>
+  <rect class="box" x="230" y="16" width="300" height="56" rx="12"/>
+  <text class="h" x="380" y="40">Probe: 300 frames per stage</text>
+  <text class="s" x="380" y="60">2000-session workspace, window off screen</text>
+  <path class="line" d="M380 72 L380 100" marker-end="url(#ar)"/>
+  <rect class="soft" x="230" y="102" width="300" height="56" rx="12"/>
+  <text class="t" x="380" y="126">Were instructions counted?</text>
+  <text class="s" x="380" y="146">Only if every reading is &gt; 0</text>
+  <path class="line accent" d="M300 158 L196 198"/><path class="line" d="M196 198 L190 201" marker-end="url(#ar)"/>
+  <path class="line" d="M460 158 L570 200" marker-end="url(#ar)"/>
+  <text class="accent-t c" x="172" y="176" style="font-size:13px">Yes: real hardware</text>
+  <text class="s" x="580" y="180">All 0: GitHub macOS VM</text>
+  <rect class="box accent-box" x="24" y="204" width="340" height="112" rx="12"/>
+  <text class="h" x="194" y="232">Each count ≤ baseline +15%</text>
+  <text class="s" x="194" y="256">Terminal frame, full redraw, scroll, plugins, startup…</text>
+  <text class="s" x="194" y="276">15% under the baseline prints "lower it"</text>
+  <text class="ok-t c" x="194" y="302">Catches slowdowns over 15%</text>
+  <rect class="box" x="396" y="204" width="340" height="112" rx="12"/>
+  <text class="h" x="566" y="232">Same-process ratio ≤ 2x baseline</text>
+  <text class="s" x="566" y="256">pane-share = terminal frame ÷ full redraw</text>
+  <text class="s" x="566" y="276">Also cardplay-share, theme-share</text>
+  <text class="bad-t c" x="566" y="302">Misses slowdowns under 2x</text>
+  <path class="line" d="M194 316 L300 356" marker-end="url(#ar)"/>
+  <path class="line" d="M566 316 L460 356" marker-end="url(#ar)"/>
+  <rect class="box" x="24" y="358" width="712" height="104" rx="12"/>
+  <text class="h" x="380" y="386">Both paths: counts and pixels, not timing</text>
+  <text class="s" x="380" y="410">A cached frame matches a fully refreshed one pixel for pixel · output draws sidebar and tabs 0 times</text>
+  <text class="s" x="380" y="430">A catch-up's own frame schedules 0 catch-ups · 0 frames requested after the focus ring fades</text>
+  <text class="s" x="380" y="450">One scrolled line shapes 1–40 CoreText runs · silent input wakes its pane 0 times</text>
+  <path class="line" d="M380 462 L380 486" marker-end="url(#ar)"/>
+  <text class="t" x="380" y="508">Green only if all pass; red uploads the pixel diffs</text>
+</svg>
+<figcaption>The decision is at lines 156 and 285–305 of <code>scripts/perf-gate.py</code>. The budgets are two constants: <code>BUDGET = 0.15</code> and <code>SHARE_BUDGET = 2.0</code>.</figcaption>
+</figure>
+
+<h3>The VM fallback: a ratio inside one process</h3>
+
+<p>With no instruction count and an unsteady clock, let the machine's speed cancel itself out: measure a terminal frame and a full redraw back to back in the same process and take terminal ÷ full. If the machine is busy, both slow down and the ratio barely moves. That ratio is <code>pane-share</code>; the baseline is 0.12, a broken build that redraws the sidebar every frame reads 0.96, and the line is 2x the baseline. One main CI run on Nov 27 read 0.09.</p>
+
+<p>Numerator and denominator have to be measured side by side. Theme frames used to be compared with a terminal frame measured separately at the start, seconds earlier; the VM sped up and slowed down in between, and the same code read <code>theme-share</code> anywhere from 0.73 to 2.37, going red once. Now each theme alternates with the plain look in 10 runs of 30 frames, each adjacent pair gives a ratio, and the gate takes the median.</p>
+
+<h3>What timing cannot catch, count</h3>
+
+<p>Some bugs are not about how expensive a frame is but about how many frames get drawn, or whether they are right. Those are asserted with counts and pixels, which work on a VM too:</p>
+
+<ul>
+  <li><b>A catch-up loop</b>: the first check counted all catch-up redraws in 5 seconds. A CI runner with a display draws on its own, so a working build had 9–15 and the check misfired. It now counts the bug's direct sign, "a catch-up's own frame scheduled another catch-up": 0 for a working build, 15 for the broken one (<code>8678054</code>).</li>
+  <li><b>A split-pane focus ring that keeps drawing after it fades</b>: instructions per frame did not change; the number of frames did. After the ring vanished the old build still asked for 120 frames a second, 25.24% of a core in a three-pane test (<a href="https://github.com/majiayu000/fibo/pull/461">#461</a>). The gate now requires frame requests while the ring shows and none after it fades, even when a redraw is forced.</li>
+  <li><b>Scrolling a line of Chinese</b>: asserted by the number of runs handed to CoreText. A normal line is 18; the build whose shaping cache missed shaped 774; 0 means nothing scrolled and the gate measured a still picture.</li>
+</ul>
+
+<h3>The gate gets tested too</h3>
+
+<p>When the gate first went in, we built three broken versions on purpose (the first three rows) and checked each was stopped; every check added later got the same treatment. Changing the gate means doing this again:</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Deliberately broken build</th><th>What the gate saw</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>Every terminal output notifies the whole workbench</td><td>+666% instructions, sidebar redrawn every frame</td><td>Stopped</td></tr>
+<tr><td>Sidebar does not refresh</td><td>Pixel differences after filter, unfilter and rename</td><td>Stopped</td></tr>
+<tr><td>Catch-up loop</td><td>15 self-triggered catch-ups</td><td>Stopped</td></tr>
+<tr><td>Plugins page not reused (hardware)</td><td>+544% instructions</td><td>Stopped</td></tr>
+<tr><td>Animation card twice as slow (hardware)</td><td>+99% instructions</td><td>Stopped</td></tr>
+<tr><td>Plugins page asks for frames at rest</td><td>480 requests at rest</td><td>Stopped</td></tr>
+<tr><td>Page not reused (VM mode)</td><td><code>cardplay-share</code> 1.08, normal 0.17–0.19</td><td>Stopped</td></tr>
+<tr><td>Card drawn 40 extra times (VM mode)</td><td><code>cardplay-share</code> 0.76</td><td>Stopped</td></tr>
+<tr><td>Focus ring expiry check moved back after scheduling</td><td>1 extra frame after the fade</td><td>Stopped</td></tr>
+<tr><td>Chinese shaping from before <code>f21658e5</code> (main's build)</td><td><code>frames-scroll</code> 39.44 M, +48.5%</td><td>Stopped</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Testing the gate also caught it measuring nothing, twice. The plugins-page gate's first run reported "the old paper theme is not in effect": the probe had set the light theme on the dark side, the theme never changed, and the numbers looked great. Later, CI was all green but the log showed animation cards at 0.00 ms: the probe picked the costliest animation by instructions, all zero on a VM, so it picked none. The local switch that imitates a VM only changed the gate script back then, and the probe still read instructions, so nothing showed locally. Now the switch reaches the probe and the gate asserts the time is above 0. The rule: any measurement that looks very good must assert that the thing measured actually happened.</p>
+
+<h3>The baseline only moves down with the code</h3>
+
+<p>The 15% line is relative to the baseline. If an optimization lands and the baseline stays, the gate quietly loosens. On Nov 25, <code>frames-main</code> and <code>frames-railrest</code> were 25–27% under their baselines; with a 15% budget they would have had to grow over 40% to fire, so those two checks were effectively off (<a href="https://github.com/majiayu000/fibo/pull/568">#568</a>). The fix changed only those two lines, taking the higher of two full gate runs: <code>frames-main</code> 55.35 → 41.32 M. It did not rewrite everything with <code>MOORING_PERF_UPDATE=1</code>, which would have written the other numbers' ±3–8% drift into the baseline. The gate now prints a reminder when a number is 15% under its baseline.</p>
+
+<p>The gate runs on every PR that touches native code; the CI run we looked at took about 10 minutes including the build. It is not a required check for merging: <code>main</code> only requires <code>Workbench Rust checks</code>. That is why rule R7 asks whoever changes rendering to run it on real hardware.</p>
+
+<h3>How large projects do it</h3>
+
+<p>Before settling on this, we looked at how a few large open-source projects handle performance regressions (surveyed Nov 4 and recorded in §9 of the performance guide; uv's workflow rechecked on Nov 28):</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Project</th><th>What it measures</th><th>Blocks PRs?</th></tr></thead>
+<tbody>
+<tr><td>pandas</td><td>asv benchmarks on a dedicated machine for every merged commit, with step detection afterwards</td><td>No; its docs say the same code on the same machine can differ noticeably</td></tr>
+<tr><td>uv</td><td>CodSpeed: <code>walltime</code> mode on a dedicated machine, plus <code>simulation</code> mode (simulated execution, independent of load), reported back on the PR</td><td>Can</td></tr>
+<tr><td>Rust compiler (rustc-perf)</td><td>Default metric <code>instructions:u</code>; changes around 0.3% show reliably; people review the graphs weekly</td><td>Human judgement</td></tr>
+<tr><td>Zed (where GPUI comes from)</td><td>CI only compiles the benchmark crate</td><td>No performance gate seen</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>What they share: to block a PR you need a metric independent of machine load (instruction counts or simulated execution); wall-clock time can only warn after the fact. Fibo follows that: instructions on real hardware, and with no dedicated CI machine, a same-process ratio on the VM.</p>
+
+<h2 id="s4">04 What sidebar redraws cost</h2>
+
+<p>With a steady ruler, the first cut went into the sidebar. The table lists the biggest changes over three weeks, each measured as instructions per frame on the same fixture with old and new builds run alternately (M = million):</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Date</th><th>Change</th><th>Measured</th><th>Before → after</th><th>Left</th><th>Commit / PR</th></tr></thead>
+<tbody>
+<tr><td>Nov 4</td><td>Sidebar becomes a cached view; terminal output no longer lays it out</td><td>Terminal output frame</td><td>74.3 → 10.3 M</td><td>14%</td><td><code>b1438ae</code></td></tr>
+<tr><td>Nov 4</td><td>Counts for the title bar, tabs and status bar computed once a second</td><td>Terminal output frame</td><td>8.3 → 6.3–7.0 M</td><td>~80%</td><td><code>d6dcf46b</code></td></tr>
+<tr><td>Nov 4</td><td>No horizontal flex around the column without a machine rail (fixing a regression)</td><td>Full redraw</td><td>130 → 75.7 M</td><td>58%</td><td><code>e0661af</code></td></tr>
+<tr><td>Nov 4</td><td>Pointing at an animation card redraws only that card</td><td>Plugins page, one playing frame</td><td>78.8 → 12.4 M</td><td>16%</td><td><code>fcda810d</code></td></tr>
+<tr><td>Nov 16</td><td>One-line session rows lose a column container and get a fixed height</td><td>Full redraw</td><td>105 → 57 M</td><td>54%</td><td><a href="https://github.com/majiayu000/fibo/pull/365">#365</a></td></tr>
+<tr><td>Nov 16</td><td>Set-aside spaces test the cheap condition first and look up a set</td><td>Full redraw (3 set-aside spaces)</td><td>238.6 → 61.5 M</td><td>26%</td><td><a href="https://github.com/majiayu000/fibo/pull/365">#365</a></td></tr>
+<tr><td>Nov 17</td><td>Shaping cache found by content, not only by row</td><td>Scrolling a line of Chinese</td><td>419 → 52 M</td><td>12%</td><td><a href="https://github.com/majiayu000/fibo/pull/398">#398</a></td></tr>
+<tr><td>Nov 19</td><td>Tab strip becomes a cached view too</td><td>Terminal output frame</td><td>7.88 → 5.22 M</td><td>66%</td><td><a href="https://github.com/majiayu000/fibo/pull/466">#466</a></td></tr>
+<tr><td>Nov 24</td><td>Chinese runs shaped by CoreText once</td><td>Scrolling a line of Chinese</td><td>39.41 → 26.54 M</td><td>67%</td><td><a href="https://github.com/majiayu000/fibo/pull/569">#569</a></td></tr>
+</tbody>
+</table>
+</div>
+
+<figure>
+<svg class="diagram" viewBox="0 0 760 560" role="img" aria-label="Before and after bar chart: each grey bar is the cost before (100%), each green bar what is left after. Terminal frame with a cached sidebar 14%, no horizontal flex 58%, one animation card 16%, one-line rows 54%, set-aside spaces 26%, shaping by content 12%, cached tab strip 66%, shaping Chinese once 67%.">
+  <text class="gh" x="24" y="34">What is left after (grey = before, 100%; green = after)</text>
+  <g>
+    <text class="l" x="24" y="76">Terminal frame · cached sidebar</text><text class="s left" x="24" y="96">b1438ae</text>
+    <rect class="bar0" x="250" y="64" width="360" height="22" rx="4"/><rect class="bar2" x="250" y="64" width="50" height="22" rx="4"/>
+    <text class="v" x="620" y="81">74.3 → 10.3 M</text>
+  </g>
+  <g>
+    <text class="l" x="24" y="136">Full redraw · no row flex</text><text class="s left" x="24" y="156">e0661af</text>
+    <rect class="bar0" x="250" y="124" width="360" height="22" rx="4"/><rect class="bar2" x="250" y="124" width="210" height="22" rx="4"/>
+    <text class="v" x="620" y="141">130 → 75.7 M</text>
+  </g>
+  <g>
+    <text class="l" x="24" y="196">Animation card · one card</text><text class="s left" x="24" y="216">fcda810d</text>
+    <rect class="bar0" x="250" y="184" width="360" height="22" rx="4"/><rect class="bar2" x="250" y="184" width="57" height="22" rx="4"/>
+    <text class="v" x="620" y="201">78.8 → 12.4 M</text>
+  </g>
+  <g>
+    <text class="l" x="24" y="256">Full redraw · flat rows</text><text class="s left" x="24" y="276">#365</text>
+    <rect class="bar0" x="250" y="244" width="360" height="22" rx="4"/><rect class="bar2" x="250" y="244" width="195" height="22" rx="4"/>
+    <text class="v" x="620" y="261">105 → 57 M</text>
+  </g>
+  <g>
+    <text class="l" x="24" y="316">Full redraw · set-aside</text><text class="s left" x="24" y="336">#365</text>
+    <rect class="bar0" x="250" y="304" width="360" height="22" rx="4"/><rect class="bar2" x="250" y="304" width="93" height="22" rx="4"/>
+    <text class="v" x="620" y="321">238.6 → 61.5 M</text>
+  </g>
+  <g>
+    <text class="l" x="24" y="376">Chinese scroll · by content</text><text class="s left" x="24" y="396">#398</text>
+    <rect class="bar0" x="250" y="364" width="360" height="22" rx="4"/><rect class="bar2" x="250" y="364" width="45" height="22" rx="4"/>
+    <text class="v" x="620" y="381">419 → 52 M</text>
+  </g>
+  <g>
+    <text class="l" x="24" y="436">Terminal frame · cached tabs</text><text class="s left" x="24" y="456">#466</text>
+    <rect class="bar0" x="250" y="424" width="360" height="22" rx="4"/><rect class="bar2" x="250" y="424" width="238" height="22" rx="4"/>
+    <text class="v" x="620" y="441">7.88 → 5.22 M</text>
+  </g>
+  <g>
+    <text class="l" x="24" y="496">Chinese scroll · shape once</text><text class="s left" x="24" y="516">#569</text>
+    <rect class="bar0" x="250" y="484" width="360" height="22" rx="4"/><rect class="bar2" x="250" y="484" width="242" height="22" rx="4"/>
+    <text class="v" x="620" y="501">39.4 → 26.5 M</text>
+  </g>
+</svg>
+<figcaption>Each row is normalised to its own "before" to compare the share removed; absolute sizes differ a lot (scrolling Chinese started at 419 M, the tab strip change at 7.88 M).</figcaption>
+</figure>
+
+<h3>First cut: terminal output should not lay out the sidebar</h3>
+
+<p>Before Nov 3, each terminal output frame cost 74.3 M instructions. Taking pieces out showed the sidebar was 88% of it. The cause is GPUI's redraw rule: <code>cx.notify()</code> marks an entity and all its ancestors dirty. The pane's observer called <code>cx.notify()</code>, so every bit of terminal output laid out the whole workbench, sidebar included.</p>
+
+<p><code>b1438ae</code> wraps the sidebar in a cached view (<code>AnyView::cached</code>): if it is not dirty and its bounds have not changed, the last frame's drawing is reused. Pane changes now notify an empty child view, <code>Tick</code>; the workbench still redraws the title bar and pane titles, the sidebar does not. Other changes the sidebar shows are picked up by a catch-up within a second. Terminal frames went from 74.3 M to 10.3 M, CPU from 4.5 to 0.8 ms. On Nov 19 the tab strip became a cached view the same way, and the terminal-frame baseline went from 6.96 M to today's 4.52 M.</p>
+
+<p>Caching brings a new kind of bug: the sidebar not refreshing when it should. So the same commit added <code>redraw-check</code>, which compares, after each step, a frame drawn without refreshing against one drawn with a forced refresh, pixel for pixel.</p>
+
+<h3>The cost is per row, not the number of rows</h3>
+
+<p>With terminal frames down, the big remaining cost was the full redraw. A sample of a real window on Nov 16 showed sidebar redraws taking about half the main thread. The first guess was too many rows, so we tried laying out only visible rows: on the fixture, laying out just the first 20 took a full redraw from 91.6 M to 91.3 M, almost nothing. Taking a piece out instead: without the 50 rows under Today, 96 M became 16.5 M, about 1.6 M a row. The cost was in each row.</p>
+
+<p>The reason is the layout engine, taffy: to size a container that grows with its content, it measures what is inside several times, and each level of nesting multiplies that. A one-line session row used to be row → column container → title, space, time. <a href="https://github.com/majiayu000/fibo/pull/365">#365</a> drops that column container for rows with a single line of text and gives them the fixed height <code>ONE_LINE_ROW</code>. Full redraw: 105 M → 57 M (two alternating rounds: 104.7 / 105.5 → 57.0 / 57.2). <code>visual-check.py shots</code> confirmed the pixels did not change.</p>
+
+<p>The same PR made two pure computation cuts. Each set-aside space went through every session on every redraw, testing the most expensive condition first (which space it belongs to, by comparing paths). Ordering the conditions from cheap to expensive, starting with whether the session is open at all (most are not), took a full redraw with 3 set-aside spaces from 237 to 98 M; collecting <code>lost_agents</code>, the sessions cut off by a restart, into a set took it from 98 to 61.5 M. Against main: 238.6 → 61.5 M.</p>
+
+<p>What was rejected is in the commits too: splitting the space label into two elements saved 3%, right-aligning the time under 2%, both below the cutoff; computing the hover tip only on hover saved about 2.5%, but the tip would read the workbench when it pops up and could crash if a render held it at that moment, so not worth it.</p>
+
+<h3>Back in a real window: 24.3% → 8.1%</h3>
+
+<p>Fixture instructions do not convert into the CPU percentage a user sees, so each round ends with a sample of a real window. One on Nov 17 found the sidebar spending 1.4 s of every 10 s rendering, 1.04 s of it asking whether 33 space folders still existed (<code>stat</code>). The same 33 folders take 28 µs to stat from a terminal and far longer inside the app process. <a href="https://github.com/majiayu000/fibo/pull/386">#386</a> remembers the answer per path for 2 seconds, at the cost of showing a deleted folder up to 2 seconds late.</p>
+
+<p>Together with #365, the menu bar moving to deltas (#376–#378) and the host reusing hashes for unchanged content (#388), a real window with a dozen-odd agents running went from 24.3% to 8.1% CPU across the update; per 10 seconds, full-window drawing went from 2647 to 338 ms and sidebar rendering from 1395 to 126 ms. It was a single before/after, with running sessions going from 16 to 19, so treat it as rough.</p>
+
+<h3>Two regressions per-frame instructions did not catch</h3>
+
+<p>On Nov 19 the window felt slow again. The baseline and the script had not changed. One cause was the split-pane focus ring: it scheduled the next frame before checking whether it had faded, so after fading it still asked for about 120 frames a second. Each frame was cheap; there were just endless frames. <a href="https://github.com/majiayu000/fibo/pull/461">#461</a> checks first, then schedules, and adds a gate check that nothing is requested after the fade. Per-frame instructions only say what a frame costs; how many frames get drawn has to be counted separately.</p>
+
+<p>The other was scrolling. In a real window sample, terminal shaping (<code>shape_cell</code>) took about 5% of the main thread (433 of 8980 samples), mostly creating new CoreText layouts. The shaping cache was keyed by row and run position, so any scroll missed everything; each Chinese character is its own run, so each line an agent printed in Chinese reshaped the screen. <a href="https://github.com/majiayu000/fibo/pull/398">#398</a> falls back to finding a run by content (text, cell width, colour, bold and italic) in the previous frame: 419 M → 52 M per line, runs handed to CoreText 774 → 18. On Nov 24, <a href="https://github.com/majiayu000/fibo/pull/569">#569</a> found each Chinese run was shaped twice (once at the terminal size, then again at a computed scale), although a font's glyphs do not change with size and the second pass only multiplies numbers. Shaping once and scaling while drawing took <code>frames-scroll</code> from 39.41 to 26.54 M (−33%); the 13 terminal rendering fixtures plus a new CJK one produced byte-identical PNGs.</p>
+
+<h2 id="s5">05 Ten rules that came out of it</h2>
+
+<p>Each fix ends as a rule in §4 of the performance guide, which you read before changing the UI. They are numbered in the order they were added; R8 came before R9:</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Rule</th><th>In one sentence</th><th>From</th></tr></thead>
+<tbody>
+<tr><td>R1</td><td>Pane changes do not notify the workbench; use <code>adopt_pane</code> / <code>pane_changed</code></td><td>Terminal frame 7x (<code>b1438ae</code>)</td></tr>
+<tr><td>R2</td><td>State the sidebar shows must notify the workbench when it changes, or it is up to a second late</td><td>A cached view that missed refreshes</td></tr>
+<tr><td>R3</td><td>The frame a catch-up triggered must set <code>asked</code>, or catch-ups schedule catch-ups</td><td>Broken build: 15 in 5 s</td></tr>
+<tr><td>R4</td><td>Values every frame needs are not derived by scanning all sessions in render; cache by revision plus current second</td><td><code>frame_facts</code>, quotas, tab names</td></tr>
+<tr><td>R5</td><td>Do not put big lists inside a horizontal flex; it measures the whole list again</td><td>Full redraw 75 → 130 M (<code>348d005</code>)</td></tr>
+<tr><td>R6</td><td>Per-frame lookups by id use FxHash</td><td>SipHash was about a tenth of a terminal frame</td></tr>
+<tr><td>R7</td><td>Changed rendering: run the gate on real hardware; change the baseline only there, on purpose, with the reason</td><td>A VM cannot write the baseline</td></tr>
+<tr><td>R8</td><td>For a small part that animates, draw it in its own small view and keep the page cached</td><td>Animation card 79 → 12 M</td></tr>
+<tr><td>R9</td><td>Elements on every row avoid content-sized containers; if a height is known, fix it</td><td>Full redraw 105 → 57 M</td></tr>
+<tr><td>R10</td><td>Filters over all sessions test cheap conditions first; tables looked up in a loop become sets first</td><td>238 → 61 M</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="tip">
+<p><b>Without Fibo, in your own project</b>: on macOS the built-in <code>/usr/bin/time -l</code> prints retired instructions, nothing to install (run on macOS on Nov 28):</p>
+<pre><code>/usr/bin/time -l ./your-bench 2&gt;&amp;1 | grep 'instructions retired'
+#   34227777414  instructions retired
+
+# The same work on efficiency cores: CPU time grows several times, instructions barely move
+taskpolicy -b /usr/bin/time -l ./your-bench
+
+# Counters over time: record with Instruments' CPU Counters template
+xcrun xctrace record --template 'CPU Counters' \
+    --output run.trace --launch -- ./your-bench</code></pre>
+<p>Inside your program, read <code>ri_instructions</code> with <code>proc_pid_rusage(pid, RUSAGE_INFO_V4, …)</code> as above, before and after, and subtract. Three things matter more than the tool: treat a reading of 0 as "cannot measure", not a pass; on GitHub's macOS runners it is 0, so have a fallback such as a same-process ratio; and for every check you add, build a broken version first and make sure it goes red. On Linux the matching counter is <code>perf</code>'s <code>instructions:u</code> (rustc-perf's default metric); we did not run it on Linux for this post.</p>
+</div>
+
+<h2 id="s6">06 Measured on Nov 28</h2>
+
+<p>For this post we ran the full gate 6 times on an Apple Silicon Mac (Nov 28, 01:39–02:00, with other agents compiling; 1-minute load 30–151). Two builds took turns: <b>new</b> is that day's main (<code>441231a2</code>), <b>old</b> is the merge that wrote today's <code>frames-scroll</code> baseline (<code>34ca0380</code>, #569). Both were built with <code>cargo build --release -p fibo-host -p fibo-app --features fibo-app/visual-test</code> and run with <code>python3 scripts/perf-gate.py target/release</code>.</p>
+
+<div class="table">
+<table>
+<thead><tr><th>Build · run</th><th>Load at start</th><th>Terminal frame</th><th>Full redraw</th><th>Scroll a Chinese line</th><th>First open of plugins</th><th>Gate</th></tr></thead>
+<tbody>
+<tr><td>Baseline (written on another Mac)</td><td>—</td><td>4.52 M</td><td>41.32 M</td><td>26.55 M</td><td>268.97 M</td><td>—</td></tr>
+<tr><td>New · 1</td><td>90</td><td>4.10 M</td><td>39.71 M</td><td>31.75 M (+19.6%)</td><td>356.76 M (+32.6%)</td><td>Red</td></tr>
+<tr><td>New · 2</td><td>75</td><td>4.24 M</td><td>39.52 M</td><td>31.44 M (+18.4%)</td><td>339.95 M (+26.4%)</td><td>Red</td></tr>
+<tr><td>Old · 1</td><td>151</td><td>4.08 M</td><td>40.11 M</td><td>30.33 M (+14.2%)</td><td>341.12 M (+26.8%)</td><td>Red</td></tr>
+<tr><td>New · 3</td><td>58</td><td>4.13 M</td><td>39.61 M</td><td>31.07 M (+17.0%)</td><td>343.71 M (+27.8%)</td><td>Red</td></tr>
+<tr><td>Old · 2</td><td>30</td><td>4.10 M</td><td>40.08 M</td><td>30.34 M (+14.3%)</td><td>338.48 M (+25.8%)</td><td>Red</td></tr>
+<tr><td>New · imitating a VM</td><td>37</td><td>0</td><td>0</td><td>0</td><td>0</td><td>Ratios only; all ratios pass</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The table shows instructions per frame (or per open), with the change against the baseline in brackets. CPU time over the same runs: terminal frames 0.35–0.42 ms, full redraws 2.86–3.17 ms; <code>pane-share</code> read 0.11–0.14 in all six runs, against a baseline of 0.12. Four things come out of it:</p>
+
+<ul>
+  <li><b>On one machine, instructions hold still</b>: the new build's three full redraws read 39.52–39.71 M (0.5% apart), the old build's two 40.08 / 40.11 M. CPU time did not spread 2.5x this time (2.86–3.17 ms); the load average does not say which cores the process got, so whether CPU time holds still is luck. Instructions do not need luck.</li>
+  <li><b>Instructions do not compare across machines</b>: the very code that wrote the 26.55 M baseline reads 30.33 M here, 14% higher; the first open of the plugins page is 26% higher. Both are mostly CoreText shaping and glyph rasterization inside the system, whose instruction count changes with OS version and hardware. Terminal frames and full redraws are mostly Fibo's own code and read 3–10% lower. A baseline means something only on the same kind of machine, so "red" here is not by itself a regression.</li>
+  <li><b>The real change between old and new is small</b>: on the same machine, alternating, scrolling a line went from 30.33 / 30.34 M to 31.07–31.75 M, a median 3.6% up, inside the 15% line; the other 21 numbers moved within ±2.1% at the median.</li>
+  <li><b>VM mode sees none of it</b>: with <code>MOORING_PERF_NO_COUNTER=1</code> every count reads 0 and the gate checks ratios only: <code>pane-share</code> 0.12 and <code>theme-share</code> 1.06, both inside their lines. None of the +14% to +33% above would be reported on that path.</li>
+</ul>
+
+<p>One more thing we saw and did not chase: in 2 of the new build's 4 runs (including the VM-mode one), the probe stopped on the 设置 › 插件 page asserting that the cached panel differed from a full refresh; the old build's 2 runs did not. Pixel checks fire on a VM too, so this is either a new intermittent bug or this machine's timing under heavy load; it needs its own reproduction.</p>
+
+<h2 id="limits">Limits: what we have not measured</h2>
+
+<ul>
+  <li><b>The VM gap</b>: CI has only the ratio checks, with a 2x line; a normal <code>cardplay-share</code> is 0.17–0.19 in the guide's records (0.23 in the Nov 27 CI run). A slowdown under 2x passes there. Only the 15% instruction line on real hardware catches it, which depends on R7.</li>
+  <li><b>The baseline belongs to the kind of machine that wrote it</b>: today's baseline was written on another Mac. On Nov 28, on this one, the same code read 14% higher for scrolling a Chinese line and 26% higher for the first open of the plugins page, mostly differences in the system's text libraries. On a new development machine, rewrite the baseline from the same code first, then use the 15% line to judge regressions.</li>
+  <li><b>The gate is not required</b>: merging only requires <code>Workbench Rust checks</code>. A red gate does not block a merge; someone has to look.</li>
+  <li><b>The first time settings open</b>: cold files make the same build read 9–12 M, too noisy for a line. A slowdown only in the first open (measured once at 4 M more) does not fire; only the log shows it.</li>
+  <li><b>GPU and compositor cost</b>: instructions count CPU only. How much GPU WindowServer spends on picture and see-through themes was tried once on Nov 5 with other sessions opening windows; no conclusion.</li>
+  <li><b>Day-to-day CPU of a real window</b>: since the batch of optimizations merged after Nov 20, there is no clean before/after of the installed app under daily load; samples kept hitting a locked screen, a build or a fresh restart.</li>
+  <li><b>The host</b>: <code>fibo serve</code> is held to at most 1 M instructions per log line, but that check has never been tested with a broken build.</li>
+  <li><b>macOS only</b>: the gate runs on macOS; the Windows window has no equivalent gate yet.</li>
+</ul>
+
+<h2 id="summary">Summary: three practices</h2>
+
+<ul>
+  <li><b>Change the ruler first</b>: the same frame's CPU time moves 2.5x with load, its retired instructions under 1%. The gate holds instructions to 15%, falls back to a same-process ratio (2x) on VMs that count none, and treats a 0 reading as "cannot measure".</li>
+  <li><b>Then take the cost apart</b>: taking pieces out found the sidebar at 88% of a terminal frame and about 1.6 M per row; cached views and one fewer container took a terminal frame from 74.3 M to 4.52 M and a full redraw from 105 M on Nov 16 to 41.32 M (4.52 M and 41.32 M are today's baselines).</li>
+  <li><b>Test the gate too</b>: build a broken version for each check (+666%, +544% and +48.5% were all stopped), assert frames, pixels and CoreText runs by count, and lower the baseline after an optimization so the 15% line does not quietly become 40%.</li>
+</ul>
+
+<nav class="pn" aria-label="More posts"><a class="pn-card" href="../handover/"><span class="eyebrow">Previous post</span><b>Close the window, update the app, keep every terminal: Fibo’s background host and terminal handover</b></a><a class="pn-card" href="../waiting-for-you/"><span class="eyebrow">Next post</span><b>How Fibo knows an agent is waiting for you, without changing the agent</b></a></nav>
+<footer class="end">
+  <p>Fibo is open source (MIT). The gate is <a href="https://github.com/majiayu000/fibo/blob/main/scripts/perf-gate.py">scripts/perf-gate.py</a>, its rules and methods are in <a href="https://github.com/majiayu000/fibo/blob/main/docs/performance/index.html">docs/performance</a>, and all the source is on <a href="https://github.com/majiayu000/fibo">GitHub</a>.</p>
+  <p><a href="../">← All posts</a> · <a href="../../">Back to fibo.page</a></p>
+</footer>
+</main>
+
+<footer><div class="wrap">
+  <div class="fcols">
+    <div><a class="logo" href="../../" aria-label="Fibo"><img src="../../brand/fibo-icon.svg" alt=""><svg viewBox="-76 -1506 3776 1948" role="img" aria-label="Fibo"><g transform="translate(0.0 0) scale(1 -1)"><path d="M68 790Q68 827 96.0 850.0Q124 873 171 873H258L295 1017Q342 1227 444.5 1339.0Q547 1451 726 1451Q834 1451 892.5 1396.0Q951 1341 951 1265Q951 1191 909.5 1147.5Q868 1104 802 1104Q762 1104 732.0 1122.0Q702 1140 676.5 1164.0Q651 1188 626.5 1206.0Q602 1224 574 1224Q545 1224 526.0 1207.5Q507 1191 499 1159Q491 1130 506.0 1095.0Q521 1060 541.5 1020.5Q562 981 574 935Q581 905 578 872H667Q720 872 750.0 856.0Q780 840 780 794Q780 756 756.0 723.5Q732 691 693.0 671.0Q654 651 609 651H521L357 48Q350 20 347.5 -2.5Q345 -25 345 -43Q345 -76 364.5 -97.0Q384 -118 403.5 -139.5Q423 -161 423 -198Q423 -251 376.0 -294.0Q329 -337 256.0 -362.0Q183 -387 104 -387Q15 -387 -10.5 -319.5Q-36 -252 -1 -133L197 550Q213 605 200.5 636.5Q188 668 144 689Q108 715 88.0 738.5Q68 762 68 790Z" fill="currentColor"/></g><g transform="translate(778.0 0) scale(1 -1)"><path d="M449.56912126019597 362.83167900145054Q425.8480358533561 304.7717499434948 428.2803716864437 276.9187930095941Q430.71270751953125 249.06583607569337 459.3382568359375 249.06583607569337Q472.2826960943639 249.06583607569337 484.41160741634667 254.0159251037985Q496.5405187383294 258.96601413190365 516.0884018726647 271.94232120737433Q530.8588882572949 281.58090794086456 543.7304555568844 283.48107585310936Q556.6020228564739 285.38124376535416 569.2359869889915 276.98881985247135Q589.30822372064 267.3400006406009 593.1660533230752 236.0196814443916Q597.0238829255104 204.6993622481823 572.0911832749844 157.19051693752408Q528.0429526790977 77.07132656127214 446.6860629953444 26.579470736905932Q365.32917331159115 -23.91238508746028 263.80459221452475 -23.91238508746028Q176.67132089659572 -23.91238508746028 131.90606880374253 15.437427196651697Q87.14081671088934 54.787239480763674 83.64020635932684 123.25825046002865Q80.13959600776434 191.72926143929362 116.64069999754429 277.8519158884883L228.13414512947202 552.5812929011881Q257.1319371499121 621.332378141582 254.01298632659018 649.0705664996058Q250.89403550326824 676.8087548576295 221.09136484190822 676.8087548576295Q207.33303516730666 676.8087548576295 193.6113158725202 670.5166965629905Q179.88959657773376 664.2246382683516 160.43602883070707 651.5709630288184Q142.09781485050917 641.5340025089681 127.06820504926145 639.4289979338646Q112.03859524801373 637.3239933587611 100.28719947487116 643.7277168110013Q77.63593560829759 653.596567761153 73.6522847097367 685.801221318543Q69.66863381117582 718.0058748759329 96.32587108761072 762.3453663773835Q143.0158333517611 836.7437374852598 228.7191981896758 888.252812974155Q314.4225630275905 939.7618884630501 411.98278062045574 939.7618884630501Q494.47380309551954 939.7618884630501 539.3451872896403 901.0030132047832Q584.2165714837611 862.2441379465163 588.4181347303092 791.3279472514987Q592.6196979768574 720.4117565564811 552.5949974879622 623.5620995387435Z" fill="currentColor"/></g><circle class="dot" cx="1296.1" cy="-1242.4" r="196.0"/><g transform="translate(1451.0 0) scale(1 -1)"><path d="M601 1061 499 734Q514 755 530 774Q596 853 677.5 896.5Q759 940 849 940Q971 940 1038.5 863.0Q1106 786 1103 646Q1101 506 1052.5 384.5Q1004 263 922.5 171.5Q841 80 739.5 29.0Q638 -22 528 -22Q408 -22 332 42Q301 68 282 108L230 46Q210 25 183.5 10.5Q157 -4 123 -4Q62 -4 38.0 44.5Q14 93 49 214L267 981Q310 1129 398.0 1233.0Q486 1337 622.0 1392.0Q758 1447 945 1447Q1075 1447 1150.0 1394.5Q1225 1342 1225 1258Q1225 1196 1186.5 1153.0Q1148 1110 1080 1110Q1030 1110 988.0 1132.5Q946 1155 909.0 1184.0Q872 1213 837.0 1235.5Q802 1258 765 1258Q710 1258 672.5 1213.5Q635 1169 601 1061Z M693 745Q657 745 618.0 713.5Q579 682 542.0 629.5Q505 577 475.5 512.0Q446 447 428.0 379.5Q410 312 408 251Q407 194 428.0 167.5Q449 141 489 141Q526 141 564.5 166.5Q603 192 639.5 237.5Q676 283 705.0 343.5Q734 404 752.0 474.0Q770 544 772 619Q774 668 763.5 695.5Q753 723 735.0 734.0Q717 745 693 745Z" fill="currentColor"/></g><g transform="translate(2584.0 0) scale(1 -1)"><path d="M673.2437749840319 941.8751911409199Q815.2732222527266 938.132080078125 905.4609382692724 882.1055753193796Q995.6486542858183 826.0790705606341 1033.6491096559912 727.476566888392Q1071.649565026164 628.8740632161498 1055.8930562622845 497.1787813194096Q1043.0881808698177 379.99490325152874 991.5722485855222 282.79549145139754Q940.0563163012266 185.59607965126634 856.4832256473601 115.63345373980701Q772.9101349934936 45.67082782834768 663.1269580833614 9.00766583904624Q553.3437811732292 -27.655496150255203 423.9298952817917 -23.54209015145898Q286.3423291519284 -18.91287872567773 196.48138732649386 36.24278579838574Q106.6204455010593 91.39845032244921 68.95540079660714 189.54033238440752Q31.29035609215498 287.68221444636583 48.51500718295574 419.342223379761Q61.1755927875638 528.0518261417747 106.2824385613203 624.0812456570566Q151.3892843350768 720.1106651723385 228.97815687954426 793.0479920115322Q306.5670294240117 865.9853188507259 417.4405330084264 905.8018105272204Q528.3140365928411 945.6183022037148 673.2437749840319 941.8751911409199Z M476.7811836078763 144.42831851169467Q503.75799349695444 142.81466569378972 532.0094203576446 158.84268273971975Q560.2608472183347 174.87069978564978 587.0507021211088 207.2502729203552Q613.8405570238829 239.62984605506063 637.3963525313884 287.2581267375499Q660.9521480388939 334.8864074200392 679.616710588336 396.30782360211015Q698.281273137778 457.7292397841811 709.762426096946 531.6536776907742Q723.6095083542168 617.2207717970014 717.2520942296833 669.3457323890179Q710.8946801051497 721.4706929810345 687.8596911747009 746.1072031799704Q664.824702244252 770.7437133789062 628.5922541543841 773.01868211478Q597.206264577806 775.1481403596699 566.5102683529258 755.7366461232305Q535.8142721280456 736.325151886791 507.6755774859339 699.3122249711305Q479.53688284382224 662.29929805547 456.012439602986 612.0588719695807Q432.4879963621497 561.8184458836913 415.07093404978514 501.8627956751734Q397.65387173742056 441.9071454666555 388.45597222447395 376.2840408049524Q376.3101014494896 295.2231904640794 384.64339731261134 244.97630411200225Q392.9766931757331 194.72941775992513 417.38975634612143 170.7891077492386Q441.80281951650977 146.8487977385521 476.7811836078763 144.42831851169467Z" fill="currentColor"/></g></svg></a><p>A native macOS workbench for running many coding agents at once. Open source, MIT licensed.</p><a class="btn white sm" style="margin-top:22px" href="https://github.com/majiayu000/fibo/releases/latest">Download</a></div>
+    <div><h4>Product</h4><ul><li><a href="../../#features">Features</a></li><li><a href="../../#start">Get started</a></li><li><a href="https://github.com/majiayu000/fibo/releases">Changelog</a></li><li><a href="../">Blog</a></li></ul></div>
+    <div><h4>Resources</h4><ul><li><a href="https://github.com/majiayu000/fibo#readme">Documentation</a></li><li><a href="../../#faq">FAQ</a></li><li><a href="https://github.com/majiayu000/fibo/issues">Report a problem</a></li></ul></div>
+    <div><h4>Project</h4><ul><li><a href="https://github.com/majiayu000/fibo">GitHub</a></li><li><a href="https://github.com/majiayu000/fibo/blob/main/LICENSE">License</a></li><li><a href="https://github.com/majiayu000/homebrew-tap">Homebrew tap</a></li></ul></div>
+  </div>
+  <div class="legal"><span>© 2026 Fibo. MIT licensed.</span><span class="formula">Fₙ = Fₙ₋₁ + Fₙ₋₂ · 1, 1, 2, 3, 5, 8, 13, 21 …</span><span>fibo.page</span></div>
+</div></footer>
+</body>
+</html>

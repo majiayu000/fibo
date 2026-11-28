@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>Fibo Blog</title>
+  <link href="https://fibo.page/blog/"/>
+  <link rel="self" href="https://fibo.page/blog/feed.xml"/>
+  <id>https://fibo.page/blog/</id>
+  <updated>2026-11-28T00:00:00+08:00</updated>
+  <author><name>Fibo</name><uri>https://fibo.page/</uri></author>
+  <entry>
+    <title>Why Fibo dropped Tauri + xterm.js and draws its terminals natively with GPUI + libghostty-vt</title>
+    <link href="https://fibo.page/blog/why-gpui/"/>
+    <id>https://fibo.page/blog/why-gpui/</id>
+    <published>2026-11-28T00:00:00+08:00</published>
+    <updated>2026-11-28T00:00:00+08:00</updated>
+    <summary>Fibo runs 40 coding-agent sessions in one window. The plan was Tauri + React + xterm.js; measured under the same load, the WebView used about 3.5x the memory of a native Ghostty, and alacritty_terminal needed 1.29 GiB for 40 sessions. Fibo now keeps terminal state in libghostty-vt (405 MiB, 66.5 MiB once idle sessions are compressed) and draws with GPUI on the GPU. The price: an idle GPUI window used 8x Ghostty&#x27;s CPU until a GPUI patch we maintain brought it to 0.07%. With a four-way comparison and how we measured.</summary>
+  </entry>
+  <entry>
+    <title>How Fibo knows an agent is waiting for you, without changing the agent</title>
+    <link href="https://fibo.page/blog/waiting-for-you/"/>
+    <id>https://fibo.page/blog/waiting-for-you/</id>
+    <published>2026-11-28T00:00:00+08:00</published>
+    <updated>2026-11-28T00:00:00+08:00</updated>
+    <summary>Claude Code and Codex do not tell other programs they are stuck on an approval prompt. Fibo builds each session’s state from five sources (session logs, hooks, the screen, OSC 7501 and processes), layers them in a fixed order, decides the state only in status::of, and uses a guard test that counts per file to stop a second owner from appearing. With a source comparison, the state machine, cases it got wrong and the baseline over time.</summary>
+  </entry>
+  <entry>
+    <title>Fibo’s performance gate: count retired instructions, not CPU time, and what sidebar redraws cost</title>
+    <link href="https://fibo.page/blog/perf-gate/"/>
+    <id>https://fibo.page/blog/perf-gate/</id>
+    <published>2026-11-28T00:00:00+08:00</published>
+    <updated>2026-11-28T00:00:00+08:00</updated>
+    <summary>The same frame’s CPU time moves 2.5x with machine load; its retired instructions move under 1%. So Fibo’s performance gate holds instructions to a 15% budget on real hardware and falls back to a same-process ratio on GitHub’s macOS VMs, which count no instructions. With every step that took a terminal frame from 74.3 M instructions to 4.52 M, ten rules, and measurements from Nov 28.</summary>
+  </entry>
+  <entry>
+    <title>Close the window, update the app, keep every terminal: Fibo’s background host and terminal handover</title>
+    <link href="https://fibo.page/blog/handover/"/>
+    <id>https://fibo.page/blog/handover/</id>
+    <published>2026-11-28T00:00:00+08:00</published>
+    <updated>2026-11-28T00:00:00+08:00</updated>
+    <summary>Terminals live in a long-running host, fibo serve, and the window is only a client. On an update the old host passes each PTY file descriptor and a screen snapshot to the new host over SCM_RIGHTS, and any failure before the new host answers &quot;taken&quot; leaves the old one serving. With a handover sequence diagram, a measured EMSGSIZE edge on macOS, and ten problems a long-running host ran into.</summary>
+  </entry>
+  <entry>
+    <title>How Fibo lets Claude Code on the other end of ssh take a pasted screenshot</title>
+    <link href="https://fibo.page/blog/remote-paste/"/>
+    <id>https://fibo.page/blog/remote-paste/</id>
+    <published>2026-11-27T00:00:00+08:00</published>
+    <updated>2026-11-27T00:00:00+08:00</updated>
+    <summary>Over ssh, Claude Code reads the clipboard of the computer it runs on, so a pasted screenshot never arrives. After testing 20 kinds of paste: a paste that is only one absolute image path becomes an attachment. Fibo saves the picture on that computer, then pastes only the path. With a manual recipe and the test table.</summary>
+  </entry>
+  <entry>
+    <title>One Window for Terminals on Every Machine: Fibo’s Multi-Host Architecture and Slow-Link Sync Design</title>
+    <link href="https://fibo.page/blog/many-machines/"/>
+    <id>https://fibo.page/blog/many-machines/</id>
+    <published>2026-11-16T00:00:00+08:00</published>
+    <updated>2026-11-16T00:00:00+08:00</updated>
+    <summary>How Fibo lets one desktop window operate terminals across multiple machines: why we dropped our separate remote UI, how one ssh -L socket tunnel unified 85 native RPCs, how we decoupled per-window view chrome from per-host state, and how we shrank refreshes from 3.59 MB to 660 bytes on a 54 KB/s link.</summary>
+  </entry>
+</feed>
