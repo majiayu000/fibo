@@ -27,6 +27,7 @@ mod dial;
 mod live;
 mod squeeze;
 mod status_text;
+mod words;
 
 use connect::stay_connected;
 use live::Live;
@@ -248,11 +249,12 @@ pub fn run(a: &Args) -> io::Result<()> {
         .map(str::to_owned)
         .or_else(|| std::env::var("MOORING_RELAY_KEY").ok())
         .filter(|k| !k.is_empty());
-    let mut relays = vec![(base, key)];
+    // (the address as set, which the app matches; where to dial; the key)
+    let mut relays = vec![(relay.to_owned(), base, key)];
     for r in also_relays()? {
         let base = Link::websocket_base(&r.relay).map_err(io::Error::other)?;
-        if relays.iter().all(|(b, _)| *b != base) {
-            relays.push((base, r.key.filter(|k| !k.is_empty())));
+        if relays.iter().all(|(_, b, _)| *b != base) {
+            relays.push((r.relay, base, r.key.filter(|k| !k.is_empty())));
         }
     }
     let name = devices::machine(&a.socket)?.name;
@@ -260,10 +262,9 @@ pub fn run(a: &Args) -> io::Result<()> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    // Each relay keeps its own connection; one that refuses this machine stops alone, and
-    // this ends only once every relay has.
-    let runs = relays.iter().map(|(base, key)| {
-        let (live, name) = (live.scoped(base), name.clone());
+    // Each relay keeps its own connection, and one refusing this machine waits alone.
+    let runs = relays.iter().map(|(relay, base, key)| {
+        let (live, name) = (live.scoped(relay), name.clone());
         let (code, socket) = (&code, &a.socket);
         async move {
             let ended = stay_connected(base, code, key.clone(), name, socket, &live).await;

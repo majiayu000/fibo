@@ -346,7 +346,7 @@ async fn relay_refusal_is_safe_when_returned_to_the_cli() {
     .unwrap();
     let (ended, was_up) = connection.await.unwrap();
     assert!(!was_up);
-    let Ended::Refused(why) = ended else {
+    let Ended::Rejected(why) = ended else {
         panic!("expected a refusal")
     };
     assert!(

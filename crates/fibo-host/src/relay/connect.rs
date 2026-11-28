@@ -19,8 +19,11 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 
 enum Ended {
-    /// The relay refused this machine; redialing would not help.
+    /// Another process on this machine took over; this one leaves.
     Refused(String),
+    /// The relay turned this machine away (a bad key, too old a relay): asked again only
+    /// every [`REJECTED_WAIT`], or at once when the setting is saved again.
+    Rejected(String),
     /// Another connection registered with this machine's code (4000). It may be another
     /// computer given the same code, or someone who read the code's hash off a proxy log
     /// (#69): either way leaving for good hands the code over, so it tries again later.
@@ -32,6 +35,10 @@ enum Ended {
 /// the code back. Long, so two computers sharing a code take turns for minutes at a time
 /// instead of throwing each other off every second.
 pub(super) const REPLACED_WAIT: Duration = Duration::from_secs(5 * 60);
+
+/// How long a relay that turned this machine away waits before it is asked again: someone
+/// may fix the key or upgrade the relay without touching this computer.
+pub(super) const REJECTED_WAIT: Duration = Duration::from_secs(5 * 60);
 
 /// Which process on this machine last dialed the relay for this runtime. Written before each
 /// dial, so when the relay pushes one off (4000) it can tell a newer process here (a host
@@ -55,19 +62,32 @@ pub(super) fn taken_here(socket: &Path) -> bool {
         .is_some_and(|pid| pid != std::process::id() && fibo_platform::process::exists(pid as i32))
 }
 
-/// What follows a connection that ended: give up, or what to say and how long to wait
-/// before the next one. `wait` is the backoff after a lost connection; it starts over once
-/// one got registered.
-fn after(ended: Ended, was_up: bool, wait: &mut Duration) -> io::Result<(Duration, String)> {
+/// What follows a connection that ended: give up, or how long to wait before the next one,
+/// what to say meanwhile and as what state. `wait` is the backoff after a lost connection;
+/// it starts over once one got registered.
+fn after(
+    ended: Ended,
+    was_up: bool,
+    wait: &mut Duration,
+) -> io::Result<(Duration, String, RemoteState)> {
     match ended {
         Ended::Refused(why) => Err(io::Error::other(why)),
+        Ended::Rejected(why) => {
+            *wait = Duration::from_secs(1);
+            let why = t!(
+                "{why}。{v1} 分钟后再试；改好后可以在 设置 › 手机与远程 点「重新连接」",
+                why,
+                v1 = REJECTED_WAIT.as_secs() / 60
+            );
+            Ok((REJECTED_WAIT, why, RemoteState::Failed))
+        }
         Ended::Replaced => {
             *wait = Duration::from_secs(1);
             let why = t!(
                 "另一个连接用这台电脑的配对码连上了中继，把它顶了下来（同一个码在另一台电脑上，或码被别人拿到了），{v1} 分钟后再连",
                 v1 = REPLACED_WAIT.as_secs() / 60
             );
-            Ok((REPLACED_WAIT, why))
+            Ok((REPLACED_WAIT, why, RemoteState::Connecting))
         }
         Ended::Lost(why) => {
             if was_up {
@@ -78,6 +98,7 @@ fn after(ended: Ended, was_up: bool, wait: &mut Duration) -> io::Result<(Duratio
             Ok((
                 now,
                 t!("{why}，{as_secs} 秒后重连", why, as_secs = now.as_secs()),
+                RemoteState::Connecting,
             ))
         }
     }
@@ -94,9 +115,9 @@ pub(super) async fn stay_connected(
     let mut wait = Duration::from_secs(1);
     loop {
         let (ended, was_up) = connect(base, code, key.as_deref(), &name, socket, live).await;
-        let (pause, again) = after(ended, was_up, &mut wait)?;
+        let (pause, again, state) = after(ended, was_up, &mut wait)?;
         eprintln!("fibo remote: 和中继断开：{again:?}");
-        live.state(RemoteState::Connecting, again);
+        live.state(state, again);
         tokio::time::sleep(pause).await;
     }
 }
@@ -122,8 +143,13 @@ async fn connect(
     .await
     {
         Ok(Ok((ws, _))) => ws,
-        Ok(Err(e)) => return (Ended::Lost(e.to_string()), false),
-        Err(_) => return (Ended::Lost(t!("连接超时").into()), false),
+        Ok(Err(e)) => return (Ended::Lost(super::words::dial_failed(&e)), false),
+        Err(_) => {
+            return (
+                Ended::Lost(t!("连中继超时：网络不通，或者中继没有回应").into()),
+                false,
+            )
+        }
     };
     let (mut sink, mut stream) = ws.split();
     let mut paired = Paired::default();
@@ -143,7 +169,7 @@ async fn connect(
         retired: devices::retired(socket),
     };
     if let Err(e) = sink.send(Message::text(register.to_text())).await {
-        return (Ended::Lost(e.to_string()), false);
+        return (Ended::Lost(super::words::dial_failed(&e)), false);
     }
     let mut refusal = None;
     let proto = loop {
@@ -153,11 +179,11 @@ async fn connect(
                 Ok(Frame::Registered { proto }) => match wire::relay_too_old(proto) {
                     Some(old) => {
                         let why = t!(
-                            "中继版本太旧（协议 {old}，这台 Fibo 要 {min} 以上）：请升级中继",
+                            "中继版本太旧（协议 {old}，这台 Fibo 要 {min} 以上）：请中继的维护者升级它",
                             old,
                             min = wire::MIN_RELAY
                         );
-                        return (Ended::Refused(why), false);
+                        return (Ended::Rejected(why), false);
                     }
                     None => break proto.unwrap_or(1),
                 },
@@ -167,16 +193,16 @@ async fn connect(
             Ok(Some(Ok(Message::Close(f)))) => {
                 let code = f.as_ref().map_or(1005, |f| u16::from(f.code));
                 let why = refusal.unwrap_or_else(|| t!("中继关闭了连接（{code}）", code));
-                // Bad key, bad token, or full: the same again would fail the same way.
+                // Bad key, bad token, or full: the same again soon would fail the same way.
                 return match code {
                     4002 | 4003 | 4401 => {
-                        (Ended::Refused(t!("中继拒绝了这台机器：{why}", why)), false)
+                        (Ended::Rejected(super::words::refused(code, &why)), false)
                     }
                     _ => (Ended::Lost(why), false),
                 };
             }
             Ok(Some(Ok(_))) => (),
-            Ok(Some(Err(e))) => return (Ended::Lost(e.to_string()), false),
+            Ok(Some(Err(e))) => return (Ended::Lost(super::words::dial_failed(&e)), false),
             Ok(None) => return (Ended::Lost(t!("中继断开").into()), false),
             Err(_) => return (Ended::Lost(t!("中继没有回应注册").into()), false),
         }
@@ -254,7 +280,7 @@ async fn connect(
         let m = match m {
             Err(_) => break Ended::Lost(t!("中继很久没有消息").into()),
             Ok(None) => break Ended::Lost(t!("中继断开").into()),
-            Ok(Some(Err(e))) => break Ended::Lost(e.to_string()),
+            Ok(Some(Err(e))) => break Ended::Lost(super::words::dial_failed(&e)),
             Ok(Some(Ok(m))) => m,
         };
         deadline = tokio::time::Instant::now() + SILENCE;

@@ -1,5 +1,6 @@
 //! 设置 › 手机与远程: phones on a relay, the operation log, and other machines.
 use super::*;
+use fibo_core::protocol::RemoteState;
 
 impl SettingsView {
     /// The key as typed: None leaves the saved one.
@@ -25,6 +26,59 @@ impl SettingsView {
                 .into_iter()
                 .collect(),
         )
+    }
+    /// 重新连接: the saved setting again, so every relay is dialed at once, including one
+    /// that turned this machine away and waits to ask again.
+    fn reconnect(&mut self, cx: &mut Context<Self>) {
+        self.remote_error = None;
+        cx.emit(SettingsAction::Remote {
+            enabled: true,
+            relay: self.remote.relay.clone(),
+            key: None,
+            also: None,
+        });
+    }
+    /// One row per relay when there is more than one: which it is, its address, its state.
+    fn relay_rows(&self) -> Vec<gpui::AnyElement> {
+        let r = &self.remote;
+        if r.live.relays.len() < 2 {
+            return Vec::new();
+        }
+        r.live
+            .relays
+            .iter()
+            .map(|x| {
+                let (name, note) = if x.relay == r.relay {
+                    (t!("主中继"), x.relay.clone())
+                } else if r.moving.as_deref() == Some(&x.relay) {
+                    let note = if r.moving_left > 0 {
+                        t!(
+                            "{relay}：换地址前配对的 {n} 台还没连过；它们连上一次就会改走新地址，之后这台自动去掉",
+                            relay = x.relay,
+                            n = r.moving_left
+                        )
+                    } else {
+                        t!("{relay}：手机都已改走新地址，下次启动时去掉", relay = x.relay)
+                    };
+                    (t!("旧中继"), note)
+                } else {
+                    (t!("备用中继"), x.relay.clone())
+                };
+                // The state in a word on the right; why, under the address, where it wraps.
+                let (dot, text) = match x.state {
+                    RemoteState::Connected => (super::phones::live_color(), t!("已连上")),
+                    RemoteState::Failed => (Tone::Danger.dot(), t!("没连上")),
+                    _ => (T::color(T::secondary()), t!("正在连…")),
+                };
+                let note = match x.state {
+                    RemoteState::Connected => note,
+                    _ if x.detail.is_empty() => note,
+                    _ => format!("{note}\n{}", x.detail),
+                };
+                self.row(false, name, &note, status_dot(dot, text.into()))
+                    .into_any_element()
+            })
+            .collect()
     }
     fn send_remote(&mut self, enabled: bool, cx: &mut Context<Self>) {
         let relay = self.relay.read(cx).text.trim().to_owned();
@@ -114,11 +168,17 @@ impl SettingsView {
             );
             let typed = self.relay.read(cx).text.trim().to_owned();
             if typed != r.relay || self.typed_key(cx).is_some() || self.also_change(cx).is_some() {
+                // A new main relay: the old one stays on until paired phones have moved.
+                let moving = typed != r.relay && !r.relay.is_empty() && !r.devices.is_empty();
                 link.push(
                     self.row(
                         false,
                         t!("改过的地址或密钥"),
-                        t!("保存后后台按新的设置重新连接"),
+                        if moving {
+                            t!("保存后后台按新的设置重新连接；旧地址先留着，已配对的手机连上一次就会改走新地址，不用重新配对")
+                        } else {
+                            t!("保存后后台按新的设置重新连接")
+                        },
                         secondary("remote-save", t!("保存")).on_click(cx.listener(
                             |this, _, _, cx| {
                                 let on = this.remote.enabled;
@@ -130,21 +190,19 @@ impl SettingsView {
                 );
             }
             let (dot, state) = super::phones::state_line(r);
-            link.push(
-                self.row(
-                    false,
-                    t!("状态"),
-                    self.remote_error.unwrap_or(""),
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(T::S6))
-                        .max_w(px(T::FORM_WIDTH * 0.6))
-                        .child(div().size(px(T::DOT)).rounded_full().bg(dot))
-                        .child(label(state)),
+            let all_up = r.live.state == RemoteState::Connected
+                && (r.live.relays.iter()).all(|x| x.state == RemoteState::Connected);
+            let control = status_dot(dot, state).when(r.enabled && !all_up, |d| {
+                d.child(
+                    secondary("remote-reconnect", t!("重新连接"))
+                        .on_click(cx.listener(|this, _, _, cx| this.reconnect(cx))),
                 )
-                .into_any_element(),
+            });
+            link.push(
+                self.row(false, t!("状态"), self.remote_error.unwrap_or(""), control)
+                    .into_any_element(),
             );
+            link.extend(self.relay_rows());
         }
         let mut phones = Vec::new();
         if self.shows(Page::Phones, t!("操作记录"), cx) {
@@ -292,4 +350,15 @@ impl SettingsView {
         }
         cx.notify();
     }
+}
+
+/// A state dot and its words, as 状态 and each relay's row show them.
+fn status_dot(dot: gpui::Hsla, text: String) -> gpui::Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(T::S6))
+        .max_w(px(T::FORM_WIDTH * 0.6))
+        .child(div().flex_none().size(px(T::DOT)).rounded_full().bg(dot))
+        .child(label(text))
 }

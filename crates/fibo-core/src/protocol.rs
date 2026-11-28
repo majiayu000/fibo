@@ -35,6 +35,12 @@ pub struct RemoteStatus {
     /// The first of `also` has a registration key saved.
     #[serde(default)]
     pub also_keyed: bool,
+    /// The relay `relay` replaced, kept on until the phones paired before the change have
+    /// connected once and learned the new one; how many have not yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moving: Option<String>,
+    #[serde(default)]
+    pub moving_left: usize,
     #[serde(flatten)]
     pub live: RemoteLive,
 }
@@ -55,6 +61,18 @@ pub struct RemoteLive {
     pub detail: String,
     #[serde(default)]
     pub online: Vec<RemotePhone>,
+    /// Each relay on its own, in the setting's order; absent from hosts before 11-28.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relays: Vec<RelayLive>,
+}
+
+/// One relay's connection: its address as set, its state, and why it is not connected.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RelayLive {
+    pub relay: String,
+    pub state: RemoteState,
+    #[serde(default)]
+    pub detail: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

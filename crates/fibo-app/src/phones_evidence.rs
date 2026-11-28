@@ -69,7 +69,7 @@ pub(super) fn start(
             .unwrap();
         let mut line = String::new();
         std::io::BufReader::new(relay.stdout.take().unwrap()).read_line(&mut line).unwrap();
-        let addr = line.split_whitespace().nth(3).unwrap().to_owned();
+        let addr = listening(&line);
         let base = format!("http://{addr}");
         call(Request::RemoteConfigure { enabled: true, relay: base.clone(), key: None, also: None });
         let pair = |name: &str, role: &str| match call(Request::RemotePair { name: name.into(), role: role.into() }) {
@@ -93,7 +93,7 @@ pub(super) fn start(
             .unwrap();
         let mut say = phone.stdin.take().unwrap();
         for line in [
-            r#"{"id":1,"op":"hello"}"#,
+            r#"{"id":1,"op":"hello","version":2}"#,
             r#"{"id":2,"op":"watch","terminal":"fibo-relay"}"#,
             r#"{"id":3,"op":"keys","terminal":"fibo-relay","keys":["up","enter"]}"#,
         ] {
@@ -151,6 +151,32 @@ pub(super) fn start(
         assert_eq!(remote(cx).devices.len(), 3);
         handle.update(cx, |v, _, a| v.visual_phones(true, None, a)).unwrap();
         both("5-after-kick", cx).await;
+        // A backup relay whose key is wrong: phones still get through, the app says which
+        // relay is down and why, and offers 重新连接.
+        let mut backup = std::process::Command::new(&relay_bin)
+            .args(["--listen", "127.0.0.1:0", "--key", "right"])
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut line = String::new();
+        std::io::BufReader::new(backup.stdout.take().unwrap()).read_line(&mut line).unwrap();
+        let second = format!("http://{}", listening(&line));
+        let wrong = fibo_core::protocol::RemoteRelay { relay: second, key: Some("wrong".into()) };
+        call(Request::RemoteConfigure { enabled: true, relay: base.clone(), key: None, also: Some(vec![wrong]) });
+        let mut half = false;
+        for _ in 0..100 {
+            wait(100).await;
+            let r = remote(cx);
+            let failed = r.live.relays.iter().any(|x| x.state == fibo_core::protocol::RemoteState::Failed);
+            if r.live.state == fibo_core::protocol::RemoteState::Connected && failed { half = true; break; }
+        }
+        assert!(half, "the backup's refusal never showed: {:?}", remote(cx));
+        handle.update(cx, |v, _, a| v.visual_phones(true, None, a)).unwrap();
+        both("6-backup-refused-panel", cx).await;
+        handle.update(cx, |v, w, a| v.visual_phones_settings(w, a)).unwrap();
+        both("7-backup-refused-settings", cx).await;
+        let _ = backup.kill();
+        let _ = backup.wait();
         let _ = phone.kill();
         let _ = phone.wait();
         call(Request::RemoteConfigure { enabled: false, relay: base, key: None, also: None });
@@ -161,4 +187,10 @@ pub(super) fn start(
     })
     .detach();
     true
+}
+
+/// The address in the relay's first line, `fibo-relay <v> (protocol <n>) listening on <addr> (…)`.
+fn listening(line: &str) -> String {
+    let after = line.split(" on ").nth(1).expect("listening line");
+    after.split_whitespace().next().unwrap().to_owned()
 }

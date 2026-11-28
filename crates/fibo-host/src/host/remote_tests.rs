@@ -70,6 +70,7 @@ fn saving_after_an_external_repair_keeps_the_recovered_keys() {
             relay: "wss://second.example".into(),
             key: Some("second recovered".into()),
         }],
+        moving: None,
     };
     std::fs::write(&file, serde_json::to_vec(&repaired).unwrap()).unwrap();
 

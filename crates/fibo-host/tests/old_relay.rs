@@ -1,9 +1,10 @@
 //! A relay older than per-phone route codes would take the machine and route no phone to
-//! it; `fibo remote --relay` leaves it and says the relay needs upgrading.
+//! it; `fibo remote --relay` leaves it, says the relay needs upgrading, and stays to ask
+//! again later (it may be upgraded without anyone touching this computer).
 #[path = "support/tied.rs"]
 mod tied;
 use futures_util::{SinkExt, StreamExt};
-use std::io::Read;
+use std::io::BufRead;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use tied::SpawnTied;
@@ -44,22 +45,34 @@ fn a_relay_that_only_speaks_protocol_2_is_left_with_a_reason() {
         .stderr(Stdio::piped())
         .spawn_tied()
         .unwrap();
-    let start = Instant::now();
-    let status = loop {
-        if let Some(status) = machine.try_wait().unwrap() {
-            break status;
+    // What it says, line by line, until it names the old relay.
+    let (said, heard) = std::sync::mpsc::channel();
+    let stderr = machine.stderr.take().unwrap();
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(stderr)
+            .lines()
+            .map_while(Result::ok)
+        {
+            let _ = said.send(line);
         }
-        assert!(
-            start.elapsed() < Duration::from_secs(15),
-            "still on a relay that speaks protocol 2 after 15 s"
-        );
-        std::thread::sleep(Duration::from_millis(50));
+    });
+    let start = Instant::now();
+    let reason = loop {
+        let left = Duration::from_secs(15).saturating_sub(start.elapsed());
+        match heard.recv_timeout(left) {
+            Ok(line) if line.contains("中继版本太旧（协议 2") => break line,
+            Ok(_) => continue,
+            Err(_) => panic!("never said the relay is too old within 15 s"),
+        }
     };
-    let mut said = String::new();
-    let mut stderr = machine.stderr.take().unwrap();
-    stderr.read_to_string(&mut said).unwrap();
+    assert!(reason.contains("分钟后再试"), "{reason}");
+    // It hung up on the old relay, and waits to ask again rather than leaving for good.
     relay.join().unwrap();
-    assert!(!status.success(), "stayed on an old relay: {said}");
-    assert!(said.contains("中继版本太旧（协议 2"), "{said}");
+    assert!(
+        machine.try_wait().unwrap().is_none(),
+        "left for good: {reason}"
+    );
+    let _ = machine.kill();
+    let _ = machine.wait();
     let _ = std::fs::remove_dir_all(&root);
 }
