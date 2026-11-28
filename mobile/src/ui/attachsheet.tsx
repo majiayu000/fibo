@@ -17,6 +17,7 @@ export function AttachSheet({
   permission,
   permissionFull,
   onPermission,
+  onResume,
 }: {
   onClose: () => void;
   /** Why pictures cannot be added now, or null when they can; undefined: this computer takes none. */
@@ -27,6 +28,8 @@ export function AttachSheet({
   permission?: string | null;
   permissionFull?: boolean | null;
   onPermission?: () => void;
+  /** A new session: pick up the last conversation in its folder instead. */
+  onResume?: () => void;
 }) {
   const t = useTheme();
   const can = pictures === null;
@@ -46,6 +49,17 @@ export function AttachSheet({
           </View>
           {!can && <Text style={{ color: t.dim, fontSize: 13, lineHeight: 18 }}>{pictures}</Text>}
         </>
+      )}
+      {!!onResume && (
+        <View style={[s.group, { backgroundColor: t.well, marginBottom: 12 }]}>
+          <Pressable accessibilityRole="button" onPress={onResume} style={({ pressed }) => [s.row, pressed && { opacity: 0.6 }]}>
+            <View style={[s.rowIcon, { backgroundColor: t.card }]}>
+              <Icon name="folder" size={16} width={1.8} color={t.text} />
+            </View>
+            <Text style={{ flex: 1, color: t.text, fontSize: 15 }}>{tr('接着上次的对话')}</Text>
+            <Icon name="right" size={14} width={2} color={t.dim} />
+          </Pressable>
+        </View>
       )}
       {(!!permission || !!onPermission) && (
         <View style={[s.group, { backgroundColor: t.well }]}>
