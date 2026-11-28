@@ -315,7 +315,9 @@
         tn[0].nodeValue = lang === 'zh' ? cn.replace(/<[^>]+>/g, '') : el._text;
       }
     });
-    $$('a[href="blog/"],a[href="blog/zh.html"]').forEach(x => x.setAttribute('href', lang === 'zh' ? 'blog/zh.html' : 'blog/'));
+    // 博客：blog/ 和 blog/<文章>/ 的中文版都是后面加 zh.html；文章封面中文是 00-cover.webp，英文是 00-cover-en.webp
+    $$('a[href^="blog/"]').forEach(x => x.setAttribute('href', x.getAttribute('href').replace(/zh\.html$/, '') + (lang === 'zh' ? 'zh.html' : '')));
+    $$('.bpost img').forEach(x => x.setAttribute('src', x.getAttribute('src').replace(/00-cover(-en)?\.webp$/, lang === 'zh' ? '00-cover.webp' : '00-cover-en.webp')));
     document.title = lang === 'zh' ? 'Fibo：在 Mac 上同时跑很多个 Coding Agent' : title;
     if (langBtn) { langBtn.textContent = lang === 'zh' ? 'EN' : '中文'; langBtn.setAttribute('aria-label', lang === 'zh' ? 'Switch to English' : '切换到中文'); }
     redraw.forEach(f => f());
