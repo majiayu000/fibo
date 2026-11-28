@@ -1,25 +1,23 @@
 // A new task: pick the computer, the directory and the Agent, write what it should do;
 // the computer opens a new tab running that Agent with it as the first message. Or pick
 // up the last conversation there: then what you write is optional, its next message.
+// What it should do is written in the same box as a conversation's (composer.tsx), typed or held
+// to talk, and sending starts it (user, 2026-11-29: 「它和我们的正常的输入方式不太一样，它就是搞成了两套了」).
 // The space its tab goes in is shown and sent, so it never lands somewhere unsaid; the
-// keyboard's return key starts it (or puts the keyboard away and says what is missing).
 // Pictures picked here go with the first message, on a computer that says it takes them.
-import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
-import { type ComponentRef, useEffect, useRef, useState } from 'react';
-import { Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { confirm, oops } from '@/actions';
 import { lang, tr } from '@/i18n';
 import { NOT_YET, refresh, remote, speaksV2, supports, useHub, write } from '@/remote/hub';
 import { getDraft, resetDraft, setDraft, useDraft } from '@/store/draft';
 import { rememberSent } from '@/store/sentPictures';
-import { useDictation } from '@/ui/dictation';
-import { useHold, VoiceGlow } from '@/ui/holdtalk';
-import { joinSpoken } from '@/ui/spoken';
+import { Composer } from '@/ui/composer';
 import { Icon } from '@/ui/icons';
-import { Btn, Label, Nav, Notice, Wide, mono, noOutline } from '@/ui/kit';
-import { MAX_PICTURES, type Picture, pick } from '@/ui/pictures';
-import { KeyboardSafe, useBottomOverKeyboard } from '@/ui/keyboard';
+import { Label, Nav, Notice, mono } from '@/ui/kit';
+import type { Picture } from '@/ui/pictures';
+import { KeyboardSafe } from '@/ui/keyboard';
 import { SpaceField } from '@/ui/spacefield';
 import { addSpaceAsk, ignoredPick, landing, pickSpace } from '@/ui/spaces';
 import { tilde } from '@/ui/status';
@@ -27,33 +25,17 @@ import { ago, useTheme } from '@/ui/theme';
 
 export default function NewTask() {
   const t = useTheme();
-  const bottom = useBottomOverKeyboard();
   const { machines } = useHub();
   const draft = useDraft();
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
-  const [pictures, setPictures] = useState<Picture[]>([]);
-  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
-  const typing = useRef(false);
-  // The box is the last field: once the keyboard is up and the page has shrunk, bring it
-  // into view. On focus alone is too early on Android, where the keyboard is still coming.
-  useEffect(() => {
-    const sub = Keyboard.addListener('keyboardDidShow', () => typing.current && scroll.current?.scrollToEnd({ animated: true }));
-    return () => sub.remove();
-  }, []);
   const online = machines.filter((m) => m.status === 'online');
   const m = machines.find((x) => x.id === draft.machine) ?? online[0] ?? machines[0];
-  const dictation = useDictation(
-    oops,
-    m && supports(m, 'transcribe') ? (audio) => write(m.id, 'transcribe', { audio, lang: lang() }).then((r) => String(r?.text ?? '')) : undefined,
-  );
-  // Starting a task takes more than words (the computer, the folder): letting go puts them in the box.
-  const hold = useHold(dictation, {
-    said: (text) => setDraft({ prompt: joinSpoken(getDraft().prompt, text) }),
-    tap: () => oops(tr('按住说话，松手放进框里')),
-    nothing: () => oops(tr('没听清，按住再说一次')),
-  });
+  const transcribe = m && supports(m, 'transcribe') ? (audio: string) => write(m.id, 'transcribe', { audio, lang: lang() }).then((r) => String(r?.text ?? '')) : undefined;
+  const keep = useCallback((d: { text: string }) => {
+    if (d.text !== getDraft().prompt) setDraft({ prompt: d.text });
+  }, []);
 
   const selectedMachine = m?.id;
   useEffect(() => {
@@ -68,8 +50,7 @@ export default function NewTask() {
   const canResume = able && !!cwd && supports(m, 'lastsession');
   // Older computers start the task without them: no button there rather than lost pictures.
   const canPicture = able && supports(m, 'openimages') && supports(m, 'image');
-  const ready = able && !!cwd && (!!draft.prompt.trim() || !!draft.resume) && !busy;
-  /** What stops 开始, said where the button is: a grey button alone says nothing. */
+  /** What stops it starting, said above the box: a send that does nothing says nothing. */
   const missing = busy
     ? ''
     : !m
@@ -80,9 +61,7 @@ export default function NewTask() {
           ? tr('这台电脑的 Fibo 还不能开新会话')
           : !cwd
             ? tr('先选一个目录')
-            : !draft.prompt.trim() && !draft.resume
-              ? tr('写上要它做什么')
-              : '';
+            : '';
 
   // Another directory, Agent or computer: another 「上次」.
   useEffect(() => {
@@ -105,44 +84,33 @@ export default function NewTask() {
     }
   }
 
-  async function start() {
-    if (!m || !cwd) return;
-    dictation.cancel();
+  /** The box's send, or letting go of a hold: false gives the words back to the box. */
+  async function start(prompt: string, pictures: Picture[]): Promise<boolean> {
+    if (!m || !cwd || missing) {
+      oops(missing || tr('先选一个目录'));
+      return false;
+    }
     setBusy(true);
     try {
-      const prompt = draft.prompt.trim();
       const space = land.space?.id;
       const images: string[] = [];
       for (const p of canPicture ? pictures : []) images.push((await write(m.id, 'image', { data: p.base64 })).path);
       const where = { ...(space ? { space } : {}), ...(images.length ? { images } : {}) };
       const ok = await write(m.id, 'open', draft.resume ? { resume: draft.resume.id, ...where, ...(prompt ? { prompt } : {}) } : { cwd: cwd, agent: draft.agent, prompt, ...where });
       if (ok?.terminal && images.length) rememberSent(m.id, ok.terminal, prompt, pictures);
-      setPictures([]);
       const ignored = ignoredPick(spaces, space, cwd, ok ?? {});
       resetDraft();
       await refresh(m.id);
       if (ignored) oops(ignored);
       if (ok?.terminal) router.replace({ pathname: '/chat', params: { machine: m.id, terminal: ok.terminal } });
       else router.back();
+      return true;
     } catch (e) {
       oops((e as Error).message);
+      return false;
     } finally {
       setBusy(false);
     }
-  }
-
-  async function addPictures() {
-    try {
-      const got = await pick('library', MAX_PICTURES - pictures.length);
-      if (got) setPictures((p) => [...p, ...got].slice(0, MAX_PICTURES));
-    } catch (e) {
-      oops((e as Error).message);
-    }
-  }
-
-  /** The keyboard's return key: start when it can; the keyboard goes away either way, and the line under 开始 says what is missing. */
-  function submit() {
-    if (ready) start();
   }
 
   async function addSpace(path: string) {
@@ -161,7 +129,7 @@ export default function NewTask() {
   return (
     <KeyboardSafe style={{ backgroundColor: t.bg }}>
       <Nav close big title={tr('新会话')} sub={tr('在电脑上开一个新终端，运行 Agent')} />
-      <ScrollView ref={scroll} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 16, paddingBottom: 16 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 18, paddingTop: 8, gap: 16, paddingBottom: 16 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         <View style={s.field}>
           <Label>{tr('电脑')}</Label>
           <Pressable onPress={() => setPicking(!picking)} style={[s.sel, { backgroundColor: t.card, borderColor: t.line }]}>
@@ -218,83 +186,6 @@ export default function NewTask() {
             <Icon name="right" size={14} width={2} color={t.dim} />
           </Pressable>
         </View>
-        <View style={s.field}>
-          <Label>Agent</Label>
-          <View style={[s.seg, { backgroundColor: t.card, borderColor: t.line }]}>
-            {(['claude', 'codex'] as const).map((a) => (
-              <Pressable
-                key={a}
-                onPress={() => setDraft({ agent: a })}
-                style={[s.segItem, draft.agent === a && { backgroundColor: t.well }]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: draft.agent === a }}
-              >
-                <Text style={{ fontSize: 15, color: draft.agent === a ? t.text : t.dim, fontWeight: draft.agent === a ? '600' : '400' }}>
-                  {m?.agentNames?.[a] || a}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-        <View style={s.field}>
-          <Label>{draft.resume ? tr('接着说什么（可以不写）') : tr('要它做什么')}</Label>
-          <TextInput
-            multiline
-            value={draft.prompt}
-            onChangeText={(prompt) => setDraft({ prompt })}
-            // Return starts it: on a phone a new line is rarely what is meant, and the
-            // keyboard otherwise hides 开始 with no way to put it away.
-            returnKeyType={ready ? 'send' : 'done'}
-            submitBehavior="blurAndSubmit"
-            onSubmitEditing={submit}
-            onFocus={() => {
-              typing.current = true;
-              if (Keyboard.isVisible()) scroll.current?.scrollToEnd({ animated: true });
-            }}
-            onBlur={() => (typing.current = false)}
-            accessibilityLabel={draft.resume ? tr('接着说什么') : tr('要它做什么')}
-            placeholder={tr('比如：把审批框里的终端内容换成等宽字体')}
-            placeholderTextColor={t.dim}
-            style={[s.area, { color: t.text, backgroundColor: t.card, borderColor: t.line }, noOutline]}
-          />
-        </View>
-        {canPicture && pictures.length > 0 && (
-          <View style={s.pictures}>
-            {pictures.map((p, i) => (
-              <View key={p.uri}>
-                <Image source={{ uri: p.uri }} style={[s.thumb, { backgroundColor: t.well }]} accessibilityLabel={tr('第 {n} 张图片', { n: i + 1 })} />
-                <Pressable
-                  onPress={() => setPictures((all) => all.filter((x) => x !== p))}
-                  style={[s.unpick, { backgroundColor: t.text }]}
-                  accessibilityLabel={tr('去掉第 {n} 张图片', { n: i + 1 })}
-                  hitSlop={8}
-                >
-                  <Icon name="close" size={9} width={2.4} color={t.bg} />
-                </Pressable>
-              </View>
-            ))}
-          </View>
-        )}
-        {/* Under the glow while held: its words would sit on top of these (2026-11-28 vivo). The held button stays and keeps the finger. */}
-        <View style={[{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, hold.shown && { opacity: 0 }]}>
-          {canPicture && pictures.length < MAX_PICTURES && <Btn label={tr('加图片')} onPress={addPictures} />}
-          {dictation.can && (
-            <View {...hold.handlers} accessibilityRole="button" accessibilityLabel={tr('按住说话')}>
-              <View pointerEvents="none">
-                <Btn label={tr('按住说话')} icon="mic" primary={hold.shown} onPress={() => undefined} />
-              </View>
-            </View>
-          )}
-          <Btn
-            label={tr('从剪贴板粘贴')}
-            onPress={() =>
-              Clipboard.getStringAsync()
-                .then((x) => x && setDraft({ prompt: draft.prompt ? `${draft.prompt}\n${x}` : x }))
-                .catch(() => undefined)
-            }
-          />
-          {canResume && !draft.resume && <Btn label={tr('接着上次的对话')} onPress={findLast} />}
-        </View>
         {!!draft.resume && (
           <View style={[s.resume, { backgroundColor: t.card, borderColor: t.line }]}>
             <View style={{ flex: 1, gap: 2 }}>
@@ -309,16 +200,32 @@ export default function NewTask() {
           </View>
         )}
         {!!note && <Notice text={note} />}
-        {m && m.status === 'online' && !able && <Notice text={tr(NOT_YET)} />}
-        {m && m.status !== 'online' && <Notice text={m.error ?? tr('电脑没连上')} />}
+        {!!missing && <Notice text={missing} />}
+        {busy && <Notice text={tr('正在打开…')} />}
+        {!missing && !busy && (
+          <Text style={{ textAlign: 'center', fontSize: 12, color: t.dim }}>
+            {land.space ? tr('电脑上「{name}」里会出现一个新标签页，回到电脑前可以直接接着用', { name: land.space.name }) : tr('电脑上会出现一个新标签页，你回到电脑前可以直接接着用')}
+          </Text>
+        )}
       </ScrollView>
-      <View style={[{ paddingHorizontal: 18, paddingBottom: bottom + 4, gap: 10 }, hold.shown && { opacity: 0 }]}>
-        <Wide label={busy ? tr('正在打开…') : draft.resume ? tr('接着做') : tr('开始')} disabled={!ready} onPress={start} />
-        <Text style={{ textAlign: 'center', fontSize: 12, color: t.dim }}>
-          {missing || (land.space ? tr('电脑上「{name}」里会出现一个新标签页，回到电脑前可以直接接着用', { name: land.space.name }) : tr('电脑上会出现一个新标签页，你回到电脑前可以直接接着用'))}
-        </Text>
-      </View>
-      {hold.shown && <VoiceGlow hold={hold} dictation={dictation} letGo={tr('松手放进框里，上移取消')} />}
+      <Composer
+        agent={m?.agentNames?.[draft.agent] || draft.agent}
+        // Two Agents: a tap on the name is the other one.
+        onModel={() => setDraft({ agent: draft.agent === 'claude' ? 'codex' : 'claude' })}
+        running={false}
+        canStop={false}
+        offline={false}
+        onStop={() => undefined}
+        onSend={start}
+        onError={oops}
+        canAttach={canPicture}
+        onResume={canResume && !draft.resume ? findLast : undefined}
+        sendsEmpty={!!draft.resume}
+        placeholder={draft.resume ? tr('接着说什么（可以不写）') : undefined}
+        kept={{ text: draft.prompt, pictures: [] }}
+        onKeep={keep}
+        onTranscribe={transcribe}
+      />
     </KeyboardSafe>
   );
 }
@@ -328,12 +235,6 @@ const s = StyleSheet.create({
   sel: { height: 48, borderRadius: 12, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14 },
   selText: { fontSize: 15, fontWeight: '500' },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  seg: { flexDirection: 'row', borderWidth: 1, borderRadius: 12, padding: 3, gap: 3 },
-  segItem: { flex: 1, height: 38, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   resume: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 14, padding: 14 },
   clear: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  pictures: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 4, paddingRight: 4 },
-  thumb: { width: 56, height: 56, borderRadius: 12 },
-  unpick: { position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  area: { minHeight: 150, borderWidth: 1, borderRadius: 14, padding: 14, fontSize: 15, lineHeight: 22, textAlignVertical: 'top' },
 });

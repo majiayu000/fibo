@@ -40,6 +40,9 @@ export function Composer({
   kept,
   onKeep,
   onTranscribe,
+  placeholder,
+  sendsEmpty,
+  onResume,
 }: {
   agent: string;
   /** What the computer says is on. */
@@ -68,6 +71,12 @@ export function Composer({
   onKeep?: (draft: ChatDraft) => void;
   /** The computer turns a recording into text, for a phone without its own recognizer. */
   onTranscribe?: (audio: string) => Promise<string>;
+  /** Said in the empty box instead of the conversation's own words (the new-session page). */
+  placeholder?: string;
+  /** Sending nothing means something: picking up the last conversation needs no words. */
+  sendsEmpty?: boolean;
+  /** The + also offers to pick up the last conversation here. */
+  onResume?: () => void;
 }) {
   const t = useTheme();
   const bottom = useBottomOverKeyboard();
@@ -81,7 +90,7 @@ export function Composer({
   const [picking, setPicking] = useState(false);
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   const dictation = useDictation(onError, onTranscribe);
-  const empty = !draft.trim() && !pictures.length;
+  const empty = !draft.trim() && !pictures.length && !sendsEmpty;
   const stop = running && canStop && empty;
   const how = running && canSteer ? 'queue' : undefined;
   // A second tap before the box redraws empty would send the same words twice.
@@ -95,7 +104,7 @@ export function Composer({
     if (stopCounts(sentAt.current, Date.now())) onStop();
   };
   async function go(text: string, with_: Picture[] = []) {
-    if ((!text.trim() && !with_.length) || sending.current) return;
+    if ((!text.trim() && !with_.length && !sendsEmpty) || sending.current) return;
     sending.current = true;
     dictation.cancel();
     sentAt.current = Date.now();
@@ -134,7 +143,7 @@ export function Composer({
     }
   }
   // The + opens pictures and this conversation's settings: shown when either is there.
-  const sheetable = !!canAttach || pictures.length > 0 || !!permission || !!onPermission;
+  const sheetable = !!canAttach || pictures.length > 0 || !!permission || !!onPermission || !!onResume;
   return (
     <View style={[s.card, { borderColor: t.line, backgroundColor: t.card, marginBottom: bottom + 8, shadowColor: '#000' }, hold.shown && s.under]}>
       {hold.shown && <VoiceGlow hold={hold} dictation={dictation} letGo={tr('松手发送，上移取消')} style={{ left: -13, right: -13, bottom: -(bottom + 9) }} />}
@@ -179,7 +188,7 @@ export function Composer({
           ref={input}
           value={draft}
           onChangeText={setDraft}
-          placeholder={offline ? tr('电脑没连上，写的话会在重连后发送') : running ? tr(whileBusy(controls, how).placeholder) : dictation.can ? tr('发消息，或按住说话') : tr('回复，或者让它接着做…')}
+          placeholder={placeholder ?? (offline ? tr('电脑没连上，写的话会在重连后发送') : running ? tr(whileBusy(controls, how).placeholder) : dictation.can ? tr('发消息，或按住说话') : tr('回复，或者让它接着做…'))}
           placeholderTextColor={t.dim}
           multiline
           numberOfLines={Platform.OS === 'web' ? 1 : undefined}
@@ -241,6 +250,13 @@ export function Composer({
           onLibrary={() => add('library')}
           permission={permission}
           permissionFull={permissionFull}
+          onResume={
+            onResume &&
+            (() => {
+              setChoosing(false);
+              onResume();
+            })
+          }
           onPermission={
             onPermission &&
             (() => {
