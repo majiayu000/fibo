@@ -14,6 +14,11 @@ import { tr } from '../i18n';
 export const LONGEST_S = 90;
 /** How often the recording so far is read while talking. */
 export const PARTIAL_MS = 1800;
+/** Louder than a quiet room (about -50 dBFS on 2026-11-28's vivo), softer than speech at arm's length. */
+const VOICE_DB = -35;
+/** Until the first word the loudness is checked this often; after it, the recording is read every PARTIAL_MS. */
+const LISTEN_MS = 150;
+const FIRST_MS = 900;
 
 // Speech needs no more: 16 kHz mono AAC at 32 kbit/s, what whisper reads anyway.
 const VOICE: RecordingOptions = {
@@ -21,6 +26,8 @@ const VOICE: RecordingOptions = {
   sampleRate: 16000,
   numberOfChannels: 1,
   bitRate: 32000,
+  // The microphone's halo follows the voice.
+  isMeteringEnabled: true,
   // ADTS, not MP4: an MP4 is only readable once its index is written at the end, ADTS frame by frame.
   android: { extension: '.aac', outputFormat: 'aac_adts', audioEncoder: 'aac' },
   ios: { outputFormat: IOSOutputFormat.MPEG4AAC, audioQuality: AudioQuality.MEDIUM },
@@ -35,6 +42,8 @@ export type VoiceMemo = {
   stop: () => Promise<void>;
   /** Typing, sending or leaving: drop the recording and any text still coming back. */
   cancel: () => void;
+  /** How loud it is now, 0 to 1, asked by the halo while recording: no state, no re-render. */
+  level: () => number;
 };
 
 export function useVoiceMemo(
@@ -53,10 +62,22 @@ export function useVoiceMemo(
   const partial = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   // One partial read at a time: a slow computer is not sent more while it works.
   const asking = useRef(false);
+  // Nobody has spoken yet: whisper, given only room noise, makes up a sentence (「我全要，我就不信拿不像的。」
+  // on the vivo while the user had not started), so nothing is read before the first word.
+  const voiced = useRef(false);
+  const lastRead = useRef(0);
 
   async function readSoFar(mine: number) {
     const uri = recorder.uri;
     if (!transcribe || !uri || asking.current) return;
+    if (!voiced.current) {
+      if ((recorder.getStatus().metering ?? -160) <= VOICE_DB) return;
+      voiced.current = true;
+      // The first read once a word or two is in.
+      lastRead.current = Date.now() - PARTIAL_MS + FIRST_MS;
+    }
+    if (Date.now() - lastRead.current < PARTIAL_MS) return;
+    lastRead.current = Date.now();
     asking.current = true;
     try {
       const said = await transcribe(await new File(uri).base64());
@@ -82,8 +103,9 @@ export function useVoiceMemo(
       // An iPhone records MP4, unreadable until it ends: its own recognizer is used there anyway.
       if (Platform.OS === 'android') {
         const mine = turn.current;
+        voiced.current = false;
         clearInterval(partial.current);
-        partial.current = setInterval(() => void readSoFar(mine), PARTIAL_MS);
+        partial.current = setInterval(() => void readSoFar(mine), LISTEN_MS);
       }
     } catch (e) {
       onError?.(tr('录不了音：{why}', { why: (e as Error).message }));
@@ -135,5 +157,8 @@ export function useVoiceMemo(
     [],
   );
 
-  return { recording, reading, start, stop, cancel };
+  // dBFS: room noise near -50, speech close to the phone near -15.
+  const level = () => Math.min(1, Math.max(0, ((recorder.getStatus().metering ?? -160) + 50) / 38));
+
+  return { recording, reading, start, stop, cancel, level };
 }
