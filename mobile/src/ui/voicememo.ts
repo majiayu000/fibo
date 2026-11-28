@@ -21,6 +21,8 @@ const VOICE: RecordingOptions = {
   sampleRate: 16000,
   numberOfChannels: 1,
   bitRate: 32000,
+  // The microphone's halo follows the voice.
+  isMeteringEnabled: true,
   // ADTS, not MP4: an MP4 is only readable once its index is written at the end, ADTS frame by frame.
   android: { extension: '.aac', outputFormat: 'aac_adts', audioEncoder: 'aac' },
   ios: { outputFormat: IOSOutputFormat.MPEG4AAC, audioQuality: AudioQuality.MEDIUM },
@@ -35,6 +37,8 @@ export type VoiceMemo = {
   stop: () => Promise<void>;
   /** Typing, sending or leaving: drop the recording and any text still coming back. */
   cancel: () => void;
+  /** How loud it is now, 0 to 1, asked by the halo while recording: no state, no re-render. */
+  level: () => number;
 };
 
 export function useVoiceMemo(
@@ -135,5 +139,8 @@ export function useVoiceMemo(
     [],
   );
 
-  return { recording, reading, start, stop, cancel };
+  // dBFS: room noise near -50, speech close to the phone near -15.
+  const level = () => Math.min(1, Math.max(0, ((recorder.getStatus().metering ?? -160) + 50) / 38));
+
+  return { recording, reading, start, stop, cancel, level };
 }

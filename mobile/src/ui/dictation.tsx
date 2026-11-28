@@ -3,10 +3,11 @@
 // A phone without one records instead and the computer reads it (voicememo.ts), where the
 // computer can; with neither there is no microphone and the keyboard's own voice key is left.
 import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet } from 'react-native';
+import { Animated, Easing, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { Icon } from './icons';
 import { QUIET_ERRORS, joinSpoken } from './spoken';
+import { useTyper } from './typer';
 import { useVoiceMemo } from './voicememo';
 import { useTheme } from './theme';
 import { lang, tr } from '../i18n';
@@ -67,6 +68,8 @@ export type Dictation = {
   /** A recording on its way to the computer and back. */
   reading: boolean;
   toggle: () => void;
+  /** How loud it is now, 0 to 1: read by the microphone's halo while listening. */
+  level: () => number;
   /** Typing or sending: what is still being heard must not land in the box afterwards. */
   cancel: () => void;
 };
@@ -83,9 +86,11 @@ export function useDictation(
   const [system, setSystem] = useState(available);
   // The box as it was when recording started: each reading of what was said so far replaces the last.
   const memoBase = useRef('');
+  const typer = useTyper(setText);
   const memo = useVoiceMemo(transcribe, (said, done) => {
-    if (said.trim() || done) setText(joinSpoken(memoBase.current, said));
+    if (said.trim() || done) typer.to(joinSpoken(memoBase.current, said));
   }, onError);
+  const volume = useRef(0);
   const textRef = useRef(text);
   textRef.current = text;
   const [listening, setListening] = useState(false);
@@ -117,8 +122,12 @@ export function useDictation(
     // Android ends each phrase and starts the next; iOS keeps one growing phrase.
     if (e.isFinal) {
       base.current = joinSpoken(base.current, heard);
-      setText(base.current);
-    } else setText(joinSpoken(base.current, heard));
+      typer.to(base.current);
+    } else typer.to(joinSpoken(base.current, heard));
+  });
+  // -2 to 10, below 0 inaudible.
+  useSpeechRecognitionEvent('volumechange', (e) => {
+    if (mine()) volume.current = Math.min(1, Math.max(0, e.value / 10));
   });
   useSpeechRecognitionEvent('error', (e) => {
     if (!mine()) return;
@@ -138,6 +147,7 @@ export function useDictation(
 
   const cancel = () => {
     memo.cancel();
+    typer.stop();
     wanted.current = false;
     clearTimeout(silent.current);
     if (!mine()) return;
@@ -163,6 +173,7 @@ export function useDictation(
     if (owner) ExpoSpeechRecognitionModule.abort();
     owner = id.current;
     base.current = text;
+    typer.from(text);
     wanted.current = true;
     streams.current = continuous();
     setListening(true);
@@ -181,6 +192,7 @@ export function useDictation(
       setSystem(false);
       if (!transcribe) return onError?.(why('client', ''));
       memoBase.current = textRef.current;
+      typer.from(textRef.current);
       void memo.start();
     }, DEAF_MS);
     ExpoSpeechRecognitionModule.start({
@@ -189,6 +201,7 @@ export function useDictation(
       // Keeps listening through pauses where the recognizer can; elsewhere 'end' starts it again.
       continuous: streams.current,
       addsPunctuation: true,
+      volumeChangeEventOptions: { enabled: true, intervalMillis: 100 },
     });
   }
 
@@ -201,8 +214,10 @@ export function useDictation(
         if (memo.recording) return void memo.stop();
         if (memo.reading) return;
         memoBase.current = textRef.current;
+        typer.from(textRef.current);
         void memo.start();
       },
+      level: memo.level,
       cancel,
     };
   return {
@@ -214,29 +229,63 @@ export function useDictation(
       wanted.current = false;
       ExpoSpeechRecognitionModule.stop();
     },
+    level: () => volume.current,
     cancel,
   };
 }
 
-/** The round microphone key: tap to talk, tap again to finish. */
+/** The round microphone key: tap to talk, tap again to finish. Green while listening, with a halo that swells with the voice. */
 export function MicButton({ dictation, disabled }: { dictation: Dictation; disabled?: boolean }) {
   const t = useTheme();
   if (!dictation.can) return null;
   const on = dictation.listening;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={on ? tr('说完了') : tr('说话输入')}
-      accessibilityState={{ selected: on }}
-      disabled={disabled || dictation.reading}
-      onPress={dictation.toggle}
-      style={({ pressed }) => [s.round, { backgroundColor: on ? t.allow : t.well, opacity: disabled || dictation.reading ? 0.35 : pressed ? 0.6 : 1 }]}
-    >
-      <Icon name="mic" size={17} width={2.1} color={on ? t.onAllow : t.text} />
-    </Pressable>
+    <View style={s.round}>
+      {on && <Halo level={dictation.level} color={t.allow} />}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={on ? tr('说完了') : tr('说话输入')}
+        accessibilityState={{ selected: on }}
+        disabled={disabled || dictation.reading}
+        onPress={dictation.toggle}
+        style={({ pressed }) => [s.round, { backgroundColor: on ? t.allow : t.well, opacity: disabled || dictation.reading ? 0.35 : pressed ? 0.6 : 1 }]}
+      >
+        <Icon name="mic" size={17} width={2.1} color={on ? t.onAllow : t.text} />
+      </Pressable>
+    </View>
+  );
+}
+
+/** Every HALO_MS the loudness is read and the halo eases toward it. */
+const HALO_MS = 90;
+
+function Halo({ level, color }: { level: () => number; color: string }) {
+  const v = useRef(new Animated.Value(0)).current;
+  const read = useRef(level);
+  read.current = level;
+  useEffect(() => {
+    const tick = setInterval(() => {
+      Animated.timing(v, { toValue: read.current(), duration: HALO_MS, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+    }, HALO_MS);
+    return () => clearInterval(tick);
+  }, [v]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        StyleSheet.absoluteFill,
+        s.halo,
+        {
+          backgroundColor: color,
+          opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.4] }),
+          transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [1.15, 1.75] }) }],
+        },
+      ]}
+    />
   );
 }
 
 const s = StyleSheet.create({
   round: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  halo: { borderRadius: 18 },
 });
