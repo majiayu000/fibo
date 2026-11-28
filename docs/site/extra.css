@@ -168,11 +168,24 @@ dialog.film video{display:block;width:100%;height:auto;aspect-ratio:16/9;border-
 .siderow.in{color:#8a8f9f}.siderow.in i{background:#c9cbd1}
 .motion .chips{max-width:420px}
 
+/* 首页上的博客：最新三篇，卡片和 .cards / .kcard 同一套底色、圆角、阴影和字体 */
+.blogs{padding:0 0 130px}
+.blogs h2{margin-top:18px}
+.bgrid{margin-top:52px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px}
+.bpost{display:flex;flex-direction:column;min-width:0;background:var(--card);border-radius:22px;box-shadow:var(--shadow-card);overflow:hidden;color:var(--ink);transition:transform .2s}
+.bpost:hover{transform:translateY(-3px)}
+.bpost img{width:100%;aspect-ratio:1600/840;object-fit:cover;background:var(--mist)}
+.bpost div{padding:22px 26px 28px}
+.bpost h3{margin-top:10px;font-family:var(--display);font-variation-settings:"SOFT" 100,"WONK" 0;font-weight:560;font-size:19.5px;line-height:1.25;letter-spacing:-.012em}
+.bpost h3+p{margin-top:10px;font-size:14.5px;line-height:1.65;color:var(--soft)}
+.ball{display:inline-block;margin-top:32px;font-size:15px;color:var(--body)}.ball:hover{color:var(--ink)}
+@media (max-width:900px){.blogs{padding-bottom:80px}.bgrid{grid-template-columns:1fr;gap:20px;margin-top:36px}}
+
 /* ===== 深色版：页面底色变深，截图和演示卡仍是浅色的“屏幕” ===== */
 html[data-theme=dark]{--paper:#0a0d2c;--mist:#10143a;--line:rgba(255,255,255,.13);--ink:#f4f2ec;--body:rgba(244,242,236,.76);--soft:rgba(244,242,236,.54);
   --shadow-card:0 40px 70px -36px rgba(0,0,0,.7),0 10px 24px -14px rgba(0,0,0,.5)}
 html[data-theme=dark] body{background:var(--paper);color:var(--ink)}
-html[data-theme=dark] :is(.panel,.tilebox,.theorem,.simboard,.simside .card,.cards,.readout,.kcard,.fsm,.shot,.canvas .card,.tip,.skyctl){--ink:#141a2e;--body:#474e63;--soft:#6f7589;--line:#e8e4da;--paper:#fbfaf6;--mist:#f4f1ea;color:var(--ink)}
+html[data-theme=dark] :is(.panel,.tilebox,.theorem,.simboard,.simside .card,.cards,.readout,.kcard,.bpost,.fsm,.shot,.canvas .card,.tip,.skyctl){--ink:#141a2e;--body:#474e63;--soft:#6f7589;--line:#e8e4da;--paper:#fbfaf6;--mist:#f4f1ea;color:var(--ink)}
 html[data-theme=dark] .fsm{background:#f4f1ea}
 html[data-theme=dark] .readout{background:#fff}
 html[data-theme=dark] .btn.dark{background:#fff;color:#141a2e}
@@ -192,7 +205,7 @@ html[data-theme=dark] .phyllo .wrap::before,html[data-theme=dark] .drive .wrap::
 html[data-theme=dark] footer{border-top:1px solid rgba(255,255,255,.1)}
 
 /* ===== 中文版的字体 ===== */
-html[lang=zh-CN] :is(h1,h2,.kcard h3,.three h3,.mgrid h3,.cards h3,.steps h3,summary){font-family:"Songti SC","Noto Serif SC","Source Han Serif SC",serif;font-weight:700;letter-spacing:0}
+html[lang=zh-CN] :is(h1,h2,.kcard h3,.three h3,.mgrid h3,.cards h3,.bpost h3,.steps h3,summary){font-family:"Songti SC","Noto Serif SC","Source Han Serif SC",serif;font-weight:700;letter-spacing:0}
 html[lang=zh-CN] :is(h1 em,h2 em,.kcard h3 em,.start h2 span){font-style:normal;font-weight:700}
 html[lang=zh-CN] h1{line-height:1.12;font-size:clamp(42px,5.6vw,84px)}
 html[lang=zh-CN] h2{line-height:1.18}

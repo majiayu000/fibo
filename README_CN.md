@@ -40,7 +40,7 @@
 
 ---
 
-> **现状：** 最新发布版 [v0.1.4](https://github.com/majiayu000/fibo/releases/latest)：Apple 芯片和 Intel 的 Mac，macOS 14 及以上，已签名并经 Apple 公证；Windows x64 和 Ubuntu 24.04（x64、arm64）为预览版：Windows 版在真 Windows 机器上试过，Ubuntu 目前只在 CI 上试过（Windows 安装程序没有代码签名）。Fibo 原名 Mooring，更早叫 Keepline，之前放在 [majiayu000/keepline](https://github.com/majiayu000/keepline) 的 `next/` 目录里；那个仓库保留上一代（Bun 命令行、网页仪表盘、Tauri 菜单栏）。
+> **现状：** 最新发布版 [v0.1.5](https://github.com/majiayu000/fibo/releases/latest)：Apple 芯片和 Intel 的 Mac，macOS 14 及以上，已签名并经 Apple 公证；Windows x64 和 Ubuntu 24.04（x64、arm64）为预览版：Windows 版在真 Windows 机器上试过，Ubuntu 目前只在 CI 上试过（Windows 安装程序没有代码签名）。Fibo 原名 Mooring，更早叫 Keepline，之前放在 [majiayu000/keepline](https://github.com/majiayu000/keepline) 的 `next/` 目录里；那个仓库保留上一代（Bun 命令行、网页仪表盘、Tauri 菜单栏）。
 
 ## 安装
 
@@ -124,7 +124,7 @@ tmux 能让终端在窗口关掉后继续跑，Fibo 的后台也一样。tmux �
 退出或更新 App，终端都继续跑（Windows 预览版更新前要先结束终端）。重启电脑会结束它们，被打断的会话会提示在原目录接着聊。
 
 **有 Windows 或 Linux 版吗？**
-Apple silicon 或 Intel 的 Mac，macOS 14 及以上。Windows x64 和 Ubuntu 24.04（x64、arm64）在发布页有预览版安装包：Windows 靠运行新版安装程序更新，Linux 只提示并给发布页链接，Windows 安装程序还没有代码签名。0.1.4 的 Windows 预览版在真 Windows 机器上试过，Linux 预览版目前只在 CI 上试过。
+Apple silicon 或 Intel 的 Mac，macOS 14 及以上。Windows x64 和 Ubuntu 24.04（x64、arm64）在发布页有预览版安装包：Windows 靠运行新版安装程序更新，Linux 只提示并给发布页链接，Windows 安装程序还没有代码签名。Windows 预览版最近一次在真 Windows 机器上试的是 0.1.4，Linux 预览版目前只在 CI 上试过。
 
 **数据放在哪，会不会传出去？**
 终端和会话索引在 `~/.local/share/fibo-workbench`，设置和插件在 `~/.config/fibo`。Fibo 只读 Agent 自己的对话记录，不上传。手机中继要你自己开启，内容端到端加密。

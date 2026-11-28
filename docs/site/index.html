@@ -412,7 +412,7 @@ html[lang="zh-CN"] .spphone img[data-lang="en"],html:not([lang="zh-CN"]) .spphon
 <section class="hero">
   <div class="bg"></div>
   <div class="in">
-    <span class="phi">φ = 1.6180339… · v0.1.4</span>
+    <span class="phi">φ = 1.6180339… · v0.1.5</span>
     <h1>Run more agents.<br><em>Miss none of them.</em></h1>
     <p class="lede">A native Mac workbench for Claude Code, Codex and the agents you already use. Real terminals side by side, and one place that shows who needs you.</p>
     <div class="cta">
@@ -539,7 +539,7 @@ html[lang="zh-CN"] .spphone img[data-lang="en"],html:not([lang="zh-CN"]) .spphon
     <article class="feat" id="f-spaces">
       <p class="fnum"><b>5</b>F₅ · Spaces &amp; machines</p>
       <h2>Spaces for projects. <em>Machines for spaces.</em></h2>
-      <p>A space is a folder you work in; its sessions stay together, and you can quiet one while you're away from it. Add another Mac over SSH and its spaces appear under it; click one of its spaces or sessions and the tabs and splits open in this window. With a phone app built from source and your own relay, questions from every machine can reach your phone with end-to-end encryption. Below: two Macs and a quieted space, then the same sessions on the phone.</p>
+      <p>A space is a folder you work in; its sessions stay together, and you can quiet one while you're away from it. Add another Mac over SSH, or through your own relay where SSH can’t reach it, and its spaces appear under it; click one of its spaces or sessions and the tabs and splits open in this window. Paste or drop a screenshot into one of its terminals and the picture goes to that Mac first, so the agent there gets it. With both ways set up, Fibo takes the faster one and the machine’s title says which. With a phone app built from source and your own relay, questions from every machine can reach your phone with end-to-end encryption. Below: two Macs and a quieted space, then the same sessions on the phone.</p>
       <div class="panel sp-panel">
         <div class="sp-real">
           <figure class="sbshot spdesk"><img class="on" data-lang="en" src="shots/sp-desktop.webp" width="632" height="1350" alt="Fibo sidebar by machine: This Mac with four spaces and the docs space quieted, mac2 over SSH with two"><img class="on" data-lang="zh" src="shots/sp-desktop-zh.webp" width="632" height="1350" alt="" loading="lazy"><figcaption><span class="on">Mac · This Mac, and mac2 over SSH</span></figcaption></figure>
@@ -548,9 +548,9 @@ html[lang="zh-CN"] .spphone img[data-lang="en"],html:not([lang="zh-CN"]) .spphon
         <div class="sp-foot"><span class="sp-set">sessions ⊂ spaces ⊂ machines</span></div>
       </div>
       <div class="three">
-        <div><h3>Spaces per project</h3><p>Group sessions by folder or repository; a new space on any machine is one click.</p></div>
+        <div><h3>Spaces per project</h3><p>Group sessions by folder or repository; a new space on any machine is one click. On another Mac, name it, then pick a folder there or make a new one.</p></div>
         <div><h3>Quiet a space</h3><p>Step away from a project without losing it. Starting work there again turns it back on.</p></div>
-        <div><h3>More than one Mac</h3><p>Any host <code>ssh</code> can reach without a password, with Fibo installed. The phone preview requires a source build and a self-hosted relay.</p></div>
+        <div><h3>More than one Mac</h3><p>Any host <code>ssh</code> can reach without a password, or one paired through your relay, with Fibo installed. The phone preview requires a source build and a self-hosted relay; add a backup relay and the phone dials both and keeps the first to answer.</p></div>
       </div>
     </article>
 
@@ -648,7 +648,7 @@ html[lang="zh-CN"] .spphone img[data-lang="en"],html:not([lang="zh-CN"]) .spphon
 <section class="more" id="more-sec" aria-labelledby="mo-h"><div class="wrap">
   <p class="eyebrow">Everything else</p>
   <h2 id="mo-h">It is a good terminal first. <em>Everything else is built on that.</em></h2>
-  <div class="mgrid"><div><small>Splits</small><h3>Tabs and splits</h3><p>Split right or down and move between panes by direction. Every ⌘ shortcut can be rebound.</p></div><div><small>⌘P</small><h3>One search box</h3><p>Finds sessions, spaces and messages, and runs commands.</p></div><div><small>Paths</small><h3>Click a path, land on the line</h3><p>⌘-click <code>pane.rs:651</code> to open it at that line in Zed, VS Code or Cursor.</p></div><div><small>To-do</small><h3>To-dos</h3><p>Write it down when you think of it; hand it to an agent later.</p></div><div><small>Limits</small><h3>Quota</h3><p>The status bar shows your Codex, Claude and Grok quota.</p></div><div><small>Sub-agents</small><h3>Sub-agents</h3><p>Sub-agents a session started open underneath it.</p></div><div><small>Find</small><h3>Find in terminal</h3><p>Search the scrollback, with shortcuts to jump to the top and bottom.</p></div><div><small>Type</small><h3>Type</h3><p>Pick the monospaced font, ligatures, line height and the CJK font separately.</p></div><div><small>Style</small><h3>Two interface styles</h3><p>Standard, or terminal native: chrome shrinks to hairlines, tabs at the bottom.</p></div><div><small>Update</small><h3>Updates keep terminals up</h3><p>A new version is verified, swapped in place, and every terminal keeps running.</p></div></div>
+  <div class="mgrid"><div><small>Splits</small><h3>Tabs and splits</h3><p>Split right or down and move between panes by direction. Every ⌘ shortcut can be rebound.</p></div><div><small>⌘P</small><h3>One search box</h3><p>Finds sessions, spaces and messages, and runs commands. Open a message to read all of it.</p></div><div><small>Paths</small><h3>Click a path, land on the line</h3><p>⌘-click <code>pane.rs:651</code> to open it at that line in Zed, VS Code or Cursor.</p></div><div><small>To-do</small><h3>To-dos</h3><p>Write it down when you think of it; hand it to an agent later. Mark a session done and Fibo offers to complete its to-dos too.</p></div><div><small>Limits</small><h3>Quota</h3><p>The status bar shows your Codex, Claude and Grok quota.</p></div><div><small>Sub-agents</small><h3>Sub-agents</h3><p>Sub-agents a session started open underneath it.</p></div><div><small>Find</small><h3>Find in terminal</h3><p>Search the scrollback, with shortcuts to jump to the top and bottom.</p></div><div><small>Type</small><h3>Type</h3><p>Pick the monospaced font, ligatures, line height and the CJK font separately.</p></div><div><small>Style</small><h3>Two interface styles</h3><p>Standard, or terminal native: chrome shrinks to hairlines, tabs at the bottom.</p></div><div><small>Update</small><h3>Updates keep terminals up</h3><p>A new version is verified, swapped in place, and every terminal keeps running.</p></div></div>
 </div></section>
 
 <section class="grow" aria-labelledby="gr-h"><div class="wrap">
@@ -737,6 +737,17 @@ html[lang="zh-CN"] .spphone img[data-lang="en"],html:not([lang="zh-CN"]) .spphon
   </div>
 </div></section>
 
+<section class="blogs" id="blog" aria-labelledby="bl-h"><div class="wrap">
+  <p class="eyebrow">Blog</p>
+  <h2 id="bl-h">From the blog.</h2>
+  <div class="bgrid">
+    <a class="bpost" href="blog/why-gpui/"><img src="blog/why-gpui/images/00-cover-en.webp" alt="" loading="lazy" width="1600" height="840"><div><p class="eyebrow">Technical choices · November 2026</p><h3>Why Fibo dropped Tauri + xterm.js and draws its terminals natively with GPUI + libghostty-vt</h3><p>Fibo runs 40 coding-agent sessions in one window. The plan was Tauri + React + xterm.js; measured under the same load, the WebView used about 3.5x the memory of a native Ghostty.</p></div></a>
+    <a class="bpost" href="blog/waiting-for-you/"><img src="blog/waiting-for-you/images/00-cover-en.webp" alt="" loading="lazy" width="1600" height="840"><div><p class="eyebrow">Engineering · November 2026</p><h3>How Fibo knows an agent is waiting for you, without changing the agent</h3><p>Claude Code and Codex do not tell other programs they are stuck on an approval prompt.</p></div></a>
+    <a class="bpost" href="blog/perf-gate/"><img src="blog/perf-gate/images/00-cover-en.webp" alt="" loading="lazy" width="1600" height="840"><div><p class="eyebrow">Engineering · November 2026</p><h3>Fibo’s performance gate: count retired instructions, not CPU time, and what sidebar redraws cost</h3><p>The same frame’s CPU time moves 2.5x with machine load; its retired instructions move under 1%.</p></div></a>
+  </div>
+  <a class="ball" href="blog/">All posts →</a>
+</div></section>
+
 <section class="faq" id="faq"><div class="wrap">
   <p class="eyebrow">FAQ</p>
   <h2>Questions &amp; answers.</h2>
@@ -746,7 +757,7 @@ html[lang="zh-CN"] .spphone img[data-lang="en"],html:not([lang="zh-CN"]) .spphon
     <details><summary>Does Fibo upload my conversations?</summary><p>No. Fibo reads local transcripts and does not upload them. Your agent CLIs still talk to their own providers. The optional phone link is end-to-end encrypted.</p></details>
     <details><summary>Does it change my agent settings?</summary><p>Hooks change agent settings when you choose to install them. The packaged app also installs command links and a Codex skill on startup; set <code>MOORING_NO_CLI_SETUP=1</code> to disable that setup. <code>fibo hooks uninstall</code> removes the hooks.</p></details>
     <details><summary>Wasn't this called Mooring?</summary><p>Yes. It was renamed Fibo in November 2026. Existing installs keep working: the <code>mooring</code> command, settings and terminals carry over.</p></details>
-    <details><summary>Windows or Linux?</summary><p>Macs with Apple silicon or Intel, macOS 14 or later. Windows x64 and Ubuntu 24.04 (x64, arm64) have preview packages on the release page; neither updates itself, and the Windows installer is not code-signed yet. The 0.1.4 Windows preview has been tried on a real Windows machine; the Linux one so far on CI runners.</p></details>
+    <details><summary>Windows or Linux?</summary><p>Macs with Apple silicon or Intel, macOS 14 or later. Windows x64 and Ubuntu 24.04 (x64, arm64) have preview packages on the release page; neither updates itself, and the Windows installer is not code-signed yet. The Windows preview was last tried on a real Windows machine with 0.1.4; the Linux one so far on CI runners.</p></details>
   </div>
 </div></section>
 

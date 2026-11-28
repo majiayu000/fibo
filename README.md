@@ -40,7 +40,7 @@
 
 ---
 
-> **Status:** latest release, [v0.1.4](https://github.com/majiayu000/fibo/releases/latest): Macs with Apple silicon or Intel, macOS 14 or later, signed and notarized; Windows x64 and Ubuntu 24.04 (x64, arm64) as previews; Windows was tried on a real Windows machine, Ubuntu so far on CI runners (the Windows installer is not code-signed). Fibo was called Mooring, and before that Keepline, and lived in the `next/` directory of [majiayu000/keepline](https://github.com/majiayu000/keepline), which keeps the previous generation (Bun CLI, web dashboard, Tauri menu bar).
+> **Status:** latest release, [v0.1.5](https://github.com/majiayu000/fibo/releases/latest): Macs with Apple silicon or Intel, macOS 14 or later, signed and notarized; Windows x64 and Ubuntu 24.04 (x64, arm64) as previews; Windows was tried on a real Windows machine, Ubuntu so far on CI runners (the Windows installer is not code-signed). Fibo was called Mooring, and before that Keepline, and lived in the `next/` directory of [majiayu000/keepline](https://github.com/majiayu000/keepline), which keeps the previous generation (Bun CLI, web dashboard, Tauri menu bar).
 
 ## Install
 
@@ -124,7 +124,7 @@ Nothing to redo. On first start Fibo moves `~/.config/mooring` to `~/.config/fib
 Quitting or updating the app leaves every terminal running (the Windows preview needs them ended before an update). Restarting the machine ends them; each interrupted session then offers to resume its conversation in the same directory.
 
 **Windows or Linux?**
-Macs with Apple silicon or Intel, macOS 14 or later. Windows x64 and Ubuntu 24.04 (x64, arm64) have preview packages on the release page; Windows updates by running the newer installer, Linux only points at the release page, and the Windows installer is not code-signed yet. The 0.1.4 Windows preview has been tried on a real Windows machine; the Linux one so far on CI runners.
+Macs with Apple silicon or Intel, macOS 14 or later. Windows x64 and Ubuntu 24.04 (x64, arm64) have preview packages on the release page; Windows updates by running the newer installer, Linux only points at the release page, and the Windows installer is not code-signed yet. The Windows preview was last tried on a real Windows machine with 0.1.4; the Linux one so far on CI runners.
 
 **Where is my data, and does anything leave my machine?**
 Terminals and the session index live in `~/.local/share/fibo-workbench`, settings and plugins in `~/.config/fibo`. Fibo reads the agents' own transcripts and never uploads them. The phone relay is opt-in and end-to-end encrypted.
