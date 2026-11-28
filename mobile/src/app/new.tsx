@@ -14,6 +14,8 @@ import { NOT_YET, refresh, remote, speaksV2, supports, useHub, write } from '@/r
 import { getDraft, resetDraft, setDraft, useDraft } from '@/store/draft';
 import { rememberSent } from '@/store/sentPictures';
 import { useDictation } from '@/ui/dictation';
+import { useHold, VoiceGlow } from '@/ui/holdtalk';
+import { joinSpoken } from '@/ui/spoken';
 import { Icon } from '@/ui/icons';
 import { Btn, Label, Nav, Notice, Wide, mono, noOutline } from '@/ui/kit';
 import { MAX_PICTURES, type Picture, pick } from '@/ui/pictures';
@@ -43,11 +45,15 @@ export default function NewTask() {
   const online = machines.filter((m) => m.status === 'online');
   const m = machines.find((x) => x.id === draft.machine) ?? online[0] ?? machines[0];
   const dictation = useDictation(
-    draft.prompt,
-    (prompt) => setDraft({ prompt }),
     oops,
     m && supports(m, 'transcribe') ? (audio) => write(m.id, 'transcribe', { audio, lang: lang() }).then((r) => String(r?.text ?? '')) : undefined,
   );
+  // Starting a task takes more than words (the computer, the folder): letting go puts them in the box.
+  const hold = useHold(dictation, {
+    said: (text) => setDraft({ prompt: joinSpoken(getDraft().prompt, text) }),
+    tap: () => oops(tr('按住说话，松手放进框里')),
+    nothing: () => oops(tr('没听清，按住再说一次')),
+  });
 
   const selectedMachine = m?.id;
   useEffect(() => {
@@ -235,10 +241,7 @@ export default function NewTask() {
           <TextInput
             multiline
             value={draft.prompt}
-            onChangeText={(prompt) => {
-              dictation.cancel();
-              setDraft({ prompt });
-            }}
+            onChangeText={(prompt) => setDraft({ prompt })}
             // Return starts it: on a phone a new line is rarely what is meant, and the
             // keyboard otherwise hides 开始 with no way to put it away.
             returnKeyType={ready ? 'send' : 'done'}
@@ -272,16 +275,15 @@ export default function NewTask() {
             ))}
           </View>
         )}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        {/* Under the glow while held: its words would sit on top of these (2026-11-28 vivo). The held button stays and keeps the finger. */}
+        <View style={[{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, hold.shown && { opacity: 0 }]}>
           {canPicture && pictures.length < MAX_PICTURES && <Btn label={tr('加图片')} onPress={addPictures} />}
           {dictation.can && (
-            <Btn
-              label={dictation.reading ? tr('正在转成文字…') : dictation.listening ? tr('停止听写') : tr('说话输入')}
-              icon="mic"
-              primary={dictation.listening}
-              disabled={dictation.reading}
-              onPress={dictation.toggle}
-            />
+            <View {...hold.handlers} accessibilityRole="button" accessibilityLabel={tr('按住说话')}>
+              <View pointerEvents="none">
+                <Btn label={tr('按住说话')} icon="mic" primary={hold.shown} onPress={() => undefined} />
+              </View>
+            </View>
           )}
           <Btn
             label={tr('从剪贴板粘贴')}
@@ -310,12 +312,13 @@ export default function NewTask() {
         {m && m.status === 'online' && !able && <Notice text={tr(NOT_YET)} />}
         {m && m.status !== 'online' && <Notice text={m.error ?? tr('电脑没连上')} />}
       </ScrollView>
-      <View style={{ paddingHorizontal: 18, paddingBottom: bottom + 4, gap: 10 }}>
+      <View style={[{ paddingHorizontal: 18, paddingBottom: bottom + 4, gap: 10 }, hold.shown && { opacity: 0 }]}>
         <Wide label={busy ? tr('正在打开…') : draft.resume ? tr('接着做') : tr('开始')} disabled={!ready} onPress={start} />
         <Text style={{ textAlign: 'center', fontSize: 12, color: t.dim }}>
           {missing || (land.space ? tr('电脑上「{name}」里会出现一个新标签页，回到电脑前可以直接接着用', { name: land.space.name }) : tr('电脑上会出现一个新标签页，你回到电脑前可以直接接着用'))}
         </Text>
       </View>
+      {hold.shown && <VoiceGlow hold={hold} dictation={dictation} letGo={tr('松手放进框里，上移取消')} />}
     </KeyboardSafe>
   );
 }

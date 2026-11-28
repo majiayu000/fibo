@@ -1,27 +1,45 @@
-// Talking into a box with the phone's own speech recognition (Android's SpeechRecognizer,
-// iOS's SFSpeechRecognizer): the words land in the box as they are heard, sending is still yours.
-// A phone without one records instead and the computer reads it (voicememo.ts), where the
-// computer can; with neither there is no microphone and the keyboard's own voice key is left.
+// Hold to talk (holdtalk.tsx draws it): what is heard shows while the finger is down, letting go
+// hands over everything said. The phone's own speech recognition (Android's SpeechRecognizer,
+// iOS's SFSpeechRecognizer) where it serves apps; elsewhere the phone records and the computer
+// reads it (voicememo.ts); with neither there is nothing to hold and the keyboard's voice key is left.
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform } from 'react-native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
-import { Icon } from './icons';
 import { QUIET_ERRORS, joinSpoken } from './spoken';
 import { useTyper } from './typer';
+import { remembered } from '../store/kv';
 import { useVoiceMemo } from './voicememo';
-import { useTheme } from './theme';
 import { lang, tr } from '../i18n';
 
 // One recognizer for the whole phone: only the box that started it hears its events.
 let owner = 0;
 let next = 1;
-// The recognizer said it cannot serve this app: no microphone again until the app restarts.
+// The recognizer said it cannot serve this app, or never listened: not asked again until the app restarts.
 let broken = false;
+// And kept across restarts for the service that failed: each first hold after a restart spent 3 s
+// on vivo's deaf recognizer and the words said meanwhile were lost (2026-11-28, 「帮我把首页的标题改成蓝色」
+// gone from the front of a sentence). Another default service set later is tried afresh.
+const deaf = remembered('dictation.deaf', { service: '' });
+
+function service(): string {
+  try {
+    return Platform.OS === 'android' ? (ExpoSpeechRecognitionModule.getDefaultRecognitionService().packageName ?? '') : '';
+  } catch {
+    return '';
+  }
+}
+
+function giveUp() {
+  broken = true;
+  const failed = service();
+  if (failed) deaf.set({ service: failed });
+}
 
 function available(): boolean {
   // Every iPhone has a recognizer, but `isAvailable` is false while offline: there it says so on use instead.
   if (Platform.OS === 'ios') return true;
   if (broken) return false;
+  if (deaf.get().service && deaf.get().service === service()) return false;
   try {
     if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) return false;
     // A phone can list a service another app keeps to itself (2026-11-28 OPPO: only Claude's, which
@@ -62,21 +80,27 @@ function why(error: string, message: string): string {
 }
 
 export type Dictation = {
-  /** The phone or the computer can read speech: without either there is no microphone to show. */
+  /** The phone or the computer can read speech: without either there is nothing to hold. */
   can: boolean;
+  /** The finger is down and the microphone on. */
   listening: boolean;
-  /** A recording on its way to the computer and back. */
+  /** Let go: the last words on their way back. */
   reading: boolean;
-  toggle: () => void;
-  /** How loud it is now, 0 to 1: read by the microphone's halo while listening. */
-  level: () => number;
-  /** Typing or sending: what is still being heard must not land in the box afterwards. */
+  /** What has been heard so far, typed in a few characters at a time. */
+  heard: string;
+  begin: () => void;
+  /** Let go: everything said once it is all read; '' when nothing was heard or it went wrong. */
+  finish: () => Promise<string>;
+  /** Slid away or left: nothing heard is handed over. */
   cancel: () => void;
+  /** How loud it is now, 0 to 1. */
+  level: () => number;
 };
 
+/** After stop() a recognizer gives its last words and 'end'; one that never does is not waited on longer. */
+const LAST_WORDS_MS = 4000;
+
 export function useDictation(
-  text: string,
-  setText: (text: string) => void,
   onError?: (why: string) => void,
   /** The computer reads a recording (`transcribe`); for phones whose own recognizer will not do. */
   transcribe?: (audio: string) => Promise<string>,
@@ -84,25 +108,36 @@ export function useDictation(
   const id = useRef(0);
   if (!id.current) id.current = next++;
   const [system, setSystem] = useState(available);
-  // The box as it was when recording started: each reading of what was said so far replaces the last.
-  const memoBase = useRef('');
-  const typer = useTyper(setText);
-  const memo = useVoiceMemo(transcribe, (said, done) => {
-    if (said.trim() || done) typer.to(joinSpoken(memoBase.current, said));
-  }, onError);
+  const [heard, setHeard] = useState('');
+  const typer = useTyper(setHeard);
+  // The computer's reading: each one is everything said so far.
+  const memo = useVoiceMemo(transcribe, (said) => typer.to(said), onError);
+  // This hold went to the computer: the recognizer never said it was listening.
+  const viaMemo = useRef(false);
   const volume = useRef(0);
-  const textRef = useRef(text);
-  textRef.current = text;
   const [listening, setListening] = useState(false);
-  // The box as it was when listening started, plus every phrase heard to the end since.
+  const [waiting, setWaiting] = useState(false);
+  // Every phrase heard to the end, and that plus the phrase being heard.
   const base = useRef('');
+  const all = useRef('');
   const mine = () => owner === id.current;
-  // The microphone is green: the user has not stopped it yet.
+  // The finger is still down.
   const wanted = useRef(false);
+  // Let go: resolved with everything heard once the recognizer ends.
+  const done = useRef<((said: string) => void) | null>(null);
+  const lastWords = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Armed by each start: a recognizer that never says it is listening (2026-11-28 vivo's, no
   // error and no words) is given up on, and the computer reads a recording instead.
   const silent = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const streams = useRef(false);
+
+  function settle(said: string) {
+    clearTimeout(lastWords.current);
+    const resolve = done.current;
+    done.current = null;
+    setWaiting(false);
+    resolve?.(said);
+  }
 
   useSpeechRecognitionEvent('start', () => {
     if (!mine()) return;
@@ -111,19 +146,19 @@ export function useDictation(
   });
   useSpeechRecognitionEvent('end', () => {
     if (!mine()) return;
-    // One phrase heard, the microphone still green: listen for the next.
+    // One phrase heard, the finger still down: listen for the next.
     if (wanted.current && !streams.current) return listen();
     owner = 0;
     setListening(false);
+    settle(all.current);
   });
   useSpeechRecognitionEvent('result', (e) => {
     if (!mine()) return;
-    const heard = e.results[0]?.transcript ?? '';
+    const said = e.results[0]?.transcript ?? '';
     // Android ends each phrase and starts the next; iOS keeps one growing phrase.
-    if (e.isFinal) {
-      base.current = joinSpoken(base.current, heard);
-      typer.to(base.current);
-    } else typer.to(joinSpoken(base.current, heard));
+    if (e.isFinal) base.current = joinSpoken(base.current, said);
+    all.current = e.isFinal ? base.current : joinSpoken(base.current, said);
+    typer.to(all.current);
   });
   // -2 to 10, below 0 inaudible.
   useSpeechRecognitionEvent('volumechange', (e) => {
@@ -136,10 +171,11 @@ export function useDictation(
     wanted.current = false;
     owner = 0;
     setListening(false);
+    settle(all.current);
     if (UNUSABLE.has(e.error)) {
-      broken = true;
+      giveUp();
       setSystem(false);
-      // The computer can still read it: the next tap records, nothing to say.
+      // The computer can still read it: the next hold records, nothing to say.
       if (transcribe) return;
     }
     if (!QUIET_ERRORS.has(e.error)) onError?.(why(e.error, e.message));
@@ -148,8 +184,11 @@ export function useDictation(
   const cancel = () => {
     memo.cancel();
     typer.stop();
+    setHeard('');
     wanted.current = false;
+    viaMemo.current = false;
     clearTimeout(silent.current);
+    settle('');
     if (!mine()) return;
     owner = 0;
     setListening(false);
@@ -158,23 +197,39 @@ export function useDictation(
   // Leaving the screen stops the microphone.
   useEffect(() => () => {
     clearTimeout(silent.current);
+    clearTimeout(lastWords.current);
     if (owner === id.current) {
       owner = 0;
       ExpoSpeechRecognitionModule.abort();
     }
   }, []);
 
-  async function start() {
+  function toMemo() {
+    viaMemo.current = true;
+    typer.from('');
+    setHeard('');
+    void memo.start();
+  }
+
+  async function begin() {
+    typer.from('');
+    setHeard('');
+    base.current = '';
+    all.current = '';
+    wanted.current = true;
+    // Read again: what an earlier run learned is loaded after the first screen asked.
+    if (!system || !available()) return toMemo();
+    viaMemo.current = false;
     const got = await ExpoSpeechRecognitionModule.requestPermissionsAsync().catch(() => null);
     if (!got?.granted) {
+      wanted.current = false;
       onError?.(why('not-allowed', ''));
       return;
     }
+    // Let go while the permission was asked.
+    if (!wanted.current) return;
     if (owner) ExpoSpeechRecognitionModule.abort();
     owner = id.current;
-    base.current = text;
-    typer.from(text);
-    wanted.current = true;
     streams.current = continuous();
     setListening(true);
     listen();
@@ -184,16 +239,17 @@ export function useDictation(
     clearTimeout(silent.current);
     silent.current = setTimeout(() => {
       if (!mine()) return;
-      wanted.current = false;
       owner = 0;
       setListening(false);
       ExpoSpeechRecognitionModule.abort();
-      broken = true;
+      giveUp();
       setSystem(false);
-      if (!transcribe) return onError?.(why('client', ''));
-      memoBase.current = textRef.current;
-      typer.from(textRef.current);
-      void memo.start();
+      if (!transcribe) {
+        wanted.current = false;
+        return onError?.(why('client', ''));
+      }
+      // The finger is still down: the rest of this hold is recorded.
+      if (wanted.current) toMemo();
     }, DEAF_MS);
     ExpoSpeechRecognitionModule.start({
       lang: lang() === 'zh' ? 'zh-CN' : 'en-US',
@@ -205,87 +261,43 @@ export function useDictation(
     });
   }
 
-  if (!system && transcribe)
-    return {
-      can: true,
-      listening: memo.recording,
-      reading: memo.reading,
-      toggle: () => {
-        if (memo.recording) return void memo.stop();
-        if (memo.reading) return;
-        memoBase.current = textRef.current;
-        typer.from(textRef.current);
-        void memo.start();
-      },
-      level: memo.level,
-      cancel,
-    };
+  async function finish(): Promise<string> {
+    wanted.current = false;
+    if (viaMemo.current) {
+      viaMemo.current = false;
+      const said = await memo.stop();
+      // Let go before the recorder had started: it must not start after all.
+      if (said === null) memo.cancel();
+      typer.stop();
+      return said ?? '';
+    }
+    clearTimeout(silent.current);
+    if (!mine()) return all.current;
+    setWaiting(true);
+    const said = new Promise<string>((resolve) => (done.current = resolve));
+    lastWords.current = setTimeout(() => {
+      if (mine()) {
+        owner = 0;
+        setListening(false);
+        ExpoSpeechRecognitionModule.abort();
+      }
+      settle(all.current);
+    }, LAST_WORDS_MS);
+    ExpoSpeechRecognitionModule.stop();
+    const got = await said;
+    typer.stop();
+    return got;
+  }
+
+  const memoOn = viaMemo.current || (!system && !!transcribe);
   return {
-    can: system,
-    listening,
-    reading: false,
-    toggle: () => {
-      if (!listening) return void start();
-      wanted.current = false;
-      ExpoSpeechRecognitionModule.stop();
-    },
-    level: () => volume.current,
+    can: system || !!transcribe,
+    listening: memoOn ? memo.recording : listening && !waiting,
+    reading: memoOn ? memo.reading : waiting,
+    heard,
+    begin: () => void begin(),
+    finish,
     cancel,
+    level: memoOn ? memo.level : () => volume.current,
   };
 }
-
-/** The round microphone key: tap to talk, tap again to finish. Green while listening, with a halo that swells with the voice. */
-export function MicButton({ dictation, disabled }: { dictation: Dictation; disabled?: boolean }) {
-  const t = useTheme();
-  if (!dictation.can) return null;
-  const on = dictation.listening;
-  return (
-    <View style={s.round}>
-      {on && <Halo level={dictation.level} color={t.allow} />}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={on ? tr('说完了') : tr('说话输入')}
-        accessibilityState={{ selected: on }}
-        disabled={disabled || dictation.reading}
-        onPress={dictation.toggle}
-        style={({ pressed }) => [s.round, { backgroundColor: on ? t.allow : t.well, opacity: disabled || dictation.reading ? 0.35 : pressed ? 0.6 : 1 }]}
-      >
-        <Icon name="mic" size={17} width={2.1} color={on ? t.onAllow : t.text} />
-      </Pressable>
-    </View>
-  );
-}
-
-/** Every HALO_MS the loudness is read and the halo eases toward it. */
-const HALO_MS = 90;
-
-function Halo({ level, color }: { level: () => number; color: string }) {
-  const v = useRef(new Animated.Value(0)).current;
-  const read = useRef(level);
-  read.current = level;
-  useEffect(() => {
-    const tick = setInterval(() => {
-      Animated.timing(v, { toValue: read.current(), duration: HALO_MS, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
-    }, HALO_MS);
-    return () => clearInterval(tick);
-  }, [v]);
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        StyleSheet.absoluteFill,
-        s.halo,
-        {
-          backgroundColor: color,
-          opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.4] }),
-          transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [1.15, 1.75] }) }],
-        },
-      ]}
-    />
-  );
-}
-
-const s = StyleSheet.create({
-  round: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  halo: { borderRadius: 18 },
-});
