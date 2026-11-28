@@ -1,4 +1,4 @@
-//! `transcribe`: a phone's recording (base64 `audio`, an `m4a` from the phone's own recorder)
+//! `transcribe`: a phone's recording (base64 `audio`, AAC from the phone's own recorder: ADTS from Android, read again as it grows, MP4 from iOS)
 //! turned into text on this computer, for a phone whose system has no speech recognition it
 //! lends to apps (2026-11-28: an OPPO with none). `ffmpeg` makes 16 kHz mono WAV of it and
 //! `whisper-cli` (whisper.cpp) with the model in the runtime's `models` reads it. Nothing leaves
@@ -67,7 +67,29 @@ pub(super) fn transcribe(socket: &Path, request: &Value) -> io::Result<Value> {
         english,
     );
     let _ = std::fs::remove_dir_all(&dir);
-    Ok(json!({ "text": said?.trim() }))
+    Ok(json!({ "text": full_width(said?.trim()) }))
+}
+
+/// whisper puts ASCII `,` `?` `!` `:` `;` into Chinese now and then: next to a Chinese character
+/// they become the full-width marks a phone keyboard would type.
+fn full_width(text: &str) -> String {
+    let chinese = |c: Option<char>| c.is_some_and(|c| ('\u{4e00}'..='\u{9fff}').contains(&c));
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    for (i, &c) in chars.iter().enumerate() {
+        let wide = match c {
+            ',' => '，',
+            '?' => '？',
+            '!' => '！',
+            ':' => '：',
+            ';' => '；',
+            _ => c,
+        };
+        let near =
+            chinese(i.checked_sub(1).map(|j| chars[j])) || chinese(chars.get(i + 1).copied());
+        out.push(if near { wide } else { c });
+    }
+    out
 }
 
 fn read(
@@ -126,5 +148,17 @@ mod tests {
         let bad = transcribe(&socket, &json!({ "audio": "not base64!" })).unwrap_err();
         assert!(bad.to_string().contains("base64"));
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn marks_beside_chinese_turn_full_width_and_english_keeps_its_own() {
+        assert_eq!(
+            full_width("失败了,改完再跑?好的!"),
+            "失败了，改完再跑？好的！"
+        );
+        assert_eq!(
+            full_width("Run it, then tell me: done?"),
+            "Run it, then tell me: done?"
+        );
     }
 }

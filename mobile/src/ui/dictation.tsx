@@ -63,7 +63,11 @@ export function useDictation(
   const id = useRef(0);
   if (!id.current) id.current = next++;
   const [system, setSystem] = useState(available);
-  const memo = useVoiceMemo(transcribe, (said) => setText(joinSpoken(textRef.current, said)), onError);
+  // The box as it was when recording started: each reading of what was said so far replaces the last.
+  const memoBase = useRef('');
+  const memo = useVoiceMemo(transcribe, (said, done) => {
+    if (said.trim() || done) setText(joinSpoken(memoBase.current, said));
+  }, onError);
   const textRef = useRef(text);
   textRef.current = text;
   const [listening, setListening] = useState(false);
@@ -138,7 +142,12 @@ export function useDictation(
       can: true,
       listening: memo.recording,
       reading: memo.reading,
-      toggle: () => void (memo.recording ? memo.stop() : memo.reading ? undefined : memo.start()),
+      toggle: () => {
+        if (memo.recording) return void memo.stop();
+        if (memo.reading) return;
+        memoBase.current = textRef.current;
+        void memo.start();
+      },
       cancel,
     };
   return {
@@ -162,9 +171,9 @@ export function MicButton({ dictation, disabled }: { dictation: Dictation; disab
       accessibilityState={{ selected: on }}
       disabled={disabled || dictation.reading}
       onPress={dictation.toggle}
-      style={({ pressed }) => [s.round, { backgroundColor: on ? t.act : t.well, opacity: disabled || dictation.reading ? 0.35 : pressed ? 0.6 : 1 }]}
+      style={({ pressed }) => [s.round, { backgroundColor: on ? t.allow : t.well, opacity: disabled || dictation.reading ? 0.35 : pressed ? 0.6 : 1 }]}
     >
-      <Icon name="mic" size={17} width={2.1} color={on ? t.onAct : t.text} />
+      <Icon name="mic" size={17} width={2.1} color={on ? t.onAllow : t.text} />
     </Pressable>
   );
 }
