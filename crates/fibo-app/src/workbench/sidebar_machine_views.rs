@@ -434,8 +434,8 @@ impl Workbench {
             ("pinned", t!("置顶"), pinned),
             ("need", fibo_core::status::needs_you_word(), order.need),
             ("running", Status::Running.label(), order.running),
-            ("today", t!("今天停着的"), today),
-            ("older", t!("更早停着的"), older),
+            ("today", t!("今天已完成"), today),
+            ("older", t!("更早已完成"), older),
         ] {
             let part = format!("{key}:{part}");
             if !rows.is_empty() {
