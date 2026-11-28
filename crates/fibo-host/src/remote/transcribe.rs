@@ -112,7 +112,13 @@ fn read(
         .args(["-nt", "-np", "-sns", "-f"])
         .arg(&wav);
     if let Some(vad) = vad {
-        whisper.arg("--vad").arg("-vm").arg(vad);
+        // The default 30 ms of padding cut the first syllable off after a pause (「帮我…」 read as
+        // 「我…」 on two phones, 2026-11-28); 300 ms keeps it.
+        whisper
+            .arg("--vad")
+            .arg("-vm")
+            .arg(vad)
+            .args(["-vp", "300"]);
     }
     match english {
         true => whisper.args(["-l", "en"]),

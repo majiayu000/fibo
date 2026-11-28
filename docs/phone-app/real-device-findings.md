@@ -78,6 +78,8 @@
 | 11-26 | 在跑区块里调用的说明被从中间剪掉：「Ping localhost 120 times, show summary」显示成「Ping localhost 1…s, show summary」，数字没了 | 真实的量和时长 | 测试数据的说明都很短，一行放得下；中间省略原是给命令留首尾的 | 有说明时末尾省略，只剩命令时仍中间省略 | `mobile/test/tools.test.ts` 的 a running step in its one line |
 | 11-28 | 语音输入的麦克风显示出来，一点就报「系统的语音识别用不了：Other client side errors.」 | 平台差异 | 单测和网页都没有安卓的识别服务；OPPO（ColorOS，安卓 16）系统不给第三方识别服务，唯一列出来的是 Claude App 自己的、要系统权限才绑得上，系统默认识别服务为空，`isRecognitionAvailable()` 却说有 | 安卓上还要有系统默认识别服务才显示麦克风；识别器报 client / service-not-allowed 后本次不再显示，提示改用输入法语音键 | 没有自动测试；本地走查 `2026-11-28-phone-walk` 的 `chat.voice` |
 | 11-28 | 手机录音交给电脑转文字，开头多出「优优独播剧场——YoYo Television Series Exclusive」 | 真实的量和时长 | whisper 遇到开头一段只有底噪会编出训练数据里的片头字幕；电脑合成的语音和合成噪声都复现不出来，只有真手机录音的底噪会 | 电脑端识别开 VAD（silero）跳过没人说话的部分、加 `-sns`；只有噪声的录音回空 | 没有自动测试；本地走查 `2026-11-28-phone-walk-5` 的 `chat.voice`（先停 3 秒再说） |
+| 11-28 | vivo（安卓 16）上麦克风变绿，说话一个字都不出，也不报错 | 平台差异 | vivo 登记了默认识别服务（`com.vivo.ai.copilot` 的 CopilotRecognitionService），`isRecognitionAvailable()` 和默认服务都说有；它收到请求后既不回「开始听」也不报错。安卓 13+ 的连续模式把 App 的录音流交给识别服务，只有谷歌的服务接这个 | 只对谷歌的识别服务用连续模式，其他服务自己录音、一句一句重启；3 秒内没回「开始听」就当用不了，改成录音交给电脑，并直接开始录 | 没有自动测试；本地走查 `2026-11-28-phone-walk-7` 的 `chat.voice`（vivo V2352A） |
+| 11-28 | 录音交给电脑转文字，开头的「帮我…」成了「我…」，两台手机都这样 | 真实的量和时长 | 开头的静音被 VAD 裁掉时，默认只给人声留 30 ms 余量，第一个音节的开头被一起裁掉；没有开头静音的合成语音复现不出来 | whisper 的 VAD 余量设成 300 ms（`-vp 300`） | 没有自动测试；本地走查 `2026-11-28-phone-walk-7` 的 `chat.voice`，电脑上用 1.5 秒和 3 秒开头静音复现 |
 
 11-05 之前的实测详情见 [v2-plan.md](v2-plan.md) 的「真机实测查出的问题」和「真机实测后留下的四件事」。
 

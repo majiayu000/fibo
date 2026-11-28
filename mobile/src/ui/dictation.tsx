@@ -31,6 +31,24 @@ function available(): boolean {
   }
 }
 
+// Android 13+'s continuous mode hands the recognizer the app's own microphone stream
+// (EXTRA_AUDIO_SOURCE); only Google's recognizer takes it. Others (2026-11-28: vivo's) hear
+// nothing that way, so they listen themselves one phrase at a time and are started again.
+/** A recognizer that has not said it is listening by now never will. */
+const DEAF_MS = 3000;
+
+const STREAMS = new Set(['com.google.android.tts', 'com.google.android.googlequicksearchbox', 'com.google.android.as']);
+
+function continuous(): boolean {
+  if (Platform.OS === 'ios') return true;
+  if (Platform.OS !== 'android' || Number(Platform.Version) < 33) return false;
+  try {
+    return STREAMS.has(ExpoSpeechRecognitionModule.getDefaultRecognitionService().packageName);
+  } catch {
+    return false;
+  }
+}
+
 /** The recognizer itself will not serve this app: asking again gives the same answer. */
 const UNUSABLE = new Set(['service-not-allowed', 'client', 'bad-grammar', 'language-not-supported']);
 
@@ -74,10 +92,22 @@ export function useDictation(
   // The box as it was when listening started, plus every phrase heard to the end since.
   const base = useRef('');
   const mine = () => owner === id.current;
+  // The microphone is green: the user has not stopped it yet.
+  const wanted = useRef(false);
+  // Armed by each start: a recognizer that never says it is listening (2026-11-28 vivo's, no
+  // error and no words) is given up on, and the computer reads a recording instead.
+  const silent = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const streams = useRef(false);
 
-  useSpeechRecognitionEvent('start', () => mine() && setListening(true));
+  useSpeechRecognitionEvent('start', () => {
+    if (!mine()) return;
+    clearTimeout(silent.current);
+    setListening(true);
+  });
   useSpeechRecognitionEvent('end', () => {
     if (!mine()) return;
+    // One phrase heard, the microphone still green: listen for the next.
+    if (wanted.current && !streams.current) return listen();
     owner = 0;
     setListening(false);
   });
@@ -92,6 +122,9 @@ export function useDictation(
   });
   useSpeechRecognitionEvent('error', (e) => {
     if (!mine()) return;
+    // A pause between phrases: 'end' follows and starts the next.
+    if (wanted.current && !streams.current && QUIET_ERRORS.has(e.error) && e.error !== 'aborted') return;
+    wanted.current = false;
     owner = 0;
     setListening(false);
     if (UNUSABLE.has(e.error)) {
@@ -105,6 +138,8 @@ export function useDictation(
 
   const cancel = () => {
     memo.cancel();
+    wanted.current = false;
+    clearTimeout(silent.current);
     if (!mine()) return;
     owner = 0;
     setListening(false);
@@ -112,6 +147,7 @@ export function useDictation(
   };
   // Leaving the screen stops the microphone.
   useEffect(() => () => {
+    clearTimeout(silent.current);
     if (owner === id.current) {
       owner = 0;
       ExpoSpeechRecognitionModule.abort();
@@ -127,12 +163,31 @@ export function useDictation(
     if (owner) ExpoSpeechRecognitionModule.abort();
     owner = id.current;
     base.current = text;
+    wanted.current = true;
+    streams.current = continuous();
     setListening(true);
+    listen();
+  }
+
+  function listen() {
+    clearTimeout(silent.current);
+    silent.current = setTimeout(() => {
+      if (!mine()) return;
+      wanted.current = false;
+      owner = 0;
+      setListening(false);
+      ExpoSpeechRecognitionModule.abort();
+      broken = true;
+      setSystem(false);
+      if (!transcribe) return onError?.(why('client', ''));
+      memoBase.current = textRef.current;
+      void memo.start();
+    }, DEAF_MS);
     ExpoSpeechRecognitionModule.start({
       lang: lang() === 'zh' ? 'zh-CN' : 'en-US',
       interimResults: true,
-      // Keeps listening through pauses; Android before 13 has no such mode and stops after one phrase.
-      continuous: Platform.OS === 'ios' || (Platform.OS === 'android' && Number(Platform.Version) >= 33),
+      // Keeps listening through pauses where the recognizer can; elsewhere 'end' starts it again.
+      continuous: streams.current,
       addsPunctuation: true,
     });
   }
@@ -154,7 +209,11 @@ export function useDictation(
     can: system,
     listening,
     reading: false,
-    toggle: () => (listening ? ExpoSpeechRecognitionModule.stop() : void start()),
+    toggle: () => {
+      if (!listening) return void start();
+      wanted.current = false;
+      ExpoSpeechRecognitionModule.stop();
+    },
     cancel,
   };
 }
