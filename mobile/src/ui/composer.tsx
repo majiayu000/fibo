@@ -2,10 +2,12 @@
 // under it. The send key turns into stop while the Agent runs and nothing is typed.
 // The + opens a sheet: take a photo or pick pictures (they wait as thumbnails above the text),
 // and this conversation's permission. The row under the text keeps only +, the model and send.
+// Holding the empty box talks (holdtalk.tsx): letting go sends what was said.
 import { type ComponentRef, useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AttachSheet } from './attachsheet';
-import { MicButton, useDictation } from './dictation';
+import { useDictation } from './dictation';
+import { useHold, VoiceGlow } from './holdtalk';
 import { Icon } from './icons';
 import { type How, STOP_AFTER_SEND_MS, stopCounts, whileBusy } from './busy';
 import { useBottomOverKeyboard } from './keyboard';
@@ -78,7 +80,7 @@ export function Composer({
   const [choosing, setChoosing] = useState(false);
   const [picking, setPicking] = useState(false);
   const input = useRef<ComponentRef<typeof TextInput>>(null);
-  const dictation = useDictation(draft, setDraft, onError, onTranscribe);
+  const dictation = useDictation(onError, onTranscribe);
   const empty = !draft.trim() && !pictures.length;
   const stop = running && canStop && empty;
   const how = running && canSteer ? 'queue' : undefined;
@@ -113,6 +115,12 @@ export function Composer({
       sending.current = false;
     }
   }
+  const hold = useHold(dictation, {
+    said: (text) => void go(text, pictures),
+    tap: () => input.current?.focus(),
+    nothing: () => onError?.(tr('没听清，按住再说一次')),
+  });
+  const holdable = dictation.can && !draft;
   async function add(from: 'camera' | 'library') {
     setChoosing(false);
     setPicking(true);
@@ -128,7 +136,9 @@ export function Composer({
   // The + opens pictures and this conversation's settings: shown when either is there.
   const sheetable = !!canAttach || pictures.length > 0 || !!permission || !!onPermission;
   return (
-    <View style={[s.card, { borderColor: t.line, backgroundColor: t.card, marginBottom: bottom + 8, shadowColor: '#000' }]}>
+    <View style={[s.card, { borderColor: t.line, backgroundColor: t.card, marginBottom: bottom + 8, shadowColor: '#000' }, hold.shown && s.under]}>
+      {hold.shown && <VoiceGlow hold={hold} dictation={dictation} letGo={tr('松手发送，上移取消')} style={{ left: -13, right: -13, bottom: -(bottom + 9) }} />}
+      <View style={[s.body, hold.shown && { opacity: 0 }]}>
       {!!suggestion && !draft && (
         <Pressable
           accessibilityRole="button"
@@ -164,20 +174,21 @@ export function Composer({
           ))}
         </View>
       )}
-      <TextInput
-        ref={input}
-        value={draft}
-        onChangeText={(text) => {
-          dictation.cancel();
-          setDraft(text);
-        }}
-        placeholder={dictation.reading ? tr('正在转成文字…') : dictation.listening ? tr('在听，说完点麦克风') : offline ? tr('电脑没连上，写的话会在重连后发送') : running ? tr(whileBusy(controls, how).placeholder) : tr('回复，或者让它接着做…')}
-        placeholderTextColor={t.dim}
-        multiline
-        numberOfLines={Platform.OS === 'web' ? 1 : undefined}
-        style={[s.input, { color: t.text }, noOutline]}
-        accessibilityLabel={tr('给 Agent 发消息')}
-      />
+      <View>
+        <TextInput
+          ref={input}
+          value={draft}
+          onChangeText={setDraft}
+          placeholder={offline ? tr('电脑没连上，写的话会在重连后发送') : running ? tr(whileBusy(controls, how).placeholder) : dictation.can ? tr('发消息，或按住说话') : tr('回复，或者让它接着做…')}
+          placeholderTextColor={t.dim}
+          multiline
+          numberOfLines={Platform.OS === 'web' ? 1 : undefined}
+          style={[s.input, { color: t.text }, noOutline]}
+          accessibilityLabel={tr('给 Agent 发消息')}
+        />
+        {/* Over the empty box only: a tap still types, a hold talks. */}
+        {holdable && <View style={s.holdArea} {...hold.handlers} accessibilityLabel={tr('按住说话')} />}
+      </View>
       <View style={s.bar}>
         {sheetable && (
           <Pressable
@@ -204,7 +215,6 @@ export function Composer({
           </Pressable>
         )}
         <View style={{ flex: 1 }} />
-        <MicButton dictation={dictation} />
         {running && canStop && !empty && (
           <Pressable accessibilityRole="button" accessibilityLabel={tr('停下')} onPress={onStop} style={({ pressed }) => [s.send, { borderWidth: 1, borderColor: t.line, backgroundColor: t.card }, pressed && { opacity: 0.6 }]}>
             <Icon name="stop" size={14} width={2.4} color={t.text} />
@@ -240,6 +250,7 @@ export function Composer({
           }
         />
       )}
+      </View>
     </View>
   );
 }
@@ -257,6 +268,11 @@ const s = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 8 },
   },
+  // The card steps aside while the glow is up, as Doubao's box does.
+  under: { borderColor: 'transparent', backgroundColor: 'transparent', shadowOpacity: 0 },
+  body: { gap: 10 },
+  // Down past the row of keys would steal their taps; the box and a little around it.
+  holdArea: { position: 'absolute', left: -12, right: -12, top: -12, bottom: -6 },
   suggestion: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', maxWidth: '100%', gap: 8, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6 },
   input: { fontSize: 15, minHeight: 24, maxHeight: 140, paddingHorizontal: 4, paddingVertical: 2 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 8 },

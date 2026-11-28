@@ -38,6 +38,16 @@ decision-makers: 用户
 - 电脑 VAD 给人声前后各留 300 ms，不然停顿后第一个字会被裁掉。
 - 电脑读出的中文里夹着的半角 `,` `?` `!` `:` `;` 换成全角。
 
+### 11-28 再追加：照豆包的做，按住说话，松手发送（取代上面的「点一下变绿」）
+
+用户看了点一下变绿的版本：「语音输入不是流式吗？……这个绿色就很奇怪」，要我学豆包的输入框：「甚至完全按照他的来做都是没有问题的」。画了几版（设计稿 F），用户定了：「可以的，没有问题。松手，直接发送」。
+
+- 输入框空着时按住框（220 ms 以内算点一下，照常打字）：屏幕底部升起一片蓝光，里面是边说边出的字和跟着音量起伏的波形（`mobile/src/ui/holdtalk.tsx`）。上滑 80 px 变红，松手就丢掉。聊天里松手直接发送；新任务页松手放进「要它做什么」框，不开始任务。框里已有字时不接管按住，照常编辑。
+- 跟豆包不同：说话时就显示字。Agent 会照着做，听错了最好松手前就看到。
+- 交给电脑时不再每次重读整段录音（越说越慢）：ADTS 每帧自带长度，任意一串完整帧就是一个能读的文件（`mobile/src/ui/adts.ts`）。录音按停顿（600 ms）或最长 8 秒切成段，只重读正在说的这一段，每秒一次；段结束时读一次定稿留下。声音门限从 -35 降到 -42 dBFS，轻声说的一句以前整句没算进去。
+- 手机系统识别 3 秒不回「开始听」就记下这个识别服务（按包名存在手机上）：以前只记在内存里，每次重开 App 的第一次按住都要先等 3 秒，这 3 秒说的字丢了（vivo 实测，「帮我把首页的标题改成蓝色，然后跑一下测试」只剩后半句）。换了默认识别服务会重新试。
+- 实测（vivo V2352A，M2 Max 上 whisper）：每段读一次约 0.85 秒；开口后约 2 秒第一次出字，之后每秒更新。
+
 ## Consequences
 
 - 安卓多了 `RECORD_AUDIO`。以前 `expo-image-picker` 的 `microphonePermission: false` 会把它列进屏蔽权限，`expo-camera` 的同一项会删掉 iOS 的 `NSMicrophoneUsageDescription`；两处都改成了同一句说明，相机仍不录音（`recordAudioAndroid: false`）。
@@ -46,13 +56,15 @@ decision-makers: 用户
 
 ## Implementation Plan
 
-- `mobile/src/ui/dictation.tsx`：`useDictation` 和 `MicButton`；整台手机一个识别器，只有开始它的那个输入框收事件。
+- `mobile/src/ui/dictation.tsx`：`useDictation`；整台手机一个识别器，只有开始它的那个输入框收事件。
+- `mobile/src/ui/holdtalk.tsx`：按住、上滑、松手（`useHold`）和底部的光（`VoiceGlow`）。
+- `mobile/src/ui/voicememo.ts`、`adts.ts`：交给电脑时按段读。
 - `mobile/src/ui/spoken.ts`：把听到的字接到原文后面（中文不加空格，英文单词之间加）。
 
 ## Verification
 
 ```sh
-cd mobile && bun test test/spoken.test.ts && bun run typecheck && bun run lint
+cd mobile && bun test test/spoken.test.ts test/adts.test.ts && bun run typecheck && bun run lint
 bunx expo config --type introspect --json | grep -E 'NSMicrophoneUsageDescription|RECORD_AUDIO'
 ```
 
